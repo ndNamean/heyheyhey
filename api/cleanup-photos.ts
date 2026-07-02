@@ -15,9 +15,7 @@
  */
 
 import { init } from '@instantdb/admin';
-
-const APP_ID      = process.env.VITE_INSTANT_APP_ID ?? '';
-const ADMIN_TOKEN = process.env.INSTANT_ADMIN_TOKEN ?? '';
+import { requireInstantCredentials } from './instant-config';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -42,11 +40,15 @@ export default async function handler(req: Req, res: Res) {
     }
   }
 
-  if (!APP_ID || !ADMIN_TOKEN) {
-    return res.status(500).json({ error: 'Missing VITE_INSTANT_APP_ID or INSTANT_ADMIN_TOKEN' });
+  let appId: string;
+  let adminToken: string;
+  try {
+    ({ appId, adminToken } = requireInstantCredentials());
+  } catch (e) {
+    return res.status(500).json({ error: e instanceof Error ? e.message : 'Missing config' });
   }
 
-  const adminDb = init({ appId: APP_ID, adminToken: ADMIN_TOKEN });
+  const adminDb = init({ appId, adminToken });
 
   // ── 1. Fetch all non-deleted mediaRecords with their reportResponse ────────
   let allRecords: Array<Record<string, unknown>>;

@@ -10,9 +10,7 @@
  */
 
 import { init, id } from '@instantdb/admin';
-
-const APP_ID      = process.env.VITE_INSTANT_APP_ID ?? '';
-const ADMIN_TOKEN = process.env.INSTANT_ADMIN_TOKEN ?? '';
+import { requireInstantCredentials } from './instant-config';
 
 interface UploadBody {
   path: string;
@@ -46,8 +44,12 @@ export default async function handler(req: Req, res: Res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  if (!APP_ID || !ADMIN_TOKEN) {
-    return res.status(500).json({ error: 'Missing VITE_INSTANT_APP_ID or INSTANT_ADMIN_TOKEN' });
+  let appId: string;
+  let adminToken: string;
+  try {
+    ({ appId, adminToken } = requireInstantCredentials());
+  } catch (e) {
+    return res.status(500).json({ error: e instanceof Error ? e.message : 'Missing config' });
   }
 
   const body = req.body;
@@ -59,7 +61,7 @@ export default async function handler(req: Req, res: Res) {
     return res.status(400).json({ error: 'Invalid storage path' });
   }
 
-  const adminDb = init({ appId: APP_ID, adminToken: ADMIN_TOKEN });
+  const adminDb = init({ appId, adminToken: adminToken });
 
   try {
     const buffer = Buffer.from(body.fileBase64, 'base64');
