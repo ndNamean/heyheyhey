@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { id } from '@instantdb/react';
 import { db } from '../db';
 import { canEditMaster } from '../lib/roles';
 import { nowIso } from '../lib/utils';
-import MapPicker from '../components/MapPicker';
 import type { Profile, Store } from '../types';
+
+const MapPicker = lazy(() => import('../components/MapPicker'));
 
 interface Props {
   profile: Profile;
@@ -159,6 +160,7 @@ export default function StoresPage({ profile }: Props) {
           <p className="small" style={{ margin: '0 0 10px', fontWeight: 600, color: '#7a5c00' }}>
             Pick location on map
           </p>
+          <Suspense fallback={<div style={{ height: 340, background: '#f5f5f5', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', fontSize: 13 }}>Loading map…</div>}>
           <MapPicker
             lat={parseFloat(form.lat) || 0}
             lng={parseFloat(form.lng) || 0}
@@ -167,10 +169,11 @@ export default function StoresPage({ profile }: Props) {
                 ...prev,
                 lat: lat.toFixed(7),
                 lng: lng.toFixed(7),
-                address: address || prev.address,
-              }));
-            }}
-          />
+              address: address || prev.address,
+            }));
+          }}
+        />
+          </Suspense>
         </div>
 
         {/* Lat / Lng read-only display (auto-filled from map) */}
