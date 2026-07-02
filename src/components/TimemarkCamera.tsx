@@ -268,7 +268,8 @@ export default function TimemarkCamera({
         }),
       });
 
-      const result = await resp.json() as {
+      const rawText = await resp.text();
+      let result: {
         error?: string;
         mediaRecordId?: string;
         fileId?: string;
@@ -277,6 +278,15 @@ export default function TimemarkCamera({
         photoCode?: string;
         capturedAt?: string;
       };
+      try {
+        result = JSON.parse(rawText);
+      } catch {
+        throw new Error(
+          rawText.startsWith('A server error')
+            ? 'Server error — photo upload API failed. Please try again in a moment.'
+            : rawText.slice(0, 120) || `Upload failed (${resp.status})`,
+        );
+      }
 
       if (!resp.ok || result.error) {
         throw new Error(result.error ?? `Upload failed (${resp.status})`);
