@@ -7,15 +7,22 @@ export default defineConfig({
     port: 5173,
   },
   optimizeDeps: {
-    include: ['leaflet', 'react-leaflet'],
+    include: [
+      'react',
+      'react-dom',
+      '@instantdb/react',
+      'leaflet',
+      'react-leaflet',
+    ],
   },
   build: {
     rollupOptions: {
       output: {
-        manualChunks(id) {
-          if (id.includes('leaflet') || id.includes('react-leaflet')) {
-            return 'leaflet';
-          }
+        manualChunks: {
+          // Each vendor in its own chunk prevents Rollup circular-dependency
+          // TDZ errors that cause blank pages in production
+          'vendor-react':   ['react', 'react-dom'],
+          'vendor-instant': ['@instantdb/react'],
         },
       },
     },
