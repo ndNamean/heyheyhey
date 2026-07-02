@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { id } from '@instantdb/react';
 import { db } from '../db';
 import { needsMedia, needsNote, needsNumber, userCanAccessStore } from '../lib/roles';
@@ -50,6 +50,13 @@ export default function SubmitReportPage({ profile }: Props) {
 
   const currentItem = visibleItems[step];
   const progress = visibleItems.length ? ((step + 1) / visibleItems.length) * 100 : 0;
+  const inChecklistFlow = !!(storeId && templateId && !submitted);
+
+  useEffect(() => {
+    if (inChecklistFlow) document.body.classList.add('wizard-active');
+    else document.body.classList.remove('wizard-active');
+    return () => document.body.classList.remove('wizard-active');
+  }, [inChecklistFlow]);
 
   function setResponse(itemId: string, patch: Partial<LocalResponse>) {
     setResponses((prev) => ({
@@ -270,19 +277,21 @@ export default function SubmitReportPage({ profile }: Props) {
   // ── Review & submit screen ────────────────────────────────────────────────
   if (!currentItem) {
     return (
-      <div className="card">
-        <h2>Ready to submit</h2>
-        <p>{visibleItems.length} items completed.</p>
-        <button onClick={submitReport} disabled={submitting}>
-          {submitting ? 'Submitting...' : 'Submit report'}
-        </button>
-        <button
-          className="secondary"
-          style={{ marginTop: 8 }}
-          onClick={() => setStep(visibleItems.length - 1)}
-        >
-          Back
-        </button>
+      <div className="submit-wizard">
+        <div className="card">
+          <h2>Ready to submit</h2>
+          <p>{visibleItems.length} items completed.</p>
+        </div>
+        <WizardNav
+          step={visibleItems.length}
+          total={visibleItems.length}
+          progress={100}
+          backLabel="← Back"
+          nextLabel={submitting ? 'Submitting…' : 'Submit report ✓'}
+          onBack={() => setStep(visibleItems.length - 1)}
+          onNext={submitReport}
+          nextDisabled={submitting}
+        />
       </div>
     );
   }
@@ -291,7 +300,7 @@ export default function SubmitReportPage({ profile }: Props) {
   const r = responses[currentItem.id] ?? { ticked: false, numberValue: '', note: '', mediaItems: [] };
 
   return (
-    <div>
+    <div className="submit-wizard">
       <div className="card">
         <p className="small">
           Item {step + 1} of {visibleItems.length}
@@ -308,15 +317,17 @@ export default function SubmitReportPage({ profile }: Props) {
       </div>
 
       <div className="card">
-        <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <input
-            type="checkbox"
-            checked={r.ticked}
-            onChange={(e) => setResponse(currentItem.id, { ticked: e.target.checked })}
-            style={{ width: 24, height: 24 }}
-          />
-          Done / Completed
-        </label>
+        <button
+          type="button"
+          className={`done-toggle${r.ticked ? ' done-toggle--on' : ''}`}
+          onClick={() => setResponse(currentItem.id, { ticked: !r.ticked })}
+          aria-pressed={r.ticked}
+        >
+          <span className="done-toggle-icon" aria-hidden="true">
+            {r.ticked ? '✓' : ''}
+          </span>
+          <span>Done / Completed</span>
+        </button>
 
         {needsNumber(currentItem.proofType) && (
           <label style={{ marginTop: 12, display: 'block' }}>
@@ -354,25 +365,76 @@ export default function SubmitReportPage({ profile }: Props) {
         )}
       </div>
 
-      <div className="sticky-footer">
-        <div className="grid two">
-          <button
-            className="secondary"
-            disabled={step === 0}
-            onClick={() => setStep((s) => s - 1)}
-          >
-            Back
-          </button>
-          <button
-            onClick={() => {
-              if (currentItem.required && !r.ticked) return alert('Mark item as done first');
-              if (step + 1 >= visibleItems.length) setStep(visibleItems.length);
-              else setStep((s) => s + 1);
-            }}
-          >
-            {step + 1 >= visibleItems.length ? 'Review & submit' : 'Next item'}
-          </button>
-        </div>
+      <WizardNav
+        step={step}
+        total={visibleItems.length}
+        progress={progress}
+        backLabel="← Back"
+        nextLabel={step + 1 >= visibleItems.length ? 'Review & submit →' : 'Next item →'}
+        onBack={() => {
+          if (step === 0) {
+            setTemplateId('');
+            setStep(0);
+          } else {
+            setStep((s) => s - 1);
+          }
+        }}
+        onNext={() => {
+          if (currentItem.required && !r.ticked) return alert('Mark item as done first');
+          if (step + 1 >= visibleItems.length) setStep(visibleItems.length);
+          else setStep((s) => s + 1);
+        }}
+      />
+    </div>
+  );
+}
+
+interface WizardNavProps {
+  step: number;
+  total: number;
+  progress: number;
+  backLabel: string;
+  nextLabel: string;
+  onBack: () => void;
+  onNext: () => void;
+  nextDisabled?: boolean;
+}
+
+function WizardNav({
+  step,
+  total,
+  progress,
+  backLabel,
+  nextLabel,
+  onBack,
+  onNext,
+  nextDisabled,
+}: WizardNavProps) {
+  const displayStep = Math.min(step + 1, total);
+
+  return (
+    <div className="wizard-nav" role="navigation" aria-label="Checklist steps">
+      <div className="wizard-nav-meta">
+        <span className="wizard-nav-step">
+          Step {displayStep} / {total}
+        </span>
+        <span className="wizard-nav-pct">{Math.round(progress)}%</span>
+      </div>
+      <div className="wizard-nav-track" aria-hidden="true">
+        <div className="wizard-nav-track-fill" style={{ width: `${progress}%` }} />
+      </div>
+      <div className="wizard-nav-actions">
+        <button type="button" className="wizard-btn wizard-btn-back" onClick={onBack}>
+          {backLabel}
+        </button>
+        <button
+          type="button"
+          className="wizard-btn wizard-btn-next"
+          onClick={onNext}
+          disabled={nextDisabled}
+        >
+          {nextLabel}
+        </button>
       </div>
     </div>
   );
