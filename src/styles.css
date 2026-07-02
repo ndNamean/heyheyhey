@@ -773,6 +773,41 @@ body.wizard-active .page {
   line-height: 18px;
 }
 
+.fix-resubmit-btn {
+  width: 100%;
+  background: linear-gradient(135deg, #111 0%, #2a2a2a 100%);
+  color: #FDC216;
+  border: 1px solid rgba(253, 194, 22, 0.45);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.correction-mode-banner {
+  background: linear-gradient(135deg, #fffbeb 0%, #fff 100%);
+  border: 1px solid rgba(253, 194, 22, 0.35);
+}
+
+.correction-feedback-card {
+  background: #fff5f5;
+  border: 1px solid #ffd6d6;
+}
+
+.correction-feedback-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #b00020;
+  margin-bottom: 6px;
+}
+
+.correction-feedback-text {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #7a0015;
+  white-space: pre-wrap;
+}
+
 /* ── Camera controls safe-area padding ──────────────────────────────────── */
 .camera-controls {
   padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));

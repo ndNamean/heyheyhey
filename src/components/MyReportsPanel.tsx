@@ -4,9 +4,10 @@ import type { Profile, Report, ReportResponse } from '../types';
 
 interface Props {
   profile: Profile;
+  onFixReport?: (reportId: string) => void;
 }
 
-export default function MyReportsPanel({ profile }: Props) {
+export default function MyReportsPanel({ profile, onFixReport }: Props) {
   const { data } = db.useQuery({
     reports: {
       $: { where: { submittedByUserId: profile.userId } },
@@ -66,6 +67,16 @@ export default function MyReportsPanel({ profile }: Props) {
                 )}
               </div>
             ))}
+
+            {flagged.length > 0 && onFixReport && (
+              <button
+                className="fix-resubmit-btn"
+                style={{ marginTop: 10 }}
+                onClick={() => onFixReport(report.id)}
+              >
+                Fix & resubmit ({flagged.length} item{flagged.length > 1 ? 's' : ''})
+              </button>
+            )}
           </div>
         );
       })}

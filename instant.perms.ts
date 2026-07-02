@@ -96,20 +96,36 @@ const rules = {
     allow: {
       view: 'isApproved',
       create: 'isApproved',
-      update: 'canReview',
+      update: 'canReview || canSubmitterUpdateReport',
       delete: 'isOwner',
     },
-    bind: { ...COMMON_BIND },
+    bind: {
+      ...COMMON_BIND,
+      isReportSubmitter: 'auth.id != null && data.submittedByUserId == auth.id',
+      reportOpenForCorrection:
+        "data.status == 'waiting_approval' || data.status == 'need_correction' || data.status == 'rejected'",
+      onlyReportResubmitFields:
+        "request.modifiedFields.all(f, f in ['status', 'completionPercent', 'updatedAt'])",
+      canSubmitterUpdateReport:
+        'isReportSubmitter && reportOpenForCorrection && onlyReportResubmitFields',
+    },
   },
 
   reportResponses: {
     allow: {
       view: 'isApproved',
       create: 'isApproved',
-      update: 'canReview',
+      update: 'canReview || canResubmitCorrection',
       delete: 'isOwner',
     },
-    bind: { ...COMMON_BIND },
+    bind: {
+      ...COMMON_BIND,
+      isResponseSubmitter: 'auth.id != null && data.submittedByUserId == auth.id',
+      isCorrectable: "data.status == 'need_correction' || data.status == 'rejected'",
+      onlyResubmitFields:
+        "request.modifiedFields.all(f, f in ['ticked', 'numberValue', 'note', 'status', 'rejectionReason', 'submittedAt', 'updatedAt', 'approvedByUserId', 'approvedAt'])",
+      canResubmitCorrection: 'isResponseSubmitter && isCorrectable && onlyResubmitFields',
+    },
   },
 
   // ── Media records ─────────────────────────────────────────────────────────

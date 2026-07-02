@@ -1,35 +1,76 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { id } from '@instantdb/react';
 import { db } from '../db';
 import { needsMedia, needsNote, needsNumber, userCanAccessStore } from '../lib/roles';
 import { calcCompletion, nowIso, todayYmd } from '../lib/utils';
 import TimemarkCamera from '../components/TimemarkCamera';
-import type { LocalResponse, Profile, Store, Template, TemplateItem, UploadedMedia } from '../types';
+import type {
+  LocalResponse,
+  MediaRecord,
+  Profile,
+  Report,
+  ReportResponse,
+  Store,
+  Template,
+  TemplateItem,
+  UploadedMedia,
+} from '../types';
 
 interface Props {
   profile: Profile;
+  correctionReportId?: string | null;
+  onCorrectionComplete?: () => void;
 }
 
-export default function SubmitReportPage({ profile }: Props) {
-  // Pre-generate a stable reportId so photo paths are valid before submission
-  const [reportId] = useState(() => id());
+const EMPTY_RESPONSE: LocalResponse = {
+  ticked: false,
+  numberValue: '',
+  note: '',
+  mediaItems: [],
+};
+
+export default function SubmitReportPage({
+  profile,
+  correctionReportId = null,
+  onCorrectionComplete,
+}: Props) {
+  const correctionMode = !!correctionReportId;
+  const [newReportId] = useState(() => id());
   const [storeId, setStoreId] = useState('');
   const [templateId, setTemplateId] = useState('');
   const [reportDate, setReportDate] = useState(todayYmd);
   const [step, setStep] = useState(0);
   const [responses, setResponses] = useState<Record<string, LocalResponse>>({});
+  const [responseIdByItem, setResponseIdByItem] = useState<Record<string, string>>({});
+  const [correctionNotes, setCorrectionNotes] = useState<Record<string, string>>({});
+  const [existingMediaIds, setExistingMediaIds] = useState<Set<string>>(new Set());
+  const [correctionReady, setCorrectionReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const correctionInitRef = useRef(false);
+
+  const activeReportId = correctionReportId ?? newReportId;
 
   const { data } = db.useQuery({
     stores: {},
     templates: { items: {}, stores: {} },
+    ...(correctionReportId
+      ? {
+          reports: {
+            $: { where: { id: correctionReportId } },
+            responses: { media: { file: {} } },
+          },
+        }
+      : {}),
   });
+
+  const correctionReport: Report | undefined = correctionReportId
+    ? (((data?.reports ?? []) as Report[])[0] as Report | undefined)
+    : undefined;
 
   const allStores: Store[] = (data?.stores ?? []) as Store[];
   const allTemplates: Template[] = (data?.templates ?? []) as Template[];
 
-  // Filter stores to those the user can access
   const accessibleStores = allStores.filter(
     (s) => s.active && userCanAccessStore(profile.role, (profile.stores ?? []).map((st) => st.id), s.id),
   );
@@ -40,17 +81,82 @@ export default function SubmitReportPage({ profile }: Props) {
   );
   const selectedTemplate = availableTemplates.find((t) => t.id === templateId);
 
+  const flaggedResponses = useMemo(() => {
+    if (!correctionReport) return [] as ReportResponse[];
+    return ((correctionReport.responses ?? []) as ReportResponse[]).filter((r) =>
+      ['rejected', 'need_correction'].includes(r.status),
+    );
+  }, [correctionReport]);
+
   const visibleItems: TemplateItem[] = useMemo(() => {
     if (!selectedTemplate?.items) return [];
     const items = selectedTemplate.items as TemplateItem[];
     const sorted = [...items].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+
+    if (correctionMode) {
+      const flaggedItemIds = new Set(flaggedResponses.map((r) => r.templateItemId));
+      return sorted.filter((i) => flaggedItemIds.has(i.id));
+    }
+
     if (profile.role === 'owner' || profile.role === 'areaManager') return sorted;
     return sorted.filter((i) => i.assignedRole === profile.role);
-  }, [selectedTemplate, profile.role]);
+  }, [selectedTemplate, profile.role, correctionMode, flaggedResponses]);
+
+  useEffect(() => {
+    if (!correctionMode || !correctionReport || correctionInitRef.current) return;
+    if (correctionReport.submittedByUserId !== profile.userId) return;
+
+    correctionInitRef.current = true;
+
+    const flagged = ((correctionReport.responses ?? []) as ReportResponse[]).filter((r) =>
+      ['rejected', 'need_correction'].includes(r.status),
+    );
+
+    const initialResponses: Record<string, LocalResponse> = {};
+    const idMap: Record<string, string> = {};
+    const notes: Record<string, string> = {};
+    const mediaIds = new Set<string>();
+
+    for (const resp of flagged) {
+      idMap[resp.templateItemId] = resp.id;
+      notes[resp.templateItemId] = resp.rejectionReason ?? '';
+      const media = (resp.media ?? []) as MediaRecord[];
+      for (const m of media) mediaIds.add(m.id);
+
+      initialResponses[resp.templateItemId] = {
+        ticked: false,
+        numberValue: resp.numberValue ?? '',
+        note: resp.note ?? '',
+        mediaItems: media.map(
+          (m): UploadedMedia => ({
+            mediaRecordId: m.id,
+            fileId: m.file?.id ?? '',
+            url: m.fileUrl || m.file?.url || '',
+            fileName: m.fileName,
+            photoCode: m.photoCode,
+            capturedAt: m.capturedAt,
+          }),
+        ),
+      };
+    }
+
+    setStoreId(correctionReport.storeId);
+    setTemplateId(correctionReport.templateId);
+    setReportDate(correctionReport.reportDate);
+    setResponses(initialResponses);
+    setResponseIdByItem(idMap);
+    setCorrectionNotes(notes);
+    setExistingMediaIds(mediaIds);
+    setStep(0);
+    setCorrectionReady(true);
+  }, [correctionMode, correctionReport, profile.userId]);
 
   const currentItem = visibleItems[step];
   const progress = visibleItems.length ? ((step + 1) / visibleItems.length) * 100 : 0;
-  const inChecklistFlow = !!(storeId && templateId && !submitted);
+  const inChecklistFlow =
+    correctionMode
+      ? correctionReady && visibleItems.length > 0 && !submitted
+      : !!(storeId && templateId && !submitted);
 
   useEffect(() => {
     if (inChecklistFlow) document.body.classList.add('wizard-active');
@@ -61,47 +167,63 @@ export default function SubmitReportPage({ profile }: Props) {
   function setResponse(itemId: string, patch: Partial<LocalResponse>) {
     setResponses((prev) => ({
       ...prev,
-      [itemId]: { ...(prev[itemId] ?? { ticked: false, numberValue: '', note: '', mediaItems: [] }), ...patch },
+      [itemId]: { ...(prev[itemId] ?? EMPTY_RESPONSE), ...patch },
     }));
   }
 
   function addMedia(itemId: string, media: UploadedMedia) {
     setResponses((prev) => {
-      const existing = prev[itemId] ?? { ticked: false, numberValue: '', note: '', mediaItems: [] };
+      const existing = prev[itemId] ?? EMPTY_RESPONSE;
       return {
         ...prev,
         [itemId]: {
           ...existing,
           mediaItems: [...existing.mediaItems, media],
-          ticked: true, // auto-tick when a photo is added
+          ticked: true,
         },
       };
     });
   }
 
+  function validateItems(items: TemplateItem[]): boolean {
+    for (const item of items) {
+      const r = responses[item.id] ?? EMPTY_RESPONSE;
+      if (item.required && !r.ticked) {
+        alert(`Mark item as done: ${item.title}`);
+        return false;
+      }
+      if (correctionMode && needsMedia(item.proofType)) {
+        const hasNewPhoto = r.mediaItems.some((m) => !existingMediaIds.has(m.mediaRecordId));
+        if (!hasNewPhoto) {
+          alert(`Please take a new photo: ${item.title}`);
+          return false;
+        }
+      } else if (item.required && needsMedia(item.proofType) && !r.mediaItems.length) {
+        alert(`Missing photo/video: ${item.title}`);
+        return false;
+      }
+      if (item.required && needsNote(item.proofType) && !r.note.trim()) {
+        alert(`Missing note: ${item.title}`);
+        return false;
+      }
+      if (item.required && needsNumber(item.proofType) && !r.numberValue.trim()) {
+        alert(`Missing number: ${item.title}`);
+        return false;
+      }
+    }
+    return true;
+  }
+
   async function submitReport() {
     if (!selectedStore || !selectedTemplate) return alert('Select a store and template first');
-
-    // Validate
-    for (const item of visibleItems) {
-      const r = responses[item.id] ?? { ticked: false, numberValue: '', note: '', mediaItems: [] };
-      if (item.required && !r.ticked)
-        return alert(`Mark item as done: ${item.title}`);
-      if (item.required && needsMedia(item.proofType) && !r.mediaItems.length)
-        return alert(`Missing photo/video: ${item.title}`);
-      if (item.required && needsNote(item.proofType) && !r.note.trim())
-        return alert(`Missing note: ${item.title}`);
-      if (item.required && needsNumber(item.proofType) && !r.numberValue.trim())
-        return alert(`Missing number: ${item.title}`);
-    }
+    if (!validateItems(visibleItems)) return;
 
     setSubmitting(true);
     try {
-        const now = nowIso();
+      const now = nowIso();
 
-      // Build response rows
       const responseItems = visibleItems.map((item) => {
-        const r = responses[item.id] ?? { ticked: false, numberValue: '', note: '', mediaItems: [] };
+        const r = responses[item.id] ?? EMPTY_RESPONSE;
         return {
           id: id(),
           templateItemId: item.id,
@@ -132,8 +254,7 @@ export default function SubmitReportPage({ profile }: Props) {
         responseItems.map((r) => ({ ticked: r.ticked, required: r.required })),
       );
 
-      // Create report
-      const reportTx = db.tx.reports[reportId]
+      const reportTx = db.tx.reports[activeReportId]
         .update({
           storeId: selectedStore.id,
           storeCode: selectedStore.code,
@@ -155,11 +276,10 @@ export default function SubmitReportPage({ profile }: Props) {
         })
         .link({ store: selectedStore.id, template: selectedTemplate.id, submitter: profile.id });
 
-      // Create response records
-      const responseTxs = responseItems.map((resp) => {
-        const txBase = db.tx.reportResponses[resp.id]
+      const responseTxs = responseItems.map((resp) =>
+        db.tx.reportResponses[resp.id]
           .update({
-            reportId,
+            reportId: activeReportId,
             templateItemId: resp.templateItemId,
             section: resp.section,
             title: resp.title,
@@ -181,12 +301,9 @@ export default function SubmitReportPage({ profile }: Props) {
             approvedAt: '',
             updatedAt: now,
           })
-          .link({ report: reportId });
+          .link({ report: activeReportId }),
+      );
 
-        return txBase;
-      });
-
-      // Link media records to their response IDs
       const mediaLinkTxs = responseItems.flatMap((resp) =>
         resp.mediaItems.map((m: UploadedMedia) =>
           db.tx.mediaRecords[m.mediaRecordId].link({ reportResponse: resp.id }),
@@ -202,24 +319,120 @@ export default function SubmitReportPage({ profile }: Props) {
     }
   }
 
+  async function resubmitCorrections() {
+    if (!correctionReport || !selectedStore) return;
+    if (!validateItems(visibleItems)) return;
+
+    setSubmitting(true);
+    try {
+      const now = nowIso();
+      const allResponses = (correctionReport.responses ?? []) as ReportResponse[];
+
+      const responseUpdateTxs = visibleItems.map((item) => {
+        const respId = responseIdByItem[item.id];
+        const r = responses[item.id] ?? EMPTY_RESPONSE;
+        return db.tx.reportResponses[respId].update({
+          ticked: r.ticked,
+          numberValue: r.numberValue,
+          note: r.note,
+          status: 'waiting_approval',
+          rejectionReason: '',
+          submittedAt: now,
+          updatedAt: now,
+          approvedByUserId: '',
+          approvedAt: '',
+        });
+      });
+
+      const mediaLinkTxs = visibleItems.flatMap((item) => {
+        const respId = responseIdByItem[item.id];
+        const r = responses[item.id] ?? EMPTY_RESPONSE;
+        return r.mediaItems
+          .filter((m) => !existingMediaIds.has(m.mediaRecordId))
+          .map((m) => db.tx.mediaRecords[m.mediaRecordId].link({ reportResponse: respId }));
+      });
+
+      const mergedResponses = allResponses.map((resp) => {
+        const item = visibleItems.find((i) => responseIdByItem[i.id] === resp.id);
+        if (!item) return resp;
+        const r = responses[item.id] ?? EMPTY_RESPONSE;
+        return { ...resp, ticked: r.ticked, status: 'waiting_approval' as const };
+      });
+
+      const completionPercent = calcCompletion(
+        mergedResponses.map((r) => ({ ticked: r.ticked, required: r.required })),
+      );
+
+      const reportTx = db.tx.reports[correctionReport.id].update({
+        status: 'waiting_approval',
+        completionPercent,
+        updatedAt: now,
+      });
+
+      await db.transact([reportTx, ...responseUpdateTxs, ...mediaLinkTxs]);
+      setSubmitted(true);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Resubmission failed');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   function resetForm() {
-    // Navigate away to force a fresh reportId on re-mount
+    if (correctionMode) {
+      onCorrectionComplete?.();
+      return;
+    }
     window.location.reload();
   }
 
-  // ── Submitted confirmation ────────────────────────────────────────────────
-  if (submitted) {
+  if (correctionMode && correctionReport && correctionReport.submittedByUserId !== profile.userId) {
     return (
       <div className="card">
-        <h2>Report submitted</h2>
-        <p>Your report is now waiting for review.</p>
-        <button onClick={resetForm}>Submit another report</button>
+        <h2>Not your report</h2>
+        <p>You can only fix reports you submitted.</p>
+        <button className="secondary" onClick={() => onCorrectionComplete?.()}>
+          Back to home
+        </button>
       </div>
     );
   }
 
-  // ── Store / template selection ────────────────────────────────────────────
-  if (!storeId || !templateId) {
+  if (correctionMode && correctionReport && !flaggedResponses.length) {
+    return (
+      <div className="card">
+        <h2>No corrections needed</h2>
+        <p>This report has no items waiting for correction.</p>
+        <button className="secondary" onClick={() => onCorrectionComplete?.()}>
+          Back to home
+        </button>
+      </div>
+    );
+  }
+
+  if (correctionMode && !correctionReady) {
+    return (
+      <div className="card">
+        <p>Loading corrections…</p>
+      </div>
+    );
+  }
+
+  if (submitted) {
+    return (
+      <div className="card">
+        <h2>{correctionMode ? 'Corrections resubmitted' : 'Report submitted'}</h2>
+        <p>
+          {correctionMode
+            ? 'Your fixes are back in the review queue.'
+            : 'Your report is now waiting for review.'}
+        </p>
+        <button onClick={resetForm}>{correctionMode ? 'Back to home' : 'Submit another report'}</button>
+      </div>
+    );
+  }
+
+  if (!correctionMode && (!storeId || !templateId)) {
     return (
       <div>
         <div className="card">
@@ -230,11 +443,7 @@ export default function SubmitReportPage({ profile }: Props) {
           <div className="grid two">
             <label>
               Date
-              <input
-                type="date"
-                value={reportDate}
-                onChange={(e) => setReportDate(e.target.value)}
-              />
+              <input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} />
             </label>
             <label>
               Store
@@ -274,36 +483,64 @@ export default function SubmitReportPage({ profile }: Props) {
     );
   }
 
-  // ── Review & submit screen ────────────────────────────────────────────────
   if (!currentItem) {
     return (
       <div className="submit-wizard">
         <div className="card">
-          <h2>Ready to submit</h2>
-          <p>{visibleItems.length} items completed.</p>
+          <h2>{correctionMode ? 'Ready to resubmit' : 'Ready to submit'}</h2>
+          <p>
+            {correctionMode
+              ? `${visibleItems.length} corrected item${visibleItems.length > 1 ? 's' : ''} ready for review.`
+              : `${visibleItems.length} items completed.`}
+          </p>
         </div>
         <WizardNav
           step={visibleItems.length}
           total={visibleItems.length}
           progress={100}
           backLabel="← Back"
-          nextLabel={submitting ? 'Submitting…' : 'Submit report ✓'}
+          nextLabel={
+            submitting
+              ? 'Submitting…'
+              : correctionMode
+                ? 'Resubmit corrections ✓'
+                : 'Submit report ✓'
+          }
           onBack={() => setStep(visibleItems.length - 1)}
-          onNext={submitReport}
+          onNext={correctionMode ? resubmitCorrections : submitReport}
           nextDisabled={submitting}
         />
       </div>
     );
   }
 
-  // ── Item wizard ───────────────────────────────────────────────────────────
-  const r = responses[currentItem.id] ?? { ticked: false, numberValue: '', note: '', mediaItems: [] };
+  const r = responses[currentItem.id] ?? EMPTY_RESPONSE;
+  const itemFeedback = correctionNotes[currentItem.id];
+  const responseRecordId = responseIdByItem[currentItem.id] ?? currentItem.id;
 
   return (
     <div className="submit-wizard">
+      {correctionMode && (
+        <div className="card correction-mode-banner">
+          <h2 style={{ margin: 0 }}>Fix corrections</h2>
+          <p className="small" style={{ margin: '6px 0 0' }}>
+            {selectedStore?.code} — {correctionReport?.templateName} · {correctionReport?.reportDate}
+          </p>
+          <button
+            type="button"
+            className="secondary"
+            style={{ marginTop: 10 }}
+            onClick={() => onCorrectionComplete?.()}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       <div className="card">
         <p className="small">
           Item {step + 1} of {visibleItems.length}
+          {correctionMode ? ' · correction' : ''}
         </p>
         <div className="progress-bar">
           <div style={{ width: progress + '%' }} />
@@ -315,6 +552,14 @@ export default function SubmitReportPage({ profile }: Props) {
           {currentItem.required ? 'Required' : 'Optional'}
         </p>
       </div>
+
+      {itemFeedback && (
+        <div className="card correction-feedback-card">
+          <div className="correction-feedback-label">Reviewer feedback</div>
+          <p className="correction-feedback-text">{itemFeedback}</p>
+          <p className="small">Update your answer below, then mark done and take a new photo if needed.</p>
+        </div>
+      )}
 
       <div className="card">
         <button
@@ -355,8 +600,8 @@ export default function SubmitReportPage({ profile }: Props) {
               store={selectedStore}
               itemTitle={currentItem.title}
               reportDate={reportDate}
-              reportId={reportId}
-              reportResponseId={currentItem.id}   // template item id — used as folder key
+              reportId={activeReportId}
+              reportResponseId={responseRecordId}
               profile={profile}
               existingMedia={r.mediaItems}
               onCapture={(media) => addMedia(currentItem.id, media)}
@@ -370,11 +615,21 @@ export default function SubmitReportPage({ profile }: Props) {
         total={visibleItems.length}
         progress={progress}
         backLabel="← Back"
-        nextLabel={step + 1 >= visibleItems.length ? 'Review & submit →' : 'Next item →'}
+        nextLabel={
+          step + 1 >= visibleItems.length
+            ? correctionMode
+              ? 'Review & resubmit →'
+              : 'Review & submit →'
+            : 'Next item →'
+        }
         onBack={() => {
           if (step === 0) {
-            setTemplateId('');
-            setStep(0);
+            if (correctionMode) {
+              onCorrectionComplete?.();
+            } else {
+              setTemplateId('');
+              setStep(0);
+            }
           } else {
             setStep((s) => s - 1);
           }

@@ -6,9 +6,11 @@ import type { Profile } from '../types';
 interface Props {
   profile: Profile;
   setPage: (p: string) => void;
+  onStartReport: () => void;
+  onFixReport: (reportId: string) => void;
 }
 
-export default function StaffHome({ profile, setPage }: Props) {
+export default function StaffHome({ profile, onStartReport, onFixReport }: Props) {
   const today = new Date().toISOString().slice(0, 10);
 
   const { data } = db.useQuery({
@@ -33,7 +35,7 @@ export default function StaffHome({ profile, setPage }: Props) {
   return (
     <div>
       <FeedbackInbox userId={profile.userId} title="Report feedback" />
-      <MyReportsPanel profile={profile} />
+      <MyReportsPanel profile={profile} onFixReport={onFixReport} />
 
       <div className="card">
         <h1>Hello, {profile.displayName || profile.email.split('@')[0]}</h1>
@@ -53,7 +55,7 @@ export default function StaffHome({ profile, setPage }: Props) {
                   {slot.status === 'missed' ? 'Missed' : `Due: ${slot.dueTime}`}
                 </span>
               </div>
-              <button style={{ marginTop: 6 }} onClick={() => setPage('submit')}>
+              <button style={{ marginTop: 6 }} onClick={onStartReport}>
                 Start checklist
               </button>
             </div>
@@ -66,7 +68,7 @@ export default function StaffHome({ profile, setPage }: Props) {
           <p>
             <span className="badge warn">Tip</span> Allow location and camera when prompted.
           </p>
-          <button style={{ marginTop: 8 }} onClick={() => setPage('submit')}>
+          <button style={{ marginTop: 8 }} onClick={onStartReport}>
             Start report
           </button>
         </div>

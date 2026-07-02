@@ -21,6 +21,17 @@ interface Props {
 
 export default function AppShell({ profile }: Props) {
   const [page, setPage] = useState<Page>('home');
+  const [correctionReportId, setCorrectionReportId] = useState<string | null>(null);
+
+  function startNewReport() {
+    setCorrectionReportId(null);
+    setPage('submit');
+  }
+
+  function startCorrection(reportId: string) {
+    setCorrectionReportId(reportId);
+    setPage('submit');
+  }
 
   function renderPage() {
     switch (page) {
@@ -28,10 +39,24 @@ export default function AppShell({ profile }: Props) {
         return profile.role === 'owner' || profile.role === 'areaManager' ? (
           <DashboardPage profile={profile} />
         ) : (
-          <StaffHome profile={profile} setPage={setPage} />
+          <StaffHome
+            profile={profile}
+            setPage={setPage}
+            onStartReport={startNewReport}
+            onFixReport={startCorrection}
+          />
         );
       case 'submit':
-        return <SubmitReportPage profile={profile} />;
+        return (
+          <SubmitReportPage
+            profile={profile}
+            correctionReportId={correctionReportId}
+            onCorrectionComplete={() => {
+              setCorrectionReportId(null);
+              setPage('home');
+            }}
+          />
+        );
       case 'review':
         return <ReviewPage profile={profile} />;
       case 'profile':
@@ -53,7 +78,14 @@ export default function AppShell({ profile }: Props) {
       case 'logbook':
         return <LogbookPage profile={profile} />;
       default:
-        return <StaffHome profile={profile} setPage={setPage} />;
+        return (
+          <StaffHome
+            profile={profile}
+            setPage={setPage}
+            onStartReport={startNewReport}
+            onFixReport={startCorrection}
+          />
+        );
     }
   }
 
