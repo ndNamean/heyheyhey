@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { db } from '../db';
 import { canReview } from '../lib/roles';
+import ProofPhoto from '../components/ProofPhoto';
 import type { MediaRecord, Profile } from '../types';
 
 interface Props {
@@ -84,19 +85,10 @@ export default function PhotoSheetPage({ profile }: Props) {
                   <td className="small">{p.captureMode ?? '—'}</td>
                   <td className="small">{p.capturedAt?.slice(0, 16) ?? '—'}</td>
                   <td>
-                    {(p as MediaRecord & { file?: { url: string } }).file?.url && (
-                      <a
-                        href={(p as MediaRecord & { file?: { url: string } }).file!.url}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        <img
-                          src={(p as MediaRecord & { file?: { url: string } }).file!.url}
-                          alt="proof"
-                          style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6 }}
-                        />
-                      </a>
-                    )}
+                    <ProofPhoto
+                      media={p}
+                      className="proof-photo-sheet-thumb"
+                    />
                   </td>
                 </tr>
               );

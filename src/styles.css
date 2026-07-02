@@ -549,6 +549,117 @@ body.wizard-active .page {
 .thumb-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-top:10px; }
 .thumb-grid img, .thumb-grid video { width:100%; border-radius:10px; border:1px solid #eee; }
 
+/* ── Proof photos (review / photo sheet) ──────────────────────────────────── */
+.proof-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.proof-photo-card {
+  background: #111;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid #2a2a2a;
+}
+
+.proof-photo-link {
+  display: block;
+  background: #0a0a0a;
+}
+
+.proof-photo-link img {
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  display: block;
+  background: #0a0a0a;
+}
+
+.proof-photo-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background: #151515;
+  border-top: 1px solid #2a2a2a;
+}
+
+.proof-photo-code {
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: #FDC216;
+}
+
+.proof-photo-time {
+  font-size: 11px;
+  color: #888;
+}
+
+.proof-photo-loading,
+.proof-photo-missing,
+.proof-photo-removed {
+  min-height: 160px;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: #888;
+}
+
+.proof-photo-loading {
+  color: #aaa;
+  background: linear-gradient(110deg, #1a1a1a 8%, #222 18%, #1a1a1a 33%);
+  background-size: 200% 100%;
+  animation: proof-shimmer 1.2s linear infinite;
+}
+
+@keyframes proof-shimmer {
+  to { background-position-x: -200%; }
+}
+
+.proof-photo-missing {
+  background: #1a1a1a;
+  border: 1px dashed #444;
+}
+
+.proof-photo-removed {
+  background: #111;
+  color: #666;
+}
+
+.proof-photo-removed-title {
+  color: #FDC216;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.proof-photo-removed-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.proof-photo-sheet-thumb.proof-photo-link img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.proof-photo-sheet-thumb.proof-photo-loading,
+.proof-photo-sheet-thumb.proof-photo-missing {
+  min-height: 64px;
+  width: 64px;
+  font-size: 10px;
+  padding: 6px;
+}
+
 /* ── Camera controls safe-area padding ──────────────────────────────────── */
 .camera-controls {
   padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));

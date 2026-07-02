@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { canApproveItem, canReview } from '../lib/roles';
 import { badgeClass, nowIso } from '../lib/utils';
+import ProofPhoto from '../components/ProofPhoto';
 import type { MediaRecord, Profile, Report, ReportResponse } from '../types';
 
 interface Props {
@@ -133,39 +134,16 @@ export default function ReviewPage({ profile }: Props) {
                     </p>
                   )}
                   {media.length > 0 && (
-                    <div className="thumb-grid">
+                    <div className="proof-photo-grid">
                       {media.map((m) => (
-                        <div key={m.id}>
-                          {m.storageDeleted ? (
-                            <div style={{
-                              background: '#111',
-                              border: '1px solid #2a2a2a',
-                              borderRadius: 10,
-                              padding: '12px 14px',
-                              fontSize: 12,
-                              color: '#888',
-                            }}>
-                              <div style={{ color: '#FDC216', fontWeight: 700, marginBottom: 6 }}>
-                                📷 Ảnh đã xóa / Photo Removed
-                              </div>
-                              <div style={{ marginBottom: 8 }}>
-                                Ảnh minh chứng đã được tự động xoá sau 7 ngày kể từ khi duyệt báo cáo.
-                              </div>
-                              <div style={{ fontFamily: 'monospace', fontSize: 11, lineHeight: 1.7, color: '#666' }}>
-                                {m.photoCode && <div>Code: {m.photoCode}</div>}
-                                {m.capturedAt && <div>Captured: {m.capturedAt}</div>}
-                                {(m.lat !== 0 || m.lng !== 0) && (
-                                  <div>GPS: {m.lat?.toFixed(5)}, {m.lng?.toFixed(5)}</div>
-                                )}
-                                {m.deletedAt && <div>Deleted: {m.deletedAt}</div>}
-                              </div>
-                            </div>
-                          ) : m.file?.url ? (
-                            <img src={m.file.url} alt={m.fileName} />
-                          ) : null}
+                        <div className="proof-photo-card" key={m.id}>
+                          <ProofPhoto media={m} />
                           {m.photoCode && !m.storageDeleted && (
-                            <div className="small" style={{ marginTop: 4, fontFamily: 'monospace', color: '#FDC216' }}>
-                              {m.photoCode}
+                            <div className="proof-photo-meta">
+                              <span className="proof-photo-code">{m.photoCode}</span>
+                              {m.capturedAt && (
+                                <span className="proof-photo-time">{m.capturedAt.slice(0, 16)}</span>
+                              )}
                             </div>
                           )}
                         </div>

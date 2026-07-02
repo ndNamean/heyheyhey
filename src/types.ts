@@ -174,6 +174,7 @@ export interface MediaRecord {
   createdAt: string;
   // Storage cleanup fields
   storagePath: string;
+  fileUrl: string;
   deletedAt: string;
   storageDeleted: boolean;
   storageDeletedReason: string;

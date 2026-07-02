@@ -131,6 +131,7 @@ const _schema = i.schema({
       createdAt: i.string(),
       // ── Storage cleanup fields ───────────────────────────────────────────
       storagePath: i.string(),             // InstantDB $files path; used by cleanup job
+      fileUrl: i.string(),                 // denormalised CDN url for review UI
       deletedAt: i.string(),               // '' while active; ISO date when storage file deleted
       storageDeleted: i.boolean(),         // true after cleanup job removes the file
       storageDeletedReason: i.string(),    // e.g. 'auto_cleanup_after_7_days_reviewed'

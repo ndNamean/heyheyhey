@@ -114,11 +114,12 @@ export default async function handler(req, res) {
           uploadedByUserId: m.uploadedByUserId,
           createdAt: m.capturedAt,
           storagePath: body.path,
+          fileUrl,
           deletedAt: '',
           storageDeleted: false,
           storageDeletedReason: '',
         })
-        .link({ file: fileData.id, reportResponse: m.reportResponseId }),
+        .link({ file: fileData.id }),
     );
 
     return res.status(200).json({
