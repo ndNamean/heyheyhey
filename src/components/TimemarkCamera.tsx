@@ -29,7 +29,6 @@ export default function TimemarkCamera({
 }: Props) {
   const videoRef   = useRef<HTMLVideoElement>(null);
   const streamRef  = useRef<MediaStream | null>(null);
-  const fileRef    = useRef<HTMLInputElement>(null);
   const bsTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [gps,      setGps]      = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
@@ -47,7 +46,8 @@ export default function TimemarkCamera({
   const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
   const [capturedUrl,  setCapturedUrl]  = useState('');
 
-  const [uploading, setUploading] = useState(false);
+  const [uploading,     setUploading]     = useState(false);
+  const [confirmError, setConfirmError] = useState('');
 
   // ── GPS watch (unchanged) ────────────────────────────────────────────────
   useEffect(() => {
@@ -340,25 +340,23 @@ export default function TimemarkCamera({
 
   async function handleConfirmPhoto() {
     if (!capturedBlob || uploading) return;
-    await uploadBlob(capturedBlob, `${store.code}_${Date.now()}.jpg`, 'live_camera');
-    URL.revokeObjectURL(capturedUrl);
-    setCapturedBlob(null);
-    setCapturedUrl('');
+    setConfirmError('');
+    try {
+      await uploadBlob(capturedBlob, `${store.code}_${Date.now()}.jpg`, 'live_camera');
+      URL.revokeObjectURL(capturedUrl);
+      setCapturedBlob(null);
+      setCapturedUrl('');
+    } catch (e) {
+      setConfirmError(e instanceof Error ? e.message : 'Upload failed. Please try again.\n\nTải lên thất bại. Vui lòng thử lại.');
+    }
   }
 
   function handleRetake() {
     URL.revokeObjectURL(capturedUrl);
     setCapturedBlob(null);
     setCapturedUrl('');
+    setConfirmError('');
     setCameraOn(true);
-  }
-
-  async function handleFileInput(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const watermarked = await watermarkBlob(file);
-    await uploadBlob(watermarked, file.name.replace(/\.[^.]+$/, '') + '_timestamped.jpg', 'file_fallback');
-    e.target.value = '';
   }
 
   // ── GPS badge helpers ────────────────────────────────────────────────────
@@ -368,28 +366,11 @@ export default function TimemarkCamera({
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div>
-      {/* Hidden file input for fallback upload */}
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        style={{ display: 'none' }}
-        onChange={handleFileInput}
-      />
-
-      {/* ── Idle state: open camera or upload ──────────────────────────── */}
+      {/* ── Idle state: open camera only (no upload — real-time proof required) */}
       {!cameraOn && !capturedBlob && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button onClick={handleOpenCamera} disabled={uploading}>
-            {uploading ? 'Uploading…' : '📷  Open Camera / Mở camera'}
-          </button>
-          <button
-            className="secondary"
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading}
-          >
-            📁  Upload photo instead / Tải ảnh lên thay thế
+            📷  Open Camera / Mở camera
           </button>
         </div>
       )}
@@ -455,10 +436,10 @@ export default function TimemarkCamera({
                   </button>
                   <button
                     className="secondary"
-                    onClick={() => { handleCloseCamera(); fileRef.current?.click(); }}
+                    onClick={handleCloseCamera}
                     style={{ fontSize: 13, padding: '10px 20px', borderRadius: 10 }}
                   >
-                    📁 Upload instead
+                    ✕ Close / Đóng
                   </button>
                 </div>
               </div>
@@ -489,11 +470,11 @@ export default function TimemarkCamera({
 
             <button
               className="cam-icon-btn"
-              onClick={() => { handleCloseCamera(); fileRef.current?.click(); }}
-              aria-label="Upload photo instead"
-              title="Upload instead / Tải ảnh lên"
+              onClick={handleCloseCamera}
+              aria-label="Close camera"
+              title="Close / Đóng"
             >
-              📁<span>Tải lên</span>
+              ✕<span>Đóng</span>
             </button>
           </div>
         </div>
@@ -516,6 +497,20 @@ export default function TimemarkCamera({
               <div className="photo-code-value" style={{ fontSize: 13, letterSpacing: 0 }}>
                 {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)}&nbsp;(±{Math.round(gps.accuracy)}m)
               </div>
+            </div>
+          )}
+
+          {confirmError && (
+            <div style={{
+              background: 'rgba(239,68,68,0.15)',
+              border: '1px solid rgba(239,68,68,0.4)',
+              borderRadius: 10,
+              padding: '10px 14px',
+              color: '#ef4444',
+              fontSize: 13,
+              whiteSpace: 'pre-line',
+            }}>
+              {confirmError}
             </div>
           )}
 
