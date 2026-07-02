@@ -56,6 +56,37 @@ export function canApproveItem(submittedByRole: Role, approverRole: Role, approv
   return false;
 }
 
+/** Lowest role index among typical first-line approvers for a submitter role. */
+export function typicalApproverMinIndex(submitterRole: Role): number {
+  switch (submitterRole) {
+    case 'staff':
+      return ROLES.indexOf('manager');
+    case 'subleader':
+    case 'leader':
+      return ROLES.indexOf('areaManager');
+    case 'manager':
+      return ROLES.indexOf('areaManager');
+    default:
+      return ROLES.indexOf('owner');
+  }
+}
+
+/** True when the reviewer is above the usual first-line approver for this submitter. */
+export function isHigherPositionReview(approverRole: Role, submitterRole: Role): boolean {
+  const approverIdx = ROLES.indexOf(approverRole);
+  if (approverIdx < 0) return false;
+  return approverIdx < typicalApproverMinIndex(submitterRole);
+}
+
+/** Reviewer roles above the submitter in the org chart. */
+export function supervisorRolesToNotify(submitterRole: Role): Role[] {
+  const submitterIdx = ROLES.indexOf(submitterRole);
+  return ROLES.filter((r) => {
+    const idx = ROLES.indexOf(r);
+    return idx >= 0 && idx < submitterIdx && canReview(r);
+  });
+}
+
 export function userCanAccessStore(userRole: Role, userStoreIds: string[], storeId: string): boolean {
   if (userRole === 'owner') return true;
   return userStoreIds.includes(storeId);

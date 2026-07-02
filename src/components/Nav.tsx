@@ -2,6 +2,7 @@ import { db } from '../db';
 import { canEditMaster, canReview } from '../lib/roles';
 import { useLang } from '../i18n';
 import LanguageSelector from './LanguageSelector';
+import { useUnreadNotificationCount } from './FeedbackInbox';
 import type { Profile } from '../types';
 
 type Page =
@@ -68,8 +69,9 @@ export function DesktopNav({ page, setPage, profile }: NavProps) {
   );
 }
 
-export function MobileNav({ page, setPage }: NavProps) {
+export function MobileNav({ page, setPage, profile }: NavProps) {
   const { t } = useLang();
+  const unreadCount = useUnreadNotificationCount(profile.userId);
 
   const tabs: { id: Page; label: string }[] = [
     { id: 'home',    label: t.nav.dashboard },
@@ -86,7 +88,12 @@ export function MobileNav({ page, setPage }: NavProps) {
           className={page === tab.id ? 'active' : ''}
           onClick={() => setPage(tab.id)}
         >
-          <span>{tab.label}</span>
+          <span className="nav-tab-label">
+            {tab.label}
+            {tab.id === 'home' && unreadCount > 0 && (
+              <span className="nav-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>
+            )}
+          </span>
         </button>
       ))}
     </nav>

@@ -251,6 +251,31 @@ export interface LogbookEntry {
   photo?: { id: string; url: string };
 }
 
+export type NotificationType =
+  | 'item_approved'
+  | 'item_rejected'
+  | 'item_correction'
+  | 'report_finalized';
+
+export interface Notification {
+  id: string;
+  recipientUserId: string;
+  type: NotificationType;
+  reportId: string;
+  reportResponseId: string;
+  storeId: string;
+  title: string;
+  body: string;
+  itemTitle: string;
+  completionPercent: number;
+  compliancePercent: number;
+  actionStatus: string;
+  actorUserId: string;
+  actorRole: string;
+  readAt: string;
+  createdAt: string;
+}
+
 // Local response state used during report submission wizard
 export interface LocalResponse {
   ticked: boolean;

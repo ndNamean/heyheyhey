@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { db } from '../db';
+import FeedbackInbox from '../components/FeedbackInbox';
 import { badgeClass, todayYmd } from '../lib/utils';
 import type { Profile, Report, ReportResponse } from '../types';
 
@@ -115,6 +116,8 @@ export default function DashboardPage({ profile }: Props) {
 
   return (
     <div>
+      <FeedbackInbox userId={profile.userId} title="Team feedback" />
+
       <div className="card">
         <h1>Operation Dashboard</h1>
         <p className="small">

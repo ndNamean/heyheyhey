@@ -660,6 +660,119 @@ body.wizard-active .page {
   padding: 6px;
 }
 
+/* ── Feedback inbox ───────────────────────────────────────────────────────── */
+.feedback-inbox-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.feedback-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.feedback-item {
+  width: 100%;
+  text-align: left;
+  background: #fafafa;
+  border: 1px solid #e8e8e8;
+  border-radius: 14px;
+  padding: 14px 16px;
+  color: #111;
+  min-height: auto;
+  font-weight: 400;
+  touch-action: manipulation;
+}
+
+.feedback-item--unread {
+  background: #fffbeb;
+  border-color: rgba(253, 194, 22, 0.45);
+  box-shadow: inset 3px 0 0 #FDC216;
+}
+
+.feedback-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.feedback-item-time {
+  font-size: 11px;
+  color: #888;
+}
+
+.feedback-item-title {
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+
+.feedback-item-stats {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.feedback-item-body {
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  color: #333;
+}
+
+.feedback-item-actor {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #888;
+  text-transform: capitalize;
+}
+
+.feedback-report-item {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #fff5f5;
+  border: 1px solid #ffd6d6;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.feedback-report-reason {
+  margin: 0;
+  font-size: 13px;
+  color: #b00020;
+  white-space: pre-wrap;
+}
+
+.nav-tab-label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-badge {
+  position: absolute;
+  top: -6px;
+  right: -12px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #b00020;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
 /* ── Camera controls safe-area padding ──────────────────────────────────── */
 .camera-controls {
   padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));

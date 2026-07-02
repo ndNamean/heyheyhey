@@ -1,5 +1,9 @@
 import { db } from '../db';
 import { canApproveItem, canReview } from '../lib/roles';
+import {
+  buildItemReviewNotifications,
+  buildReportFinalizedNotifications,
+} from '../lib/notifications';
 import { badgeClass, nowIso } from '../lib/utils';
 import ProofPhoto from '../components/ProofPhoto';
 import type { MediaRecord, Profile, Report, ReportResponse } from '../types';
@@ -15,19 +19,21 @@ export default function ReviewPage({ profile }: Props) {
       responses: { media: { file: {} } },
       store: {},
     },
+    profiles: { stores: {} },
   });
 
   const reports: Report[] = (data?.reports ?? []) as Report[];
+  const allProfiles: Profile[] = (data?.profiles ?? []) as Profile[];
 
   if (!canReview(profile.role)) {
     return <div className="card">You do not have permission to review reports.</div>;
   }
 
   async function updateResponseStatus(
+    report: Report,
     response: ReportResponse,
     status: 'approved' | 'rejected' | 'need_correction',
   ) {
-    // Check permission
     const approverRoles = JSON.parse(response.approverRolesJson || '[]') as import('../types').Role[];
     if (
       !canApproveItem(
@@ -44,10 +50,25 @@ export default function ReviewPage({ profile }: Props) {
     if (status !== 'approved') {
       reason =
         prompt(status === 'rejected' ? 'Rejection reason?' : 'Correction note?') ?? status;
+      if (!reason.trim()) {
+        alert('Please enter feedback for the submitter.');
+        return;
+      }
     }
 
     const now = nowIso();
-    await db.transact(
+    const responses = (report.responses ?? []) as ReportResponse[];
+    const notificationTxs = buildItemReviewNotifications(
+      report,
+      response,
+      status,
+      reason,
+      profile,
+      allProfiles,
+      responses,
+    );
+
+    await db.transact([
       db.tx.reportResponses[response.id].update({
         status,
         rejectionReason: reason,
@@ -55,7 +76,8 @@ export default function ReviewPage({ profile }: Props) {
         approvedAt: now,
         updatedAt: now,
       }),
-    );
+      ...notificationTxs,
+    ]);
   }
 
   async function markReportApproved(report: Report) {
@@ -70,19 +92,30 @@ export default function ReviewPage({ profile }: Props) {
           )
         : 0;
 
-    await db.transact(
+    const notificationTxs = buildReportFinalizedNotifications(
+      report,
+      newStatus,
+      compliancePercent,
+      profile,
+      allProfiles,
+      responses,
+    );
+
+    await db.transact([
       db.tx.reports[report.id].update({
         status: newStatus,
         compliancePercent,
         updatedAt: nowIso(),
       }),
-    );
+      ...notificationTxs,
+    ]);
   }
 
   return (
     <div>
       <div className="card">
         <h1>Review Reports</h1>
+        <p className="small">Reject/correct items with a comment — feedback is sent to the submitter and their supervisors when reviewed by a higher role.</p>
       </div>
 
       {reports.map((report) => {
@@ -155,19 +188,19 @@ export default function ReviewPage({ profile }: Props) {
                     <div className="capture-actions" style={{ marginTop: 12 }}>
                       <button
                         className="success"
-                        onClick={() => updateResponseStatus(resp, 'approved')}
+                        onClick={() => updateResponseStatus(report, resp, 'approved')}
                       >
                         Approve
                       </button>
                       <button
                         className="danger"
-                        onClick={() => updateResponseStatus(resp, 'rejected')}
+                        onClick={() => updateResponseStatus(report, resp, 'rejected')}
                       >
                         Reject
                       </button>
                       <button
                         className="secondary"
-                        onClick={() => updateResponseStatus(resp, 'need_correction')}
+                        onClick={() => updateResponseStatus(report, resp, 'need_correction')}
                       >
                         Correction
                       </button>

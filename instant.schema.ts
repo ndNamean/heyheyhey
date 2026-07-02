@@ -227,6 +227,25 @@ const _schema = i.schema({
       createdAt: i.string(),
       updatedAt: i.string(),
     }),
+
+    // ─── Review feedback notifications ───────────────────────────────────────
+    notifications: i.entity({
+      recipientUserId: i.string().indexed(),
+      type: i.string(),                   // item_approved|item_rejected|item_correction|report_finalized
+      reportId: i.string().indexed(),
+      reportResponseId: i.string(),
+      storeId: i.string().indexed(),
+      title: i.string(),
+      body: i.string(),
+      itemTitle: i.string(),
+      completionPercent: i.number(),
+      compliancePercent: i.number(),
+      actionStatus: i.string(),
+      actorUserId: i.string(),
+      actorRole: i.string(),
+      readAt: i.string(),                   // '' = unread
+      createdAt: i.string(),
+    }),
   },
 
   links: {

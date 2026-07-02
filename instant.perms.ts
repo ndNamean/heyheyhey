@@ -191,6 +191,20 @@ const rules = {
       isAuthor: "auth.id != null && data.authorUserId == auth.id",
     },
   },
+
+  // ── Review feedback notifications ─────────────────────────────────────────
+  notifications: {
+    allow: {
+      view: "isApproved && data.recipientUserId == auth.id",
+      create: 'canReview',
+      update: "isApproved && data.recipientUserId == auth.id && onlyReadAt",
+      delete: 'false',
+    },
+    bind: {
+      ...COMMON_BIND,
+      onlyReadAt: "request.modifiedFields.all(f, f in ['readAt'])",
+    },
+  },
 } satisfies InstantRules;
 
 export default rules;

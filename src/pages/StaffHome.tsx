@@ -1,4 +1,6 @@
 import { db } from '../db';
+import FeedbackInbox from '../components/FeedbackInbox';
+import MyReportsPanel from '../components/MyReportsPanel';
 import type { Profile } from '../types';
 
 interface Props {
@@ -30,6 +32,9 @@ export default function StaffHome({ profile, setPage }: Props) {
 
   return (
     <div>
+      <FeedbackInbox userId={profile.userId} title="Report feedback" />
+      <MyReportsPanel profile={profile} />
+
       <div className="card">
         <h1>Hello, {profile.displayName || profile.email.split('@')[0]}</h1>
         <p className="small">
