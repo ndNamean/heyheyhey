@@ -251,6 +251,7 @@ function RejectedScreen({ email }: { email: string }) {
 // ─── Main gate ───────────────────────────────────────────────────────────────
 
 export default function AuthGate({ children }: Props) {
+  const { t } = useLang();
   const { isLoading: authLoading, user, error: authError } = db.useAuth();
   const creatingRef = useRef(false);
 
@@ -289,8 +290,6 @@ export default function AuthGate({ children }: Props) {
   if (authLoading || (user && profileLoading)) {
     return <div className="loading-screen">{t.common.loading}</div>;
   }
-
-  const { t } = useLang();
 
   if (authError) {
     return (
