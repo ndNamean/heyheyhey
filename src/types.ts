@@ -172,6 +172,11 @@ export interface MediaRecord {
   address: string;
   uploadedByUserId: string;
   createdAt: string;
+  // Storage cleanup fields
+  storagePath: string;
+  deletedAt: string;
+  storageDeleted: boolean;
+  storageDeletedReason: string;
   file?: { id: string; url: string };
 }
 

@@ -22,13 +22,18 @@ const rules = {
   },
 
   // ── $files (Instant Storage) ─────────────────────────────────────────────
+  // NOTE: auth.ref() traversals are NOT evaluated in $files permission context;
+  // only auth.id is available. We use isSignedIn here; the UI already gates
+  // access to approved users via AuthGate before the camera is reachable.
+  // Storage file deletion is performed exclusively via the admin SDK (cleanup
+  // cron job), which bypasses client permissions — so delete is 'false' here.
   $files: {
     allow: {
-      view: 'isApproved',
-      create: "isApproved && data.path.startsWith('stores/')",
-      delete: 'canEditMaster',
+      view: 'isSignedIn',
+      create: "isSignedIn && data.path.startsWith('stores/')",
+      delete: 'false',
     },
-    bind: { ...COMMON_BIND },
+    bind: { isSignedIn: 'auth.id != null' },
   },
 
   // ── Profiles ─────────────────────────────────────────────────────────────

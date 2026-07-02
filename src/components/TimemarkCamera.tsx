@@ -271,6 +271,11 @@ export default function TimemarkCamera({
             address:         '',
             uploadedByUserId: profile.userId,
             createdAt:       capturedAt,
+            // Storage cleanup fields — populated now, updated by cleanup job later
+            storagePath:           path,
+            deletedAt:             '',
+            storageDeleted:        false,
+            storageDeletedReason:  '',
           })
           .link({ file: fileData.id, reportResponse: reportResponseId }),
       );

@@ -136,10 +136,34 @@ export default function ReviewPage({ profile }: Props) {
                     <div className="thumb-grid">
                       {media.map((m) => (
                         <div key={m.id}>
-                          {m.file?.url && (
+                          {m.storageDeleted ? (
+                            <div style={{
+                              background: '#111',
+                              border: '1px solid #2a2a2a',
+                              borderRadius: 10,
+                              padding: '12px 14px',
+                              fontSize: 12,
+                              color: '#888',
+                            }}>
+                              <div style={{ color: '#FDC216', fontWeight: 700, marginBottom: 6 }}>
+                                📷 Ảnh đã xóa / Photo Removed
+                              </div>
+                              <div style={{ marginBottom: 8 }}>
+                                Ảnh minh chứng đã được tự động xoá sau 7 ngày kể từ khi duyệt báo cáo.
+                              </div>
+                              <div style={{ fontFamily: 'monospace', fontSize: 11, lineHeight: 1.7, color: '#666' }}>
+                                {m.photoCode && <div>Code: {m.photoCode}</div>}
+                                {m.capturedAt && <div>Captured: {m.capturedAt}</div>}
+                                {(m.lat !== 0 || m.lng !== 0) && (
+                                  <div>GPS: {m.lat?.toFixed(5)}, {m.lng?.toFixed(5)}</div>
+                                )}
+                                {m.deletedAt && <div>Deleted: {m.deletedAt}</div>}
+                              </div>
+                            </div>
+                          ) : m.file?.url ? (
                             <img src={m.file.url} alt={m.fileName} />
-                          )}
-                          {m.photoCode && (
+                          ) : null}
+                          {m.photoCode && !m.storageDeleted && (
                             <div className="small" style={{ marginTop: 4, fontFamily: 'monospace', color: '#FDC216' }}>
                               {m.photoCode}
                             </div>
