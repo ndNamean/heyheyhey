@@ -68,7 +68,7 @@ export function DesktopNav({ page, setPage, profile }: NavProps) {
   );
 }
 
-export function MobileNav({ page, setPage, profile }: NavProps) {
+export function MobileNav({ page, setPage }: NavProps) {
   const { t } = useLang();
 
   const tabs: { id: Page; label: string }[] = [
