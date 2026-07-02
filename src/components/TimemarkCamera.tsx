@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { id } from '@instantdb/react';
-import { db } from '../db';
 import { nowIso, nowText, generatePhotoCode } from '../lib/utils';
 import type { Profile, Store, UploadedMedia } from '../types';
 
@@ -232,61 +230,65 @@ export default function TimemarkCamera({
     return new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), 'image/jpeg', 0.85));
   }
 
-  // ── Upload (unchanged logic; added explicit mode param) ─────────────────
+  async function blobToBase64(blob: Blob): Promise<string> {
+    const buffer = await blob.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
+    return btoa(binary);
+  }
+
+  // Upload via server API (admin SDK) — bypasses client $files storage permissions
   async function uploadBlob(blob: Blob, fileName: string, mode: 'live_camera' | 'file_fallback') {
     setUploading(true);
     try {
       const photoCode  = generatePhotoCode(store.code);
       const capturedAt = nowIso();
       const path       = `stores/${store.id}/reports/${reportId}/${reportResponseId}/${Date.now()}_${fileName}`;
-      const file       = new File([blob], fileName, { type: 'image/jpeg' });
 
-      const { data: fileData } = await db.storage.uploadFile(path, file, { contentType: 'image/jpeg' });
-      if (!fileData?.id) throw new Error('Upload returned no file ID');
-
-      // In @instantdb/react v1+, uploadFile only returns { id }.
-      // Fetch the permanent URL by querying the $files entity.
-      const filesResult = await db.queryOnce({ $files: { $: { where: { id: fileData.id } } } });
-      const fileUrl: string = (filesResult.data as { $files: Array<{ url?: string }> }).$files?.[0]?.url ?? '';
-
-      const mediaId = id();
-      await db.transact(
-        db.tx.mediaRecords[mediaId]
-          .update({
+      const resp = await fetch('/api/upload-photo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path,
+          fileName,
+          fileBase64: await blobToBase64(blob),
+          metadata: {
             reportId,
             reportResponseId,
-            storeId:         store.id,
-            fileName,
-            mimeType:        'image/jpeg',
-            lat:             gps?.lat      ?? 0,
-            lng:             gps?.lng      ?? 0,
-            accuracy:        gps?.accuracy ?? 0,
+            storeId: store.id,
+            lat: gps?.lat ?? 0,
+            lng: gps?.lng ?? 0,
+            accuracy: gps?.accuracy ?? 0,
             capturedAt,
-            watermarked:     true,
             photoCode,
-            verificationHash: '',
-            captureMode:     mode,
-            storeDistanceM:  0,
-            noteText:        '',
-            address:         '',
+            captureMode: mode,
             uploadedByUserId: profile.userId,
-            createdAt:       capturedAt,
-            // Storage cleanup fields — populated now, updated by cleanup job later
-            storagePath:           path,
-            deletedAt:             '',
-            storageDeleted:        false,
-            storageDeletedReason:  '',
-          })
-          .link({ file: fileData.id, reportResponse: reportResponseId }),
-      );
+          },
+        }),
+      });
+
+      const result = await resp.json() as {
+        error?: string;
+        mediaRecordId?: string;
+        fileId?: string;
+        url?: string;
+        fileName?: string;
+        photoCode?: string;
+        capturedAt?: string;
+      };
+
+      if (!resp.ok || result.error) {
+        throw new Error(result.error ?? `Upload failed (${resp.status})`);
+      }
 
       onCapture({
-        mediaRecordId: mediaId,
-        fileId:        fileData.id,
-        url:           fileUrl,
-        fileName,
-        photoCode,
-        capturedAt,
+        mediaRecordId: result.mediaRecordId!,
+        fileId:        result.fileId!,
+        url:           result.url ?? '',
+        fileName:      result.fileName ?? fileName,
+        photoCode:     result.photoCode ?? photoCode,
+        capturedAt:    result.capturedAt ?? capturedAt,
       });
     } finally {
       setUploading(false);

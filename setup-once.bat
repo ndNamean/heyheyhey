@@ -5,7 +5,7 @@ cd /d "%~dp0"
 set NPX=C:\Program Files\nodejs\npx.cmd
 set NPM=C:\Program Files\nodejs\npm.cmd
 set PATH=C:\Program Files\nodejs;%PATH%
-set INSTANT_APP_ADMIN_TOKEN=58ea1b1e-0565-487a-89d8-4a1f506c947a
+set INSTANT_CLI_AUTH_TOKEN=58ea1b1e-0565-487a-89d8-4a1f506c947a
 
 echo.
 echo =========================================
@@ -14,7 +14,7 @@ echo =========================================
 echo.
 echo Step 1 of 2: Pushing database structure...
 echo.
-"%NPX%" instant-cli@latest push schema --yes
+"%NPX%" instant-cli@latest push schema --yes -a f7ac027e-2079-41eb-8f34-aa0e4543ca71
 if errorlevel 1 (
   echo.
   echo ERROR on Step 1. Send a screenshot for help.
@@ -25,7 +25,7 @@ if errorlevel 1 (
 echo.
 echo Step 2 of 2: Pushing security rules...
 echo.
-"%NPX%" instant-cli@latest push perms --yes
+"%NPX%" instant-cli@latest push perms --yes -a f7ac027e-2079-41eb-8f34-aa0e4543ca71
 if errorlevel 1 (
   echo.
   echo ERROR on Step 2. Send a screenshot for help.
