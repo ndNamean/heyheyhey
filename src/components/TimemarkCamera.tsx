@@ -242,7 +242,12 @@ export default function TimemarkCamera({
       const file       = new File([blob], fileName, { type: 'image/jpeg' });
 
       const { data: fileData } = await db.storage.uploadFile(path, file, { contentType: 'image/jpeg' });
-      if (!fileData) throw new Error('Upload returned no data');
+      if (!fileData?.id) throw new Error('Upload returned no file ID');
+
+      // In @instantdb/react v1+, uploadFile only returns { id }.
+      // Fetch the permanent URL by querying the $files entity.
+      const filesResult = await db.queryOnce({ $files: { $: { where: { id: fileData.id } } } });
+      const fileUrl: string = (filesResult.data as { $files: Array<{ url?: string }> }).$files?.[0]?.url ?? '';
 
       const mediaId = id();
       await db.transact(
@@ -273,7 +278,7 @@ export default function TimemarkCamera({
       onCapture({
         mediaRecordId: mediaId,
         fileId:        fileData.id,
-        url:           fileData.url ?? '',
+        url:           fileUrl,
         fileName,
         photoCode,
         capturedAt,
