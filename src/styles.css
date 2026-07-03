@@ -541,21 +541,25 @@ body.wizard-active .page {
   pointer-events: none;
   z-index: 3;
   font-family: monospace;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.proof-ts-logo {
+  max-height: 36px;
+  max-width: 56px;
+  object-fit: contain;
+  flex-shrink: 0;
+  align-self: center;
+}
+.proof-ts-lines {
+  min-width: 0;
+  flex: 1;
 }
 .proof-ts-store { color: #FDC216; font-weight: 700; }
 .proof-ts-time { font-weight: 600; }
 .proof-ts-location { opacity: 0.92; word-break: break-word; }
 .proof-ts-weather { opacity: 0.88; margin-top: 2px; font-size: 10px; }
-.proof-logo-overlay {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  max-height: 48px;
-  max-width: 28%;
-  object-fit: contain;
-  pointer-events: none;
-  z-index: 3;
-}
 .camera-topbar-actions {
   display: flex;
   align-items: center;

@@ -47,6 +47,7 @@ export default async function handler(req, res) {
   try {
     const upstream = await fetch(url);
     if (!upstream.ok) {
+      console.error('[weather/current] upstream status', upstream.status);
       return res.status(503).json({ error: 'Weather unavailable' });
     }
 

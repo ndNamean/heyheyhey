@@ -78,40 +78,56 @@ function proofWatermarkLines(proof: ProofSnapshot): string[] {
   return lines;
 }
 
-function loadImage(url: string): Promise<HTMLImageElement | null> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = () => resolve(null);
-    img.src = url;
-  });
+function loadImageForCanvas(url: string): Promise<HTMLImageElement | null> {
+  return (async () => {
+    try {
+      const resp = await fetch(`/api/image-proxy?url=${encodeURIComponent(url)}`);
+      if (!resp.ok) return null;
+      const blob = await resp.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      return new Promise<HTMLImageElement | null>((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          URL.revokeObjectURL(objectUrl);
+          resolve(img);
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(objectUrl);
+          resolve(null);
+        };
+        img.src = objectUrl;
+      });
+    } catch {
+      return null;
+    }
+  })();
 }
 
 function ProofTimestampOverlay({ proof }: { proof: ProofSnapshot }) {
+  const showLogo =
+    proof.cameraOptionsSnapshot.logoEnabled && proof.proofLogoUrl.trim().length > 0;
+
   return (
     <div className="proof-timestamp-overlay" aria-hidden="true">
-      <div className="proof-ts-store">{proof.storeCode}</div>
-      <div>{proof.itemTitle}</div>
-      <div className="proof-ts-time">{proof.displayTime}</div>
-      <div>{proof.userName}</div>
-      <div className="proof-ts-location">{proof.locationLine}</div>
-      {proof.cameraOptionsSnapshot.weatherEnabled && proof.weatherLine && (
-        <div className="proof-ts-weather">{proof.weatherLine}</div>
+      {showLogo && (
+        <img
+          className="proof-ts-logo"
+          src={proof.proofLogoUrl}
+          alt=""
+          aria-hidden="true"
+        />
       )}
+      <div className="proof-ts-lines">
+        <div className="proof-ts-store">{proof.storeCode}</div>
+        <div>{proof.itemTitle}</div>
+        <div className="proof-ts-time">{proof.displayTime}</div>
+        <div>{proof.userName}</div>
+        <div className="proof-ts-location">{proof.locationLine}</div>
+        {proof.cameraOptionsSnapshot.weatherEnabled && proof.weatherLine && (
+          <div className="proof-ts-weather">{proof.weatherLine}</div>
+        )}
+      </div>
     </div>
-  );
-}
-
-function ProofLogoOverlay({ url }: { url: string }) {
-  if (!url.trim()) return null;
-  return (
-    <img
-      className="proof-logo-overlay"
-      src={url}
-      alt=""
-      aria-hidden="true"
-    />
   );
 }
 
@@ -130,6 +146,7 @@ export default function TimemarkCamera({
   const bsTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const geocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const weatherTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fetchedWeatherKeyRef = useRef('');
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   const [gps,      setGps]      = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
@@ -165,6 +182,8 @@ export default function TimemarkCamera({
 
   const isAdminLogo = canEditStoreLogo(profile?.role);
   const activeLogoUrl = storeLogoUrl.trim() || resolveActiveLogoUrl(store);
+  const weatherKey =
+    gps && !gpsError ? `${gps.lat.toFixed(2)},${gps.lng.toFixed(2)}` : '';
 
   useEffect(() => {
     setCameraOptions(parseCameraOptions(profile));
@@ -302,24 +321,32 @@ export default function TimemarkCamera({
   useEffect(() => {
     if (!cameraOn || frozenProof || !cameraOptions.weatherEnabled) return;
 
-    if (!gps) {
+    if (gpsError) {
+      setWeatherStatus('unavailable');
+      return;
+    }
+
+    if (!weatherKey) {
       setWeatherStatus('waiting');
       return;
     }
-    if (gpsError) {
-      setWeatherStatus('unavailable');
+
+    if (weatherKey === fetchedWeatherKeyRef.current) {
+      setWeatherStatus('ready');
       return;
     }
 
     if (weatherTimer.current) clearTimeout(weatherTimer.current);
     weatherTimer.current = setTimeout(() => {
       setWeatherStatus('loading');
-      fetch(`/api/weather/current?lat=${encodeURIComponent(gps.lat)}&lon=${encodeURIComponent(gps.lng)}`)
+      const [lat, lon] = weatherKey.split(',').map(Number);
+      fetch(`/api/weather/current?lat=${encodeURIComponent(lat!)}&lon=${encodeURIComponent(lon!)}`)
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data && typeof data.temperature === 'number') {
             setLiveWeather(data as ProofWeather);
             setWeatherStatus('ready');
+            fetchedWeatherKeyRef.current = weatherKey;
           } else {
             setWeatherStatus('unavailable');
           }
@@ -330,7 +357,7 @@ export default function TimemarkCamera({
     return () => {
       if (weatherTimer.current) clearTimeout(weatherTimer.current);
     };
-  }, [cameraOn, frozenProof, gps, gpsError, cameraOptions.weatherEnabled]);
+  }, [cameraOn, frozenProof, weatherKey, gpsError, cameraOptions.weatherEnabled]);
 
   // ── Live clock while camera open (before capture) ────────────────────────
   useEffect(() => {
@@ -509,28 +536,41 @@ export default function TimemarkCamera({
     canvas.height = bitmap.height;
     ctx.drawImage(bitmap, 0, 0);
 
-    if (proof.cameraOptionsSnapshot.logoEnabled && proof.proofLogoUrl.trim()) {
-      const logo = await loadImage(proof.proofLogoUrl);
-      if (logo) {
-        const maxH = Math.max(48, Math.floor(canvas.height * 0.08));
-        const scale = maxH / logo.height;
-        const w = logo.width * scale;
-        const h = logo.height * scale;
-        const margin = Math.max(12, Math.floor(canvas.width * 0.02));
-        ctx.drawImage(logo, canvas.width - w - margin, margin, w, h);
-      }
-    }
-
     const padding    = Math.max(16, Math.floor(canvas.width * 0.025));
     const fontSize   = Math.max(20, Math.floor(canvas.width * 0.032));
     const lineHeight = Math.floor(fontSize * 1.35);
     const boxHeight  = padding * 2 + lineHeight * lines.length;
+    const boxTop     = canvas.height - boxHeight;
+
+    let logoImg: HTMLImageElement | null = null;
+    let logoDrawW = 0;
+    let logoDrawH = 0;
+    const logoGap = Math.max(8, Math.floor(padding * 0.6));
+
+    if (proof.cameraOptionsSnapshot.logoEnabled && proof.proofLogoUrl.trim()) {
+      logoImg = await loadImageForCanvas(proof.proofLogoUrl);
+      if (logoImg) {
+        const maxLogoH = Math.min(boxHeight - padding * 2, Math.max(40, Math.floor(canvas.height * 0.07)));
+        const scale = maxLogoH / logoImg.height;
+        logoDrawH = logoImg.height * scale;
+        logoDrawW = logoImg.width * scale;
+      }
+    }
+
     ctx.fillStyle = 'rgba(0,0,0,0.72)';
-    ctx.fillRect(0, canvas.height - boxHeight, canvas.width, boxHeight);
+    ctx.fillRect(0, boxTop, canvas.width, boxHeight);
+
+    const textX = padding + (logoDrawW > 0 ? logoDrawW + logoGap : 0);
+
+    if (logoImg && logoDrawW > 0) {
+      const logoY = boxTop + (boxHeight - logoDrawH) / 2;
+      ctx.drawImage(logoImg, padding, logoY, logoDrawW, logoDrawH);
+    }
+
     ctx.font      = `${fontSize}px Arial`;
     ctx.fillStyle = 'white';
     lines.forEach((line, i) => {
-      ctx.fillText(line, padding, canvas.height - boxHeight + padding + lineHeight * (i + 0.75));
+      ctx.fillText(line, textX, boxTop + padding + lineHeight * (i + 0.75));
     });
     return new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), 'image/jpeg', 0.85));
   }
@@ -686,6 +726,9 @@ export default function TimemarkCamera({
     setFrozenProof(null);
     setLiveNow(new Date());
     setOptionsOpen(false);
+    fetchedWeatherKeyRef.current = '';
+    setLiveWeather(null);
+    setWeatherStatus('waiting');
     setCamState('idle');
     setCamError('');
     setCameraOn(true);
@@ -778,7 +821,6 @@ export default function TimemarkCamera({
   const gpsLabel  = gpsError ? 'GPS ✗' : gps ? `±${Math.round(gps.accuracy)}m` : 'GPS…';
 
   const showLiveOverlay = camState === 'ready' && !frozenProof;
-  const showLogo = cameraOptions.logoEnabled && activeLogoUrl;
 
   return (
     <div>
@@ -927,10 +969,7 @@ export default function TimemarkCamera({
             <video ref={videoRef} playsInline muted autoPlay />
 
             {showLiveOverlay && (
-              <>
-                <ProofTimestampOverlay proof={liveProof} />
-                {showLogo && <ProofLogoOverlay url={activeLogoUrl} />}
-              </>
+              <ProofTimestampOverlay proof={liveProof} />
             )}
 
             {camState === 'opening' && (
@@ -1009,9 +1048,6 @@ export default function TimemarkCamera({
           <div className="postcapture-thumb">
             <img src={capturedUrl} alt="Captured photo" />
             <ProofTimestampOverlay proof={frozenProof} />
-            {frozenProof.cameraOptionsSnapshot.logoEnabled && frozenProof.proofLogoUrl && (
-              <ProofLogoOverlay url={frozenProof.proofLogoUrl} />
-            )}
           </div>
 
           {confirmError && (
