@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { db } from '../db';
 import { canApproveItem, canReview } from '../lib/roles';
 import {
@@ -6,13 +7,22 @@ import {
 } from '../lib/notifications';
 import { badgeClass, nowIso } from '../lib/utils';
 import ProofPhoto from '../components/ProofPhoto';
+import ReviewFeedbackModal, { type FeedbackResult } from '../components/ReviewFeedbackModal';
 import type { MediaRecord, Profile, Report, ReportResponse } from '../types';
 
 interface Props {
   profile: Profile;
 }
 
+interface PendingFeedback {
+  report: Report;
+  response: ReportResponse;
+  status: 'rejected' | 'need_correction';
+}
+
 export default function ReviewPage({ profile }: Props) {
+  const [pendingFeedback, setPendingFeedback] = useState<PendingFeedback | null>(null);
+
   const { data } = db.useQuery({
     reports: {
       $: { where: { status: 'waiting_approval' } },
@@ -29,10 +39,30 @@ export default function ReviewPage({ profile }: Props) {
     return <div className="card">You do not have permission to review reports.</div>;
   }
 
+  function openFeedbackModal(
+    report: Report,
+    response: ReportResponse,
+    status: 'rejected' | 'need_correction',
+  ) {
+    const approverRoles = JSON.parse(response.approverRolesJson || '[]') as import('../types').Role[];
+    if (
+      !canApproveItem(
+        response.submittedByRole as import('../types').Role,
+        profile.role,
+        approverRoles,
+      )
+    ) {
+      alert('You do not have permission to approve this item.');
+      return;
+    }
+    setPendingFeedback({ report, response, status });
+  }
+
   async function updateResponseStatus(
     report: Report,
     response: ReportResponse,
     status: 'approved' | 'rejected' | 'need_correction',
+    feedback?: FeedbackResult,
   ) {
     const approverRoles = JSON.parse(response.approverRolesJson || '[]') as import('../types').Role[];
     if (
@@ -46,15 +76,7 @@ export default function ReviewPage({ profile }: Props) {
       return;
     }
 
-    let reason = '';
-    if (status !== 'approved') {
-      reason =
-        prompt(status === 'rejected' ? 'Rejection reason?' : 'Correction note?') ?? status;
-      if (!reason.trim()) {
-        alert('Please enter feedback for the submitter.');
-        return;
-      }
-    }
+    const reason = feedback?.rejectionReason ?? '';
 
     const now = nowIso();
     const responses = (report.responses ?? []) as ReportResponse[];
@@ -72,12 +94,21 @@ export default function ReviewPage({ profile }: Props) {
       db.tx.reportResponses[response.id].update({
         status,
         rejectionReason: reason,
+        feedbackCode: feedback?.feedbackCode ?? '',
+        feedbackNote: feedback?.feedbackNote ?? '',
         approvedByUserId: profile.userId,
         approvedAt: now,
         updatedAt: now,
       }),
       ...notificationTxs,
     ]);
+  }
+
+  async function handleFeedbackConfirm(result: FeedbackResult) {
+    if (!pendingFeedback) return;
+    const { report, response, status } = pendingFeedback;
+    setPendingFeedback(null);
+    await updateResponseStatus(report, response, status, result);
   }
 
   async function markReportApproved(report: Report) {
@@ -113,9 +144,20 @@ export default function ReviewPage({ profile }: Props) {
 
   return (
     <div>
+      <ReviewFeedbackModal
+        open={!!pendingFeedback}
+        mode={pendingFeedback?.status ?? 'rejected'}
+        itemTitle={pendingFeedback?.response.title ?? ''}
+        onConfirm={handleFeedbackConfirm}
+        onCancel={() => setPendingFeedback(null)}
+      />
+
       <div className="card">
         <h1>Review Reports</h1>
-        <p className="small">Reject/correct items with a comment — feedback is sent to the submitter and their supervisors when reviewed by a higher role.</p>
+        <p className="small">
+          Reject or request correction using a preset reason — feedback is sent to the submitter and
+          their supervisors when reviewed by a higher role.
+        </p>
       </div>
 
       {reports.map((report) => {
@@ -162,7 +204,7 @@ export default function ReviewPage({ profile }: Props) {
                     </p>
                   )}
                   {resp.rejectionReason && resp.status !== 'approved' && (
-                    <p className="small" style={{ color: '#b00020' }}>
+                    <p className="small" style={{ color: '#b00020', whiteSpace: 'pre-wrap' }}>
                       Reason: {resp.rejectionReason}
                     </p>
                   )}
@@ -194,13 +236,13 @@ export default function ReviewPage({ profile }: Props) {
                       </button>
                       <button
                         className="danger"
-                        onClick={() => updateResponseStatus(report, resp, 'rejected')}
+                        onClick={() => openFeedbackModal(report, resp, 'rejected')}
                       >
                         Reject
                       </button>
                       <button
                         className="secondary"
-                        onClick={() => updateResponseStatus(report, resp, 'need_correction')}
+                        onClick={() => openFeedbackModal(report, resp, 'need_correction')}
                       >
                         Correction
                       </button>

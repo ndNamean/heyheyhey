@@ -123,7 +123,7 @@ const rules = {
       isResponseSubmitter: 'auth.id != null && data.submittedByUserId == auth.id',
       isCorrectable: "data.status == 'need_correction' || data.status == 'rejected'",
       onlyResubmitFields:
-        "request.modifiedFields.all(f, f in ['ticked', 'numberValue', 'note', 'status', 'rejectionReason', 'submittedAt', 'updatedAt', 'approvedByUserId', 'approvedAt'])",
+        "request.modifiedFields.all(f, f in ['ticked', 'numberValue', 'note', 'status', 'rejectionReason', 'feedbackCode', 'feedbackNote', 'submittedAt', 'updatedAt', 'approvedByUserId', 'approvedAt'])",
       canResubmitCorrection: 'isResponseSubmitter && isCorrectable && onlyResubmitFields',
     },
   },

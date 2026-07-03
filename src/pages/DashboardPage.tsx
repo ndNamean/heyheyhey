@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { db } from '../db';
 import FeedbackInbox from '../components/FeedbackInbox';
+import { aggregateFeedbackFrequency } from '../lib/feedbackReasons';
 import { badgeClass, todayYmd } from '../lib/utils';
 import type { Profile, Report, ReportResponse } from '../types';
 
@@ -17,6 +18,7 @@ export default function DashboardPage({ profile }: Props) {
   const [from, setFrom] = useState(firstDayOfMonth);
   const [to, setTo] = useState(todayYmd);
   const [filterStoreId, setFilterStoreId] = useState('all');
+  const [showOtherDetails, setShowOtherDetails] = useState(false);
 
   const { data } = db.useQuery({
     reports: {
@@ -110,6 +112,11 @@ export default function DashboardPage({ profile }: Props) {
     }));
   }, [reports, profiles]);
 
+  const feedbackStats = useMemo(
+    () => aggregateFeedbackFrequency(reports, profiles as Profile[]),
+    [reports, profiles],
+  );
+
   const displayStores = profile.role === 'owner' || profile.role === 'areaManager'
     ? stores
     : (profile.stores ?? []);
@@ -192,6 +199,82 @@ export default function DashboardPage({ profile }: Props) {
           </table>
         </div>
       )}
+
+      <div className="card table-wrap feedback-freq-card">
+        <h2>Feedback reasons</h2>
+        <p className="small">Rejections and correction requests in the selected period.</p>
+
+        {feedbackStats.rows.length > 0 ? (
+          <>
+            <table className="feedback-freq-table">
+              <thead>
+                <tr>
+                  <th>Reason</th>
+                  <th>Count</th>
+                  <th>Share</th>
+                  <th style={{ width: '30%' }}>Frequency</th>
+                </tr>
+              </thead>
+              <tbody>
+                {feedbackStats.rows.map((row) => (
+                  <tr key={row.code}>
+                    <td>
+                      {row.label}
+                      {row.code === 'other' && feedbackStats.otherDetails.length > 0 && (
+                        <button
+                          type="button"
+                          className="feedback-other-toggle"
+                          onClick={() => setShowOtherDetails((v) => !v)}
+                        >
+                          {showOtherDetails ? 'Hide details' : 'Show details'}
+                        </button>
+                      )}
+                    </td>
+                    <td>{row.count}</td>
+                    <td>{row.percent}%</td>
+                    <td>
+                      <div className="progress-bar" style={{ margin: 0 }}>
+                        <div style={{ width: `${row.percent}%` }} />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {showOtherDetails && feedbackStats.otherDetails.length > 0 && (
+              <table className="feedback-other-detail">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Store</th>
+                    <th>Item</th>
+                    <th>Feedback</th>
+                    <th>Reviewer</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {feedbackStats.otherDetails.map((d) => (
+                    <tr key={d.id}>
+                      <td className="small">{d.reportDate}</td>
+                      <td>{d.storeCode}</td>
+                      <td>{d.itemTitle}</td>
+                      <td className="feedback-other-text">{d.text}</td>
+                      <td className="small">
+                        {d.reviewerName}
+                        <br />
+                        <span className="badge">{d.reviewerRole}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
+        ) : (
+          <p className="small">No rejection or correction feedback in this period.</p>
+        )}
+      </div>
 
       <div className="card table-wrap">
         <h2>Failed items</h2>

@@ -143,6 +143,8 @@ export interface ReportResponse {
   note: string;
   status: ResponseStatus;
   rejectionReason: string;
+  feedbackCode: string;
+  feedbackNote: string;
   submittedByUserId: string;
   submittedByRole: string;
   submittedAt: string;

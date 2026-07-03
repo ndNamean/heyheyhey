@@ -101,6 +101,8 @@ const _schema = i.schema({
       note: i.string(),
       status: i.string(),                  // not_started|waiting_approval|approved|rejected|need_correction
       rejectionReason: i.string(),
+      feedbackCode: i.string().indexed(),  // preset code or 'other'
+      feedbackNote: i.string(),            // free text for 'other' or optional extra note
       submittedByUserId: i.string(),
       submittedByRole: i.string(),
       submittedAt: i.string(),
