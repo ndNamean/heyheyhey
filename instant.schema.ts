@@ -24,9 +24,8 @@ const _schema = i.schema({
       approvedByEmail: i.string(),
       createdAt: i.string(),
       updatedAt: i.string(),
+      cameraOptionsJson: i.string(),       // JSON: { weatherEnabled, logoEnabled, flashlightLastUsed }
     }),
-
-    // ─── Stores ──────────────────────────────────────────────────────────────
     stores: i.entity({
       code: i.string().unique(),
       name: i.string(),
@@ -38,9 +37,8 @@ const _schema = i.schema({
       active: i.boolean(),
       createdAt: i.string(),
       updatedAt: i.string(),
+      proofLogoUrl: i.string(),            // '' = use app default logo
     }),
-
-    // ─── Report templates ────────────────────────────────────────────────────
     templates: i.entity({
       name: i.string(),
       reportType: i.string(),
@@ -137,6 +135,7 @@ const _schema = i.schema({
       deletedAt: i.string(),               // '' while active; ISO date when storage file deleted
       storageDeleted: i.boolean(),         // true after cleanup job removes the file
       storageDeletedReason: i.string(),    // e.g. 'auto_cleanup_after_7_days_reviewed'
+      proofMetadataJson: i.string(),       // JSON: proofTimestamp, proofLocation, proofWeather, proofLogoUrl, cameraOptionsSnapshot
     }),
 
     // ─── Watermark templates ─────────────────────────────────────────────────

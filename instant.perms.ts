@@ -53,7 +53,7 @@ const rules = {
       isOwner: "'owner' in auth.ref('profile.role')",
       isAreaManager: "'areaManager' in auth.ref('profile.role')",
       isAdmin: 'isOwner || isAreaManager',
-      onlyDisplayName: "request.modifiedFields.all(f, f in ['displayName', 'updatedAt'])",
+      onlyDisplayName: "request.modifiedFields.all(f, f in ['displayName', 'cameraOptionsJson', 'updatedAt'])",
     },
   },
 

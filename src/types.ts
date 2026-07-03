@@ -46,6 +46,31 @@ export type ClockType = 'clockIn' | 'clockOut';
 
 export type LogSeverity = 'info' | 'warning' | 'critical';
 
+export interface CameraOptions {
+  weatherEnabled: boolean;
+  logoEnabled: boolean;
+  flashlightLastUsed: boolean;
+}
+
+export interface ProofWeather {
+  temperature: number;
+  feelsLike: number;
+  humidity: number;
+  condition: string;
+  description: string;
+  windSpeed: number;
+  city: string;
+  fetchedAt: string;
+}
+
+export interface ProofMetadata {
+  proofTimestamp: string;
+  proofLocation: string;
+  proofWeather: ProofWeather | null;
+  proofLogoUrl: string;
+  cameraOptionsSnapshot: CameraOptions;
+}
+
 // Profile shape (from db.useQuery result — fields only, no links)
 export interface Profile {
   id: string;
@@ -58,6 +83,7 @@ export interface Profile {
   approvedByEmail: string;
   createdAt: string;
   updatedAt: string;
+  cameraOptionsJson?: string;
   // Optional linked data from useQuery:
   stores?: Store[];
 }
@@ -74,9 +100,8 @@ export interface Store {
   active: boolean;
   createdAt: string;
   updatedAt: string;
+  proofLogoUrl?: string;
 }
-
-export interface Template {
   id: string;
   name: string;
   reportType: string;
@@ -180,6 +205,7 @@ export interface MediaRecord {
   deletedAt: string;
   storageDeleted: boolean;
   storageDeletedReason: string;
+  proofMetadataJson?: string;
   file?: { id: string; url: string };
 }
 

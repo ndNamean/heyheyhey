@@ -545,6 +545,98 @@ body.wizard-active .page {
 .proof-ts-store { color: #FDC216; font-weight: 700; }
 .proof-ts-time { font-weight: 600; }
 .proof-ts-location { opacity: 0.92; word-break: break-word; }
+.proof-ts-weather { opacity: 0.88; margin-top: 2px; font-size: 10px; }
+.proof-logo-overlay {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  max-height: 48px;
+  max-width: 28%;
+  object-fit: contain;
+  pointer-events: none;
+  z-index: 3;
+}
+.camera-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cam-flash-btn.active { color: #FDC216; }
+.cam-icon-btn.active { color: #FDC216; }
+.camera-options-sheet {
+  background: rgba(0, 0, 0, 0.88);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 5;
+}
+.camera-options-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #fff;
+  font-size: 13px;
+}
+.cam-opt-toggle {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cam-opt-muted { color: #888; font-size: 12px; }
+.camera-options-logo-preview {
+  display: flex;
+  justify-content: center;
+  padding: 6px 0;
+}
+.camera-options-logo-preview img {
+  max-height: 40px;
+  max-width: 120px;
+  object-fit: contain;
+}
+.camera-options-logo-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cam-opt-btn {
+  background: rgba(253, 194, 22, 0.15);
+  color: #FDC216;
+  border: 1px solid rgba(253, 194, 22, 0.35);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cam-opt-btn.secondary {
+  background: transparent;
+  color: #aaa;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+.cam-opt-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.camera-options-defaults {
+  display: flex;
+  gap: 8px;
+}
+.cam-opt-default-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 4px;
+  cursor: pointer;
+}
+.cam-opt-default-thumb img {
+  height: 32px;
+  max-width: 64px;
+  object-fit: contain;
+  display: block;
+}
+.cam-opt-msg { color: #aaa; font-size: 11px; margin: 0; }
 .camera-controls { display:flex; align-items:center; justify-content:space-between; padding:18px 28px; background:rgba(0,0,0,0.92); }
 .shutter { width:72px; height:72px; border-radius:50%; border:3px solid #fff; padding:5px; cursor:pointer; background:transparent; }
 .shutter-inner { width:100%; height:100%; border-radius:50%; background:#fff; }

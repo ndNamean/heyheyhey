@@ -111,6 +111,7 @@ export default async function handler(req, res) {
           storeDistanceM: 0,
           noteText: '',
           address: m.address ?? '',
+          proofMetadataJson: m.proofMetadataJson ?? '',
           uploadedByUserId: m.uploadedByUserId,
           createdAt: m.capturedAt,
           storagePath: body.path,

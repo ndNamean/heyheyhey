@@ -17,6 +17,10 @@
       "maxDuration": 30,
       "memory": 1024
     },
+    "api/upload-logo.js": {
+      "maxDuration": 30,
+      "memory": 512
+    },
     "api/cleanup-photos.js": {
       "maxDuration": 60
     }

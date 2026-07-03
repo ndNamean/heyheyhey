@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { generatePhotoCode } from '../lib/utils';
-import type { Profile, Store, UploadedMedia } from '../types';
+import { db } from '../db';
+import {
+  DEFAULT_LOGOS,
+  buildWeatherLine,
+  canEditStoreLogo,
+  parseCameraOptions,
+  resolveActiveLogoUrl,
+  serializeCameraOptions,
+} from '../lib/cameraSettings';
+import { generatePhotoCode, nowIso } from '../lib/utils';
+import type { CameraOptions, Profile, ProofWeather, Store, UploadedMedia } from '../types';
 
 interface Props {
   store: Store;
@@ -14,6 +23,7 @@ interface Props {
 }
 
 type CamState = 'idle' | 'opening' | 'ready' | 'error';
+type WeatherStatus = 'waiting' | 'loading' | 'ready' | 'unavailable';
 
 interface ProofSnapshot {
   capturedAt: string;
@@ -24,6 +34,10 @@ interface ProofSnapshot {
   locationLine: string;
   gps: { lat: number; lng: number; accuracy: number } | null;
   address: string;
+  weatherLine: string;
+  proofWeather: ProofWeather | null;
+  proofLogoUrl: string;
+  cameraOptionsSnapshot: CameraOptions;
 }
 
 function formatProofTime(d: Date): string {
@@ -51,13 +65,27 @@ function buildLocationLine(
 }
 
 function proofWatermarkLines(proof: ProofSnapshot): string[] {
-  return [
+  const lines = [
     proof.storeCode,
     proof.itemTitle,
     proof.displayTime,
     proof.userName,
     proof.locationLine,
   ];
+  if (proof.cameraOptionsSnapshot.weatherEnabled && proof.weatherLine.trim()) {
+    lines.push(proof.weatherLine);
+  }
+  return lines;
+}
+
+function loadImage(url: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
 }
 
 function ProofTimestampOverlay({ proof }: { proof: ProofSnapshot }) {
@@ -68,7 +96,22 @@ function ProofTimestampOverlay({ proof }: { proof: ProofSnapshot }) {
       <div className="proof-ts-time">{proof.displayTime}</div>
       <div>{proof.userName}</div>
       <div className="proof-ts-location">{proof.locationLine}</div>
+      {proof.cameraOptionsSnapshot.weatherEnabled && proof.weatherLine && (
+        <div className="proof-ts-weather">{proof.weatherLine}</div>
+      )}
     </div>
+  );
+}
+
+function ProofLogoOverlay({ url }: { url: string }) {
+  if (!url.trim()) return null;
+  return (
+    <img
+      className="proof-logo-overlay"
+      src={url}
+      alt=""
+      aria-hidden="true"
+    />
   );
 }
 
@@ -86,6 +129,8 @@ export default function TimemarkCamera({
   const streamRef  = useRef<MediaStream | null>(null);
   const bsTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const geocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const weatherTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const [gps,      setGps]      = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
@@ -94,22 +139,51 @@ export default function TimemarkCamera({
   const [liveNow, setLiveNow] = useState(() => new Date());
   const [frozenProof, setFrozenProof] = useState<ProofSnapshot | null>(null);
 
-  // Camera overlay visibility
+  const [cameraOptions, setCameraOptions] = useState<CameraOptions>(() => parseCameraOptions(profile));
+  const [liveWeather, setLiveWeather] = useState<ProofWeather | null>(null);
+  const [weatherStatus, setWeatherStatus] = useState<WeatherStatus>('waiting');
+  const [storeLogoUrl, setStoreLogoUrl] = useState(() => store?.proofLogoUrl?.trim() ?? '');
+
+  const [torchSupported, setTorchSupported] = useState(false);
+  const [torchOn, setTorchOn] = useState(false);
+  const [torchProbed, setTorchProbed] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoMsg, setLogoMsg] = useState('');
+
   const [cameraOn,  setCameraOn]  = useState(false);
   const [camState,  setCamState]  = useState<CamState>('idle');
   const [camError,  setCamError]  = useState('');
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [retryTick, setRetryTick] = useState(0);
 
-  // Post-capture preview
   const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
   const [capturedUrl,  setCapturedUrl]  = useState('');
 
   const [uploading,     setUploading]     = useState(false);
   const [confirmError, setConfirmError] = useState('');
 
+  const isAdminLogo = canEditStoreLogo(profile?.role);
+  const activeLogoUrl = storeLogoUrl.trim() || resolveActiveLogoUrl(store);
+
+  useEffect(() => {
+    setCameraOptions(parseCameraOptions(profile));
+  }, [profile?.cameraOptionsJson, profile?.id]);
+
+  useEffect(() => {
+    setStoreLogoUrl(store?.proofLogoUrl?.trim() ?? '');
+  }, [store?.id, store?.proofLogoUrl]);
+
   const buildProofSnapshot = useCallback(
-    (at: Date, gpsSnap: typeof gps, addressSnap: string): ProofSnapshot => {
+    (
+      at: Date,
+      gpsSnap: typeof gps,
+      addressSnap: string,
+      weather: ProofWeather | null,
+      wStatus: WeatherStatus,
+      logoUrl: string,
+      opts: CameraOptions,
+    ): ProofSnapshot => {
       const storeCode = store?.code?.trim() || '—';
       const title = itemTitle?.trim() || '—';
       const userName =
@@ -118,6 +192,7 @@ export default function TimemarkCamera({
         '—';
       const address = addressSnap?.trim() ?? '';
       const locationLine = buildLocationLine(gpsSnap, gpsError, address);
+      const weatherLine = buildWeatherLine(opts.weatherEnabled, gpsSnap, gpsError, wStatus, weather);
 
       return {
         capturedAt: at.toISOString(),
@@ -128,12 +203,65 @@ export default function TimemarkCamera({
         locationLine,
         gps: gpsSnap,
         address,
+        weatherLine,
+        proofWeather: opts.weatherEnabled ? weather : null,
+        proofLogoUrl: opts.logoEnabled ? logoUrl : '',
+        cameraOptionsSnapshot: { ...opts },
       };
     },
     [store, itemTitle, profile, gpsError],
   );
 
-  const liveProof = buildProofSnapshot(liveNow, gps, resolvedAddress);
+  const liveProof = buildProofSnapshot(
+    liveNow,
+    gps,
+    resolvedAddress,
+    liveWeather,
+    weatherStatus,
+    activeLogoUrl,
+    cameraOptions,
+  );
+
+  const setTorchOff = useCallback(async () => {
+    const track = streamRef.current?.getVideoTracks()?.[0];
+    if (!track || !torchOn) {
+      setTorchOn(false);
+      return;
+    }
+    try {
+      await track.applyConstraints({ advanced: [{ torch: false }] } as MediaTrackConstraints);
+    } catch { /* unsupported */ }
+    setTorchOn(false);
+  }, [torchOn]);
+
+  const applyTorch = useCallback(async (on: boolean) => {
+    const track = streamRef.current?.getVideoTracks()?.[0];
+    if (!track || !torchSupported) return;
+    try {
+      await track.applyConstraints({ advanced: [{ torch: on }] } as MediaTrackConstraints);
+      setTorchOn(on);
+      const next = { ...cameraOptions, flashlightLastUsed: on };
+      setCameraOptions(next);
+      db.transact(
+        db.tx.profiles[profile.id].update({
+          cameraOptionsJson: serializeCameraOptions(next),
+          updatedAt: nowIso(),
+        }),
+      ).catch(() => { /* non-blocking */ });
+    } catch { /* device rejected */ }
+  }, [torchSupported, cameraOptions, profile.id]);
+
+  async function saveCameraOptions(next: CameraOptions) {
+    setCameraOptions(next);
+    try {
+      await db.transact(
+        db.tx.profiles[profile.id].update({
+          cameraOptionsJson: serializeCameraOptions(next),
+          updatedAt: nowIso(),
+        }),
+      );
+    } catch { /* non-blocking */ }
+  }
 
   // ── GPS watch (unchanged) ────────────────────────────────────────────────
   useEffect(() => {
@@ -170,6 +298,40 @@ export default function TimemarkCamera({
     };
   }, [gps, cameraOn]);
 
+  // ── Weather fetch (non-blocking) ─────────────────────────────────────────
+  useEffect(() => {
+    if (!cameraOn || frozenProof || !cameraOptions.weatherEnabled) return;
+
+    if (!gps) {
+      setWeatherStatus('waiting');
+      return;
+    }
+    if (gpsError) {
+      setWeatherStatus('unavailable');
+      return;
+    }
+
+    if (weatherTimer.current) clearTimeout(weatherTimer.current);
+    weatherTimer.current = setTimeout(() => {
+      setWeatherStatus('loading');
+      fetch(`/api/weather/current?lat=${encodeURIComponent(gps.lat)}&lon=${encodeURIComponent(gps.lng)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data && typeof data.temperature === 'number') {
+            setLiveWeather(data as ProofWeather);
+            setWeatherStatus('ready');
+          } else {
+            setWeatherStatus('unavailable');
+          }
+        })
+        .catch(() => setWeatherStatus('unavailable'));
+    }, 1000);
+
+    return () => {
+      if (weatherTimer.current) clearTimeout(weatherTimer.current);
+    };
+  }, [cameraOn, frozenProof, gps, gpsError, cameraOptions.weatherEnabled]);
+
   // ── Live clock while camera open (before capture) ────────────────────────
   useEffect(() => {
     if (!cameraOn || frozenProof) return;
@@ -177,6 +339,37 @@ export default function TimemarkCamera({
     const id = setInterval(() => setLiveNow(new Date()), 1000);
     return () => clearInterval(id);
   }, [cameraOn, frozenProof]);
+
+  // ── Torch capability probe ───────────────────────────────────────────────
+  useEffect(() => {
+    if (!cameraOn || camState !== 'ready') {
+      setTorchSupported(false);
+      setTorchProbed(false);
+      return;
+    }
+    const track = streamRef.current?.getVideoTracks()?.[0];
+    if (!track) return;
+    try {
+      const caps = track.getCapabilities?.() as MediaTrackCapabilities & { torch?: boolean };
+      const supported = caps?.torch === true;
+      setTorchSupported(supported);
+      setTorchProbed(true);
+      if (!supported) setTorchOn(false);
+    } catch {
+      setTorchSupported(false);
+      setTorchProbed(true);
+    }
+  }, [cameraOn, camState, facingMode, retryTick]);
+
+  // ── Turn torch off on unmount ────────────────────────────────────────────
+  useEffect(() => () => {
+    const track = streamRef.current?.getVideoTracks()?.[0];
+    if (track) {
+      try {
+        track.applyConstraints({ advanced: [{ torch: false }] } as MediaTrackConstraints).catch(() => {});
+      } catch { /* ignore */ }
+    }
+  }, []);
 
   // ── Body-scroll lock while camera / preview is open ──────────────────────
   useEffect(() => {
@@ -293,6 +486,12 @@ export default function TimemarkCamera({
     return () => {
       cancelled = true;
       if (bsTimer.current) clearTimeout(bsTimer.current);
+      const track = streamRef.current?.getVideoTracks()?.[0];
+      if (track) {
+        try {
+          track.applyConstraints({ advanced: [{ torch: false }] } as MediaTrackConstraints).catch(() => {});
+        } catch { /* ignore */ }
+      }
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     };
@@ -309,6 +508,19 @@ export default function TimemarkCamera({
     canvas.width  = bitmap.width;
     canvas.height = bitmap.height;
     ctx.drawImage(bitmap, 0, 0);
+
+    if (proof.cameraOptionsSnapshot.logoEnabled && proof.proofLogoUrl.trim()) {
+      const logo = await loadImage(proof.proofLogoUrl);
+      if (logo) {
+        const maxH = Math.max(48, Math.floor(canvas.height * 0.08));
+        const scale = maxH / logo.height;
+        const w = logo.width * scale;
+        const h = logo.height * scale;
+        const margin = Math.max(12, Math.floor(canvas.width * 0.02));
+        ctx.drawImage(logo, canvas.width - w - margin, margin, w, h);
+      }
+    }
+
     const padding    = Math.max(16, Math.floor(canvas.width * 0.025));
     const fontSize   = Math.max(20, Math.floor(canvas.width * 0.032));
     const lineHeight = Math.floor(fontSize * 1.35);
@@ -343,6 +555,14 @@ export default function TimemarkCamera({
       const capturedAt = proof.capturedAt;
       const path       = `stores/${store.id}/reports/${reportId}/${reportResponseId}/${Date.now()}_${fileName}`;
 
+      const proofMetadataJson = JSON.stringify({
+        proofTimestamp: proof.displayTime,
+        proofLocation: proof.locationLine,
+        proofWeather: proof.proofWeather,
+        proofLogoUrl: proof.proofLogoUrl,
+        cameraOptionsSnapshot: proof.cameraOptionsSnapshot,
+      });
+
       const resp = await fetch('/api/upload-photo', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -362,6 +582,7 @@ export default function TimemarkCamera({
             captureMode: mode,
             uploadedByUserId: profile.userId,
             address: proof.address ?? '',
+            proofMetadataJson,
           },
         }),
       });
@@ -403,23 +624,83 @@ export default function TimemarkCamera({
     }
   }
 
+  async function saveStoreLogoUrl(url: string) {
+    const next = url.trim();
+    setStoreLogoUrl(next);
+    try {
+      await db.transact(
+        db.tx.stores[store.id].update({
+          proofLogoUrl: next,
+          updatedAt: nowIso(),
+        }),
+      );
+      setLogoMsg('Logo saved.');
+    } catch {
+      setLogoMsg('Could not save logo. Try again.');
+    }
+  }
+
+  async function handleLogoFile(file: File) {
+    if (!isAdminLogo) return;
+    const allowed = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+    if (!allowed.includes(file.type)) {
+      setLogoMsg('Use PNG, JPEG, or WebP.');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setLogoMsg('Max file size 2MB.');
+      return;
+    }
+    setLogoUploading(true);
+    setLogoMsg('');
+    try {
+      const buffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
+      const resp = await fetch('/api/upload-logo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storeId: store.id,
+          mimeType: file.type,
+          fileBase64: btoa(binary),
+        }),
+      });
+      const result = await resp.json();
+      if (!resp.ok || !result.url) {
+        setLogoMsg(result.error ?? 'Upload failed.');
+        return;
+      }
+      await saveStoreLogoUrl(result.url);
+    } catch {
+      setLogoMsg('Upload failed. Keeping current logo.');
+    } finally {
+      setLogoUploading(false);
+    }
+  }
+
   function handleOpenCamera() {
     if (capturedUrl) { URL.revokeObjectURL(capturedUrl); setCapturedUrl(''); }
     setCapturedBlob(null);
     setFrozenProof(null);
     setLiveNow(new Date());
+    setOptionsOpen(false);
     setCamState('idle');
     setCamError('');
     setCameraOn(true);
   }
 
-  function handleCloseCamera() {
+  async function handleCloseCamera() {
+    await setTorchOff();
+    setOptionsOpen(false);
     setCameraOn(false);
     setCamState('idle');
     setCamError('');
   }
 
-  function handleSwitchCamera() {
+  async function handleSwitchCamera() {
+    await setTorchOff();
     setFacingMode((prev) => (prev === 'environment' ? 'user' : 'environment'));
   }
 
@@ -436,8 +717,18 @@ export default function TimemarkCamera({
     const tracks = streamRef.current?.getVideoTracks() ?? [];
     if (!tracks.length || tracks[0].readyState === 'ended') return;
 
+    await setTorchOff();
+
     const captureMoment = new Date();
-    const proof = buildProofSnapshot(captureMoment, gps, resolvedAddress);
+    const proof = buildProofSnapshot(
+      captureMoment,
+      gps,
+      resolvedAddress,
+      liveWeather,
+      weatherStatus,
+      activeLogoUrl,
+      cameraOptions,
+    );
     setFrozenProof(proof);
 
     const canvas = document.createElement('canvas');
@@ -451,6 +742,7 @@ export default function TimemarkCamera({
     streamRef.current = null;
     setCameraOn(false);
     setCamState('idle');
+    setOptionsOpen(false);
 
     const url = URL.createObjectURL(watermarked);
     setCapturedBlob(watermarked);
@@ -471,18 +763,22 @@ export default function TimemarkCamera({
     }
   }
 
-  function handleRetake() {
+  async function handleRetake() {
     URL.revokeObjectURL(capturedUrl);
     setCapturedBlob(null);
     setCapturedUrl('');
     setConfirmError('');
     setFrozenProof(null);
     setLiveNow(new Date());
+    setOptionsOpen(false);
     setCameraOn(true);
   }
 
   const gpsStatus = gpsError ? 'error' : !gps ? 'warn' : gps.accuracy > 50 ? 'warn' : 'ok';
   const gpsLabel  = gpsError ? 'GPS ✗' : gps ? `±${Math.round(gps.accuracy)}m` : 'GPS…';
+
+  const showLiveOverlay = camState === 'ready' && !frozenProof;
+  const showLogo = cameraOptions.logoEnabled && activeLogoUrl;
 
   return (
     <div>
@@ -506,17 +802,135 @@ export default function TimemarkCamera({
               ✕
             </button>
             <span className="camera-topbar-title">Chụp ảnh minh chứng</span>
+            <div className="camera-topbar-actions">
+              {torchProbed && (
+                torchSupported ? (
+                  <button
+                    className={`cam-icon-btn cam-flash-btn${torchOn ? ' active' : ''}`}
+                    onClick={() => applyTorch(!torchOn)}
+                    aria-label={torchOn ? 'Turn flash off' : 'Turn flash on'}
+                    title={torchOn ? 'Flash on' : 'Flash off'}
+                  >
+                    ⚡
+                  </button>
+                ) : (
+                  <button
+                    className="cam-icon-btn"
+                    disabled
+                    title="Flash not supported on this device."
+                    aria-label="Flash not supported"
+                  >
+                    ⚡
+                  </button>
+                )
+              )}
+              <button
+                className={`cam-icon-btn${optionsOpen ? ' active' : ''}`}
+                onClick={() => setOptionsOpen((o) => !o)}
+                aria-label="Camera options"
+                title="Options"
+              >
+                ⚙
+              </button>
+            </div>
             <div className={`gps-badge ${gpsStatus}`}>
               <span className={`gps-dot${gps ? ' gps-dot-pulse' : ''}`} />
               {gpsLabel}
             </div>
           </div>
 
+          {optionsOpen && (
+            <div className="camera-options-sheet">
+              <div className="camera-options-row">
+                <span>Flashlight</span>
+                {torchSupported ? (
+                  <button type="button" className="cam-opt-toggle" onClick={() => applyTorch(!torchOn)}>
+                    {torchOn ? 'On' : 'Off'}
+                  </button>
+                ) : (
+                  <span className="cam-opt-muted">Not supported</span>
+                )}
+              </div>
+              <div className="camera-options-row">
+                <span>Weather overlay</span>
+                <button
+                  type="button"
+                  className="cam-opt-toggle"
+                  onClick={() => saveCameraOptions({ ...cameraOptions, weatherEnabled: !cameraOptions.weatherEnabled })}
+                >
+                  {cameraOptions.weatherEnabled ? 'On' : 'Off'}
+                </button>
+              </div>
+              <div className="camera-options-row">
+                <span>Logo overlay</span>
+                <button
+                  type="button"
+                  className="cam-opt-toggle"
+                  onClick={() => saveCameraOptions({ ...cameraOptions, logoEnabled: !cameraOptions.logoEnabled })}
+                >
+                  {cameraOptions.logoEnabled ? 'On' : 'Off'}
+                </button>
+              </div>
+              {cameraOptions.logoEnabled && activeLogoUrl && (
+                <div className="camera-options-logo-preview">
+                  <img src={activeLogoUrl} alt="Logo preview" />
+                </div>
+              )}
+              {isAdminLogo && (
+                <div className="camera-options-logo-actions">
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void handleLogoFile(f);
+                      e.target.value = '';
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="cam-opt-btn"
+                    disabled={logoUploading}
+                    onClick={() => logoInputRef.current?.click()}
+                  >
+                    {logoUploading ? 'Uploading…' : 'Change logo'}
+                  </button>
+                  <div className="camera-options-defaults">
+                    {DEFAULT_LOGOS.map((url) => (
+                      <button
+                        key={url}
+                        type="button"
+                        className="cam-opt-default-thumb"
+                        onClick={() => void saveStoreLogoUrl(url)}
+                        title="Use this default logo"
+                      >
+                        <img src={url} alt="" />
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="cam-opt-btn secondary"
+                    onClick={() => void saveStoreLogoUrl('')}
+                  >
+                    Use default logo
+                  </button>
+                </div>
+              )}
+              {logoMsg && <p className="cam-opt-msg">{logoMsg}</p>}
+            </div>
+          )}
+
           <div className="camera-viewfinder">
             <video ref={videoRef} playsInline muted autoPlay />
 
-            {camState === 'ready' && !frozenProof && (
-              <ProofTimestampOverlay proof={liveProof} />
+            {showLiveOverlay && (
+              <>
+                <ProofTimestampOverlay proof={liveProof} />
+                {showLogo && <ProofLogoOverlay url={activeLogoUrl} />}
+              </>
             )}
 
             {camState === 'opening' && (
@@ -595,6 +1009,9 @@ export default function TimemarkCamera({
           <div className="postcapture-thumb">
             <img src={capturedUrl} alt="Captured photo" />
             <ProofTimestampOverlay proof={frozenProof} />
+            {frozenProof.cameraOptionsSnapshot.logoEnabled && frozenProof.proofLogoUrl && (
+              <ProofLogoOverlay url={frozenProof.proofLogoUrl} />
+            )}
           </div>
 
           {confirmError && (
