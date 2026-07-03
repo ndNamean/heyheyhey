@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { nowIso, nowText, generatePhotoCode } from '../lib/utils';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { generatePhotoCode } from '../lib/utils';
 import type { Profile, Store, UploadedMedia } from '../types';
 
 interface Props {
@@ -15,6 +15,63 @@ interface Props {
 
 type CamState = 'idle' | 'opening' | 'ready' | 'error';
 
+interface ProofSnapshot {
+  capturedAt: string;
+  displayTime: string;
+  storeCode: string;
+  itemTitle: string;
+  userName: string;
+  locationLine: string;
+  gps: { lat: number; lng: number; accuracy: number } | null;
+  address: string;
+}
+
+function formatProofTime(d: Date): string {
+  return d.toLocaleString('en-GB', {
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
+function buildLocationLine(
+  gps: { lat: number; lng: number; accuracy: number } | null,
+  gpsError: string | null,
+  address: string,
+): string {
+  if (gpsError) return 'Location unavailable';
+  if (!gps) return 'GPS verifying...';
+  const coords = `${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)} (±${Math.round(gps.accuracy)}m)`;
+  if (address.trim()) return address.trim();
+  return coords;
+}
+
+function proofWatermarkLines(proof: ProofSnapshot): string[] {
+  return [
+    proof.storeCode,
+    proof.itemTitle,
+    proof.displayTime,
+    proof.userName,
+    proof.locationLine,
+  ];
+}
+
+function ProofTimestampOverlay({ proof }: { proof: ProofSnapshot }) {
+  return (
+    <div className="proof-timestamp-overlay" aria-hidden="true">
+      <div className="proof-ts-store">{proof.storeCode}</div>
+      <div>{proof.itemTitle}</div>
+      <div className="proof-ts-time">{proof.displayTime}</div>
+      <div>{proof.userName}</div>
+      <div className="proof-ts-location">{proof.locationLine}</div>
+    </div>
+  );
+}
+
 export default function TimemarkCamera({
   store,
   itemTitle,
@@ -28,16 +85,20 @@ export default function TimemarkCamera({
   const videoRef   = useRef<HTMLVideoElement>(null);
   const streamRef  = useRef<MediaStream | null>(null);
   const bsTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const geocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [gps,      setGps]      = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
+  const [resolvedAddress, setResolvedAddress] = useState('');
+
+  const [liveNow, setLiveNow] = useState(() => new Date());
+  const [frozenProof, setFrozenProof] = useState<ProofSnapshot | null>(null);
 
   // Camera overlay visibility
   const [cameraOn,  setCameraOn]  = useState(false);
   const [camState,  setCamState]  = useState<CamState>('idle');
   const [camError,  setCamError]  = useState('');
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
-  // Incrementing this with the same cameraOn/facingMode forces the effect to re-run (retry)
   const [retryTick, setRetryTick] = useState(0);
 
   // Post-capture preview
@@ -46,6 +107,33 @@ export default function TimemarkCamera({
 
   const [uploading,     setUploading]     = useState(false);
   const [confirmError, setConfirmError] = useState('');
+
+  const buildProofSnapshot = useCallback(
+    (at: Date, gpsSnap: typeof gps, addressSnap: string): ProofSnapshot => {
+      const storeCode = store?.code?.trim() || '—';
+      const title = itemTitle?.trim() || '—';
+      const userName =
+        profile?.displayName?.trim() ||
+        profile?.email?.split('@')[0]?.trim() ||
+        '—';
+      const address = addressSnap?.trim() ?? '';
+      const locationLine = buildLocationLine(gpsSnap, gpsError, address);
+
+      return {
+        capturedAt: at.toISOString(),
+        displayTime: formatProofTime(at),
+        storeCode,
+        itemTitle: title,
+        userName,
+        locationLine,
+        gps: gpsSnap,
+        address,
+      };
+    },
+    [store, itemTitle, profile, gpsError],
+  );
+
+  const liveProof = buildProofSnapshot(liveNow, gps, resolvedAddress);
 
   // ── GPS watch (unchanged) ────────────────────────────────────────────────
   useEffect(() => {
@@ -58,6 +146,38 @@ export default function TimemarkCamera({
     return () => navigator.geolocation.clearWatch(watchId);
   }, []);
 
+  // ── Reverse geocode when GPS available ───────────────────────────────────
+  useEffect(() => {
+    if (!gps || !cameraOn) return;
+
+    if (geocodeTimer.current) clearTimeout(geocodeTimer.current);
+    geocodeTimer.current = setTimeout(() => {
+      const { lat, lng } = gps;
+      fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}&format=json`,
+        { headers: { 'Accept-Language': 'en' } },
+      )
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          const label = data?.display_name;
+          if (typeof label === 'string' && label.trim()) setResolvedAddress(label.trim());
+        })
+        .catch(() => { /* keep coordinates */ });
+    }, 1500);
+
+    return () => {
+      if (geocodeTimer.current) clearTimeout(geocodeTimer.current);
+    };
+  }, [gps, cameraOn]);
+
+  // ── Live clock while camera open (before capture) ────────────────────────
+  useEffect(() => {
+    if (!cameraOn || frozenProof) return;
+    setLiveNow(new Date());
+    const id = setInterval(() => setLiveNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, [cameraOn, frozenProof]);
+
   // ── Body-scroll lock while camera / preview is open ──────────────────────
   useEffect(() => {
     const lock = cameraOn || !!capturedBlob;
@@ -65,13 +185,7 @@ export default function TimemarkCamera({
     return () => { document.body.style.overflow = ''; };
   }, [cameraOn, capturedBlob]);
 
-  // ── Camera stream lifecycle ──────────────────────────────────────────────
-  //
-  // THE CRITICAL FIX: previously startCamera() called getUserMedia() BEFORE
-  // setCameraOn(true), so videoRef.current was null and srcObject was never set.
-  //
-  // Now: setCameraOn(true) triggers a render that mounts <video>, THEN this
-  // effect runs (after DOM commit) so videoRef.current is always valid.
+  // ── Camera stream lifecycle (unchanged) ──────────────────────────────────
   useEffect(() => {
     if (!cameraOn) return;
 
@@ -125,7 +239,6 @@ export default function TimemarkCamera({
 
       video.srcObject = stream;
 
-      // Wait for the browser to have actual frame data available
       await new Promise<void>((resolve) => {
         if (video.readyState >= 2) { resolve(); return; }
         video.addEventListener('loadedmetadata', () => resolve(), { once: true });
@@ -136,18 +249,14 @@ export default function TimemarkCamera({
 
       try { await video.play(); } catch { /* iOS may reject .play() */ }
 
-      // Verify real pixel data (not a black frame)
       if (video.videoWidth > 0 && video.videoHeight > 0) {
         setCamState('ready');
-        console.debug('[Camera] ready', video.videoWidth, 'x', video.videoHeight);
       } else {
-        // Give the browser up to 4 s to produce the first frame
         const onFrame = () => {
           if (!cancelled && videoRef.current && videoRef.current.videoWidth > 0) {
             clearTimeout(bsTimer.current!);
             setCamState('ready');
             video.removeEventListener('timeupdate', onFrame);
-            console.debug('[Camera] ready (deferred)', video.videoWidth, 'x', video.videoHeight);
           }
         };
         video.addEventListener('timeupdate', onFrame);
@@ -161,26 +270,22 @@ export default function TimemarkCamera({
           } else {
             setCamState('error');
             setCamError(
-              'Camera opened but no image is visible. Please retry or upload a photo.\n\n' +
-              'Camera đã mở nhưng không có hình ảnh. Vui lòng thử lại hoặc tải ảnh lên.',
+              'Camera opened but no image is visible. Please retry.\n\n' +
+              'Camera đã mở nhưng không có hình ảnh. Vui lòng thử lại.',
             );
-            console.debug('[Camera] black-screen timeout');
           }
         }, 4000);
       }
 
-      // Detect track ending mid-session (camera stolen by another app)
       stream.getVideoTracks()[0]?.addEventListener('ended', () => {
         if (!cancelled) {
           setCamState('error');
           setCamError(
-            'Camera was disconnected. Tap Retry or upload instead.\n\n' +
-            'Camera đã bị ngắt. Thử lại hoặc tải ảnh lên.',
+            'Camera was disconnected. Tap Retry.\n\n' +
+            'Camera đã bị ngắt. Thử lại.',
           );
         }
       });
-
-      console.debug('[Camera] track state:', stream.getVideoTracks()[0]?.readyState);
     }
 
     openStream();
@@ -191,25 +296,13 @@ export default function TimemarkCamera({
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     };
-  // retryTick forces a fresh attempt without toggling cameraOn
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cameraOn, facingMode, retryTick]);
 
-  // Stop any lingering stream on unmount
   useEffect(() => () => { streamRef.current?.getTracks().forEach((t) => t.stop()); }, []);
 
-  // ── Watermark text ──────────────────────────────────────────────────────
-  const watermarkLines = useMemo(
-    () => [
-      `${store.code} | ${store.name} | ${itemTitle}`,
-      `${reportDate} | ${nowText()} | ${gps ? `${gps.lat.toFixed(4)}, ${gps.lng.toFixed(4)}` : 'GPS pending'}`,
-      `Submitted by: ${profile.displayName || profile.email}`,
-    ],
-    [store, itemTitle, reportDate, gps, profile],
-  );
-
-  // ── Watermark + canvas (unchanged logic) ────────────────────────────────
-  async function watermarkBlob(blob: Blob): Promise<Blob> {
+  async function watermarkBlob(blob: Blob, proof: ProofSnapshot): Promise<Blob> {
+    const lines = proofWatermarkLines(proof);
     const bitmap = await createImageBitmap(blob);
     const canvas = document.createElement('canvas');
     const ctx    = canvas.getContext('2d')!;
@@ -217,14 +310,14 @@ export default function TimemarkCamera({
     canvas.height = bitmap.height;
     ctx.drawImage(bitmap, 0, 0);
     const padding    = Math.max(16, Math.floor(canvas.width * 0.025));
-    const fontSize   = Math.max(22, Math.floor(canvas.width * 0.035));
+    const fontSize   = Math.max(20, Math.floor(canvas.width * 0.032));
     const lineHeight = Math.floor(fontSize * 1.35);
-    const boxHeight  = padding * 2 + lineHeight * watermarkLines.length;
-    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    const boxHeight  = padding * 2 + lineHeight * lines.length;
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
     ctx.fillRect(0, canvas.height - boxHeight, canvas.width, boxHeight);
     ctx.font      = `${fontSize}px Arial`;
     ctx.fillStyle = 'white';
-    watermarkLines.forEach((line, i) => {
+    lines.forEach((line, i) => {
       ctx.fillText(line, padding, canvas.height - boxHeight + padding + lineHeight * (i + 0.75));
     });
     return new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), 'image/jpeg', 0.85));
@@ -238,12 +331,16 @@ export default function TimemarkCamera({
     return btoa(binary);
   }
 
-  // Upload via server API (admin SDK) — bypasses client $files storage permissions
-  async function uploadBlob(blob: Blob, fileName: string, mode: 'live_camera' | 'file_fallback') {
+  async function uploadBlob(
+    blob: Blob,
+    fileName: string,
+    mode: 'live_camera' | 'file_fallback',
+    proof: ProofSnapshot,
+  ) {
     setUploading(true);
     try {
-      const photoCode  = generatePhotoCode(store.code);
-      const capturedAt = nowIso();
+      const photoCode  = generatePhotoCode(store?.code ?? 'XX');
+      const capturedAt = proof.capturedAt;
       const path       = `stores/${store.id}/reports/${reportId}/${reportResponseId}/${Date.now()}_${fileName}`;
 
       const resp = await fetch('/api/upload-photo', {
@@ -257,13 +354,14 @@ export default function TimemarkCamera({
             reportId,
             reportResponseId,
             storeId: store.id,
-            lat: gps?.lat ?? 0,
-            lng: gps?.lng ?? 0,
-            accuracy: gps?.accuracy ?? 0,
+            lat: proof.gps?.lat ?? 0,
+            lng: proof.gps?.lng ?? 0,
+            accuracy: proof.gps?.accuracy ?? 0,
             capturedAt,
             photoCode,
             captureMode: mode,
             uploadedByUserId: profile.userId,
+            address: proof.address ?? '',
           },
         }),
       });
@@ -305,11 +403,11 @@ export default function TimemarkCamera({
     }
   }
 
-  // ── Camera controls ──────────────────────────────────────────────────────
-
   function handleOpenCamera() {
     if (capturedUrl) { URL.revokeObjectURL(capturedUrl); setCapturedUrl(''); }
     setCapturedBlob(null);
+    setFrozenProof(null);
+    setLiveNow(new Date());
     setCamState('idle');
     setCamError('');
     setCameraOn(true);
@@ -321,12 +419,10 @@ export default function TimemarkCamera({
     setCamError('');
   }
 
-  /** Flip between back/front camera — effect cleanup stops old stream */
   function handleSwitchCamera() {
     setFacingMode((prev) => (prev === 'environment' ? 'user' : 'environment'));
   }
 
-  /** In-place retry without toggling cameraOn */
   function handleRetryCamera() {
     setCamState('idle');
     setCamError('');
@@ -336,20 +432,21 @@ export default function TimemarkCamera({
   async function handleCapture() {
     const video = videoRef.current;
     if (!video || camState !== 'ready') return;
-    // Final safety checks before drawing to canvas
     if (video.videoWidth === 0 || video.videoHeight === 0 || video.readyState < 2) return;
     const tracks = streamRef.current?.getVideoTracks() ?? [];
     if (!tracks.length || tracks[0].readyState === 'ended') return;
 
-    // Draw from real video dimensions — never from CSS/layout dimensions
+    const captureMoment = new Date();
+    const proof = buildProofSnapshot(captureMoment, gps, resolvedAddress);
+    setFrozenProof(proof);
+
     const canvas = document.createElement('canvas');
     canvas.width  = video.videoWidth;
     canvas.height = video.videoHeight;
     canvas.getContext('2d')!.drawImage(video, 0, 0);
-    const raw        = await new Promise<Blob>((r) => canvas.toBlob((b) => r(b!), 'image/jpeg', 0.92));
-    const watermarked = await watermarkBlob(raw);
+    const raw = await new Promise<Blob>((r) => canvas.toBlob((b) => r(b!), 'image/jpeg', 0.92));
+    const watermarked = await watermarkBlob(raw, proof);
 
-    // Stop camera before showing preview
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     setCameraOn(false);
@@ -361,13 +458,14 @@ export default function TimemarkCamera({
   }
 
   async function handleConfirmPhoto() {
-    if (!capturedBlob || uploading) return;
+    if (!capturedBlob || uploading || !frozenProof) return;
     setConfirmError('');
     try {
-      await uploadBlob(capturedBlob, `${store.code}_${Date.now()}.jpg`, 'live_camera');
+      await uploadBlob(capturedBlob, `${store?.code ?? 'photo'}_${Date.now()}.jpg`, 'live_camera', frozenProof);
       URL.revokeObjectURL(capturedUrl);
       setCapturedBlob(null);
       setCapturedUrl('');
+      setFrozenProof(null);
     } catch (e) {
       setConfirmError(e instanceof Error ? e.message : 'Upload failed. Please try again.\n\nTải lên thất bại. Vui lòng thử lại.');
     }
@@ -378,17 +476,16 @@ export default function TimemarkCamera({
     setCapturedBlob(null);
     setCapturedUrl('');
     setConfirmError('');
+    setFrozenProof(null);
+    setLiveNow(new Date());
     setCameraOn(true);
   }
 
-  // ── GPS badge helpers ────────────────────────────────────────────────────
   const gpsStatus = gpsError ? 'error' : !gps ? 'warn' : gps.accuracy > 50 ? 'warn' : 'ok';
   const gpsLabel  = gpsError ? 'GPS ✗' : gps ? `±${Math.round(gps.accuracy)}m` : 'GPS…';
 
-  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div>
-      {/* ── Idle state: open camera only (no upload — real-time proof required) */}
       {!cameraOn && !capturedBlob && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button onClick={handleOpenCamera} disabled={uploading}>
@@ -397,11 +494,8 @@ export default function TimemarkCamera({
         </div>
       )}
 
-      {/* ── Camera full-screen overlay ──────────────────────────────────── */}
       {cameraOn && (
         <div className="camera-fullscreen">
-
-          {/* Top bar */}
           <div className="camera-topbar">
             <button
               className="cam-icon-btn"
@@ -418,20 +512,13 @@ export default function TimemarkCamera({
             </div>
           </div>
 
-          {/* Viewfinder — video is always mounted here so videoRef is valid when effect runs */}
           <div className="camera-viewfinder">
             <video ref={videoRef} playsInline muted autoPlay />
 
-            {/* Watermark overlay — only shown when feed is live */}
-            {camState === 'ready' && (
-              <div className="watermark-preview">
-                <div className="wm-store">{watermarkLines[0]}</div>
-                <div>{watermarkLines[1]}</div>
-                <div>{watermarkLines[2]}</div>
-              </div>
+            {camState === 'ready' && !frozenProof && (
+              <ProofTimestampOverlay proof={liveProof} />
             )}
 
-            {/* Loading overlay */}
             {camState === 'opening' && (
               <div className="cam-state-overlay">
                 <div className="cam-spinner" />
@@ -442,7 +529,6 @@ export default function TimemarkCamera({
               </div>
             )}
 
-            {/* Error overlay */}
             {camState === 'error' && (
               <div className="cam-state-overlay">
                 <span style={{ fontSize: 40, lineHeight: 1 }}>📵</span>
@@ -468,7 +554,6 @@ export default function TimemarkCamera({
             )}
           </div>
 
-          {/* Bottom controls — safe-area-inset-bottom applied via CSS */}
           <div className="camera-controls">
             <button
               className="cam-icon-btn"
@@ -480,7 +565,6 @@ export default function TimemarkCamera({
               🔄<span>Đổi</span>
             </button>
 
-            {/* Shutter — large centre button */}
             <button
               className={`shutter${camState !== 'ready' ? ' disabled' : ''}`}
               onClick={handleCapture}
@@ -502,8 +586,7 @@ export default function TimemarkCamera({
         </div>
       )}
 
-      {/* ── Post-capture preview ────────────────────────────────────────── */}
-      {capturedBlob && (
+      {capturedBlob && frozenProof && (
         <div className="postcapture-sheet">
           <div style={{ color: '#fff', fontWeight: 700, fontSize: 17 }}>
             Xem lại ảnh / Review Photo
@@ -511,16 +594,8 @@ export default function TimemarkCamera({
 
           <div className="postcapture-thumb">
             <img src={capturedUrl} alt="Captured photo" />
+            <ProofTimestampOverlay proof={frozenProof} />
           </div>
-
-          {gps && (
-            <div className="photo-code-box">
-              <div className="photo-code-label">GPS</div>
-              <div className="photo-code-value" style={{ fontSize: 13, letterSpacing: 0 }}>
-                {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)}&nbsp;(±{Math.round(gps.accuracy)}m)
-              </div>
-            </div>
-          )}
 
           {confirmError && (
             <div style={{
@@ -561,7 +636,6 @@ export default function TimemarkCamera({
         </div>
       )}
 
-      {/* ── Existing media thumbnails ───────────────────────────────────── */}
       {existingMedia.length > 0 && !cameraOn && !capturedBlob && (
         <div className="thumb-grid" style={{ marginTop: 10 }}>
           {existingMedia.map((m) => (

@@ -527,13 +527,31 @@ body.wizard-active .page {
 .camera-viewfinder video { width:100%; height:100%; object-fit:cover; }
 .watermark-preview { position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.72); color:#fff; padding:10px 14px; font-size:11px; font-family:monospace; line-height:1.6; pointer-events:none; }
 .watermark-preview .wm-store { color:#FDC216; font-weight:700; }
+.proof-timestamp-overlay {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  max-width: 72%;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1.45;
+  padding: 8px 10px;
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 3;
+  font-family: monospace;
+}
+.proof-ts-store { color: #FDC216; font-weight: 700; }
+.proof-ts-time { font-weight: 600; }
+.proof-ts-location { opacity: 0.92; word-break: break-word; }
 .camera-controls { display:flex; align-items:center; justify-content:space-between; padding:18px 28px; background:rgba(0,0,0,0.92); }
 .shutter { width:72px; height:72px; border-radius:50%; border:3px solid #fff; padding:5px; cursor:pointer; background:transparent; }
 .shutter-inner { width:100%; height:100%; border-radius:50%; background:#fff; }
 .shutter.disabled { opacity:0.4; cursor:not-allowed; }
 .shutter.disabled .shutter-inner { background:#888; }
 .postcapture-sheet { position:fixed; inset:0; z-index:210; background:rgba(0,0,0,0.92); display:flex; flex-direction:column; padding:20px 16px; gap:14px; overflow-y:auto; }
-.postcapture-thumb { border-radius:14px; overflow:hidden; max-height:40vh; }
+.postcapture-thumb { border-radius:14px; overflow:hidden; max-height:40vh; position:relative; }
 .postcapture-thumb img { width:100%; display:block; }
 .photo-code-box { background:#1a1a1a; border:1px solid #2a2a2a; border-radius:12px; padding:12px 16px; }
 .photo-code-label { color:#888; font-size:11px; margin-bottom:6px; }

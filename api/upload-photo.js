@@ -110,7 +110,7 @@ export default async function handler(req, res) {
           captureMode: m.captureMode,
           storeDistanceM: 0,
           noteText: '',
-          address: '',
+          address: m.address ?? '',
           uploadedByUserId: m.uploadedByUserId,
           createdAt: m.capturedAt,
           storagePath: body.path,
