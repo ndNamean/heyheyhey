@@ -81,7 +81,11 @@ export function MobileNav({ page, setPage, profile }: NavProps) {
   ];
 
   return (
-    <nav className="bottom-nav">
+    <>
+      <div className="mobile-lang-row">
+        <LanguageSelector />
+      </div>
+      <nav className="bottom-nav">
       {tabs.map((tab) => (
         <button
           key={tab.id}
@@ -97,6 +101,7 @@ export function MobileNav({ page, setPage, profile }: NavProps) {
         </button>
       ))}
     </nav>
+    </>
   );
 }
 

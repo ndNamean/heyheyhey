@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { db } from '../db';
+import { useLang } from '../i18n';
 import { canReview } from '../lib/roles';
+import { statusLabel } from '../lib/i18nUtils';
 import { badgeClass, nowIso } from '../lib/utils';
 import type { CorrectiveAction, Profile } from '../types';
 
@@ -9,6 +11,7 @@ interface Props {
 }
 
 export default function CorrectiveActionsPage({ profile }: Props) {
+  const { t } = useLang();
   const [filter, setFilter] = useState<'open' | 'overdue' | 'verified' | 'all'>('open');
 
   const { data } = db.useQuery({
@@ -23,14 +26,14 @@ export default function CorrectiveActionsPage({ profile }: Props) {
   });
 
   if (!canReview(profile.role)) {
-    return <div className="card">You need at least leader role to view corrective actions.</div>;
+    return <div className="card">{t.corrective.noPermission}</div>;
   }
 
   const severityBadge = (s: string) =>
     s === 'critical' ? 'badge bad' : s === 'major' ? 'badge warn' : 'badge';
 
   async function closeAction(action: CorrectiveAction) {
-    const note = prompt('Closing note / evidence description?') ?? '';
+    const note = prompt(t.corrective.closingNotePrompt) ?? '';
     await db.transact(
       db.tx.correctiveActions[action.id].update({
         status: 'verified',
@@ -54,11 +57,12 @@ export default function CorrectiveActionsPage({ profile }: Props) {
   return (
     <div>
       <div className="card">
-        <h1>Corrective Actions</h1>
+        <h1>{t.corrective.title}</h1>
+        <p className="small">{t.corrective.subtitle}</p>
         <div className="tabs">
           {(['open', 'overdue', 'verified', 'all'] as const).map((s) => (
             <button key={s} className={filter === s ? 'active' : ''} onClick={() => setFilter(s)}>
-              {s}
+              {s === 'all' ? t.common.all : statusLabel(t, s)}
             </button>
           ))}
         </div>
@@ -69,27 +73,27 @@ export default function CorrectiveActionsPage({ profile }: Props) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <h2 style={{ margin: 0, flex: 1 }}>{ca.title}</h2>
             <span className={severityBadge(ca.severity)}>{ca.severity}</span>
-            <span className={badgeClass(ca.status)}>{ca.status}</span>
+            <span className={badgeClass(ca.status)}>{statusLabel(t, ca.status)}</span>
           </div>
           <p className="small">
-            Due: {ca.dueAt?.slice(0, 16) || '—'} · Assigned: {ca.assignedRole}
+            {t.corrective.due}: {ca.dueAt?.slice(0, 16) || '—'} · {t.corrective.assigned}: {ca.assignedRole}
             {ca.escalationLevel > 0 && (
-              <> · <span className="badge bad">Escalation {ca.escalationLevel}</span></>
+              <> · <span className="badge bad">{t.corrective.escalation} {ca.escalationLevel}</span></>
             )}
           </p>
           {ca.evidenceNote && (
             <p className="small">
-              <strong>Note:</strong> {ca.evidenceNote}
+              <strong>{t.common.note}:</strong> {ca.evidenceNote}
             </p>
           )}
 
           {(ca.status === 'open' || ca.status === 'overdue' || ca.status === 'in_progress') && (
             <div className="capture-actions" style={{ marginTop: 12 }}>
               <button className="secondary" onClick={() => escalate(ca)}>
-                Escalate
+                {t.corrective.escalate}
               </button>
               <button className="success" onClick={() => closeAction(ca)}>
-                Mark verified
+                {t.corrective.markVerified}
               </button>
             </div>
           )}
@@ -98,7 +102,7 @@ export default function CorrectiveActionsPage({ profile }: Props) {
 
       {!actions.length && (
         <div className="card">
-          <p>No corrective actions with status: {filter}.</p>
+          <p>{t.corrective.noActionsWithStatus} {filter === 'all' ? t.common.all : statusLabel(t, filter)}.</p>
         </div>
       )}
     </div>

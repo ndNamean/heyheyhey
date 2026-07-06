@@ -1,6 +1,7 @@
 import { Suspense, lazy, useState } from 'react';
 import { id } from '@instantdb/react';
 import { db } from '../db';
+import { useLang } from '../i18n';
 import { canEditMaster } from '../lib/roles';
 import { nowIso } from '../lib/utils';
 import type { Profile, Store } from '../types';
@@ -22,6 +23,7 @@ const EMPTY_FORM = {
 };
 
 export default function StoresPage({ profile }: Props) {
+  const { t } = useLang();
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -30,7 +32,7 @@ export default function StoresPage({ profile }: Props) {
   const stores: Store[] = (data?.stores ?? []) as Store[];
 
   if (!canEditMaster(profile.role)) {
-    return <div className="card">Only owner or area manager can manage stores.</div>;
+    return <div className="card">{t.stores.noPermission}</div>;
   }
 
   function startEdit(store: Store) {
@@ -52,7 +54,7 @@ export default function StoresPage({ profile }: Props) {
   }
 
   async function saveStore() {
-    if (!form.code.trim() || !form.name.trim()) return alert('Code and name are required');
+    if (!form.code.trim() || !form.name.trim()) return alert(t.stores.codeNameRequired);
     setSaving(true);
     try {
       const payload = {
@@ -76,7 +78,7 @@ export default function StoresPage({ profile }: Props) {
       }
       cancelEdit();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to save store');
+      alert(e instanceof Error ? e.message : t.stores.saveFailed);
     } finally {
       setSaving(false);
     }
@@ -92,15 +94,15 @@ export default function StoresPage({ profile }: Props) {
   return (
     <div>
       <div className="card">
-        <h1>Stores</h1>
+        <h1>{t.stores.title}</h1>
       </div>
 
       <div className="card">
-        <h2>{editingId ? 'Edit store' : 'Add store'}</h2>
+        <h2>{editingId ? t.stores.edit : t.stores.add}</h2>
 
         <div className="grid two" style={{ marginBottom: 12 }}>
           <label>
-            Store code
+            {t.stores.storeCode}
             <input
               value={form.code}
               onChange={(e) => f('code', e.target.value)}
@@ -109,7 +111,7 @@ export default function StoresPage({ profile }: Props) {
             />
           </label>
           <label>
-            Store name
+            {t.stores.storeName}
             <input
               value={form.name}
               onChange={(e) => f('name', e.target.value)}
@@ -117,7 +119,7 @@ export default function StoresPage({ profile }: Props) {
             />
           </label>
           <label>
-            Area / region
+            {t.stores.areaRegion}
             <input
               value={form.area}
               onChange={(e) => f('area', e.target.value)}
@@ -126,7 +128,7 @@ export default function StoresPage({ profile }: Props) {
             />
           </label>
           <label>
-            Geofence radius (metres)
+            {t.stores.geofenceRadius}
             <input
               type="number"
               value={form.geofenceRadiusM}
@@ -136,21 +138,19 @@ export default function StoresPage({ profile }: Props) {
           </label>
         </div>
 
-        {/* Address — auto-filled from map but editable */}
         <label style={{ display: 'block', marginBottom: 12 }}>
-          Address
+          {t.common.address}
           <input
             value={form.address}
             onChange={(e) => f('address', e.target.value)}
-            placeholder="Will auto-fill when you pick a location on the map"
+            placeholder={t.stores.addressPlaceholder}
             style={{ marginTop: 4 }}
           />
         </label>
 
-        {/* Map picker */}
         <div className="map-hint-banner">
-          <p className="small">Pick location on map</p>
-          <Suspense fallback={<div className="map-loading-placeholder">Loading map…</div>}>
+          <p className="small">{t.stores.pickLocation}</p>
+          <Suspense fallback={<div className="map-loading-placeholder">{t.common.loadingMap}</div>}>
           <MapPicker
             lat={parseFloat(form.lat) || 0}
             lng={parseFloat(form.lng) || 0}
@@ -166,28 +166,27 @@ export default function StoresPage({ profile }: Props) {
           </Suspense>
         </div>
 
-        {/* Lat / Lng read-only display (auto-filled from map) */}
         <div className="grid two" style={{ marginBottom: 12 }}>
           <label>
-            Latitude
+            {t.stores.latitude}
             <input
               type="number"
               step="any"
               value={form.lat}
               onChange={(e) => f('lat', e.target.value)}
-              placeholder="Auto-filled from map"
+              placeholder={t.stores.autoFromMap}
               className={form.lat ? 'input-filled' : 'input-readonly-muted'}
               style={{ marginTop: 4 }}
             />
           </label>
           <label>
-            Longitude
+            {t.stores.longitude}
             <input
               type="number"
               step="any"
               value={form.lng}
               onChange={(e) => f('lng', e.target.value)}
-              placeholder="Auto-filled from map"
+              placeholder={t.stores.autoFromMap}
               className={form.lng ? 'input-filled' : 'input-readonly-muted'}
               style={{ marginTop: 4 }}
             />
@@ -197,11 +196,11 @@ export default function StoresPage({ profile }: Props) {
         <div className="capture-actions">
           {editingId && (
             <button className="secondary" onClick={cancelEdit}>
-              Cancel
+              {t.common.cancel}
             </button>
           )}
           <button onClick={saveStore} disabled={saving}>
-            {saving ? 'Saving...' : editingId ? 'Update store' : 'Create store'}
+            {saving ? t.common.saving : editingId ? t.stores.updateStore : t.stores.createStore}
           </button>
         </div>
       </div>
@@ -210,11 +209,11 @@ export default function StoresPage({ profile }: Props) {
         <table>
           <thead>
             <tr>
-              <th>Store</th>
-              <th>Area</th>
-              <th>Coords</th>
-              <th>Active</th>
-              <th>Actions</th>
+              <th>{t.common.store}</th>
+              <th>{t.common.area}</th>
+              <th>{t.stores.coords}</th>
+              <th>{t.stores.active}</th>
+              <th>{t.common.actions}</th>
             </tr>
           </thead>
           <tbody>
@@ -232,7 +231,7 @@ export default function StoresPage({ profile }: Props) {
                 </td>
                 <td>
                   <span className={s.active ? 'badge good' : 'badge bad'}>
-                    {s.active ? 'Active' : 'Inactive'}
+                    {s.active ? t.common.active : t.common.inactive}
                   </span>
                 </td>
                 <td>
@@ -241,7 +240,7 @@ export default function StoresPage({ profile }: Props) {
                     style={{ fontSize: 12, padding: '6px 10px', minHeight: 32, marginRight: 6 }}
                     onClick={() => startEdit(s)}
                   >
-                    Edit
+                    {t.common.edit}
                   </button>
                   {s.active && (
                     <button
@@ -249,7 +248,7 @@ export default function StoresPage({ profile }: Props) {
                       style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
                       onClick={() => deactivate(s)}
                     >
-                      Deactivate
+                      {t.stores.deactivate}
                     </button>
                   )}
                 </td>
@@ -257,7 +256,7 @@ export default function StoresPage({ profile }: Props) {
             ))}
             {!stores.length && (
               <tr>
-                <td colSpan={5}>No stores yet.</td>
+                <td colSpan={5}>{t.stores.noStores}</td>
               </tr>
             )}
           </tbody>

@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { id } from '@instantdb/react';
 import { db } from '../db';
+import { useLang } from '../i18n';
 import { canReview } from '../lib/roles';
-import { badgeClass, nowIso, todayYmd } from '../lib/utils';
+import { nowIso, todayYmd } from '../lib/utils';
 import type { LogbookEntry, Profile, Store } from '../types';
 
 interface Props {
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function LogbookPage({ profile }: Props) {
+  const { t } = useLang();
   const [storeId, setStoreId] = useState('all');
   const [date, setDate] = useState(todayYmd);
   const [showForm, setShowForm] = useState(false);
@@ -43,11 +45,11 @@ export default function LogbookPage({ profile }: Props) {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   if (!canReview(profile.role)) {
-    return <div className="card">You need at least leader role to view the logbook.</div>;
+    return <div className="card">{t.logbook.noPermission}</div>;
   }
 
   async function addEntry() {
-    if (!form.content.trim()) return alert('Content is required');
+    if (!form.content.trim()) return alert(t.logbook.contentRequired);
     setSaving(true);
     try {
       const entryId = id();
@@ -75,7 +77,7 @@ export default function LogbookPage({ profile }: Props) {
       setForm({ storeId: '', shift: 'AM', content: '', severity: 'info', isAnnouncement: false, requiresAck: false });
       setShowForm(false);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to save entry');
+      alert(e instanceof Error ? e.message : t.logbook.saveFailed);
     } finally {
       setSaving(false);
     }
@@ -98,16 +100,16 @@ export default function LogbookPage({ profile }: Props) {
     <div>
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <h1 style={{ margin: 0, flex: 1 }}>Logbook</h1>
+          <h1 style={{ margin: 0, flex: 1 }}>{t.logbook.title}</h1>
           <button onClick={() => setShowForm((v) => !v)}>
-            {showForm ? 'Cancel' : '+ Add entry'}
+            {showForm ? t.common.cancel : t.logbook.addEntry}
           </button>
         </div>
         <div className="grid two" style={{ marginTop: 12 }}>
           <label>
-            Store
+            {t.common.store}
             <select value={storeId} onChange={(e) => setStoreId(e.target.value)}>
-              <option value="all">All stores</option>
+              <option value="all">{t.common.allStores}</option>
               {stores.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.code} — {s.name}
@@ -116,7 +118,7 @@ export default function LogbookPage({ profile }: Props) {
             </select>
           </label>
           <label>
-            Date
+            {t.common.date}
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </label>
         </div>
@@ -124,15 +126,15 @@ export default function LogbookPage({ profile }: Props) {
 
       {showForm && (
         <div className="card">
-          <h2>New logbook entry</h2>
+          <h2>{t.logbook.newEntry}</h2>
           <div className="grid two">
             <label>
-              Store (leave blank for all)
+              {t.logbook.storeOptional}
               <select
                 value={form.storeId}
                 onChange={(e) => setForm({ ...form, storeId: e.target.value })}
               >
-                <option value="">All stores</option>
+                <option value="">{t.common.allStores}</option>
                 {stores.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.code} — {s.name}
@@ -141,20 +143,20 @@ export default function LogbookPage({ profile }: Props) {
               </select>
             </label>
             <label>
-              Shift
+              {t.common.shift}
               <select
                 value={form.shift}
                 onChange={(e) => setForm({ ...form, shift: e.target.value })}
               >
                 {['AM', 'PM', 'Night', 'All day'].map((s) => (
                   <option key={s} value={s}>
-                    {s}
+                    {s === 'All day' ? t.logbook.allDay : s}
                   </option>
                 ))}
               </select>
             </label>
             <label>
-              Severity
+              {t.common.severity}
               <select
                 value={form.severity}
                 onChange={(e) => setForm({ ...form, severity: e.target.value })}
@@ -168,11 +170,11 @@ export default function LogbookPage({ profile }: Props) {
             </label>
           </div>
           <label style={{ marginTop: 12, display: 'block' }}>
-            Content
+            {t.common.content}
             <textarea
               value={form.content}
               onChange={(e) => setForm({ ...form, content: e.target.value })}
-              placeholder="What happened during this shift?"
+              placeholder={t.logbook.contentPlaceholder}
               style={{ marginTop: 4 }}
             />
           </label>
@@ -183,7 +185,7 @@ export default function LogbookPage({ profile }: Props) {
                 checked={form.isAnnouncement}
                 onChange={(e) => setForm({ ...form, isAnnouncement: e.target.checked })}
               />
-              Announcement
+              {t.common.announcement}
             </label>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input
@@ -191,11 +193,11 @@ export default function LogbookPage({ profile }: Props) {
                 checked={form.requiresAck}
                 onChange={(e) => setForm({ ...form, requiresAck: e.target.checked })}
               />
-              Requires acknowledgement
+              {t.logbook.requiresAck}
             </label>
           </div>
           <button style={{ marginTop: 12 }} onClick={addEntry} disabled={saving}>
-            {saving ? 'Saving...' : 'Save entry'}
+            {saving ? t.common.saving : t.logbook.saveEntry}
           </button>
         </div>
       )}
@@ -210,7 +212,7 @@ export default function LogbookPage({ profile }: Props) {
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   {entry.isAnnouncement && (
-                    <span className="badge warn">Announcement</span>
+                    <span className="badge warn">{t.common.announcement}</span>
                   )}
                   <span
                     className={`badge ${
@@ -237,18 +239,18 @@ export default function LogbookPage({ profile }: Props) {
             {entry.requiresAck && (
               <div style={{ marginTop: 8 }}>
                 {meAcked ? (
-                  <span className="badge good">Acknowledged</span>
+                  <span className="badge good">{t.common.acknowledged}</span>
                 ) : (
                   <button
                     className="secondary"
                     style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
                     onClick={() => acknowledge(entry)}
                   >
-                    Acknowledge
+                    {t.common.acknowledge}
                   </button>
                 )}
                 <span className="small" style={{ marginLeft: 8 }}>
-                  {ackIds.length} ack{ackIds.length !== 1 ? 's' : ''}
+                  {ackIds.length} {ackIds.length !== 1 ? t.logbook.acks : t.logbook.ack}
                 </span>
               </div>
             )}
@@ -258,7 +260,7 @@ export default function LogbookPage({ profile }: Props) {
 
       {!entries.length && (
         <div className="card">
-          <p>No logbook entries for the selected date and store.</p>
+          <p>{t.logbook.noEntries}</p>
         </div>
       )}
     </div>

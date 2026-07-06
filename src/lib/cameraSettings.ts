@@ -45,17 +45,30 @@ export function formatWeatherLine(w: ProofWeather | null | undefined): string {
   return `${temp}°C · ${condition} · Humidity ${humidity}% · Wind ${wind} m/s`;
 }
 
+export interface WeatherStatusMessages {
+  unavailable: string;
+  waitingGps: string;
+  loading: string;
+}
+
+const DEFAULT_WEATHER_STATUS: WeatherStatusMessages = {
+  unavailable: 'Weather unavailable',
+  waitingGps: 'Weather waiting for GPS...',
+  loading: 'Weather loading...',
+};
+
 export function buildWeatherLine(
   weatherEnabled: boolean,
   gps: { lat: number; lng: number; accuracy: number } | null,
   gpsError: string | null,
   status: 'waiting' | 'loading' | 'ready' | 'unavailable',
   weather: ProofWeather | null,
+  statusMessages: WeatherStatusMessages = DEFAULT_WEATHER_STATUS,
 ): string {
   if (!weatherEnabled) return '';
-  if (gpsError || status === 'unavailable') return 'Weather unavailable';
-  if (!gps || status === 'waiting') return 'Weather waiting for GPS...';
-  if (status === 'loading' || !weather) return 'Weather loading...';
+  if (gpsError || status === 'unavailable') return statusMessages.unavailable;
+  if (!gps || status === 'waiting') return statusMessages.waitingGps;
+  if (status === 'loading' || !weather) return statusMessages.loading;
   return formatWeatherLine(weather);
 }
 

@@ -294,7 +294,7 @@ export default function AuthGate({ children }: Props) {
   if (authError) {
     return (
       <TicketShell>
-        <h2 className="ticket-section-title">Error</h2>
+        <h2 className="ticket-section-title">{t.auth.errorTitle}</h2>
         <p className="small" style={{ marginBottom: 20 }}>{authError.message}</p>
         <button className="secondary" style={{ width: '100%' }} onClick={() => db.auth.signOut()}>
           {t.auth.signOut}
@@ -312,7 +312,7 @@ export default function AuthGate({ children }: Props) {
   }
 
   if (!profileData || profileData.profiles.length === 0) {
-    return <div className="loading-screen">Setting up your account...</div>;
+    return <div className="loading-screen">{t.auth.settingUpAccount}</div>;
   }
 
   const profile = profileData.profiles[0] as Profile;

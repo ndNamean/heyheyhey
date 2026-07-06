@@ -1,6 +1,7 @@
 import { db } from '../db';
 import FeedbackInbox from '../components/FeedbackInbox';
 import MyReportsPanel from '../components/MyReportsPanel';
+import { useLang } from '../i18n';
 import type { Profile } from '../types';
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export default function StaffHome({ profile, onStartReport, onFixReport }: Props) {
+  const { t } = useLang();
   const today = new Date().toISOString().slice(0, 10);
 
   const { data } = db.useQuery({
@@ -34,49 +36,49 @@ export default function StaffHome({ profile, onStartReport, onFixReport }: Props
 
   return (
     <div>
-      <FeedbackInbox userId={profile.userId} title="Report feedback" />
+      <FeedbackInbox userId={profile.userId} />
       <MyReportsPanel profile={profile} onFixReport={onFixReport} />
 
       <div className="card">
-        <h1>Hello, {profile.displayName || profile.email.split('@')[0]}</h1>
+        <h1>{t.common.hello}, {profile.displayName || profile.email.split('@')[0]}</h1>
         <p className="small">
-          Role: <span className="badge">{profile.role}</span>
+          {t.staffHome.role}: <span className="badge">{profile.role}</span>
         </p>
       </div>
 
       {pendingSlots.length > 0 ? (
         <div className="card">
-          <h2>Today's scheduled tasks</h2>
+          <h2>{t.staffHome.todaysScheduled}</h2>
           {pendingSlots.map((slot) => (
             <div className="item-card" key={slot.id} style={{ marginTop: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <h3 style={{ margin: 0, flex: 1 }}>{slot.templateName}</h3>
                 <span className={slot.status === 'missed' ? 'badge bad' : 'badge warn'}>
-                  {slot.status === 'missed' ? 'Missed' : `Due: ${slot.dueTime}`}
+                  {slot.status === 'missed' ? t.staffHome.missed : `${t.staffHome.due}: ${slot.dueTime}`}
                 </span>
               </div>
               <button style={{ marginTop: 6 }} onClick={onStartReport}>
-                Start checklist
+                {t.staffHome.startChecklist}
               </button>
             </div>
           ))}
         </div>
       ) : (
         <div className="card">
-          <h2>Today's tasks</h2>
-          <p className="small">Tap Submit to complete your store checklist with photo proof.</p>
+          <h2>{t.staffHome.todaysTasks}</h2>
+          <p className="small">{t.staffHome.submitHint}</p>
           <p>
-            <span className="badge warn">Tip</span> Allow location and camera when prompted.
+            <span className="badge warn">{t.common.tip}</span> {t.staffHome.locationCameraTip}
           </p>
           <button style={{ marginTop: 8 }} onClick={onStartReport}>
-            Start report
+            {t.staffHome.startReport}
           </button>
         </div>
       )}
 
       {storeNames && (
         <div className="card">
-          <h3>Your stores</h3>
+          <h3>{t.staffHome.yourStores}</h3>
           <p className="small">{storeNames}</p>
         </div>
       )}

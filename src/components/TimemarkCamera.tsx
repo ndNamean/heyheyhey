@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { db } from '../db';
+import { useLang } from '../i18n';
 import {
   DEFAULT_LOGOS,
   buildWeatherLine,
@@ -57,9 +58,10 @@ function buildLocationLine(
   gps: { lat: number; lng: number; accuracy: number } | null,
   gpsError: string | null,
   address: string,
+  messages: { locationUnavailable: string; gpsVerifying: string },
 ): string {
-  if (gpsError) return 'Location unavailable';
-  if (!gps) return 'GPS verifying...';
+  if (gpsError) return messages.locationUnavailable;
+  if (!gps) return messages.gpsVerifying;
   const coords = `${gps.lat.toFixed(5)}, ${gps.lng.toFixed(5)} (±${Math.round(gps.accuracy)}m)`;
   if (address.trim()) return address.trim();
   return coords;
@@ -329,6 +331,7 @@ export default function TimemarkCamera({
   existingMedia,
   onCapture,
 }: Props) {
+  const { t } = useLang();
   const videoRef   = useRef<HTMLVideoElement>(null);
   const streamRef  = useRef<MediaStream | null>(null);
   const bsTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -385,6 +388,23 @@ export default function TimemarkCamera({
     setStoreLogoUrl(store?.proofLogoUrl?.trim() ?? '');
   }, [store?.id, store?.proofLogoUrl]);
 
+  const locationStatusMessages = useMemo(
+    () => ({
+      locationUnavailable: t.camera.locationUnavailable,
+      gpsVerifying: t.camera.gpsVerifying,
+    }),
+    [t],
+  );
+
+  const weatherStatusMessages = useMemo(
+    () => ({
+      unavailable: t.camera.weatherUnavailable,
+      waitingGps: t.camera.weatherWaitingGps,
+      loading: t.camera.weatherLoading,
+    }),
+    [t],
+  );
+
   const buildProofSnapshot = useCallback(
     (
       at: Date,
@@ -402,8 +422,15 @@ export default function TimemarkCamera({
         profile?.email?.split('@')[0]?.trim() ||
         '—';
       const address = addressSnap?.trim() ?? '';
-      const locationLine = buildLocationLine(gpsSnap, gpsError, address);
-      const weatherLine = buildWeatherLine(opts.weatherEnabled, gpsSnap, gpsError, wStatus, weather);
+      const locationLine = buildLocationLine(gpsSnap, gpsError, address, locationStatusMessages);
+      const weatherLine = buildWeatherLine(
+        opts.weatherEnabled,
+        gpsSnap,
+        gpsError,
+        wStatus,
+        weather,
+        weatherStatusMessages,
+      );
 
       return {
         capturedAt: at.toISOString(),
@@ -420,7 +447,7 @@ export default function TimemarkCamera({
         cameraOptionsSnapshot: { ...opts },
       };
     },
-    [store, itemTitle, profile, gpsError],
+    [store, itemTitle, profile, gpsError, locationStatusMessages, weatherStatusMessages],
   );
 
   const liveProof = buildProofSnapshot(
@@ -476,14 +503,14 @@ export default function TimemarkCamera({
 
   // ── GPS watch (unchanged) ────────────────────────────────────────────────
   useEffect(() => {
-    if (!navigator.geolocation) { setGpsError('Geolocation not supported'); return; }
+    if (!navigator.geolocation) { setGpsError(t.camera.geolocationNotSupported); return; }
     const watchId = navigator.geolocation.watchPosition(
       (pos) => setGps({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy }),
       (err)  => setGpsError(err.message),
       { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 },
     );
     return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+  }, [t.camera.geolocationNotSupported]);
 
   // ── Reverse geocode when GPS available ───────────────────────────────────
   useEffect(() => {
@@ -623,19 +650,13 @@ export default function TimemarkCamera({
         const err = e as DOMException;
         let msg = '';
         if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-          msg =
-            'Camera cannot open. Please allow camera permission in your browser.\n\n' +
-            'Không thể mở camera. Vui lòng cho phép quyền camera trong trình duyệt.';
+          msg = t.camera.permissionDenied;
         } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-          msg =
-            'Camera may be used by another app or unavailable.\n\n' +
-            'Camera đang được dùng bởi ứng dụng khác hoặc trình duyệt không thể truy cập.';
+          msg = t.camera.cameraInUse;
         } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-          msg =
-            'This device or browser does not support live camera.\n\n' +
-            'Thiết bị hoặc trình duyệt này không hỗ trợ camera trực tiếp.';
+          msg = t.camera.cameraNotFound;
         } else {
-          msg = (err.message || 'Camera error.') + '\n\nLỗi camera.';
+          msg = err.message || t.camera.cameraError;
         }
         setCamState('error');
         setCamError(msg);
@@ -649,7 +670,7 @@ export default function TimemarkCamera({
       if (!video) {
         stream.getTracks().forEach((t) => t.stop());
         setCamState('error');
-        setCamError('Video element unavailable. Please try again.\n\nPhần tử video không khả dụng.');
+        setCamError(t.camera.videoUnavailable);
         return;
       }
 
@@ -685,10 +706,7 @@ export default function TimemarkCamera({
             setCamState('ready');
           } else {
             setCamState('error');
-            setCamError(
-              'Camera opened but no image is visible. Please retry.\n\n' +
-              'Camera đã mở nhưng không có hình ảnh. Vui lòng thử lại.',
-            );
+            setCamError(t.camera.noImage);
           }
         }, 4000);
       }
@@ -696,10 +714,7 @@ export default function TimemarkCamera({
       stream.getVideoTracks()[0]?.addEventListener('ended', () => {
         if (!cancelled) {
           setCamState('error');
-          setCamError(
-            'Camera was disconnected. Tap Retry.\n\n' +
-            'Camera đã bị ngắt. Thử lại.',
-          );
+          setCamError(t.camera.disconnected);
         }
       });
     }
@@ -718,8 +733,7 @@ export default function TimemarkCamera({
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cameraOn, facingMode, retryTick]);
+  }, [cameraOn, facingMode, retryTick, t]);
 
   useEffect(() => () => { streamRef.current?.getTracks().forEach((t) => t.stop()); }, []);
 
@@ -838,8 +852,8 @@ export default function TimemarkCamera({
       } catch {
         throw new Error(
           rawText.startsWith('A server error')
-            ? 'Server error — photo upload API failed. Please try again in a moment.'
-            : rawText.slice(0, 120) || `Upload failed (${resp.status})`,
+            ? t.camera.serverUploadFailed
+            : rawText.slice(0, 120) || `${t.camera.uploadFailed} (${resp.status})`,
         );
       }
 
@@ -870,9 +884,9 @@ export default function TimemarkCamera({
           updatedAt: nowIso(),
         }),
       );
-      setLogoMsg('Logo saved.');
+      setLogoMsg(t.camera.logoSaved);
     } catch {
-      setLogoMsg('Could not save logo. Try again.');
+      setLogoMsg(t.camera.logoSaveFailed);
     }
   }
 
@@ -880,11 +894,11 @@ export default function TimemarkCamera({
     if (!isAdminLogo) return;
     const allowed = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
     if (!allowed.includes(file.type)) {
-      setLogoMsg('Use PNG, JPEG, or WebP.');
+      setLogoMsg(t.camera.logoFileTypes);
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
-      setLogoMsg('Max file size 2MB.');
+      setLogoMsg(t.camera.logoMaxSize);
       return;
     }
     setLogoUploading(true);
@@ -905,12 +919,12 @@ export default function TimemarkCamera({
       });
       const result = await resp.json();
       if (!resp.ok || !result.url) {
-        setLogoMsg(result.error ?? 'Upload failed.');
+        setLogoMsg(result.error ?? t.camera.uploadFailed);
         return;
       }
       await saveStoreLogoUrl(result.url);
     } catch {
-      setLogoMsg('Upload failed. Keeping current logo.');
+      setLogoMsg(t.camera.logoUploadFailedKeep);
     } finally {
       setLogoUploading(false);
     }
@@ -1004,7 +1018,7 @@ export default function TimemarkCamera({
       setFrozenProof(null);
       setCaptureSize(null);
     } catch (e) {
-      setConfirmError(e instanceof Error ? e.message : 'Upload failed. Please try again.\n\nTải lên thất bại. Vui lòng thử lại.');
+      setConfirmError(e instanceof Error ? e.message : t.camera.uploadFailed);
     }
   }
 
@@ -1030,7 +1044,7 @@ export default function TimemarkCamera({
       {!cameraOn && !capturedBlob && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button onClick={handleOpenCamera} disabled={uploading}>
-            📷  Open Camera / Mở camera
+            📷 {t.camera.openCamera}
           </button>
         </div>
       )}
@@ -1041,20 +1055,20 @@ export default function TimemarkCamera({
             <button
               className="cam-icon-btn"
               onClick={handleCloseCamera}
-              aria-label="Close camera"
+              aria-label={t.camera.closeCamera}
               style={{ minWidth: 44, minHeight: 44, padding: '4px 8px', fontSize: 18, borderRadius: 10 }}
             >
               ✕
             </button>
-            <span className="camera-topbar-title">Chụp ảnh minh chứng</span>
+            <span className="camera-topbar-title">{t.camera.captureTitle}</span>
             <div className="camera-topbar-actions">
               {torchProbed && (
                 torchSupported ? (
                   <button
                     className={`cam-icon-btn cam-flash-btn${torchOn ? ' active' : ''}`}
                     onClick={() => applyTorch(!torchOn)}
-                    aria-label={torchOn ? 'Turn flash off' : 'Turn flash on'}
-                    title={torchOn ? 'Flash on' : 'Flash off'}
+                    aria-label={torchOn ? t.camera.flashlight : t.camera.flashlight}
+                    title={torchOn ? t.camera.on : t.camera.off}
                   >
                     ⚡
                   </button>
@@ -1062,8 +1076,8 @@ export default function TimemarkCamera({
                   <button
                     className="cam-icon-btn"
                     disabled
-                    title="Flash not supported on this device."
-                    aria-label="Flash not supported"
+                    title={t.camera.flashNotSupported}
+                    aria-label={t.camera.flashNotSupported}
                   >
                     ⚡
                   </button>
@@ -1072,8 +1086,8 @@ export default function TimemarkCamera({
               <button
                 className={`cam-icon-btn${optionsOpen ? ' active' : ''}`}
                 onClick={() => setOptionsOpen((o) => !o)}
-                aria-label="Camera options"
-                title="Options"
+                aria-label={t.camera.options}
+                title={t.camera.options}
               >
                 ⚙
               </button>
@@ -1087,38 +1101,38 @@ export default function TimemarkCamera({
           {optionsOpen && (
             <div className="camera-options-sheet">
               <div className="camera-options-row">
-                <span>Flashlight</span>
+                <span>{t.camera.flashlight}</span>
                 {torchSupported ? (
                   <button type="button" className="cam-opt-toggle" onClick={() => applyTorch(!torchOn)}>
-                    {torchOn ? 'On' : 'Off'}
+                    {torchOn ? t.camera.on : t.camera.off}
                   </button>
                 ) : (
-                  <span className="cam-opt-muted">Not supported</span>
+                  <span className="cam-opt-muted">{t.camera.notSupported}</span>
                 )}
               </div>
               <div className="camera-options-row">
-                <span>Weather overlay</span>
+                <span>{t.camera.weatherOverlay}</span>
                 <button
                   type="button"
                   className="cam-opt-toggle"
                   onClick={() => saveCameraOptions({ ...cameraOptions, weatherEnabled: !cameraOptions.weatherEnabled })}
                 >
-                  {cameraOptions.weatherEnabled ? 'On' : 'Off'}
+                  {cameraOptions.weatherEnabled ? t.camera.on : t.camera.off}
                 </button>
               </div>
               <div className="camera-options-row">
-                <span>Logo overlay</span>
+                <span>{t.camera.logoOverlay}</span>
                 <button
                   type="button"
                   className="cam-opt-toggle"
                   onClick={() => saveCameraOptions({ ...cameraOptions, logoEnabled: !cameraOptions.logoEnabled })}
                 >
-                  {cameraOptions.logoEnabled ? 'On' : 'Off'}
+                  {cameraOptions.logoEnabled ? t.camera.on : t.camera.off}
                 </button>
               </div>
               {cameraOptions.logoEnabled && activeLogoUrl && (
                 <div className="camera-options-logo-preview">
-                  <img src={activeLogoUrl} alt="Logo preview" />
+                  <img src={activeLogoUrl} alt={t.camera.logoPreview} />
                 </div>
               )}
               {isAdminLogo && (
@@ -1140,7 +1154,7 @@ export default function TimemarkCamera({
                     disabled={logoUploading}
                     onClick={() => logoInputRef.current?.click()}
                   >
-                    {logoUploading ? 'Uploading…' : 'Change logo'}
+                    {logoUploading ? t.camera.uploading : t.camera.changeLogo}
                   </button>
                   <div className="camera-options-defaults">
                     {DEFAULT_LOGOS.map((url) => (
@@ -1149,7 +1163,7 @@ export default function TimemarkCamera({
                         type="button"
                         className="cam-opt-default-thumb"
                         onClick={() => void saveStoreLogoUrl(url)}
-                        title="Use this default logo"
+                        title={t.camera.useDefaultLogo}
                       >
                         <img src={url} alt="" />
                       </button>
@@ -1160,7 +1174,7 @@ export default function TimemarkCamera({
                     className="cam-opt-btn secondary"
                     onClick={() => void saveStoreLogoUrl('')}
                   >
-                    Use default logo
+                    {t.camera.useDefaultLogo}
                   </button>
                 </div>
               )}
@@ -1179,8 +1193,7 @@ export default function TimemarkCamera({
               <div className="cam-state-overlay">
                 <div className="cam-spinner" />
                 <p style={{ color: '#fff', textAlign: 'center', margin: 0, fontSize: 14 }}>
-                  Opening camera…<br />
-                  <span style={{ fontSize: 12, opacity: 0.7 }}>Đang mở camera…</span>
+                  {t.camera.opening}
                 </p>
               </div>
             )}
@@ -1196,14 +1209,14 @@ export default function TimemarkCamera({
                     onClick={handleRetryCamera}
                     style={{ fontSize: 13, padding: '10px 20px', borderRadius: 10 }}
                   >
-                    🔄 Retry / Thử lại
+                    🔄 {t.common.retry}
                   </button>
                   <button
                     className="secondary"
                     onClick={handleCloseCamera}
                     style={{ fontSize: 13, padding: '10px 20px', borderRadius: 10 }}
                   >
-                    ✕ Close / Đóng
+                    ✕ {t.camera.closeShort}
                   </button>
                 </div>
               </div>
@@ -1215,17 +1228,17 @@ export default function TimemarkCamera({
               className="cam-icon-btn"
               onClick={handleSwitchCamera}
               disabled={camState === 'opening'}
-              aria-label="Switch camera"
-              title="Switch camera / Đổi camera"
+              aria-label={t.camera.switchCamera}
+              title={t.camera.switchCamera}
             >
-              🔄<span>Đổi</span>
+              🔄<span>{t.camera.switchShort}</span>
             </button>
 
             <button
               className={`shutter${camState !== 'ready' ? ' disabled' : ''}`}
               onClick={handleCapture}
               disabled={camState !== 'ready'}
-              aria-label="Capture photo"
+              aria-label={t.camera.capturePhoto}
             >
               <div className="shutter-inner" />
             </button>
@@ -1233,10 +1246,10 @@ export default function TimemarkCamera({
             <button
               className="cam-icon-btn"
               onClick={handleCloseCamera}
-              aria-label="Close camera"
-              title="Close / Đóng"
+              aria-label={t.camera.closeCamera}
+              title={t.camera.closeShort}
             >
-              ✕<span>Đóng</span>
+              ✕<span>{t.camera.closeShort}</span>
             </button>
           </div>
         </div>,
@@ -1246,7 +1259,7 @@ export default function TimemarkCamera({
       {capturedBlob && frozenProof && createPortal(
         <div className="postcapture-sheet">
           <div style={{ color: '#fff', fontWeight: 700, fontSize: 17 }}>
-            Xem lại ảnh / Review Photo
+            {t.camera.reviewPhoto}
           </div>
 
           <div
@@ -1257,7 +1270,7 @@ export default function TimemarkCamera({
                 : undefined
             }
           >
-            <img src={capturedUrl} alt="Captured photo" />
+            <img src={capturedUrl} alt={t.camera.capturedPhoto} />
           </div>
 
           {confirmError && (
@@ -1285,15 +1298,14 @@ export default function TimemarkCamera({
                 borderRadius: 12,
               }}
             >
-              ↩ Chụp lại<br /><span style={{ fontWeight: 400, fontSize: 11 }}>Retake</span>
+              ↩ {t.camera.retake}
             </button>
             <button
               onClick={handleConfirmPhoto}
               disabled={uploading}
               style={{ background: '#FDC216', color: '#111', fontWeight: 700, borderRadius: 12 }}
             >
-              {uploading ? 'Saving…' : '✓ Dùng ảnh này'}<br />
-              {!uploading && <span style={{ fontWeight: 400, fontSize: 11 }}>Use Photo</span>}
+              {uploading ? t.camera.saving : `✓ ${t.camera.usePhoto}`}
             </button>
           </div>
         </div>,
@@ -1306,7 +1318,7 @@ export default function TimemarkCamera({
             <div key={m.mediaRecordId}>
               <img src={m.url} alt={m.fileName} />
               <div className="photo-code-box" style={{ marginTop: 4 }}>
-                <div className="photo-code-label">Photo code</div>
+                <div className="photo-code-label">{t.camera.photoCode}</div>
                 <div className="photo-code-value">{m.photoCode}</div>
               </div>
             </div>

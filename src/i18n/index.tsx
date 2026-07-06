@@ -1,4 +1,6 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { deepMerge } from './fallback';
+import { buildExtendedPack, extraCommonEn, type ExtendedSections } from './extra';
 
 // ─── Supported languages ──────────────────────────────────────────────────────
 
@@ -32,7 +34,7 @@ export const LANGUAGES: LangMeta[] = [
 
 // ─── Translation shape ────────────────────────────────────────────────────────
 
-interface T {
+export type T = {
   nav: {
     dashboard: string; submit: string; review: string; profile: string;
     stores: string; users: string; templates: string; corrective: string;
@@ -45,6 +47,7 @@ interface T {
     pendingTitle: string; pendingBody: string; pendingNote: string; waitingBadge: string;
     rejectedTitle: string; rejectedBody: string; rejectedContact: string; signOut: string;
     sendingCode: string; signingIn: string; settingUp: string;
+    errorTitle: string; settingUpAccount: string;
   };
   common: {
     save: string; cancel: string; edit: string; delete: string; approve: string;
@@ -54,14 +57,14 @@ interface T {
     copy: string; copied: string; revoke: string; noData: string; actions: string;
     status: string; role: string; stores: string; name: string; code: string;
     address: string; area: string; date: string; note: string; type: string;
-  };
+  } & typeof extraCommonEn;
   pages: {
     dashboard: string; submit: string; review: string; stores: string; users: string;
     templates: string; corrective: string; photos: string; verify: string;
     shifts: string; logbook: string; profile: string;
   };
   lang: { label: string; others: string; };
-}
+} & ExtendedSections;
 
 // ─── Translations ─────────────────────────────────────────────────────────────
 
@@ -552,6 +555,18 @@ const translations: Record<LangCode, T> = {
   },
 };
 
+// Merge extended sections (staff/admin/camera) into each language pack
+const fullTranslations = Object.fromEntries(
+  (Object.keys(translations) as LangCode[]).map((code) => {
+    const ext = code === 'vi' ? buildExtendedPack('vi') : buildExtendedPack('en');
+    return [code, deepMerge(deepMerge(translations.en, translations[code]), ext) as T];
+  }),
+) as Record<LangCode, T>;
+
+function resolveT(lang: LangCode): T {
+  return deepMerge(fullTranslations.en, fullTranslations[lang] ?? fullTranslations.en);
+}
+
 // ─── Context ──────────────────────────────────────────────────────────────────
 
 interface LangCtx {
@@ -564,7 +579,7 @@ interface LangCtx {
 const Ctx = createContext<LangCtx>({
   lang: 'en',
   setLang: () => {},
-  t: translations.en,
+  t: resolveT('en'),
   isRtl: false,
 });
 
@@ -579,6 +594,7 @@ function detectDefault(): LangCode {
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<LangCode>(detectDefault);
+  const t = useMemo(() => resolveT(lang), [lang]);
 
   function setLang(l: LangCode) {
     setLangState(l);
@@ -598,7 +614,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const isRtl = LANGUAGES.find((x) => x.code === lang)?.rtl ?? false;
 
   return (
-    <Ctx.Provider value={{ lang, setLang, t: translations[lang], isRtl }}>
+    <Ctx.Provider value={{ lang, setLang, t, isRtl }}>
       {children}
     </Ctx.Provider>
   );

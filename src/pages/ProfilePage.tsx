@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { db } from '../db';
+import { useLang } from '../i18n';
+import LanguageSelector from '../components/LanguageSelector';
 import { nowIso } from '../lib/utils';
 import type { Profile } from '../types';
 
@@ -8,6 +10,7 @@ interface Props {
 }
 
 export default function ProfilePage({ profile }: Props) {
+  const { t } = useLang();
   const [editing, setEditing] = useState(false);
   const [displayName, setDisplayName] = useState(profile.displayName);
   const [saving, setSaving] = useState(false);
@@ -26,7 +29,7 @@ export default function ProfilePage({ profile }: Props) {
       );
       setEditing(false);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to update name');
+      alert(e instanceof Error ? e.message : t.profile.updateFailed);
     } finally {
       setSaving(false);
     }
@@ -35,12 +38,12 @@ export default function ProfilePage({ profile }: Props) {
   return (
     <div>
       <div className="card">
-        <h1>Profile</h1>
+        <h1>{t.profile.title}</h1>
 
         {editing ? (
           <>
             <label style={{ display: 'block', marginBottom: 12 }}>
-              Display name
+              {t.profile.displayName}
               <input
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
@@ -49,10 +52,10 @@ export default function ProfilePage({ profile }: Props) {
             </label>
             <div className="capture-actions">
               <button className="secondary" onClick={() => { setEditing(false); setDisplayName(profile.displayName); }} disabled={saving}>
-                Cancel
+                {t.common.cancel}
               </button>
               <button onClick={save} disabled={saving || !displayName.trim()}>
-                {saving ? 'Saving...' : 'Save'}
+                {saving ? t.common.saving : t.common.save}
               </button>
             </div>
           </>
@@ -63,23 +66,31 @@ export default function ProfilePage({ profile }: Props) {
             </p>
             <p className="small">{profile.email}</p>
             <p>
-              Role: <span className="badge">{profile.role}</span>
+              {t.profile.role}: <span className="badge">{profile.role}</span>
             </p>
-            <p className="small">Stores: {storeNames || 'None assigned'}</p>
+            <p className="small">
+              {t.profile.storesLabel}: {storeNames || t.profile.noneAssigned}
+            </p>
             <button
               className="secondary"
               style={{ marginTop: 12, fontSize: 13, padding: '8px 14px', minHeight: 38 }}
               onClick={() => setEditing(true)}
             >
-              Edit display name
+              {t.profile.editDisplayName}
             </button>
           </>
         )}
       </div>
 
       <div className="card">
+        <h2 style={{ marginTop: 0 }}>{t.profile.language}</h2>
+        <p className="small">{t.profile.languageHint}</p>
+        <LanguageSelector />
+      </div>
+
+      <div className="card">
         <button className="danger" onClick={() => db.auth.signOut()}>
-          Sign out
+          {t.profile.signOut}
         </button>
       </div>
     </div>

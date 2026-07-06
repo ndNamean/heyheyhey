@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { id } from '@instantdb/react';
 import { db } from '../db';
+import { useLang } from '../i18n';
 import { canReview } from '../lib/roles';
+import { statusLabel } from '../lib/i18nUtils';
 import { badgeClass, nowIso, todayYmd } from '../lib/utils';
 import type { Profile, Shift, Store } from '../types';
 
@@ -10,6 +12,7 @@ interface Props {
 }
 
 export default function ShiftsPage({ profile }: Props) {
+  const { t } = useLang();
   const [date, setDate] = useState(todayYmd);
   const [tab, setTab] = useState<'schedule' | 'clockin'>('schedule');
   const [newShift, setNewShift] = useState({
@@ -38,7 +41,6 @@ export default function ShiftsPage({ profile }: Props) {
   const shifts: Shift[] = (data?.shifts ?? []) as Shift[];
   const stores: Store[] = (data?.stores ?? []) as Store[];
 
-  // Filter shifts to user's scope
   const myShifts =
     profile.role === 'owner' || profile.role === 'areaManager'
       ? shifts
@@ -50,13 +52,13 @@ export default function ShiftsPage({ profile }: Props) {
 
   async function createShift() {
     if (!newShift.storeId || !newShift.employeeEmail) {
-      return alert('Store and employee email are required');
+      return alert(t.shifts.storeEmailRequired);
     }
     setSaving(true);
     try {
       const profiles: Profile[] = (data?.profiles ?? []) as Profile[];
       const employee = profiles.find((p) => p.email === newShift.employeeEmail);
-      if (!employee) return alert('No approved user found with that email');
+      if (!employee) return alert(t.shifts.userNotFound);
 
       await db.transact(
         db.tx.shifts[id()]
@@ -79,14 +81,14 @@ export default function ShiftsPage({ profile }: Props) {
       );
       setNewShift({ ...newShift, employeeEmail: '', notes: '' });
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to create shift');
+      alert(e instanceof Error ? e.message : t.shifts.createFailed);
     } finally {
       setSaving(false);
     }
   }
 
   async function recordClock(shift: Shift, type: 'clockIn' | 'clockOut') {
-    if (!navigator.geolocation) return alert('Geolocation not supported');
+    if (!navigator.geolocation) return alert(t.shifts.geolocationUnsupported);
     setClockingIn(shift.id);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
@@ -120,26 +122,27 @@ export default function ShiftsPage({ profile }: Props) {
             .link({ shift: shift.id }),
         );
         setClockingIn(null);
-        alert(gpsValid ? `${type === 'clockIn' ? 'Clock-in' : 'Clock-out'} recorded.` : `${type === 'clockIn' ? 'Clock-in' : 'Clock-out'} recorded. Note: outside geofence.`);
+        const recorded = type === 'clockIn' ? t.shifts.clockInRecorded : t.shifts.clockOutRecorded;
+        alert(gpsValid ? recorded : `${recorded} ${t.shifts.outsideGeofence}`);
       },
       (err) => {
         setClockingIn(null);
-        alert('GPS error: ' + err.message);
+        alert(`${t.shifts.gpsError}: ${err.message}`);
       },
       { enableHighAccuracy: true, timeout: 15000 },
     );
   }
 
   if (!canReview(profile.role) && profile.role !== 'staff') {
-    return <div className="card">You do not have access to shifts.</div>;
+    return <div className="card">{t.shifts.noAccess}</div>;
   }
 
   return (
     <div>
       <div className="card">
-        <h1>Shifts</h1>
+        <h1>{t.shifts.title}</h1>
         <label>
-          Date
+          {t.common.date}
           <input
             type="date"
             value={date}
@@ -149,25 +152,25 @@ export default function ShiftsPage({ profile }: Props) {
         </label>
         <div className="tabs" style={{ marginTop: 12 }}>
           <button className={tab === 'schedule' ? 'active' : ''} onClick={() => setTab('schedule')}>
-            Schedule
+            {t.shifts.schedule}
           </button>
           <button className={tab === 'clockin' ? 'active' : ''} onClick={() => setTab('clockin')}>
-            Clock in/out
+            {t.shifts.clockInOut}
           </button>
         </div>
       </div>
 
       {tab === 'schedule' && canReview(profile.role) && (
         <div className="card">
-          <h2>Add shift</h2>
+          <h2>{t.shifts.addShift}</h2>
           <div className="grid two">
             <label>
-              Store
+              {t.common.store}
               <select
                 value={newShift.storeId}
                 onChange={(e) => setNewShift({ ...newShift, storeId: e.target.value })}
               >
-                <option value="">Select store</option>
+                <option value="">{t.common.selectStore}</option>
                 {stores.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.code} — {s.name}
@@ -176,7 +179,7 @@ export default function ShiftsPage({ profile }: Props) {
               </select>
             </label>
             <label>
-              Employee email
+              {t.shifts.employeeEmail}
               <input
                 value={newShift.employeeEmail}
                 onChange={(e) => setNewShift({ ...newShift, employeeEmail: e.target.value })}
@@ -184,7 +187,7 @@ export default function ShiftsPage({ profile }: Props) {
               />
             </label>
             <label>
-              Role
+              {t.common.role}
               <select
                 value={newShift.role}
                 onChange={(e) => setNewShift({ ...newShift, role: e.target.value })}
@@ -197,7 +200,7 @@ export default function ShiftsPage({ profile }: Props) {
               </select>
             </label>
             <label>
-              Hourly rate
+              {t.shifts.hourlyRate}
               <input
                 type="number"
                 value={newShift.hourlyRate}
@@ -205,7 +208,7 @@ export default function ShiftsPage({ profile }: Props) {
               />
             </label>
             <label>
-              Start time
+              {t.shifts.startTime}
               <input
                 type="time"
                 value={newShift.startTime}
@@ -213,7 +216,7 @@ export default function ShiftsPage({ profile }: Props) {
               />
             </label>
             <label>
-              End time
+              {t.shifts.endTime}
               <input
                 type="time"
                 value={newShift.endTime}
@@ -222,7 +225,7 @@ export default function ShiftsPage({ profile }: Props) {
             </label>
           </div>
           <button style={{ marginTop: 12 }} onClick={createShift} disabled={saving}>
-            {saving ? 'Adding...' : 'Add shift'}
+            {saving ? t.shifts.adding : t.shifts.addShift}
           </button>
         </div>
       )}
@@ -231,12 +234,12 @@ export default function ShiftsPage({ profile }: Props) {
         <table>
           <thead>
             <tr>
-              <th>Employee</th>
-              <th>Store</th>
-              <th>Time</th>
-              <th>Role</th>
-              <th>Status</th>
-              {tab === 'clockin' && <th>Action</th>}
+              <th>{t.common.employee}</th>
+              <th>{t.common.store}</th>
+              <th>{t.shifts.time}</th>
+              <th>{t.common.role}</th>
+              <th>{t.common.status}</th>
+              {tab === 'clockin' && <th>{t.shifts.action}</th>}
             </tr>
           </thead>
           <tbody>
@@ -260,15 +263,15 @@ export default function ShiftsPage({ profile }: Props) {
                   </td>
                   <td>{s.role}</td>
                   <td>
-                    <span className={badgeClass(s.status)}>{s.status}</span>
+                    <span className={badgeClass(s.status)}>{statusLabel(t, s.status)}</span>
                     {hasClockedIn && !hasClockedOut && (
                       <span className="badge good" style={{ marginLeft: 4 }}>
-                        In
+                        {t.shifts.in}
                       </span>
                     )}
                     {hasClockedOut && (
                       <span className="badge" style={{ marginLeft: 4 }}>
-                        Out
+                        {t.shifts.out}
                       </span>
                     )}
                   </td>
@@ -281,7 +284,7 @@ export default function ShiftsPage({ profile }: Props) {
                         onClick={() => recordClock(s, 'clockIn')}
                         disabled={clockingIn === s.id}
                       >
-                        {clockingIn === s.id ? '...' : 'Clock in'}
+                        {clockingIn === s.id ? '...' : t.shifts.clockIn}
                       </button>
                     ) : !hasClockedOut ? (
                       <button
@@ -290,10 +293,10 @@ export default function ShiftsPage({ profile }: Props) {
                         onClick={() => recordClock(s, 'clockOut')}
                         disabled={clockingIn === s.id}
                       >
-                          {clockingIn === s.id ? '...' : 'Clock out'}
+                          {clockingIn === s.id ? '...' : t.shifts.clockOut}
                         </button>
                       ) : (
-                        <span className="small">Done</span>
+                        <span className="small">{t.common.done}</span>
                       )}
                     </td>
                   )}
@@ -303,7 +306,7 @@ export default function ShiftsPage({ profile }: Props) {
             })}
             {!myShifts.length && (
               <tr>
-                <td colSpan={6}>No shifts for {date}.</td>
+                <td colSpan={6}>{t.shifts.noShiftsForDate} {date}.</td>
               </tr>
             )}
           </tbody>
@@ -313,7 +316,6 @@ export default function ShiftsPage({ profile }: Props) {
   );
 }
 
-// Simple haversine distance in metres
 function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;

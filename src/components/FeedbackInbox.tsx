@@ -1,4 +1,6 @@
 import { db } from '../db';
+import { useLang } from '../i18n';
+import { statusLabel } from '../lib/i18nUtils';
 import { badgeClass, nowIso } from '../lib/utils';
 import type { Notification } from '../types';
 
@@ -8,7 +10,10 @@ interface Props {
   limit?: number;
 }
 
-export default function FeedbackInbox({ userId, title = 'Feedback', limit = 15 }: Props) {
+export default function FeedbackInbox({ userId, title, limit = 15 }: Props) {
+  const { t } = useLang();
+  const inboxTitle = title ?? t.staffHome.feedback;
+
   const { data } = db.useQuery({
     notifications: {
       $: { where: { recipientUserId: userId } },
@@ -31,8 +36,12 @@ export default function FeedbackInbox({ userId, title = 'Feedback', limit = 15 }
   return (
     <div className="card feedback-inbox">
       <div className="feedback-inbox-header">
-        <h2 style={{ margin: 0 }}>{title}</h2>
-        {unreadCount > 0 && <span className="badge warn">{unreadCount} new</span>}
+        <h2 style={{ margin: 0 }}>{inboxTitle}</h2>
+        {unreadCount > 0 && (
+          <span className="badge warn">
+            {unreadCount} {t.common.new}
+          </span>
+        )}
       </div>
 
       <div className="feedback-list">
@@ -44,18 +53,19 @@ export default function FeedbackInbox({ userId, title = 'Feedback', limit = 15 }
             onClick={() => markRead(n)}
           >
             <div className="feedback-item-top">
-              <span className={badgeClass(n.actionStatus)}>{n.actionStatus.replace(/_/g, ' ')}</span>
+              <span className={badgeClass(n.actionStatus)}>{statusLabel(t, n.actionStatus)}</span>
               <span className="feedback-item-time">{n.createdAt?.slice(0, 16)}</span>
             </div>
             <div className="feedback-item-title">{n.title}</div>
             <div className="feedback-item-stats">
-              Completion {n.completionPercent ?? 0}% · Compliance {n.compliancePercent ?? 0}%
+              {t.feedback.completion} {n.completionPercent ?? 0}% · {t.feedback.compliance}{' '}
+              {n.compliancePercent ?? 0}%
             </div>
             <div className="feedback-item-body">{n.body}</div>
             {n.actorRole && (
               <div className="feedback-item-actor">
-                Reviewed by {n.actorRole}
-                {n.type === 'report_finalized' ? ' · report summary' : ''}
+                {t.feedback.reviewedBy} {n.actorRole}
+                {n.type === 'report_finalized' ? ` · ${t.feedback.reportSummary}` : ''}
               </div>
             )}
           </button>

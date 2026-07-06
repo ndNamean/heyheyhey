@@ -1,16 +1,17 @@
 import { useRef, useState, useCallback } from 'react';
 import { db } from '../db';
+import { useLang } from '../i18n';
+import { statusLabel } from '../lib/i18nUtils';
 import { ROLES } from '../lib/roles';
-import { badgeClass, nowIso } from '../lib/utils';
+import { nowIso } from '../lib/utils';
 import type { ApprovalStatus, Profile, Role, Store } from '../types';
 
 interface Props {
   currentProfile: Profile;
 }
 
-// ─── Invite user form ─────────────────────────────────────────────────────────
-
 function InviteUserForm({ currentProfile }: { currentProfile: Profile }) {
+  const { t } = useLang();
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Role>('staff');
   const [sent, setSent] = useState(false);
@@ -20,7 +21,6 @@ function InviteUserForm({ currentProfile }: { currentProfile: Profile }) {
 
   const isOwner = currentProfile.role === 'owner';
 
-  // Roles the current admin is allowed to invite
   const assignableRoles = ROLES.filter(
     (r) => isOwner || !['owner', 'areaManager'].includes(r),
   );
@@ -44,14 +44,13 @@ function InviteUserForm({ currentProfile }: { currentProfile: Profile }) {
       await db.auth.sendMagicCode({ email: trimmed });
       setSent(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not send code. Try again.');
+      setError(e instanceof Error ? e.message : t.users.couldNotSendCode);
     } finally {
       setLoading(false);
     }
   }
 
   if (sent) {
-    // Link carries email + intended role so the app pre-sets the role on first sign-in
     const sentLink =
       `${window.location.origin}/?invite=${encodeURIComponent(email.trim())}` +
       `&role=${encodeURIComponent(role)}`;
@@ -60,15 +59,14 @@ function InviteUserForm({ currentProfile }: { currentProfile: Profile }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div className="alert-success">
           <p className="small">
-            Sign-in code emailed to <strong>{email}</strong> as <strong>{role}</strong>.
+            {t.users.inviteSent} <strong>{email}</strong> as <strong>{role}</strong>.
           </p>
         </div>
 
         <div className="alert-info">
-          <p className="small alert-info-title">Direct sign-in link</p>
+          <p className="small alert-info-title">{t.common.directSignInLink}</p>
           <p className="small" style={{ margin: '0 0 10px' }}>
-            The email InstantDB sent contains the 6-digit code. Share this link too —
-            when they click it their email is pre-filled and the code is sent again automatically.
+            {t.users.inviteLinkHint}
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
             <input
@@ -86,7 +84,7 @@ function InviteUserForm({ currentProfile }: { currentProfile: Profile }) {
               style={{ fontSize: 13, padding: '10px 16px', minHeight: 0, whiteSpace: 'nowrap' }}
               onClick={() => copyLink(sentLink)}
             >
-              {copied ? 'Copied!' : 'Copy link'}
+              {copied ? t.common.copied : t.common.copyLink}
             </button>
           </div>
         </div>
@@ -96,7 +94,7 @@ function InviteUserForm({ currentProfile }: { currentProfile: Profile }) {
           style={{ alignSelf: 'flex-start', fontSize: 13, padding: '8px 14px', minHeight: 36 }}
           onClick={() => { setSent(false); setEmail(''); setCopied(false); }}
         >
-          ← Invite another
+          {t.common.inviteAnother}
         </button>
       </div>
     );
@@ -105,13 +103,12 @@ function InviteUserForm({ currentProfile }: { currentProfile: Profile }) {
   return (
     <div>
       <p className="small" style={{ marginBottom: 14 }}>
-        Enter their email and select a role. A sign-in code will be emailed to them and
-        you'll get a direct link to share via WhatsApp, Telegram, or any channel.
+        {t.users.inviteHint}
       </p>
 
       <div className="grid two" style={{ marginBottom: 12 }}>
         <label>
-          Email address
+          {t.users.emailAddress}
           <input
             type="email"
             value={email}
@@ -124,7 +121,7 @@ function InviteUserForm({ currentProfile }: { currentProfile: Profile }) {
         </label>
 
         <label>
-          Role
+          {t.common.role}
           <select
             value={role}
             onChange={(e) => setRole(e.target.value as Role)}
@@ -145,13 +142,11 @@ function InviteUserForm({ currentProfile }: { currentProfile: Profile }) {
         onClick={send}
         disabled={loading || !email.trim()}
       >
-        {loading ? 'Sending…' : 'Send sign-in code + get invite link →'}
+        {loading ? t.auth.sending : t.common.sendSignInCode}
       </button>
     </div>
   );
 }
-
-// ─── Stores dropdown ──────────────────────────────────────────────────────────
 
 function StoresDropdown({
   profile,
@@ -162,6 +157,7 @@ function StoresDropdown({
   allStores: Store[];
   canEdit: boolean;
 }) {
+  const { t } = useLang();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -198,17 +194,16 @@ function StoresDropdown({
           opacity: canEdit ? 1 : 0.6,
         }}
         onClick={() => canEdit && setOpen((v) => !v)}
-        title={canEdit ? 'Click to manage stores' : 'No permission'}
+        title={canEdit ? t.users.manageStoresTitle : t.users.noPermissionStores}
       >
         <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {assignedCodes.length ? assignedCodes.join(', ') : 'None'}
+          {assignedCodes.length ? assignedCodes.join(', ') : t.common.none}
         </span>
         {canEdit && <span style={{ opacity: 0.5 }}>▾</span>}
       </button>
 
       {open && (
         <>
-          {/* click-away overlay */}
           <div
             style={{ position: 'fixed', inset: 0, zIndex: 99 }}
             onClick={() => setOpen(false)}
@@ -219,7 +214,7 @@ function StoresDropdown({
           >
             {allStores.length === 0 && (
               <p className="small" style={{ padding: '4px 8px', margin: 0 }}>
-                No stores yet.
+                {t.stores.noStores}
               </p>
             )}
             {allStores.map((store) => (
@@ -246,8 +241,6 @@ function StoresDropdown({
   );
 }
 
-// ─── Approve modal ────────────────────────────────────────────────────────────
-
 function ApproveModal({
   pending,
   stores,
@@ -259,6 +252,7 @@ function ApproveModal({
   currentProfile: Profile;
   onClose: () => void;
 }) {
+  const { t } = useLang();
   const [role, setRole] = useState<Role>('staff');
   const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -283,7 +277,7 @@ function ApproveModal({
       await db.transact([tx, ...storeLinkTxs]);
       onClose();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to approve');
+      alert(e instanceof Error ? e.message : t.users.approveFailed);
     } finally {
       setSaving(false);
     }
@@ -310,14 +304,14 @@ function ApproveModal({
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div className="card" style={{ width: '100%', maxWidth: 480, margin: 0 }}>
-        <h2 style={{ marginTop: 0 }}>Approve access</h2>
+        <h2 style={{ marginTop: 0 }}>{t.users.approveAccess}</h2>
         <p>
           <strong>{pending.displayName || pending.email}</strong>
         </p>
         <p className="small">{pending.email}</p>
 
         <label style={{ marginTop: 12, display: 'block' }}>
-          Role
+          {t.common.role}
           <select
             value={role}
             onChange={(e) => setRole(e.target.value as Role)}
@@ -331,7 +325,7 @@ function ApproveModal({
           </select>
         </label>
 
-        <label style={{ marginTop: 12, display: 'block' }}>Assign stores</label>
+        <label style={{ marginTop: 12, display: 'block' }}>{t.users.assignStores}</label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
           {stores.map((s) => (
             <label
@@ -348,15 +342,15 @@ function ApproveModal({
               </span>
             </label>
           ))}
-          {!stores.length && <p className="small">No stores yet.</p>}
+          {!stores.length && <p className="small">{t.stores.noStores}</p>}
         </div>
 
         <div className="capture-actions" style={{ marginTop: 20 }}>
           <button className="secondary" onClick={onClose} disabled={saving}>
-            Cancel
+            {t.common.cancel}
           </button>
           <button className="success" onClick={approve} disabled={saving}>
-            {saving ? 'Approving...' : 'Approve'}
+            {saving ? t.users.approving : t.common.approve}
           </button>
         </div>
       </div>
@@ -364,9 +358,8 @@ function ApproveModal({
   );
 }
 
-// ─── Main users page ──────────────────────────────────────────────────────────
-
 export default function UsersPage({ currentProfile }: Props) {
+  const { t } = useLang();
   const [tab, setTab] = useState<'pending' | 'all'>('pending');
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
@@ -386,12 +379,12 @@ export default function UsersPage({ currentProfile }: Props) {
   const isAdmin = currentProfile.role === 'owner' || currentProfile.role === 'areaManager';
 
   if (!isAdmin) {
-    return <div className="card">Only owner or area manager can manage users.</div>;
+    return <div className="card">{t.users.noPermission}</div>;
   }
 
   async function updateRole(profile: Profile, role: Role) {
     if (!isOwner && ['owner', 'areaManager'].includes(role)) {
-      alert('Only the owner can assign owner or area manager roles.');
+      alert(t.users.ownerRoleOnly);
       return;
     }
     await db.transact(db.tx.profiles[profile.id].update({ role, updatedAt: nowIso() }));
@@ -416,25 +409,24 @@ export default function UsersPage({ currentProfile }: Props) {
         />
       )}
 
-      {/* ── Header ── */}
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-          <h1 style={{ margin: 0, flex: 1 }}>Users &amp; Access</h1>
+          <h1 style={{ margin: 0, flex: 1 }}>{t.users.title}</h1>
           {pendingProfiles.length > 0 && (
-            <span className="badge warn">{pendingProfiles.length} pending</span>
+            <span className="badge warn">{pendingProfiles.length} {t.users.pending.toLowerCase()}</span>
           )}
           <button
             className={showInvite ? 'secondary' : 'btn-gold'}
             style={{ fontSize: 13, padding: '8px 16px', minHeight: 36 }}
             onClick={() => setShowInvite((v) => !v)}
           >
-            {showInvite ? 'Cancel' : '+ Invite user'}
+            {showInvite ? t.common.cancel : t.users.inviteUser}
           </button>
         </div>
 
         {showInvite && (
           <div className="panel-inset" style={{ marginBottom: 16 }}>
-            <h3 style={{ margin: '0 0 4px', fontSize: 15 }}>Send sign-in code</h3>
+            <h3 style={{ margin: '0 0 4px', fontSize: 15 }}>{t.users.sendSignInCodeTitle}</h3>
             <InviteUserForm currentProfile={currentProfile} />
           </div>
         )}
@@ -444,23 +436,22 @@ export default function UsersPage({ currentProfile }: Props) {
             className={tab === 'pending' ? 'active' : ''}
             onClick={() => setTab('pending')}
           >
-            Pending ({pendingProfiles.length})
+            {t.users.pending} ({pendingProfiles.length})
           </button>
           <button
             className={tab === 'all' ? 'active' : ''}
             onClick={() => setTab('all')}
           >
-            All users ({allProfiles.length})
+            {t.users.allUsers} ({allProfiles.length})
           </button>
         </div>
       </div>
 
-      {/* ── Pending tab ── */}
       {tab === 'pending' && (
         <>
           {pendingProfiles.length === 0 ? (
             <div className="card">
-              <p className="small">No pending access requests.</p>
+              <p className="small">{t.users.noPending}</p>
             </div>
           ) : (
             pendingProfiles.map((p) => (
@@ -472,9 +463,9 @@ export default function UsersPage({ currentProfile }: Props) {
                   <div style={{ flex: 1 }}>
                     <strong>{p.displayName || p.email}</strong>
                     <div className="small">{p.email}</div>
-                    <div className="small">Requested {p.createdAt?.slice(0, 10)}</div>
+                    <div className="small">{t.users.requested} {p.createdAt?.slice(0, 10)}</div>
                   </div>
-                  <span className="badge warn">Pending</span>
+                  <span className="badge warn">{t.users.pending}</span>
                 </div>
                 <div className="capture-actions" style={{ marginTop: 12 }}>
                   <button
@@ -483,10 +474,10 @@ export default function UsersPage({ currentProfile }: Props) {
                       updateStatus(p, 'rejected')
                     }
                   >
-                    Reject
+                    {t.common.reject}
                   </button>
                   <button className="success" onClick={() => setApprovingId(p.id)}>
-                    Approve
+                    {t.common.approve}
                   </button>
                 </div>
               </div>
@@ -495,17 +486,16 @@ export default function UsersPage({ currentProfile }: Props) {
         </>
       )}
 
-      {/* ── All users tab ── */}
       {tab === 'all' && (
         <div className="card table-wrap">
           <table>
             <thead>
               <tr>
-                <th>User</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Stores</th>
-                <th>Actions</th>
+                <th>{t.users.user}</th>
+                <th>{t.common.role}</th>
+                <th>{t.common.status}</th>
+                <th>{t.common.stores}</th>
+                <th>{t.common.actions}</th>
               </tr>
             </thead>
             <tbody>
@@ -514,7 +504,6 @@ export default function UsersPage({ currentProfile }: Props) {
                   isOwner || !['owner', 'areaManager'].includes(p.role);
                 return (
                   <tr key={p.id}>
-                    {/* User */}
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div className="avatar-circle" style={{ width: 34, height: 34, fontSize: 14 }}>
@@ -527,7 +516,6 @@ export default function UsersPage({ currentProfile }: Props) {
                       </div>
                     </td>
 
-                    {/* Role dropdown */}
                     <td>
                       <select
                         value={p.role}
@@ -545,20 +533,18 @@ export default function UsersPage({ currentProfile }: Props) {
                       </select>
                     </td>
 
-                    {/* Status dropdown */}
                     <td>
                       <select
                         value={p.approvalStatus}
                         onChange={(e) => updateStatus(p, e.target.value as ApprovalStatus)}
                         className={`approval-select approval-select--${p.approvalStatus}`}
                       >
-                        <option value="pending">pending</option>
-                        <option value="approved">approved</option>
-                        <option value="rejected">rejected</option>
+                        <option value="pending">{statusLabel(t, 'pending')}</option>
+                        <option value="approved">{statusLabel(t, 'approved')}</option>
+                        <option value="rejected">{statusLabel(t, 'rejected')}</option>
                       </select>
                     </td>
 
-                    {/* Stores dropdown */}
                     <td>
                       <StoresDropdown
                         profile={p}
@@ -567,7 +553,6 @@ export default function UsersPage({ currentProfile }: Props) {
                       />
                     </td>
 
-                    {/* Actions */}
                     <td>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {p.approvalStatus !== 'rejected' && (
@@ -576,7 +561,7 @@ export default function UsersPage({ currentProfile }: Props) {
                             style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
                             onClick={() => updateStatus(p, 'rejected')}
                           >
-                            Revoke
+                            {t.users.revoke}
                           </button>
                         )}
                         {p.approvalStatus !== 'approved' && (
@@ -585,7 +570,7 @@ export default function UsersPage({ currentProfile }: Props) {
                             style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
                             onClick={() => updateStatus(p, 'approved')}
                           >
-                            Approve
+                            {t.common.approve}
                           </button>
                         )}
                         <button
@@ -594,14 +579,14 @@ export default function UsersPage({ currentProfile }: Props) {
                           onClick={async () => {
                             try {
                               await db.auth.sendMagicCode({ email: p.email });
-                              alert(`Sign-in code sent to ${p.email}`);
+                              alert(`${t.users.codeSent} ${p.email}`);
                             } catch {
-                              alert('Failed to send code.');
+                              alert(t.users.codeSendFailed);
                             }
                           }}
-                          title="Send a new sign-in code to this user"
+                          title={t.users.sendSignInCodeTitle}
                         >
-                          Send code
+                          {t.users.sendCode}
                         </button>
                       </div>
                     </td>
@@ -611,7 +596,7 @@ export default function UsersPage({ currentProfile }: Props) {
               {!allProfiles.length && (
                 <tr>
                   <td colSpan={5} style={{ textAlign: 'center', padding: 24 }}>
-                    No other users yet. Use "Invite user" above to get started.
+                    {t.users.noOtherUsers}
                   </td>
                 </tr>
               )}

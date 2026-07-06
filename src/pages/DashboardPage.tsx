@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { db } from '../db';
 import FeedbackInbox from '../components/FeedbackInbox';
+import { useLang } from '../i18n';
+import { statusLabel } from '../lib/i18nUtils';
 import { aggregateFeedbackFrequency } from '../lib/feedbackReasons';
 import { badgeClass, todayYmd } from '../lib/utils';
 import type { Profile, Report, ReportResponse } from '../types';
@@ -15,6 +17,7 @@ function firstDayOfMonth() {
 }
 
 export default function DashboardPage({ profile }: Props) {
+  const { t } = useLang();
   const [from, setFrom] = useState(firstDayOfMonth);
   const [to, setTo] = useState(todayYmd);
   const [filterStoreId, setFilterStoreId] = useState('all');
@@ -123,30 +126,30 @@ export default function DashboardPage({ profile }: Props) {
 
   return (
     <div>
-      <FeedbackInbox userId={profile.userId} title="Team feedback" />
+      <FeedbackInbox userId={profile.userId} title={t.dashboard.teamFeedback} />
 
       <div className="card">
-        <h1>Operation Dashboard</h1>
+        <h1>{t.dashboard.title}</h1>
         <p className="small">
           {profile.displayName} — {profile.role}
         </p>
       </div>
 
       <div className="card">
-        <h2>Filters</h2>
+        <h2>{t.dashboard.filters}</h2>
         <div className="grid two">
           <label>
-            From
+            {t.dashboard.from}
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
           </label>
           <label>
-            To
+            {t.dashboard.to}
             <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
           </label>
           <label>
-            Store
+            {t.common.store}
             <select value={filterStoreId} onChange={(e) => setFilterStoreId(e.target.value)}>
-              <option value="all">All stores</option>
+              <option value="all">{t.dashboard.allStores}</option>
               {(displayStores as { id: string; code: string; name: string }[]).map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.code} — {s.name}
@@ -159,32 +162,32 @@ export default function DashboardPage({ profile }: Props) {
 
       <div className="grid four">
         <div className="card">
-          <div className="small">Completion</div>
+          <div className="small">{t.dashboard.completion}</div>
           <div className="metric">{metrics.completion}%</div>
         </div>
         <div className="card">
-          <div className="small">Compliance</div>
+          <div className="small">{t.dashboard.compliance}</div>
           <div className="metric">{metrics.compliance}%</div>
         </div>
         <div className="card">
-          <div className="small">Reports</div>
+          <div className="small">{t.dashboard.reports}</div>
           <div className="metric">{metrics.reportCount}</div>
         </div>
         <div className="card">
-          <div className="small">Failed items</div>
+          <div className="small">{t.dashboard.failedItems}</div>
           <div className="metric">{metrics.failed.length}</div>
         </div>
       </div>
 
       {approvalShare.length > 0 && (
         <div className="card table-wrap">
-          <h2>Approvals by role</h2>
+          <h2>{t.dashboard.approvalsByRole}</h2>
           <table>
             <thead>
               <tr>
-                <th>Role</th>
-                <th>Count</th>
-                <th>Share</th>
+                <th>{t.common.role}</th>
+                <th>{t.dashboard.count}</th>
+                <th>{t.dashboard.share}</th>
               </tr>
             </thead>
             <tbody>
@@ -201,18 +204,18 @@ export default function DashboardPage({ profile }: Props) {
       )}
 
       <div className="card table-wrap feedback-freq-card">
-        <h2>Feedback reasons</h2>
-        <p className="small">Rejections and correction requests in the selected period.</p>
+        <h2>{t.dashboard.feedbackReasons}</h2>
+        <p className="small">{t.dashboard.rejectionsPeriod}</p>
 
         {feedbackStats.rows.length > 0 ? (
           <>
             <table className="feedback-freq-table">
               <thead>
                 <tr>
-                  <th>Reason</th>
-                  <th>Count</th>
-                  <th>Share</th>
-                  <th style={{ width: '30%' }}>Frequency</th>
+                  <th>{t.review.feedbackReason}</th>
+                  <th>{t.dashboard.count}</th>
+                  <th>{t.dashboard.share}</th>
+                  <th style={{ width: '30%' }}>{t.dashboard.feedbackFreq}</th>
                 </tr>
               </thead>
               <tbody>
@@ -226,7 +229,7 @@ export default function DashboardPage({ profile }: Props) {
                           className="feedback-other-toggle"
                           onClick={() => setShowOtherDetails((v) => !v)}
                         >
-                          {showOtherDetails ? 'Hide details' : 'Show details'}
+                          {showOtherDetails ? t.dashboard.hideDetails : t.dashboard.showDetails}
                         </button>
                       )}
                     </td>
@@ -246,11 +249,11 @@ export default function DashboardPage({ profile }: Props) {
               <table className="feedback-other-detail">
                 <thead>
                   <tr>
-                    <th>Date</th>
-                    <th>Store</th>
-                    <th>Item</th>
-                    <th>Feedback</th>
-                    <th>Reviewer</th>
+                    <th>{t.common.date}</th>
+                    <th>{t.common.store}</th>
+                    <th>{t.dashboard.item}</th>
+                    <th>{t.dashboard.feedback}</th>
+                    <th>{t.dashboard.reviewer}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -272,19 +275,19 @@ export default function DashboardPage({ profile }: Props) {
             )}
           </>
         ) : (
-          <p className="small">No rejection or correction feedback in this period.</p>
+          <p className="small">{t.dashboard.noFeedbackPeriod}</p>
         )}
       </div>
 
       <div className="card table-wrap">
-        <h2>Failed items</h2>
+        <h2>{t.dashboard.failedItems}</h2>
         <table>
           <thead>
             <tr>
-              <th>Item</th>
-              <th>Section</th>
-              <th>Category</th>
-              <th>Times</th>
+              <th>{t.dashboard.item}</th>
+              <th>{t.common.section}</th>
+              <th>{t.dashboard.category}</th>
+              <th>{t.dashboard.times}</th>
             </tr>
           </thead>
           <tbody>
@@ -298,7 +301,7 @@ export default function DashboardPage({ profile }: Props) {
             ))}
             {!metrics.failed.length && (
               <tr>
-                <td colSpan={4}>No failed items in this period.</td>
+                <td colSpan={4}>{t.dashboard.noFailedItems}</td>
               </tr>
             )}
           </tbody>
@@ -306,15 +309,15 @@ export default function DashboardPage({ profile }: Props) {
       </div>
 
       <div className="card table-wrap">
-        <h2>Recent reports</h2>
+        <h2>{t.dashboard.recentReports}</h2>
         <table>
           <thead>
             <tr>
-              <th>Store</th>
-              <th>Template</th>
-              <th>Date</th>
-              <th>Status</th>
-              <th>Completion</th>
+              <th>{t.common.store}</th>
+              <th>{t.common.template}</th>
+              <th>{t.common.date}</th>
+              <th>{t.common.status}</th>
+              <th>{t.dashboard.completion}</th>
             </tr>
           </thead>
           <tbody>
@@ -326,14 +329,14 @@ export default function DashboardPage({ profile }: Props) {
                 <td>{r.templateName}</td>
                 <td>{r.reportDate}</td>
                 <td>
-                  <span className={badgeClass(r.status)}>{r.status}</span>
+                  <span className={badgeClass(r.status)}>{statusLabel(t, r.status)}</span>
                 </td>
                 <td>{r.completionPercent ?? 0}%</td>
               </tr>
             ))}
             {!reports.length && (
               <tr>
-                <td colSpan={5}>No reports in this date range.</td>
+                <td colSpan={5}>{t.dashboard.noReportsInRange}</td>
               </tr>
             )}
           </tbody>

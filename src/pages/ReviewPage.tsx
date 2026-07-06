@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { db } from '../db';
+import { useLang } from '../i18n';
 import { canApproveItem, canReview } from '../lib/roles';
+import { statusLabel } from '../lib/i18nUtils';
 import {
   buildItemReviewNotifications,
   buildReportFinalizedNotifications,
@@ -21,6 +23,7 @@ interface PendingFeedback {
 }
 
 export default function ReviewPage({ profile }: Props) {
+  const { t } = useLang();
   const [pendingFeedback, setPendingFeedback] = useState<PendingFeedback | null>(null);
 
   const { data } = db.useQuery({
@@ -36,7 +39,7 @@ export default function ReviewPage({ profile }: Props) {
   const allProfiles: Profile[] = (data?.profiles ?? []) as Profile[];
 
   if (!canReview(profile.role)) {
-    return <div className="card">You do not have permission to review reports.</div>;
+    return <div className="card">{t.review.noPermission}</div>;
   }
 
   function openFeedbackModal(
@@ -52,7 +55,7 @@ export default function ReviewPage({ profile }: Props) {
         approverRoles,
       )
     ) {
-      alert('You do not have permission to approve this item.');
+      alert(t.review.noPermissionItem);
       return;
     }
     setPendingFeedback({ report, response, status });
@@ -72,7 +75,7 @@ export default function ReviewPage({ profile }: Props) {
         approverRoles,
       )
     ) {
-      alert('You do not have permission to approve this item.');
+      alert(t.review.noPermissionItem);
       return;
     }
 
@@ -153,11 +156,8 @@ export default function ReviewPage({ profile }: Props) {
       />
 
       <div className="card">
-        <h1>Review Reports</h1>
-        <p className="small">
-          Reject or request correction using a preset reason — feedback is sent to the submitter and
-          their supervisors when reviewed by a higher role.
-        </p>
+        <h1>{t.review.title}</h1>
+        <p className="small">{t.review.subtitle}</p>
       </div>
 
       {reports.map((report) => {
@@ -172,13 +172,13 @@ export default function ReviewPage({ profile }: Props) {
                   {report.storeCode} — {report.templateName}
                 </h2>
                 <p className="small" style={{ margin: '4px 0 0' }}>
-                  {report.reportDate} · Submitted by {report.submittedByRole} ·{' '}
-                  <span className={badgeClass(report.status)}>{report.status}</span> ·{' '}
-                  {report.completionPercent ?? 0}% complete
+                  {report.reportDate} · {t.review.submittedBy} {report.submittedByRole} ·{' '}
+                  <span className={badgeClass(report.status)}>{statusLabel(t, report.status)}</span> ·{' '}
+                  {report.completionPercent ?? 0}% {t.review.percentComplete}
                 </p>
               </div>
               {pendingCount > 0 && (
-                <span className="badge warn">{pendingCount} pending</span>
+                <span className="badge warn">{pendingCount} {t.review.pendingItems}</span>
               )}
             </div>
 
@@ -188,24 +188,24 @@ export default function ReviewPage({ profile }: Props) {
                 <div className="item-card" key={resp.id} style={{ marginTop: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <h3 style={{ margin: 0, flex: 1 }}>{resp.title}</h3>
-                    <span className={badgeClass(resp.status)}>{resp.status}</span>
+                    <span className={badgeClass(resp.status)}>{statusLabel(t, resp.status)}</span>
                   </div>
                   <p className="small">
                     By {resp.submittedByRole} · {resp.section} · {resp.proofType}
                   </p>
                   {resp.note && (
                     <p>
-                      <strong>Note:</strong> {resp.note}
+                      <strong>{t.common.note}:</strong> {resp.note}
                     </p>
                   )}
                   {resp.numberValue && (
                     <p>
-                      <strong>Number:</strong> {resp.numberValue}
+                      <strong>{t.common.number}:</strong> {resp.numberValue}
                     </p>
                   )}
                   {resp.rejectionReason && resp.status !== 'approved' && (
                     <p className="small text-danger" style={{ whiteSpace: 'pre-wrap' }}>
-                      Reason: {resp.rejectionReason}
+                      {t.review.rejectionReason}: {resp.rejectionReason}
                     </p>
                   )}
                   {media.length > 0 && (
@@ -232,19 +232,19 @@ export default function ReviewPage({ profile }: Props) {
                         className="success"
                         onClick={() => updateResponseStatus(report, resp, 'approved')}
                       >
-                        Approve
+                        {t.review.approveItem}
                       </button>
                       <button
                         className="danger"
                         onClick={() => openFeedbackModal(report, resp, 'rejected')}
                       >
-                        Reject
+                        {t.review.rejectItem}
                       </button>
                       <button
                         className="secondary"
                         onClick={() => openFeedbackModal(report, resp, 'need_correction')}
                       >
-                        Correction
+                        {t.review.correction}
                       </button>
                     </div>
                   )}
@@ -258,7 +258,7 @@ export default function ReviewPage({ profile }: Props) {
                 style={{ marginTop: 12 }}
                 onClick={() => markReportApproved(report)}
               >
-                Finalise report
+                {t.review.finaliseReport}
               </button>
             )}
           </div>
@@ -267,7 +267,7 @@ export default function ReviewPage({ profile }: Props) {
 
       {!reports.length && (
         <div className="card">
-          <p>No reports awaiting review.</p>
+          <p>{t.review.noAwaitingReview}</p>
         </div>
       )}
     </div>

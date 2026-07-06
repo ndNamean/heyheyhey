@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { id } from '@instantdb/react';
 import { db } from '../db';
+import { useLang } from '../i18n';
 import { canEditMaster, PROOF_TYPES } from '../lib/roles';
 import { nowIso } from '../lib/utils';
 import type { Profile, Store, Template, TemplateItem } from '../types';
@@ -23,6 +24,7 @@ interface ItemDraft {
 }
 
 export default function TemplatesPage({ profile }: Props) {
+  const { t } = useLang();
   const [name, setName] = useState('');
   const [reportType, setReportType] = useState('Daily Hygiene');
   const [storeIds, setStoreIds] = useState<string[]>([]);
@@ -34,7 +36,7 @@ export default function TemplatesPage({ profile }: Props) {
   const templates: Template[] = (data?.templates ?? []) as Template[];
 
   if (!canEditMaster(profile.role)) {
-    return <div className="card">Only owner or area manager can manage templates.</div>;
+    return <div className="card">{t.templates.noPermission}</div>;
   }
 
   function addItem() {
@@ -64,13 +66,12 @@ export default function TemplatesPage({ profile }: Props) {
   }
 
   async function save() {
-    if (!name.trim()) return alert('Template name required');
-    if (!items.length) return alert('Add at least one checklist item');
+    if (!name.trim()) return alert(t.templates.nameRequired);
+    if (!items.length) return alert(t.templates.itemRequired);
     setSaving(true);
     try {
       const templateId = id();
 
-      // Create template
       const templateTx = db.tx.templates[templateId].update({
         name: name.trim(),
         reportType,
@@ -81,12 +82,10 @@ export default function TemplatesPage({ profile }: Props) {
         updatedAt: nowIso(),
       });
 
-      // Link to stores
       const storeLinkTxs = storeIds.map((sid) =>
         db.tx.templates[templateId].link({ stores: sid }),
       );
 
-      // Create template items
       const itemTxs = items.map((item, i) => {
         const itemId = id();
         return db.tx.templateItems[itemId]
@@ -111,7 +110,7 @@ export default function TemplatesPage({ profile }: Props) {
       setStoreIds([]);
       setItems([]);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to save template');
+      alert(e instanceof Error ? e.message : t.templates.saveFailed);
     } finally {
       setSaving(false);
     }
@@ -125,24 +124,24 @@ export default function TemplatesPage({ profile }: Props) {
   return (
     <div>
       <div className="card">
-        <h1>Templates</h1>
+        <h1>{t.templates.title}</h1>
       </div>
 
       <div className="card">
-        <h2>Create template</h2>
+        <h2>{t.templates.create}</h2>
         <div className="grid two">
           <label>
-            Name
+            {t.common.name}
             <input value={name} onChange={(e) => setName(e.target.value)} />
           </label>
           <label>
-            Report type
+            {t.templates.reportType}
             <input value={reportType} onChange={(e) => setReportType(e.target.value)} />
           </label>
         </div>
 
         <label style={{ marginTop: 12, display: 'block' }}>
-          Assign to stores
+          {t.templates.assignStores}
           <select
             multiple
             value={storeIds}
@@ -160,34 +159,34 @@ export default function TemplatesPage({ profile }: Props) {
         </label>
 
         <button style={{ marginTop: 12 }} onClick={addItem}>
-          + Add checklist item
+          {t.templates.addChecklistItem}
         </button>
 
         {items.map((item, i) => (
           <div className="item-card" key={item.id} style={{ marginTop: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0 }}>Item {i + 1}</h3>
+              <h3 style={{ margin: 0 }}>{t.templates.itemN} {i + 1}</h3>
               <button
                 className="danger"
                 style={{ padding: '4px 10px', minHeight: 32, fontSize: 12 }}
                 onClick={() => removeItem(item.id)}
               >
-                Remove
+                {t.common.delete}
               </button>
             </div>
             <div className="grid two" style={{ marginTop: 8 }}>
               <input
-                placeholder="Section"
+                placeholder={t.common.section}
                 value={item.section}
                 onChange={(e) => updateItem(item.id, { section: e.target.value })}
               />
               <input
-                placeholder="Title"
+                placeholder={t.common.title}
                 value={item.title}
                 onChange={(e) => updateItem(item.id, { title: e.target.value })}
               />
               <textarea
-                placeholder="Requirement / description"
+                placeholder={t.templates.requirement}
                 value={item.requirement}
                 onChange={(e) => updateItem(item.id, { requirement: e.target.value })}
                 style={{ minHeight: 60 }}
@@ -203,7 +202,7 @@ export default function TemplatesPage({ profile }: Props) {
                 ))}
               </select>
               <label>
-                Assigned role
+                {t.templates.assignedRole}
                 <select
                   value={item.assignedRole}
                   onChange={(e) => updateItem(item.id, { assignedRole: e.target.value })}
@@ -218,7 +217,7 @@ export default function TemplatesPage({ profile }: Props) {
                 </select>
               </label>
               <label>
-                Failure category
+                {t.templates.failureCategory}
                 <input
                   value={item.failureCategory}
                   onChange={(e) => updateItem(item.id, { failureCategory: e.target.value })}
@@ -231,13 +230,13 @@ export default function TemplatesPage({ profile }: Props) {
                 checked={item.required}
                 onChange={(e) => updateItem(item.id, { required: e.target.checked })}
               />
-              Required
+              {t.common.required}
             </label>
           </div>
         ))}
 
         <button style={{ marginTop: 12 }} onClick={save} disabled={saving}>
-          {saving ? 'Creating...' : 'Create template'}
+          {saving ? t.templates.creating : t.templates.create}
         </button>
       </div>
 
@@ -245,38 +244,38 @@ export default function TemplatesPage({ profile }: Props) {
         <table>
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Type</th>
-              <th>Stores</th>
-              <th>Items</th>
-              <th>Status</th>
-              <th>Actions</th>
+              <th>{t.common.name}</th>
+              <th>{t.common.type}</th>
+              <th>{t.templates.storesAssigned}</th>
+              <th>{t.staffHome.items}</th>
+              <th>{t.common.status}</th>
+              <th>{t.common.actions}</th>
             </tr>
           </thead>
           <tbody>
-            {templates.map((t) => (
-              <tr key={t.id}>
+            {templates.map((tmpl) => (
+              <tr key={tmpl.id}>
                 <td>
-                  <strong>{t.name}</strong>
+                  <strong>{tmpl.name}</strong>
                 </td>
-                <td>{t.reportType}</td>
+                <td>{tmpl.reportType}</td>
                 <td className="small">
-                  {(t.stores ?? []).map((s: Store) => s.code).join(', ') || '—'}
+                  {(tmpl.stores ?? []).map((s: Store) => s.code).join(', ') || '—'}
                 </td>
-                <td>{(t.items as TemplateItem[] ?? []).length}</td>
+                <td>{(tmpl.items as TemplateItem[] ?? []).length}</td>
                 <td>
-                  <span className={t.active ? 'badge good' : 'badge bad'}>
-                    {t.active ? 'Active' : 'Inactive'}
+                  <span className={tmpl.active ? 'badge good' : 'badge bad'}>
+                    {tmpl.active ? t.common.active : t.common.inactive}
                   </span>
                 </td>
                 <td>
-                  {t.active && (
+                  {tmpl.active && (
                     <button
                       className="danger"
                       style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
-                      onClick={() => deactivate(t)}
+                      onClick={() => deactivate(tmpl)}
                     >
-                      Deactivate
+                      {t.templates.deactivate}
                     </button>
                   )}
                 </td>
@@ -284,7 +283,7 @@ export default function TemplatesPage({ profile }: Props) {
             ))}
             {!templates.length && (
               <tr>
-                <td colSpan={6}>No templates yet.</td>
+                <td colSpan={6}>{t.templates.noTemplates}</td>
               </tr>
             )}
           </tbody>

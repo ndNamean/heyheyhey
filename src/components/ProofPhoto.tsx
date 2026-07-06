@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLang } from '../i18n';
 import type { MediaRecord } from '../types';
 
 interface Props {
@@ -7,6 +8,7 @@ interface Props {
 }
 
 export default function ProofPhoto({ media, className = '' }: Props) {
+  const { t } = useLang();
   const directUrl = media.fileUrl || media.file?.url || '';
   const [url, setUrl] = useState(directUrl);
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>(
@@ -53,7 +55,7 @@ export default function ProofPhoto({ media, className = '' }: Props) {
   if (media.storageDeleted) {
     return (
       <div className={`proof-photo-removed${className ? ` ${className}` : ''}`}>
-        <div className="proof-photo-removed-title">Photo removed</div>
+        <div className="proof-photo-removed-title">{t.photoSheet.photoRemoved}</div>
         <div className="proof-photo-removed-meta">
           {media.photoCode && <span>{media.photoCode}</span>}
           {media.capturedAt && <span>{media.capturedAt.slice(0, 16)}</span>}
@@ -65,7 +67,7 @@ export default function ProofPhoto({ media, className = '' }: Props) {
   if (status === 'loading' || status === 'idle') {
     return (
       <div className={`proof-photo-loading${className ? ` ${className}` : ''}`}>
-        Loading photo…
+        {t.photoSheet.loading}
       </div>
     );
   }
@@ -73,7 +75,7 @@ export default function ProofPhoto({ media, className = '' }: Props) {
   if (status === 'error' || !url) {
     return (
       <div className={`proof-photo-missing${className ? ` ${className}` : ''}`}>
-        Photo unavailable
+        {t.photoSheet.photoMissing}
         {media.photoCode && <span className="proof-photo-code">{media.photoCode}</span>}
       </div>
     );
@@ -86,7 +88,7 @@ export default function ProofPhoto({ media, className = '' }: Props) {
       rel="noreferrer"
       className={`proof-photo-link${className ? ` ${className}` : ''}`}
     >
-      <img src={url} alt={media.fileName || media.photoCode || 'Proof photo'} />
+      <img src={url} alt={media.fileName || media.photoCode || t.photoSheet.title} />
     </a>
   );
 }

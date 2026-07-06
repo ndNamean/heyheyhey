@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { db } from '../db';
+import { useLang } from '../i18n';
 import type { MediaRecord, Profile } from '../types';
 
 interface Props {
@@ -18,11 +19,11 @@ interface VerifyResult {
 }
 
 export default function VerifyPhotoPage(_props: Props) {
+  const { t } = useLang();
   const [code, setCode] = useState('');
   const [result, setResult] = useState<VerifyResult | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Pre-load media records for lookup
   const { data } = db.useQuery({ mediaRecords: { file: {} }, stores: {} });
 
   async function verify() {
@@ -35,7 +36,7 @@ export default function VerifyPhotoPage(_props: Props) {
       const match = allMedia.find((m) => m.photoCode === trimmed);
 
       if (!match) {
-        setResult({ valid: false, reason: 'Photo code not found in the database.' });
+        setResult({ valid: false, reason: t.verifyPhoto.notFoundReason });
         return;
       }
 
@@ -46,7 +47,7 @@ export default function VerifyPhotoPage(_props: Props) {
 
       setResult({
         valid: true,
-        reason: 'Photo is authentic and on record.',
+        reason: t.verifyPhoto.authenticReason,
         photoCode: match.photoCode,
         capturedAt: match.capturedAt,
         lat: match.lat,
@@ -62,7 +63,8 @@ export default function VerifyPhotoPage(_props: Props) {
   return (
     <div>
       <div className="card">
-        <h1>Photo Verification</h1>
+        <h1>{t.verifyPhoto.title}</h1>
+        <p className="small">{t.verifyPhoto.subtitle}</p>
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <input
             value={code}
@@ -72,7 +74,7 @@ export default function VerifyPhotoPage(_props: Props) {
             onKeyDown={(e) => e.key === 'Enter' && verify()}
           />
           <button onClick={verify} disabled={loading} style={{ flex: '0 0 auto' }}>
-            {loading ? 'Verifying...' : 'Verify'}
+            {loading ? t.verifyPhoto.verifying : t.verifyPhoto.verify}
           </button>
         </div>
       </div>
@@ -80,7 +82,7 @@ export default function VerifyPhotoPage(_props: Props) {
       {result && (
         <div className="card">
           <span className={result.valid ? 'badge good' : 'badge bad'}>
-            {result.valid ? 'Authentic' : 'Not found'}
+            {result.valid ? t.verifyPhoto.authentic : t.verifyPhoto.notFound}
           </span>
           <p className="small" style={{ marginTop: 8 }}>
             {result.reason}
@@ -88,13 +90,13 @@ export default function VerifyPhotoPage(_props: Props) {
           {result.valid && (
             <div style={{ marginTop: 12 }}>
               {[
-                ['Photo code', result.photoCode],
-                ['Store', result.storeCode],
-                ['Captured at', result.capturedAt?.slice(0, 16)],
-                ['Coordinates', result.lat ? `${result.lat?.toFixed(5)}, ${result.lng?.toFixed(5)}` : 'No GPS'],
-                ['Capture mode', result.captureMode],
+                [t.common.photoCode, result.photoCode],
+                [t.common.store, result.storeCode],
+                [t.verifyPhoto.capturedAt, result.capturedAt?.slice(0, 16)],
+                [t.verifyPhoto.coordinates, result.lat ? `${result.lat?.toFixed(5)}, ${result.lng?.toFixed(5)}` : t.photoSheet.noGps],
+                [t.photoSheet.captureMode, result.captureMode],
               ].map(([label, value]) => (
-                <p key={label} className="small">
+                <p key={String(label)} className="small">
                   <strong>{label}:</strong> {value ?? '—'}
                 </p>
               ))}

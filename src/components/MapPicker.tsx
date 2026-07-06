@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import { Icon } from 'leaflet';
+import { useLang } from '../i18n';
 import 'leaflet/dist/leaflet.css';
 
 const PIN = new Icon({
@@ -49,6 +50,7 @@ interface Props {
 }
 
 export default function MapPicker({ lat, lng, onSelect }: Props) {
+  const { t } = useLang();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<NominatimResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -98,7 +100,7 @@ export default function MapPicker({ lat, lng, onSelect }: Props) {
             onKeyDown={(e) => {
               if (e.key === 'Enter') { e.preventDefault(); search(); }
             }}
-            placeholder="Search address, landmark, or place name…"
+            placeholder={t.common.searchAddress}
             style={{ flex: 1 }}
           />
           <button
@@ -107,7 +109,7 @@ export default function MapPicker({ lat, lng, onSelect }: Props) {
             onClick={search}
             disabled={searching || !query.trim()}
           >
-            {searching ? 'Searching…' : 'Search'}
+            {searching ? t.common.searching : t.common.search}
           </button>
         </div>
 
@@ -150,8 +152,7 @@ export default function MapPicker({ lat, lng, onSelect }: Props) {
       </div>
 
       <p className="small" style={{ marginTop: 8 }}>
-        Search for a location above, or click anywhere on the map to drop the pin.
-        Latitude &amp; Longitude fill in automatically.
+        {t.stores.mapHint}
       </p>
     </div>
   );

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLang } from '../i18n';
 import { FEEDBACK_REASONS, type FeedbackCode } from '../lib/feedbackReasons';
 
 export interface FeedbackResult {
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export default function ReviewFeedbackModal({ open, mode, itemTitle, onConfirm, onCancel }: Props) {
+  const { t } = useLang();
   const [code, setCode] = useState<FeedbackCode>('blurry');
   const [freeText, setFreeText] = useState('');
   const [extraNote, setExtraNote] = useState('');
@@ -43,7 +45,7 @@ export default function ReviewFeedbackModal({ open, mode, itemTitle, onConfirm, 
     const trimmedNote = extraNote.trim();
 
     if (code === 'other' && !trimmedFree) {
-      alert('Please enter your feedback.');
+      alert(t.review.feedbackRequired);
       return;
     }
 
@@ -66,7 +68,7 @@ export default function ReviewFeedbackModal({ open, mode, itemTitle, onConfirm, 
     });
   }
 
-  const title = mode === 'rejected' ? 'Reject item' : 'Request correction';
+  const title = mode === 'rejected' ? t.review.rejectItemTitle : t.review.requestCorrectionTitle;
 
   return (
     <div className="review-feedback-overlay" role="dialog" aria-modal="true" aria-labelledby="review-feedback-title">
@@ -75,7 +77,7 @@ export default function ReviewFeedbackModal({ open, mode, itemTitle, onConfirm, 
         <p className="small">{itemTitle}</p>
 
         <label className="review-feedback-field">
-          Feedback reason
+          {t.review.feedbackReason}
           <select value={code} onChange={(e) => setCode(e.target.value as FeedbackCode)}>
             {FEEDBACK_REASONS.map((r) => (
               <option key={r.code} value={r.code}>
@@ -87,21 +89,21 @@ export default function ReviewFeedbackModal({ open, mode, itemTitle, onConfirm, 
 
         {code === 'other' ? (
           <label className="review-feedback-field">
-            Your feedback
+            {t.review.yourFeedback}
             <textarea
               value={freeText}
               onChange={(e) => setFreeText(e.target.value)}
-              placeholder="Describe what needs to be fixed…"
+              placeholder={t.review.feedbackPlaceholder}
               rows={4}
             />
           </label>
         ) : (
           <label className="review-feedback-field">
-            Additional note (optional)
+            {t.review.feedbackDetail}
             <textarea
               value={extraNote}
               onChange={(e) => setExtraNote(e.target.value)}
-              placeholder="Extra detail for the submitter…"
+              placeholder={t.review.feedbackExtra}
               rows={3}
             />
           </label>
@@ -109,10 +111,10 @@ export default function ReviewFeedbackModal({ open, mode, itemTitle, onConfirm, 
 
         <div className="review-feedback-actions">
           <button type="button" className="secondary" onClick={onCancel}>
-            Cancel
+            {t.common.cancel}
           </button>
           <button type="button" className={mode === 'rejected' ? 'danger' : ''} onClick={handleConfirm}>
-            {mode === 'rejected' ? 'Confirm reject' : 'Send correction'}
+            {mode === 'rejected' ? t.review.confirmReject : t.review.sendCorrection}
           </button>
         </div>
       </div>

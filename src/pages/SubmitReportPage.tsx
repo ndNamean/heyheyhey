@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { id } from '@instantdb/react';
 import { db } from '../db';
+import { useLang } from '../i18n';
 import { needsMedia, needsNote, needsNumber, userCanAccessStore } from '../lib/roles';
 import { calcCompletion, nowIso, todayYmd } from '../lib/utils';
 import TimemarkCamera from '../components/TimemarkCamera';
@@ -34,6 +35,7 @@ export default function SubmitReportPage({
   correctionReportId = null,
   onCorrectionComplete,
 }: Props) {
+  const { t } = useLang();
   const correctionMode = !!correctionReportId;
   const [newReportId] = useState(() => id());
   const [storeId, setStoreId] = useState('');
@@ -189,25 +191,25 @@ export default function SubmitReportPage({
     for (const item of items) {
       const r = responses[item.id] ?? EMPTY_RESPONSE;
       if (item.required && !r.ticked) {
-        alert(`Mark item as done: ${item.title}`);
+        alert(`${t.submit.markItemDoneNamed} ${item.title}`);
         return false;
       }
       if (correctionMode && needsMedia(item.proofType)) {
         const hasNewPhoto = r.mediaItems.some((m) => !existingMediaIds.has(m.mediaRecordId));
         if (!hasNewPhoto) {
-          alert(`Please take a new photo: ${item.title}`);
+          alert(`${t.submit.newPhotoRequired} ${item.title}`);
           return false;
         }
       } else if (item.required && needsMedia(item.proofType) && !r.mediaItems.length) {
-        alert(`Missing photo/video: ${item.title}`);
+        alert(`${t.validation.missingPhoto} ${item.title}`);
         return false;
       }
       if (item.required && needsNote(item.proofType) && !r.note.trim()) {
-        alert(`Missing note: ${item.title}`);
+        alert(`${t.validation.missingNote} ${item.title}`);
         return false;
       }
       if (item.required && needsNumber(item.proofType) && !r.numberValue.trim()) {
-        alert(`Missing number: ${item.title}`);
+        alert(`${t.validation.missingNumber} ${item.title}`);
         return false;
       }
     }
@@ -215,7 +217,7 @@ export default function SubmitReportPage({
   }
 
   async function submitReport() {
-    if (!selectedStore || !selectedTemplate) return alert('Select a store and template first');
+    if (!selectedStore || !selectedTemplate) return alert(t.submit.selectStoreTemplateFirst);
     if (!validateItems(visibleItems)) return;
 
     setSubmitting(true);
@@ -317,7 +319,7 @@ export default function SubmitReportPage({
       await db.transact([reportTx, ...responseTxs, ...mediaLinkTxs]);
       setSubmitted(true);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Submission failed');
+      alert(e instanceof Error ? e.message : t.submit.submissionFailed);
     } finally {
       setSubmitting(false);
     }
@@ -378,7 +380,7 @@ export default function SubmitReportPage({
       await db.transact([reportTx, ...responseUpdateTxs, ...mediaLinkTxs]);
       setSubmitted(true);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Resubmission failed');
+      alert(e instanceof Error ? e.message : t.validation.resubmitFailed);
     } finally {
       setSubmitting(false);
     }
@@ -395,10 +397,10 @@ export default function SubmitReportPage({
   if (correctionMode && correctionReport && correctionReport.submittedByUserId !== profile.userId) {
     return (
       <div className="card">
-        <h2>Not your report</h2>
-        <p>You can only fix reports you submitted.</p>
+        <h2>{t.submit.notYourReport}</h2>
+        <p>{t.submit.onlyYourReports}</p>
         <button className="secondary" onClick={() => onCorrectionComplete?.()}>
-          Back to home
+          {t.submit.backToHome}
         </button>
       </div>
     );
@@ -407,10 +409,10 @@ export default function SubmitReportPage({
   if (correctionMode && correctionReport && !flaggedResponses.length) {
     return (
       <div className="card">
-        <h2>No corrections needed</h2>
-        <p>This report has no items waiting for correction.</p>
+        <h2>{t.submit.noCorrections}</h2>
+        <p>{t.submit.noItemsWaiting}</p>
         <button className="secondary" onClick={() => onCorrectionComplete?.()}>
-          Back to home
+          {t.submit.backToHome}
         </button>
       </div>
     );
@@ -419,7 +421,7 @@ export default function SubmitReportPage({
   if (correctionMode && !correctionReady) {
     return (
       <div className="card">
-        <p>Loading corrections…</p>
+        <p>{t.submit.loadingCorrections}</p>
       </div>
     );
   }
@@ -427,13 +429,13 @@ export default function SubmitReportPage({
   if (submitted) {
     return (
       <div className="card">
-        <h2>{correctionMode ? 'Corrections resubmitted' : 'Report submitted'}</h2>
+        <h2>{correctionMode ? t.submit.correctionsResubmitted : t.submit.reportSubmitted}</h2>
         <p>
-          {correctionMode
-            ? 'Your fixes are back in the review queue.'
-            : 'Your report is now waiting for review.'}
+          {correctionMode ? t.submit.fixesInQueue : t.submit.waitingReview}
         </p>
-        <button onClick={resetForm}>{correctionMode ? 'Back to home' : 'Submit another report'}</button>
+        <button onClick={resetForm}>
+          {correctionMode ? t.submit.backToHome : t.submit.submitAnother}
+        </button>
       </div>
     );
   }
@@ -442,17 +444,17 @@ export default function SubmitReportPage({
     return (
       <div>
         <div className="card">
-          <h1>Submit Report</h1>
-          <p className="small">Photos are watermarked with store, GPS, date/time, and your name.</p>
+          <h1>{t.submit.title}</h1>
+          <p className="small">{t.submit.watermarkHint}</p>
         </div>
         <div className="card">
           <div className="grid two">
             <label>
-              Date
+              {t.common.date}
               <input type="date" value={reportDate} onChange={(e) => setReportDate(e.target.value)} />
             </label>
             <label>
-              Store
+              {t.common.store}
               <select
                 value={storeId}
                 onChange={(e) => {
@@ -460,7 +462,7 @@ export default function SubmitReportPage({
                   setTemplateId('');
                 }}
               >
-                <option value="">Select store</option>
+                <option value="">{t.common.selectStore}</option>
                 {accessibleStores.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.code} — {s.name}
@@ -469,16 +471,16 @@ export default function SubmitReportPage({
               </select>
             </label>
             <label>
-              Checklist template
+              {t.submit.checklistTemplate}
               <select
                 value={templateId}
                 onChange={(e) => setTemplateId(e.target.value)}
                 disabled={!storeId}
               >
-                <option value="">Select template</option>
-                {availableTemplates.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
+                <option value="">{t.common.selectTemplate}</option>
+                {availableTemplates.map((tpl) => (
+                  <option key={tpl.id} value={tpl.id}>
+                    {tpl.name}
                   </option>
                 ))}
               </select>
@@ -493,24 +495,27 @@ export default function SubmitReportPage({
     return (
       <div className="submit-wizard">
         <div className="card">
-          <h2>{correctionMode ? 'Ready to resubmit' : 'Ready to submit'}</h2>
+          <h2>{correctionMode ? t.submit.readyToResubmit : t.submit.readyToSubmit}</h2>
           <p>
             {correctionMode
-              ? `${visibleItems.length} corrected item${visibleItems.length > 1 ? 's' : ''} ready for review.`
-              : `${visibleItems.length} items completed.`}
+              ? `${visibleItems.length} ${
+                  visibleItems.length > 1 ? t.submit.correctedItemsReady : t.submit.correctedItemReady
+                }`
+              : `${visibleItems.length} ${t.submit.itemsCompleted}`}
           </p>
         </div>
         <WizardNav
+          t={t}
           step={visibleItems.length}
           total={visibleItems.length}
           progress={100}
-          backLabel="← Back"
+          backLabel={`← ${t.common.back}`}
           nextLabel={
             submitting
-              ? 'Submitting…'
+              ? t.submit.submitting
               : correctionMode
-                ? 'Resubmit corrections ✓'
-                : 'Submit report ✓'
+                ? t.submit.resubmitCorrectionsCheck
+                : t.submit.submitReportCheck
           }
           onBack={() => setStep(visibleItems.length - 1)}
           onNext={correctionMode ? resubmitCorrections : submitReport}
@@ -528,7 +533,7 @@ export default function SubmitReportPage({
     <div className="submit-wizard">
       {correctionMode && (
         <div className="card correction-mode-banner">
-          <h2 style={{ margin: 0 }}>Fix corrections</h2>
+          <h2 style={{ margin: 0 }}>{t.submit.fixCorrections}</h2>
           <p className="small" style={{ margin: '6px 0 0' }}>
             {selectedStore?.code} — {correctionReport?.templateName} · {correctionReport?.reportDate}
           </p>
@@ -538,15 +543,15 @@ export default function SubmitReportPage({
             style={{ marginTop: 10 }}
             onClick={() => onCorrectionComplete?.()}
           >
-            Cancel
+            {t.common.cancel}
           </button>
         </div>
       )}
 
       <div className="card">
         <p className="small">
-          Item {step + 1} of {visibleItems.length}
-          {correctionMode ? ' · correction' : ''}
+          {t.submit.itemNOf} {step + 1} {t.common.of} {visibleItems.length}
+          {correctionMode ? ` · ${t.submit.correctionTag}` : ''}
         </p>
         <div className="progress-bar">
           <div style={{ width: progress + '%' }} />
@@ -555,15 +560,15 @@ export default function SubmitReportPage({
         <p>{currentItem.requirement}</p>
         <p className="small">
           {currentItem.section} · {currentItem.proofType} ·{' '}
-          {currentItem.required ? 'Required' : 'Optional'}
+          {currentItem.required ? t.common.required : t.common.optional}
         </p>
       </div>
 
       {itemFeedback && (
         <div className="card correction-feedback-card">
-          <div className="correction-feedback-label">Reviewer feedback</div>
+          <div className="correction-feedback-label">{t.submit.reviewerFeedback}</div>
           <p className="correction-feedback-text">{itemFeedback}</p>
-          <p className="small">Update your answer below, then mark done and take a new photo if needed.</p>
+          <p className="small">{t.submit.updateAndPhoto}</p>
         </div>
       )}
 
@@ -577,12 +582,12 @@ export default function SubmitReportPage({
           <span className="done-toggle-icon" aria-hidden="true">
             {r.ticked ? '✓' : ''}
           </span>
-          <span>Done / Completed</span>
+          <span>{t.submit.doneCompleted}</span>
         </button>
 
         {needsNumber(currentItem.proofType) && (
           <label style={{ marginTop: 12, display: 'block' }}>
-            Number
+            {t.common.number}
             <input
               value={r.numberValue}
               onChange={(e) => setResponse(currentItem.id, { numberValue: e.target.value })}
@@ -592,7 +597,7 @@ export default function SubmitReportPage({
 
         {needsNote(currentItem.proofType) && (
           <label style={{ marginTop: 12, display: 'block' }}>
-            Note
+            {t.common.note}
             <textarea
               value={r.note}
               onChange={(e) => setResponse(currentItem.id, { note: e.target.value })}
@@ -617,16 +622,17 @@ export default function SubmitReportPage({
       </div>
 
       <WizardNav
+        t={t}
         step={step}
         total={visibleItems.length}
         progress={progress}
-        backLabel="← Back"
+        backLabel={`← ${t.common.back}`}
         nextLabel={
           step + 1 >= visibleItems.length
             ? correctionMode
-              ? 'Review & resubmit →'
-              : 'Review & submit →'
-            : 'Next item →'
+              ? t.submit.reviewResubmit
+              : t.submit.reviewSubmit
+            : t.submit.nextItem
         }
         onBack={() => {
           if (step === 0) {
@@ -641,7 +647,7 @@ export default function SubmitReportPage({
           }
         }}
         onNext={() => {
-          if (currentItem.required && !r.ticked) return alert('Mark item as done first');
+          if (currentItem.required && !r.ticked) return alert(t.submit.markDoneFirst);
           if (step + 1 >= visibleItems.length) setStep(visibleItems.length);
           else setStep((s) => s + 1);
         }}
@@ -650,7 +656,10 @@ export default function SubmitReportPage({
   );
 }
 
+import type { T } from '../i18n';
+
 interface WizardNavProps {
+  t: T;
   step: number;
   total: number;
   progress: number;
@@ -662,6 +671,7 @@ interface WizardNavProps {
 }
 
 function WizardNav({
+  t,
   step,
   total,
   progress,
@@ -674,10 +684,10 @@ function WizardNav({
   const displayStep = Math.min(step + 1, total);
 
   return (
-    <div className="wizard-nav" role="navigation" aria-label="Checklist steps">
+    <div className="wizard-nav" role="navigation" aria-label={t.submit.wizardNav}>
       <div className="wizard-nav-meta">
         <span className="wizard-nav-step">
-          Step {displayStep} / {total}
+          {t.common.step} {displayStep} / {total}
         </span>
         <span className="wizard-nav-pct">{Math.round(progress)}%</span>
       </div>

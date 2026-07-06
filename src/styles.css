@@ -196,7 +196,7 @@ textarea { min-height: 88px; resize: vertical; }
   max-width: 1280px;
   margin: 0 auto;
   padding: 16px;
-  padding-bottom: 88px;
+  padding-bottom: 120px;
   position: relative;
   z-index: 1;
 }
@@ -473,6 +473,25 @@ textarea { min-height: 88px; resize: vertical; }
 .bottom-nav button.active {
   color: var(--accent);
   font-weight: 700;
+}
+
+.mobile-lang-row {
+  position: fixed;
+  bottom: calc(72px + env(safe-area-inset-bottom, 0));
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  padding: 6px 12px;
+  background: rgba(11, 14, 20, 0.92);
+  border-top: 1px solid var(--card-border);
+  z-index: 99;
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+@media (min-width: 768px) {
+  .mobile-lang-row { display: none; }
 }
 
 /* ── Grids ────────────────────────────────────────────────────────────────── */
