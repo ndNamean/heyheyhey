@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { db } from '../db';
 import {
   DEFAULT_LOGOS,
@@ -64,18 +64,76 @@ function buildLocationLine(
   return coords;
 }
 
-function proofWatermarkLines(proof: ProofSnapshot): string[] {
-  const lines = [
-    proof.storeCode,
-    proof.itemTitle,
-    proof.displayTime,
-    proof.userName,
-    proof.locationLine,
-  ];
-  if (proof.cameraOptionsSnapshot.weatherEnabled && proof.weatherLine.trim()) {
-    lines.push(proof.weatherLine);
+function getWeatherCoords(
+  gps: { lat: number; lng: number; accuracy: number } | null,
+): { lat: number; lon: number } | null {
+  if (!gps) return null;
+  const g = gps as { lat?: number; lng?: number; latitude?: number; longitude?: number; lon?: number };
+  const lat = g.latitude ?? g.lat;
+  const lon = g.longitude ?? g.lon ?? g.lng;
+  if (lat === undefined || lon === undefined || !Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return null;
   }
+  return { lat, lon };
+}
+
+function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const trimmed = text.trim();
+  if (!trimmed || maxWidth <= 0) return trimmed ? [trimmed] : [];
+
+  const words = trimmed.split(/\s+/);
+  const lines: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (ctx.measureText(candidate).width <= maxWidth) {
+      current = candidate;
+      continue;
+    }
+    if (current) lines.push(current);
+    if (ctx.measureText(word).width <= maxWidth) {
+      current = word;
+      continue;
+    }
+    let chunk = '';
+    for (const ch of word) {
+      const next = chunk + ch;
+      if (ctx.measureText(next).width > maxWidth && chunk) {
+        lines.push(chunk);
+        chunk = ch;
+      } else {
+        chunk = next;
+      }
+    }
+    current = chunk;
+  }
+  if (current) lines.push(current);
   return lines;
+}
+
+function capWrappedLines(lines: string[], maxLines: number): string[] {
+  if (lines.length <= maxLines) return lines;
+  const capped = lines.slice(0, maxLines);
+  const last = capped[maxLines - 1] ?? '';
+  capped[maxLines - 1] = last.length > 1 ? `${last.slice(0, Math.max(0, last.length - 1))}…` : '…';
+  return capped;
+}
+
+function buildWrappedProofLines(
+  ctx: CanvasRenderingContext2D,
+  proof: ProofSnapshot,
+  maxWidth: number,
+): string[] {
+  const result: string[] = [];
+  for (const field of [proof.storeCode, proof.itemTitle, proof.displayTime, proof.userName]) {
+    result.push(...wrapText(ctx, field, maxWidth));
+  }
+  result.push(...capWrappedLines(wrapText(ctx, proof.locationLine, maxWidth), 4));
+  if (proof.cameraOptionsSnapshot.weatherEnabled && proof.weatherLine.trim()) {
+    result.push(...wrapText(ctx, proof.weatherLine, maxWidth));
+  }
+  return result;
 }
 
 function loadImageForCanvas(url: string): Promise<HTMLImageElement | null> {
@@ -176,14 +234,18 @@ export default function TimemarkCamera({
 
   const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
   const [capturedUrl,  setCapturedUrl]  = useState('');
+  const [captureSize, setCaptureSize] = useState<{ w: number; h: number } | null>(null);
 
   const [uploading,     setUploading]     = useState(false);
   const [confirmError, setConfirmError] = useState('');
 
   const isAdminLogo = canEditStoreLogo(profile?.role);
   const activeLogoUrl = storeLogoUrl.trim() || resolveActiveLogoUrl(store);
+  const weatherCoords = getWeatherCoords(gps);
   const weatherKey =
-    gps && !gpsError ? `${gps.lat.toFixed(2)},${gps.lng.toFixed(2)}` : '';
+    weatherCoords && !gpsError
+      ? `${weatherCoords.lat.toFixed(2)},${weatherCoords.lon.toFixed(2)}`
+      : '';
 
   useEffect(() => {
     setCameraOptions(parseCameraOptions(profile));
@@ -331,16 +393,20 @@ export default function TimemarkCamera({
       return;
     }
 
-    if (weatherKey === fetchedWeatherKeyRef.current) {
+    if (weatherKey === fetchedWeatherKeyRef.current && liveWeather) {
       setWeatherStatus('ready');
       return;
     }
 
     if (weatherTimer.current) clearTimeout(weatherTimer.current);
     weatherTimer.current = setTimeout(() => {
+      const coords = getWeatherCoords(gps);
+      if (!coords) {
+        setWeatherStatus('waiting');
+        return;
+      }
       setWeatherStatus('loading');
-      const [lat, lon] = weatherKey.split(',').map(Number);
-      fetch(`/api/weather/current?lat=${encodeURIComponent(lat!)}&lon=${encodeURIComponent(lon!)}`)
+      fetch(`/api/weather/current?lat=${encodeURIComponent(coords.lat)}&lon=${encodeURIComponent(coords.lon)}`)
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data && typeof data.temperature === 'number') {
@@ -357,7 +423,7 @@ export default function TimemarkCamera({
     return () => {
       if (weatherTimer.current) clearTimeout(weatherTimer.current);
     };
-  }, [cameraOn, frozenProof, weatherKey, gpsError, cameraOptions.weatherEnabled]);
+  }, [cameraOn, frozenProof, weatherKey, gps, gpsError, cameraOptions.weatherEnabled, liveWeather]);
 
   // ── Live clock while camera open (before capture) ────────────────────────
   useEffect(() => {
@@ -528,7 +594,6 @@ export default function TimemarkCamera({
   useEffect(() => () => { streamRef.current?.getTracks().forEach((t) => t.stop()); }, []);
 
   async function watermarkBlob(blob: Blob, proof: ProofSnapshot): Promise<Blob> {
-    const lines = proofWatermarkLines(proof);
     const bitmap = await createImageBitmap(blob);
     const canvas = document.createElement('canvas');
     const ctx    = canvas.getContext('2d')!;
@@ -536,42 +601,71 @@ export default function TimemarkCamera({
     canvas.height = bitmap.height;
     ctx.drawImage(bitmap, 0, 0);
 
-    const padding    = Math.max(16, Math.floor(canvas.width * 0.025));
-    const fontSize   = Math.max(20, Math.floor(canvas.width * 0.032));
-    const lineHeight = Math.floor(fontSize * 1.35);
-    const boxHeight  = padding * 2 + lineHeight * lines.length;
-    const boxTop     = canvas.height - boxHeight;
+    const padding    = Math.round(canvas.width * 0.035);
+    const fontSize   = Math.max(14, Math.round(canvas.width * 0.035));
+    const lineHeight = Math.round(fontSize * 1.3);
+    const logoGap    = Math.max(8, Math.round(padding * 0.5));
+    const logoMaxW   = Math.min(Math.round(canvas.width * 0.14), 70);
 
+    ctx.font = `${fontSize}px Arial`;
+
+    const hasLogo = proof.cameraOptionsSnapshot.logoEnabled && proof.proofLogoUrl.trim().length > 0;
     let logoImg: HTMLImageElement | null = null;
     let logoDrawW = 0;
     let logoDrawH = 0;
-    const logoGap = Math.max(8, Math.floor(padding * 0.6));
 
-    if (proof.cameraOptionsSnapshot.logoEnabled && proof.proofLogoUrl.trim()) {
+    if (hasLogo) {
       logoImg = await loadImageForCanvas(proof.proofLogoUrl);
       if (logoImg) {
-        const maxLogoH = Math.min(boxHeight - padding * 2, Math.max(40, Math.floor(canvas.height * 0.07)));
-        const scale = maxLogoH / logoImg.height;
+        const scale = logoMaxW / logoImg.width;
+        logoDrawW = logoMaxW;
         logoDrawH = logoImg.height * scale;
-        logoDrawW = logoImg.width * scale;
       }
     }
 
+    const fullTextWidth = canvas.width - padding * 2;
+    const sideTextWidth = Math.max(
+      80,
+      canvas.width - padding * 2 - (logoDrawW > 0 ? logoDrawW + logoGap : 0),
+    );
+
+    const stackedLines = buildWrappedProofLines(ctx, proof, fullTextWidth);
+    const sideLines = logoDrawW > 0 ? buildWrappedProofLines(ctx, proof, sideTextWidth) : stackedLines;
+
+    const useStack =
+      logoDrawW > 0 &&
+      (sideTextWidth < 120 ||
+        sideLines.length > stackedLines.length + 1 ||
+        proof.locationLine.length > 48);
+
+    const wrappedLines = useStack ? stackedLines : sideLines;
+    const textBlockH = wrappedLines.length * lineHeight;
+    const stackLogoRow = useStack && logoDrawW > 0 ? logoDrawH + logoGap : 0;
+    const sideLogoH = !useStack && logoDrawW > 0 ? logoDrawH : 0;
+    const panelHeight = padding * 2 + stackLogoRow + Math.max(textBlockH, sideLogoH);
+    const boxTop = canvas.height - panelHeight;
+
     ctx.fillStyle = 'rgba(0,0,0,0.72)';
-    ctx.fillRect(0, boxTop, canvas.width, boxHeight);
+    ctx.fillRect(0, boxTop, canvas.width, panelHeight);
 
-    const textX = padding + (logoDrawW > 0 ? logoDrawW + logoGap : 0);
+    let textX = padding;
+    let textY = boxTop + padding;
 
-    if (logoImg && logoDrawW > 0) {
-      const logoY = boxTop + (boxHeight - logoDrawH) / 2;
+    if (useStack && logoImg && logoDrawW > 0) {
+      ctx.drawImage(logoImg, padding, boxTop + padding, logoDrawW, logoDrawH);
+      textY = boxTop + padding + logoDrawH + logoGap;
+    } else if (!useStack && logoImg && logoDrawW > 0) {
+      const logoY = boxTop + (panelHeight - logoDrawH) / 2;
       ctx.drawImage(logoImg, padding, logoY, logoDrawW, logoDrawH);
+      textX = padding + logoDrawW + logoGap;
+      textY = boxTop + padding;
     }
 
-    ctx.font      = `${fontSize}px Arial`;
     ctx.fillStyle = 'white';
-    lines.forEach((line, i) => {
-      ctx.fillText(line, textX, boxTop + padding + lineHeight * (i + 0.75));
+    wrappedLines.forEach((line, i) => {
+      ctx.fillText(line, textX, textY + lineHeight * (i + 0.75));
     });
+
     return new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), 'image/jpeg', 0.85));
   }
 
@@ -724,6 +818,7 @@ export default function TimemarkCamera({
     if (capturedUrl) { URL.revokeObjectURL(capturedUrl); setCapturedUrl(''); }
     setCapturedBlob(null);
     setFrozenProof(null);
+    setCaptureSize(null);
     setLiveNow(new Date());
     setOptionsOpen(false);
     fetchedWeatherKeyRef.current = '';
@@ -756,7 +851,9 @@ export default function TimemarkCamera({
   async function handleCapture() {
     const video = videoRef.current;
     if (!video || camState !== 'ready') return;
-    if (video.videoWidth === 0 || video.videoHeight === 0 || video.readyState < 2) return;
+    const videoW = video.videoWidth;
+    const videoH = video.videoHeight;
+    if (videoW === 0 || videoH === 0 || video.readyState < 2) return;
     const tracks = streamRef.current?.getVideoTracks() ?? [];
     if (!tracks.length || tracks[0].readyState === 'ended') return;
 
@@ -775,11 +872,13 @@ export default function TimemarkCamera({
     setFrozenProof(proof);
 
     const canvas = document.createElement('canvas');
-    canvas.width  = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width  = videoW;
+    canvas.height = videoH;
     canvas.getContext('2d')!.drawImage(video, 0, 0);
     const raw = await new Promise<Blob>((r) => canvas.toBlob((b) => r(b!), 'image/jpeg', 0.92));
     const watermarked = await watermarkBlob(raw, proof);
+
+    setCaptureSize({ w: videoW, h: videoH });
 
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
@@ -801,6 +900,7 @@ export default function TimemarkCamera({
       setCapturedBlob(null);
       setCapturedUrl('');
       setFrozenProof(null);
+      setCaptureSize(null);
     } catch (e) {
       setConfirmError(e instanceof Error ? e.message : 'Upload failed. Please try again.\n\nTải lên thất bại. Vui lòng thử lại.');
     }
@@ -812,6 +912,7 @@ export default function TimemarkCamera({
     setCapturedUrl('');
     setConfirmError('');
     setFrozenProof(null);
+    setCaptureSize(null);
     setLiveNow(new Date());
     setOptionsOpen(false);
     setCameraOn(true);
@@ -1045,9 +1146,15 @@ export default function TimemarkCamera({
             Xem lại ảnh / Review Photo
           </div>
 
-          <div className="postcapture-thumb">
+          <div
+            className="postcapture-thumb"
+            style={
+              captureSize
+                ? ({ '--capture-aspect': `${captureSize.w} / ${captureSize.h}` } as CSSProperties)
+                : undefined
+            }
+          >
             <img src={capturedUrl} alt="Captured photo" />
-            <ProofTimestampOverlay proof={frozenProof} />
           </div>
 
           {confirmError && (

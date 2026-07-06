@@ -22,7 +22,9 @@ export default async function handler(req, res) {
   }
 
   const lat = parseCoord(req.query.lat);
-  const lon = parseCoord(req.query.lon);
+  const lon = parseCoord(req.query.lon ?? req.query.lng);
+  console.log('WEATHER_ROUTE_RECEIVED', { lat, lon });
+
   if (lat === null || lon === null) {
     return res.status(400).json({ error: 'Missing or invalid lat/lon' });
   }
@@ -34,6 +36,7 @@ export default async function handler(req, res) {
   }
 
   const apiKey = process.env.OPENWEATHER_API_KEY;
+  console.log('WEATHER_HAS_KEY', Boolean(apiKey));
   if (!apiKey) {
     return res.status(503).json({ error: 'Weather unavailable' });
   }
@@ -47,7 +50,7 @@ export default async function handler(req, res) {
   try {
     const upstream = await fetch(url);
     if (!upstream.ok) {
-      console.error('[weather/current] upstream status', upstream.status);
+      console.error('WEATHER_OPENWEATHER_STATUS', upstream.status);
       return res.status(503).json({ error: 'Weather unavailable' });
     }
 
