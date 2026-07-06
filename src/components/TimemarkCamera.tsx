@@ -120,13 +120,13 @@ function capWrappedLines(lines: string[], maxLines: number): string[] {
   return capped;
 }
 
-function buildWrappedProofLines(
+function buildFloatingProofLines(
   ctx: CanvasRenderingContext2D,
   proof: ProofSnapshot,
   maxWidth: number,
 ): string[] {
   const result: string[] = [];
-  for (const field of [proof.storeCode, proof.itemTitle, proof.displayTime, proof.userName]) {
+  for (const field of [proof.storeCode, proof.itemTitle, proof.userName]) {
     result.push(...wrapText(ctx, field, maxWidth));
   }
   result.push(...capWrappedLines(wrapText(ctx, proof.locationLine, maxWidth), 4));
@@ -134,6 +134,133 @@ function buildWrappedProofLines(
     result.push(...wrapText(ctx, proof.weatherLine, maxWidth));
   }
   return result;
+}
+
+interface StampMetrics {
+  boxX: number;
+  boxY: number;
+  boxW: number;
+  boxH: number;
+  logoDrawW: number;
+  logoDrawH: number;
+}
+
+function fillRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
+  const radius = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + w - radius, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+  ctx.lineTo(x + w, y + h - radius);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+  ctx.lineTo(x + radius, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function computeStampMetrics(
+  ctx: CanvasRenderingContext2D,
+  proof: ProofSnapshot,
+  logoImg: HTMLImageElement | null,
+  padding: number,
+  fontSize: number,
+  lineHeight: number,
+  logoMaxW: number,
+  logoGap: number,
+  canvasH: number,
+): StampMetrics {
+  const showLogo =
+    proof.cameraOptionsSnapshot.logoEnabled &&
+    proof.proofLogoUrl.trim().length > 0 &&
+    logoImg;
+
+  let logoDrawW = 0;
+  let logoDrawH = 0;
+  if (showLogo && logoImg) {
+    const scale = logoMaxW / logoImg.width;
+    logoDrawW = logoMaxW;
+    logoDrawH = logoImg.height * scale;
+  }
+
+  ctx.font = `${fontSize}px Arial`;
+  const tsW = ctx.measureText(proof.displayTime).width;
+  const innerW = (logoDrawW > 0 ? logoDrawW + logoGap : 0) + tsW;
+  const innerH = Math.max(logoDrawH, lineHeight);
+  const boxW = padding * 2 + innerW;
+  const boxH = padding * 2 + innerH;
+  const boxX = padding;
+  const boxY = canvasH - padding - boxH;
+
+  return { boxX, boxY, boxW, boxH, logoDrawW, logoDrawH };
+}
+
+function drawFloatingText(
+  ctx: CanvasRenderingContext2D,
+  lines: string[],
+  x: number,
+  y: number,
+  fontSize: number,
+  lineHeight: number,
+) {
+  ctx.font = `${fontSize}px Arial`;
+  ctx.fillStyle = '#FDC216';
+  ctx.strokeStyle = 'rgba(255,245,180,0.7)';
+  ctx.lineWidth = Math.max(1, fontSize * 0.08);
+  ctx.shadowColor = 'rgba(0,0,0,0.92)';
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetX = 3;
+  ctx.shadowOffsetY = 5;
+  ctx.lineJoin = 'round';
+
+  lines.forEach((line, i) => {
+    const ly = y + lineHeight * (i + 0.75);
+    ctx.strokeText(line, x, ly);
+    ctx.fillText(line, x, ly);
+  });
+
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+}
+
+function drawStampBox(
+  ctx: CanvasRenderingContext2D,
+  proof: ProofSnapshot,
+  logoImg: HTMLImageElement | null,
+  metrics: StampMetrics,
+  padding: number,
+  fontSize: number,
+  lineHeight: number,
+  logoGap: number,
+) {
+  const radius = Math.max(6, Math.round(fontSize * 0.35));
+  ctx.fillStyle = 'rgba(0,0,0,0.72)';
+  fillRoundedRect(ctx, metrics.boxX, metrics.boxY, metrics.boxW, metrics.boxH, radius);
+
+  let contentX = metrics.boxX + padding;
+  const midY = metrics.boxY + metrics.boxH / 2;
+
+  if (logoImg && metrics.logoDrawW > 0) {
+    const logoY = midY - metrics.logoDrawH / 2;
+    ctx.drawImage(logoImg, contentX, logoY, metrics.logoDrawW, metrics.logoDrawH);
+    contentX += metrics.logoDrawW + logoGap;
+  }
+
+  ctx.font = `${fontSize}px Arial`;
+  ctx.fillStyle = '#fff';
+  ctx.shadowColor = 'transparent';
+  ctx.fillText(proof.displayTime, contentX, midY + fontSize * 0.35);
 }
 
 function loadImageForCanvas(url: string): Promise<HTMLImageElement | null> {
@@ -166,24 +293,26 @@ function ProofTimestampOverlay({ proof }: { proof: ProofSnapshot }) {
     proof.cameraOptionsSnapshot.logoEnabled && proof.proofLogoUrl.trim().length > 0;
 
   return (
-    <div className="proof-timestamp-overlay" aria-hidden="true">
-      {showLogo && (
-        <img
-          className="proof-ts-logo"
-          src={proof.proofLogoUrl}
-          alt=""
-          aria-hidden="true"
-        />
-      )}
-      <div className="proof-ts-lines">
+    <div className="proof-overlay-root" aria-hidden="true">
+      <div className="proof-floating-lines">
         <div className="proof-ts-store">{proof.storeCode}</div>
         <div>{proof.itemTitle}</div>
-        <div className="proof-ts-time">{proof.displayTime}</div>
         <div>{proof.userName}</div>
         <div className="proof-ts-location">{proof.locationLine}</div>
         {proof.cameraOptionsSnapshot.weatherEnabled && proof.weatherLine && (
           <div className="proof-ts-weather">{proof.weatherLine}</div>
         )}
+      </div>
+      <div className="proof-stamp-box">
+        {showLogo && (
+          <img
+            className="proof-ts-logo"
+            src={proof.proofLogoUrl}
+            alt=""
+            aria-hidden="true"
+          />
+        )}
+        <div className="proof-ts-time">{proof.displayTime}</div>
       </div>
     </div>
   );
@@ -606,65 +735,37 @@ export default function TimemarkCamera({
     const lineHeight = Math.round(fontSize * 1.3);
     const logoGap    = Math.max(8, Math.round(padding * 0.5));
     const logoMaxW   = Math.min(Math.round(canvas.width * 0.14), 70);
+    const zoneGap    = Math.max(8, Math.round(padding * 0.6));
 
     ctx.font = `${fontSize}px Arial`;
 
-    const hasLogo = proof.cameraOptionsSnapshot.logoEnabled && proof.proofLogoUrl.trim().length > 0;
+    const hasLogo =
+      proof.cameraOptionsSnapshot.logoEnabled && proof.proofLogoUrl.trim().length > 0;
     let logoImg: HTMLImageElement | null = null;
-    let logoDrawW = 0;
-    let logoDrawH = 0;
-
     if (hasLogo) {
       logoImg = await loadImageForCanvas(proof.proofLogoUrl);
-      if (logoImg) {
-        const scale = logoMaxW / logoImg.width;
-        logoDrawW = logoMaxW;
-        logoDrawH = logoImg.height * scale;
-      }
     }
 
-    const fullTextWidth = canvas.width - padding * 2;
-    const sideTextWidth = Math.max(
-      80,
-      canvas.width - padding * 2 - (logoDrawW > 0 ? logoDrawW + logoGap : 0),
+    const stampMetrics = computeStampMetrics(
+      ctx,
+      proof,
+      logoImg,
+      padding,
+      fontSize,
+      lineHeight,
+      logoMaxW,
+      logoGap,
+      canvas.height,
     );
 
-    const stackedLines = buildWrappedProofLines(ctx, proof, fullTextWidth);
-    const sideLines = logoDrawW > 0 ? buildWrappedProofLines(ctx, proof, sideTextWidth) : stackedLines;
+    const floatMaxWidth = canvas.width - padding * 2;
+    const floatLines = buildFloatingProofLines(ctx, proof, floatMaxWidth);
+    const floatBlockH = floatLines.length * lineHeight;
+    let floatTop = stampMetrics.boxY - zoneGap - floatBlockH;
+    if (floatTop < padding) floatTop = padding;
 
-    const useStack =
-      logoDrawW > 0 &&
-      (sideTextWidth < 120 ||
-        sideLines.length > stackedLines.length + 1 ||
-        proof.locationLine.length > 48);
-
-    const wrappedLines = useStack ? stackedLines : sideLines;
-    const textBlockH = wrappedLines.length * lineHeight;
-    const stackLogoRow = useStack && logoDrawW > 0 ? logoDrawH + logoGap : 0;
-    const sideLogoH = !useStack && logoDrawW > 0 ? logoDrawH : 0;
-    const panelHeight = padding * 2 + stackLogoRow + Math.max(textBlockH, sideLogoH);
-    const boxTop = canvas.height - panelHeight;
-
-    ctx.fillStyle = 'rgba(0,0,0,0.72)';
-    ctx.fillRect(0, boxTop, canvas.width, panelHeight);
-
-    let textX = padding;
-    let textY = boxTop + padding;
-
-    if (useStack && logoImg && logoDrawW > 0) {
-      ctx.drawImage(logoImg, padding, boxTop + padding, logoDrawW, logoDrawH);
-      textY = boxTop + padding + logoDrawH + logoGap;
-    } else if (!useStack && logoImg && logoDrawW > 0) {
-      const logoY = boxTop + (panelHeight - logoDrawH) / 2;
-      ctx.drawImage(logoImg, padding, logoY, logoDrawW, logoDrawH);
-      textX = padding + logoDrawW + logoGap;
-      textY = boxTop + padding;
-    }
-
-    ctx.fillStyle = 'white';
-    wrappedLines.forEach((line, i) => {
-      ctx.fillText(line, textX, textY + lineHeight * (i + 0.75));
-    });
+    drawFloatingText(ctx, floatLines, padding, floatTop, fontSize, lineHeight);
+    drawStampBox(ctx, proof, logoImg, stampMetrics, padding, fontSize, lineHeight, logoGap);
 
     return new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), 'image/jpeg', 0.85));
   }
