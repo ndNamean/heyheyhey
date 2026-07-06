@@ -94,9 +94,6 @@ export default function LogbookPage({ profile }: Props) {
     );
   }
 
-  const severityColor = (s: string) =>
-    s === 'critical' ? '#b00020' : s === 'warning' ? '#7a5c00' : '#0a5c22';
-
   return (
     <div>
       <div className="card">
@@ -216,8 +213,13 @@ export default function LogbookPage({ profile }: Props) {
                     <span className="badge warn">Announcement</span>
                   )}
                   <span
-                    className="badge"
-                    style={{ color: severityColor(entry.severity) }}
+                    className={`badge ${
+                      entry.severity === 'critical'
+                        ? 'severity-critical'
+                        : entry.severity === 'warning'
+                          ? 'severity-warning'
+                          : 'severity-info'
+                    }`}
                   >
                     {entry.severity}
                   </span>

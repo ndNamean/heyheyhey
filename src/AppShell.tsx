@@ -90,10 +90,12 @@ export default function AppShell({ profile }: Props) {
   }
 
   return (
-    <main className="page">
-      <DesktopNav page={page} setPage={setPage} profile={profile} />
-      {renderPage()}
-      <MobileNav page={page} setPage={setPage} profile={profile} />
-    </main>
+    <div className="app-shell">
+      <main className="page">
+        <DesktopNav page={page} setPage={setPage} profile={profile} />
+        {renderPage()}
+        <MobileNav page={page} setPage={setPage} profile={profile} />
+      </main>
+    </div>
   );
 }

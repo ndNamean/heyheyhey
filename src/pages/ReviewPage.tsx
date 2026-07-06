@@ -204,7 +204,7 @@ export default function ReviewPage({ profile }: Props) {
                     </p>
                   )}
                   {resp.rejectionReason && resp.status !== 'approved' && (
-                    <p className="small" style={{ color: '#b00020', whiteSpace: 'pre-wrap' }}>
+                    <p className="small text-danger" style={{ whiteSpace: 'pre-wrap' }}>
                       Reason: {resp.rejectionReason}
                     </p>
                   )}

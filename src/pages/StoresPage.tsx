@@ -148,19 +148,9 @@ export default function StoresPage({ profile }: Props) {
         </label>
 
         {/* Map picker */}
-        <div
-          style={{
-            border: '1px solid #FDC216',
-            borderRadius: 14,
-            padding: 14,
-            marginBottom: 12,
-            background: '#fffdf0',
-          }}
-        >
-          <p className="small" style={{ margin: '0 0 10px', fontWeight: 600, color: '#7a5c00' }}>
-            Pick location on map
-          </p>
-          <Suspense fallback={<div style={{ height: 340, background: '#f5f5f5', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', fontSize: 13 }}>Loading map…</div>}>
+        <div className="map-hint-banner">
+          <p className="small">Pick location on map</p>
+          <Suspense fallback={<div className="map-loading-placeholder">Loading map…</div>}>
           <MapPicker
             lat={parseFloat(form.lat) || 0}
             lng={parseFloat(form.lng) || 0}
@@ -186,7 +176,8 @@ export default function StoresPage({ profile }: Props) {
               value={form.lat}
               onChange={(e) => f('lat', e.target.value)}
               placeholder="Auto-filled from map"
-              style={{ marginTop: 4, background: form.lat ? '#fff' : '#fafafa' }}
+              className={form.lat ? 'input-filled' : 'input-readonly-muted'}
+              style={{ marginTop: 4 }}
             />
           </label>
           <label>
@@ -197,7 +188,8 @@ export default function StoresPage({ profile }: Props) {
               value={form.lng}
               onChange={(e) => f('lng', e.target.value)}
               placeholder="Auto-filled from map"
-              style={{ marginTop: 4, background: form.lng ? '#fff' : '#fafafa' }}
+              className={form.lng ? 'input-filled' : 'input-readonly-muted'}
+              style={{ marginTop: 4 }}
             />
           </label>
         </div>

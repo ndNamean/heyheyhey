@@ -3,7 +3,6 @@ import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-lea
 import { Icon } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// Use CDN-hosted icons to avoid Vite bundling issues with Leaflet's default icon paths
 const PIN = new Icon({
   iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -20,7 +19,6 @@ interface NominatimResult {
   lon: string;
 }
 
-// Handles map click events
 function ClickHandler({ onSelect }: { onSelect: (lat: number, lng: number) => void }) {
   useMapEvents({
     click(e) {
@@ -30,7 +28,6 @@ function ClickHandler({ onSelect }: { onSelect: (lat: number, lng: number) => vo
   return null;
 }
 
-// Smoothly flies to a new position whenever lat/lng changes
 function FlyTo({ lat, lng }: { lat: number; lng: number }) {
   const map = useMap();
   const prevRef = useRef({ lat: 0, lng: 0 });
@@ -58,8 +55,6 @@ export default function MapPicker({ lat, lng, onSelect }: Props) {
   const [flyTo, setFlyTo] = useState<{ lat: number; lng: number } | null>(null);
 
   const hasPin = Boolean(lat || lng);
-
-  // Default centre: Ho Chi Minh City
   const centre: [number, number] = hasPin ? [lat, lng] : [10.7769, 106.7009];
 
   async function search() {
@@ -95,9 +90,8 @@ export default function MapPicker({ lat, lng, onSelect }: Props) {
 
   return (
     <div>
-      {/* ── Search bar ── */}
-      <div style={{ position: 'relative', marginBottom: 10 }}>
-        <div style={{ display: 'flex', gap: 8 }}>
+      <div className="map-search-wrap">
+        <div className="map-search-row">
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
@@ -117,49 +111,18 @@ export default function MapPicker({ lat, lng, onSelect }: Props) {
           </button>
         </div>
 
-        {/* Results dropdown */}
         {results.length > 0 && (
           <>
-            {/* click-away overlay */}
             <div
               style={{ position: 'fixed', inset: 0, zIndex: 399 }}
               onClick={() => setResults([])}
             />
-            <div
-              style={{
-                position: 'absolute',
-                top: 'calc(100% + 4px)',
-                left: 0,
-                right: 0,
-                zIndex: 400,
-                background: '#fff',
-                border: '1px solid #ddd',
-                borderRadius: 12,
-                boxShadow: '0 6px 24px rgba(0,0,0,0.12)',
-                overflow: 'hidden',
-                maxHeight: 240,
-                overflowY: 'auto',
-              }}
-            >
+            <div className="map-search-dropdown">
               {results.map((r) => (
                 <button
                   key={r.place_id}
+                  className="map-search-item"
                   onClick={() => pickResult(r)}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    textAlign: 'left',
-                    background: 'none',
-                    border: 'none',
-                    borderBottom: '1px solid #f0f0f0',
-                    padding: '11px 14px',
-                    fontSize: 13,
-                    lineHeight: 1.4,
-                    cursor: 'pointer',
-                    color: '#111',
-                    minHeight: 0,
-                    borderRadius: 0,
-                  }}
                 >
                   {r.display_name}
                 </button>
@@ -169,16 +132,7 @@ export default function MapPicker({ lat, lng, onSelect }: Props) {
         )}
       </div>
 
-      {/* ── Map ── */}
-      <div
-        style={{
-          height: 340,
-          borderRadius: 14,
-          overflow: 'hidden',
-          border: '1px solid #eee',
-          boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
-        }}
-      >
+      <div className="map-frame">
         <MapContainer
           center={centre}
           zoom={hasPin ? 16 : 12}
@@ -195,7 +149,7 @@ export default function MapPicker({ lat, lng, onSelect }: Props) {
         </MapContainer>
       </div>
 
-      <p className="small" style={{ marginTop: 8, color: '#888' }}>
+      <p className="small" style={{ marginTop: 8 }}>
         Search for a location above, or click anywhere on the map to drop the pin.
         Latitude &amp; Longitude fill in automatically.
       </p>

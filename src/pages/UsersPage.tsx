@@ -58,17 +58,15 @@ function InviteUserForm({ currentProfile }: { currentProfile: Profile }) {
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {/* Success */}
-        <div style={{ background: '#d9f8e2', border: '1px solid #a3e9b8', borderRadius: 10, padding: '12px 16px' }}>
-          <p className="small" style={{ color: '#0a5c22', margin: 0 }}>
+        <div className="alert-success">
+          <p className="small">
             Sign-in code emailed to <strong>{email}</strong> as <strong>{role}</strong>.
           </p>
         </div>
 
-        {/* Copy link */}
-        <div style={{ background: '#fafafa', border: '1px solid #eee', borderRadius: 10, padding: '14px 16px' }}>
-          <p className="small" style={{ margin: '0 0 4px', fontWeight: 700 }}>Direct sign-in link</p>
-          <p className="small" style={{ margin: '0 0 10px', color: '#666' }}>
+        <div className="alert-info">
+          <p className="small alert-info-title">Direct sign-in link</p>
+          <p className="small" style={{ margin: '0 0 10px' }}>
             The email InstantDB sent contains the 6-digit code. Share this link too —
             when they click it their email is pre-filled and the code is sent again automatically.
           </p>
@@ -77,10 +75,10 @@ function InviteUserForm({ currentProfile }: { currentProfile: Profile }) {
               readOnly
               value={sentLink}
               onFocus={(e) => e.target.select()}
+              className="input-readonly-muted"
               style={{
                 flex: 1, fontSize: 12, fontFamily: 'monospace',
-                padding: '10px 12px', borderRadius: 10, border: '1px solid #ddd',
-                background: '#fff', color: '#333', minWidth: 0,
+                padding: '10px 12px', borderRadius: 10, minWidth: 0,
               }}
             />
             <button
@@ -121,11 +119,7 @@ function InviteUserForm({ currentProfile }: { currentProfile: Profile }) {
             onKeyDown={(e) => e.key === 'Enter' && send()}
             placeholder="employee@example.com"
             autoFocus
-            style={{
-              marginTop: 6, fontSize: 15, padding: '13px 14px',
-              border: '2px solid #FDC216', borderRadius: 12,
-              color: '#111', background: '#fff',
-            }}
+            className="input-accent"
           />
         </label>
 
@@ -143,7 +137,7 @@ function InviteUserForm({ currentProfile }: { currentProfile: Profile }) {
         </label>
       </div>
 
-      {error && <p className="small" style={{ color: '#b00020', marginBottom: 10 }}>{error}</p>}
+      {error && <p className="small text-danger" style={{ marginBottom: 10 }}>{error}</p>}
 
       <button
         className="btn-gold"
@@ -220,19 +214,8 @@ function StoresDropdown({
             onClick={() => setOpen(false)}
           />
           <div
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: 0,
-              zIndex: 100,
-              background: '#fff',
-              border: '1px solid #ddd',
-              borderRadius: 10,
-              padding: 8,
-              minWidth: 200,
-              boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-              marginTop: 4,
-            }}
+            className="dropdown-panel dropdown-panel--below"
+            style={{ zIndex: 100 }}
           >
             {allStores.length === 0 && (
               <p className="small" style={{ padding: '4px 8px', margin: 0 }}>
@@ -242,15 +225,7 @@ function StoresDropdown({
             {allStores.map((store) => (
               <label
                 key={store.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '8px 10px',
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                  background: saving === store.id ? '#f5f5f5' : undefined,
-                }}
+                className={`dropdown-check-row${saving === store.id ? ' dropdown-check-row--saving' : ''}`}
               >
                 <input
                   type="checkbox"
@@ -458,15 +433,7 @@ export default function UsersPage({ currentProfile }: Props) {
         </div>
 
         {showInvite && (
-          <div
-            style={{
-              background: '#fafafa',
-              border: '1px solid #eee',
-              borderRadius: 12,
-              padding: 16,
-              marginBottom: 16,
-            }}
-          >
+          <div className="panel-inset" style={{ marginBottom: 16 }}>
             <h3 style={{ margin: '0 0 4px', fontSize: 15 }}>Send sign-in code</h3>
             <InviteUserForm currentProfile={currentProfile} />
           </div>
@@ -499,20 +466,7 @@ export default function UsersPage({ currentProfile }: Props) {
             pendingProfiles.map((p) => (
               <div className="card" key={p.id}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: '50%',
-                      background: '#f0f0f0',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontWeight: 700,
-                      fontSize: 16,
-                      flexShrink: 0,
-                    }}
-                  >
+                  <div className="avatar-circle">
                     {(p.displayName || p.email)[0]?.toUpperCase()}
                   </div>
                   <div style={{ flex: 1 }}>
@@ -563,20 +517,7 @@ export default function UsersPage({ currentProfile }: Props) {
                     {/* User */}
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div
-                          style={{
-                            width: 34,
-                            height: 34,
-                            borderRadius: '50%',
-                            background: '#f0f0f0',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontWeight: 700,
-                            fontSize: 14,
-                            flexShrink: 0,
-                          }}
-                        >
+                        <div className="avatar-circle" style={{ width: 34, height: 34, fontSize: 14 }}>
                           {(p.displayName || p.email)[0]?.toUpperCase()}
                         </div>
                         <div>
@@ -609,30 +550,7 @@ export default function UsersPage({ currentProfile }: Props) {
                       <select
                         value={p.approvalStatus}
                         onChange={(e) => updateStatus(p, e.target.value as ApprovalStatus)}
-                        style={{
-                          minWidth: 110,
-                          fontSize: 13,
-                          background:
-                            p.approvalStatus === 'approved'
-                              ? '#d9f8e2'
-                              : p.approvalStatus === 'rejected'
-                                ? '#ffe1e1'
-                                : '#fff0c2',
-                          color:
-                            p.approvalStatus === 'approved'
-                              ? '#0a5c22'
-                              : p.approvalStatus === 'rejected'
-                                ? '#8b0000'
-                                : '#7a5c00',
-                          fontWeight: 600,
-                          border: '1px solid',
-                          borderColor:
-                            p.approvalStatus === 'approved'
-                              ? '#a3e9b8'
-                              : p.approvalStatus === 'rejected'
-                                ? '#f5b8b8'
-                                : '#f5dfa0',
-                        }}
+                        className={`approval-select approval-select--${p.approvalStatus}`}
                       >
                         <option value="pending">pending</option>
                         <option value="approved">approved</option>
