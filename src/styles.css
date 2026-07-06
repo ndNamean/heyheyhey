@@ -763,8 +763,8 @@ body.wizard-active .page {
 .gps-strip.ok .gps-dot { background:#3dd68c; }
 .gps-strip.warn .gps-dot { background:#FDC216; }
 .gps-strip.error .gps-dot { background:#ef4444; }
-.camera-viewfinder { flex:1; position:relative; overflow:hidden; background:#111; }
-.camera-viewfinder video { width:100%; height:100%; object-fit:contain; }
+.camera-viewfinder { flex:1; min-height:0; position:relative; overflow:hidden; background:#111; }
+.camera-viewfinder video { width:100%; height:100%; object-fit:contain; position:relative; z-index:1; display:block; }
 .watermark-preview { position:absolute; bottom:0; left:0; right:0; background:rgba(0,0,0,0.72); color:#fff; padding:10px 14px; font-size:11px; font-family:monospace; line-height:1.6; pointer-events:none; }
 .watermark-preview .wm-store { color:#FDC216; font-weight:700; }
 .proof-overlay-root {

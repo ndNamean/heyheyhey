@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import { db } from '../db';
 import {
   DEFAULT_LOGOS,
@@ -1034,7 +1035,7 @@ export default function TimemarkCamera({
         </div>
       )}
 
-      {cameraOn && (
+      {cameraOn && createPortal(
         <div className="camera-fullscreen">
           <div className="camera-topbar">
             <button
@@ -1238,10 +1239,11 @@ export default function TimemarkCamera({
               ✕<span>Đóng</span>
             </button>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
-      {capturedBlob && frozenProof && (
+      {capturedBlob && frozenProof && createPortal(
         <div className="postcapture-sheet">
           <div style={{ color: '#fff', fontWeight: 700, fontSize: 17 }}>
             Xem lại ảnh / Review Photo
@@ -1294,7 +1296,8 @@ export default function TimemarkCamera({
               {!uploading && <span style={{ fontWeight: 400, fontSize: 11 }}>Use Photo</span>}
             </button>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {existingMedia.length > 0 && !cameraOn && !capturedBlob && (
