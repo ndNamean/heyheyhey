@@ -250,7 +250,18 @@ export default function TemplatesPage({ profile }: Props) {
   async function deactivate(template: Template) {
     if (!confirm(`Deactivate "${template.name}"?`)) return;
     await db.transact(db.tx.templates[template.id].update({ active: false, updatedAt: nowIso() }));
-    if (editingTemplateId === template.id) resetForm();
+    if (editingTemplateId === template.id) {
+      setEditingTemplateActive(false);
+    }
+  }
+
+  async function activate(template: Template) {
+    const msg = t.templates.activateConfirm.replace('{name}', template.name);
+    if (!confirm(msg)) return;
+    await db.transact(db.tx.templates[template.id].update({ active: true, updatedAt: nowIso() }));
+    if (editingTemplateId === template.id) {
+      setEditingTemplateActive(true);
+    }
   }
 
   return (
@@ -429,13 +440,20 @@ export default function TemplatesPage({ profile }: Props) {
                     >
                       {t.templates.edit}
                     </button>
-                    {tmpl.active && (
+                    {tmpl.active ? (
                       <button
                         className="danger"
                         style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
                         onClick={() => deactivate(tmpl)}
                       >
                         {t.templates.deactivate}
+                      </button>
+                    ) : (
+                      <button
+                        style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
+                        onClick={() => activate(tmpl)}
+                      >
+                        {t.templates.activate}
                       </button>
                     )}
                   </div>

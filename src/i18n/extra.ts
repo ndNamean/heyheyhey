@@ -263,6 +263,9 @@ export const sectionsEn = {
     storesAssigned: 'Stores',
     noTemplates: 'No templates yet.',
     deactivate: 'Deactivate',
+    activate: 'Activate',
+    activateConfirm:
+      'Activate "{name}"? Staff will be able to use this template for new submissions again.',
     creating: 'Creating...',
     editTemplate: 'Edit template',
     createTemplate: 'Create template',
@@ -670,6 +673,9 @@ export const sectionsVi = {
     storesAssigned: 'Cửa hàng',
     noTemplates: 'Chưa có mẫu nào.',
     deactivate: 'Vô hiệu hóa',
+    activate: 'Kích hoạt',
+    activateConfirm:
+      'Kích hoạt "{name}"? Nhân viên có thể dùng mẫu này cho các lần nộp báo cáo mới.',
     creating: 'Đang tạo...',
     editTemplate: 'Sửa mẫu',
     createTemplate: 'Tạo mẫu',
