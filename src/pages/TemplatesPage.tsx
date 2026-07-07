@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { id } from '@instantdb/react';
 import { db } from '../db';
 import { useLang } from '../i18n';
@@ -23,20 +23,103 @@ interface ItemDraft {
   failureCategory: string;
 }
 
+const DEFAULT_APPROVER_ROLES = ['leader', 'subleader', 'manager'];
+
+function parseApproverRoles(json: string | undefined): string[] {
+  if (!json?.trim()) return [...DEFAULT_APPROVER_ROLES];
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) && parsed.length ? parsed : [...DEFAULT_APPROVER_ROLES];
+  } catch {
+    return [...DEFAULT_APPROVER_ROLES];
+  }
+}
+
+function templateItemToDraft(item: TemplateItem): ItemDraft {
+  return {
+    id: item.id,
+    section: item.section,
+    title: item.title,
+    requirement: item.requirement,
+    proofType: item.proofType,
+    required: item.required,
+    assignedRole: item.assignedRole,
+    approverRoles: parseApproverRoles(item.approverRolesJson),
+    weight: item.weight,
+    failureCategory: item.failureCategory,
+  };
+}
+
+function itemPayload(item: ItemDraft, sortOrder: number) {
+  return {
+    section: item.section,
+    title: item.title,
+    requirement: item.requirement,
+    proofType: item.proofType,
+    required: item.required,
+    assignedRole: item.assignedRole,
+    approverRolesJson: JSON.stringify(item.approverRoles),
+    weight: item.weight,
+    failureCategory: item.failureCategory,
+    sortOrder,
+  };
+}
+
 export default function TemplatesPage({ profile }: Props) {
   const { t } = useLang();
+  const formRef = useRef<HTMLDivElement>(null);
+
   const [name, setName] = useState('');
   const [reportType, setReportType] = useState('Daily Hygiene');
   const [storeIds, setStoreIds] = useState<string[]>([]);
   const [items, setItems] = useState<ItemDraft[]>([]);
   const [saving, setSaving] = useState(false);
 
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [editingTemplateName, setEditingTemplateName] = useState('');
+  const [editingTemplateActive, setEditingTemplateActive] = useState(false);
+  const [originalItemIds, setOriginalItemIds] = useState<Set<string>>(new Set());
+  const [prevStoreIds, setPrevStoreIds] = useState<string[]>([]);
+
   const { data } = db.useQuery({ stores: {}, templates: { items: {}, stores: {} } });
   const stores: Store[] = (data?.stores ?? []) as Store[];
   const templates: Template[] = (data?.templates ?? []) as Template[];
 
+  const isEditMode = editingTemplateId !== null;
+
   if (!canEditMaster(profile.role)) {
     return <div className="card">{t.templates.noPermission}</div>;
+  }
+
+  function resetForm() {
+    setName('');
+    setReportType('Daily Hygiene');
+    setStoreIds([]);
+    setItems([]);
+    setEditingTemplateId(null);
+    setEditingTemplateName('');
+    setEditingTemplateActive(false);
+    setOriginalItemIds(new Set());
+    setPrevStoreIds([]);
+  }
+
+  function loadTemplateForEdit(template: Template) {
+    const templateItems = [...((template.items ?? []) as TemplateItem[])].sort(
+      (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0),
+    );
+    const linkedStoreIds = (template.stores ?? []).map((s: Store) => s.id);
+
+    setEditingTemplateId(template.id);
+    setEditingTemplateName(template.name);
+    setEditingTemplateActive(template.active);
+    setOriginalItemIds(new Set(templateItems.map((i) => i.id)));
+    setPrevStoreIds(linkedStoreIds);
+    setName(template.name);
+    setReportType(template.reportType);
+    setStoreIds(linkedStoreIds);
+    setItems(templateItems.map(templateItemToDraft));
+
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function addItem() {
@@ -50,7 +133,7 @@ export default function TemplatesPage({ profile }: Props) {
         proofType: 'photo',
         required: true,
         assignedRole: 'staff',
-        approverRoles: ['leader', 'subleader', 'manager'],
+        approverRoles: [...DEFAULT_APPROVER_ROLES],
         weight: 1,
         failureCategory: 'Hygiene',
       },
@@ -65,50 +148,98 @@ export default function TemplatesPage({ profile }: Props) {
     setItems((prev) => prev.filter((i) => i.id !== itemId));
   }
 
+  function buildEditConfirmMessage(): string {
+    const parts = [t.templates.editWarning];
+    if (editingTemplateActive) parts.push(t.templates.activeEditWarning);
+    const draftIds = new Set(items.map((i) => i.id));
+    const hasRemoved = [...originalItemIds].some((oid) => !draftIds.has(oid));
+    if (hasRemoved) parts.push(t.templates.removeItemWarning);
+    return parts.join('\n\n');
+  }
+
+  async function saveCreate() {
+    const templateId = id();
+
+    const templateTx = db.tx.templates[templateId].update({
+      name: name.trim(),
+      reportType,
+      scheduleJson: JSON.stringify({ enabled: false }),
+      active: true,
+      createdByUserId: profile.userId,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    });
+
+    const storeLinkTxs = storeIds.map((sid) =>
+      db.tx.templates[templateId].link({ stores: sid }),
+    );
+
+    const itemTxs = items.map((item, i) => {
+      const itemId = id();
+      return db.tx.templateItems[itemId]
+        .update(itemPayload(item, i))
+        .link({ template: templateId });
+    });
+
+    await db.transact([templateTx, ...storeLinkTxs, ...itemTxs]);
+    resetForm();
+  }
+
+  async function saveEdit() {
+    if (!editingTemplateId) return;
+    if (!confirm(buildEditConfirmMessage())) return;
+
+    const templateTx = db.tx.templates[editingTemplateId].update({
+      name: name.trim(),
+      reportType,
+      updatedAt: nowIso(),
+    });
+
+    const storeIdSet = new Set(storeIds);
+    const prevSet = new Set(prevStoreIds);
+    const storeLinkTxs = storeIds
+      .filter((sid) => !prevSet.has(sid))
+      .map((sid) => db.tx.templates[editingTemplateId].link({ stores: sid }));
+    const storeUnlinkTxs = prevStoreIds
+      .filter((sid) => !storeIdSet.has(sid))
+      .map((sid) => db.tx.templates[editingTemplateId].unlink({ stores: sid }));
+
+    const draftIds = new Set(items.map((i) => i.id));
+    const removedItemIds = [...originalItemIds].filter((oid) => !draftIds.has(oid));
+
+    const itemUpdateTxs = items.map((item, i) => {
+      if (originalItemIds.has(item.id)) {
+        return db.tx.templateItems[item.id].update(itemPayload(item, i));
+      }
+      const newItemId = id();
+      return db.tx.templateItems[newItemId]
+        .update(itemPayload(item, i))
+        .link({ template: editingTemplateId });
+    });
+
+    const itemDeleteTxs = removedItemIds.map((removedId) =>
+      db.tx.templateItems[removedId].delete(),
+    );
+
+    await db.transact([
+      templateTx,
+      ...storeLinkTxs,
+      ...storeUnlinkTxs,
+      ...itemUpdateTxs,
+      ...itemDeleteTxs,
+    ]);
+    resetForm();
+    alert(t.templates.updateSuccess);
+  }
+
   async function save() {
+    if (saving) return;
     if (!name.trim()) return alert(t.templates.nameRequired);
     if (!items.length) return alert(t.templates.itemRequired);
     setSaving(true);
     try {
-      const templateId = id();
-
-      const templateTx = db.tx.templates[templateId].update({
-        name: name.trim(),
-        reportType,
-        scheduleJson: JSON.stringify({ enabled: false }),
-        active: true,
-        createdByUserId: profile.userId,
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
-      });
-
-      const storeLinkTxs = storeIds.map((sid) =>
-        db.tx.templates[templateId].link({ stores: sid }),
-      );
-
-      const itemTxs = items.map((item, i) => {
-        const itemId = id();
-        return db.tx.templateItems[itemId]
-          .update({
-            section: item.section,
-            title: item.title,
-            requirement: item.requirement,
-            proofType: item.proofType,
-            required: item.required,
-            assignedRole: item.assignedRole,
-            approverRolesJson: JSON.stringify(item.approverRoles),
-            weight: item.weight,
-            failureCategory: item.failureCategory,
-            sortOrder: i,
-          })
-          .link({ template: templateId });
-      });
-
-      await db.transact([templateTx, ...storeLinkTxs, ...itemTxs]);
-      setName('');
-      setReportType('Daily Hygiene');
-      setStoreIds([]);
-      setItems([]);
+      if (isEditMode) await saveEdit();
+      else await saveCreate();
     } catch (e) {
       alert(e instanceof Error ? e.message : t.templates.saveFailed);
     } finally {
@@ -119,6 +250,7 @@ export default function TemplatesPage({ profile }: Props) {
   async function deactivate(template: Template) {
     if (!confirm(`Deactivate "${template.name}"?`)) return;
     await db.transact(db.tx.templates[template.id].update({ active: false, updatedAt: nowIso() }));
+    if (editingTemplateId === template.id) resetForm();
   }
 
   return (
@@ -127,8 +259,14 @@ export default function TemplatesPage({ profile }: Props) {
         <h1>{t.templates.title}</h1>
       </div>
 
-      <div className="card">
-        <h2>{t.templates.create}</h2>
+      <div className="card" ref={formRef}>
+        <h2>{isEditMode ? t.templates.editTemplate : t.templates.createTemplate}</h2>
+        {isEditMode && (
+          <p className="small" style={{ marginTop: 0 }}>
+            {t.templates.editingLabel}: <strong>{editingTemplateName}</strong>
+          </p>
+        )}
+
         <div className="grid two">
           <label>
             {t.common.name}
@@ -235,9 +373,22 @@ export default function TemplatesPage({ profile }: Props) {
           </div>
         ))}
 
-        <button style={{ marginTop: 12 }} onClick={save} disabled={saving}>
-          {saving ? t.templates.creating : t.templates.create}
-        </button>
+        <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+          <button onClick={save} disabled={saving}>
+            {saving
+              ? isEditMode
+                ? t.templates.savingChanges
+                : t.templates.creating
+              : isEditMode
+                ? t.templates.saveChanges
+                : t.templates.createTemplate}
+          </button>
+          {isEditMode && (
+            <button className="secondary" onClick={resetForm} disabled={saving}>
+              {t.templates.cancelEdit}
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="card table-wrap">
@@ -269,15 +420,25 @@ export default function TemplatesPage({ profile }: Props) {
                   </span>
                 </td>
                 <td>
-                  {tmpl.active && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button
-                      className="danger"
+                      className="secondary"
                       style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
-                      onClick={() => deactivate(tmpl)}
+                      onClick={() => loadTemplateForEdit(tmpl)}
+                      disabled={editingTemplateId === tmpl.id}
                     >
-                      {t.templates.deactivate}
+                      {t.templates.edit}
                     </button>
-                  )}
+                    {tmpl.active && (
+                      <button
+                        className="danger"
+                        style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
+                        onClick={() => deactivate(tmpl)}
+                      >
+                        {t.templates.deactivate}
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

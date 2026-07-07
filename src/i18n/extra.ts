@@ -264,6 +264,19 @@ export const sectionsEn = {
     noTemplates: 'No templates yet.',
     deactivate: 'Deactivate',
     creating: 'Creating...',
+    editTemplate: 'Edit template',
+    createTemplate: 'Create template',
+    saveChanges: 'Save changes',
+    cancelEdit: 'Cancel edit',
+    editingLabel: 'Editing',
+    editWarning:
+      'Editing this template will affect future submissions only. Existing submitted reports will not be changed.',
+    activeEditWarning:
+      'You are editing an active template. Staff submitting future reports may see the updated checklist. Existing submitted reports will not change. Continue?',
+    removeItemWarning:
+      'Prefer editing checklist items instead of removing them. Removing an item may affect open correction resubmits that still reference it.',
+    updateSuccess: 'Template updated.',
+    savingChanges: 'Saving changes…',
   },
   stores: {
     title: 'Stores',
@@ -658,6 +671,19 @@ export const sectionsVi = {
     noTemplates: 'Chưa có mẫu nào.',
     deactivate: 'Vô hiệu hóa',
     creating: 'Đang tạo...',
+    editTemplate: 'Sửa mẫu',
+    createTemplate: 'Tạo mẫu',
+    saveChanges: 'Lưu thay đổi',
+    cancelEdit: 'Hủy sửa',
+    editingLabel: 'Đang sửa',
+    editWarning:
+      'Sửa mẫu này chỉ ảnh hưởng các lần nộp báo cáo sau. Các báo cáo đã nộp sẽ không thay đổi.',
+    activeEditWarning:
+      'Bạn đang sửa mẫu đang hoạt động. Nhân viên nộp báo cáo sau có thể thấy checklist đã cập nhật. Các báo cáo đã nộp sẽ không thay đổi. Tiếp tục?',
+    removeItemWarning:
+      'Nên sửa mục checklist thay vì xóa. Xóa mục có thể ảnh hưởng các lần nộp lại chỉnh sửa đang mở vẫn tham chiếu mục đó.',
+    updateSuccess: 'Đã cập nhật mẫu.',
+    savingChanges: 'Đang lưu thay đổi…',
   },
   stores: {
     title: 'Cửa hàng',
