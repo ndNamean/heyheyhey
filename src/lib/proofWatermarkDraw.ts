@@ -1,4 +1,4 @@
-import { GOLD_FILL, MINT_STROKE, PROOF_FONT } from './proofFonts';
+import { CHARCOAL_STROKE, GOLD_FILL, PROOF_FONT } from './proofFonts';
 import { computeStampLayout, createMeasureContext } from './proofStampLayout';
 import type { StampLayoutResult, StampSegmentKind } from './proofStampLayout';
 import type { CameraOptions, ProofWeather } from '../types';
@@ -53,9 +53,9 @@ function drawGoldOutlinedText(
   ctx.font = `${fontSize}px ${fontFamily}`;
   ctx.lineJoin = 'round';
   ctx.lineWidth = Math.max(2, fontSize * 0.12);
-  ctx.strokeStyle = MINT_STROKE;
+  ctx.strokeStyle = CHARCOAL_STROKE;
   ctx.fillStyle = fillColor;
-  ctx.shadowColor = 'rgba(51, 205, 149, 0.75)';
+  ctx.shadowColor = 'rgba(58, 58, 76, 0.75)';
   ctx.shadowBlur = Math.max(4, fontSize * 0.35);
   ctx.shadowOffsetX = 1;
   ctx.shadowOffsetY = 2;

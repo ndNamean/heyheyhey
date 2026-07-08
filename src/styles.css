@@ -821,9 +821,9 @@ body.wizard-active .page {
   font-size: var(--font-detail, 11px);
   line-height: var(--stamp-line-height, 1.45);
   color: #FDC216;
-  -webkit-text-stroke: 1px #33CD95;
+  -webkit-text-stroke: 1px #3A3A4C;
   paint-order: stroke fill;
-  text-shadow: 0 1px 3px rgba(51, 205, 149, 0.75);
+  text-shadow: 0 1px 3px rgba(58, 58, 76, 0.75);
 }
 .proof-ts-ident {
   font-size: 12px;
@@ -880,8 +880,8 @@ body.wizard-active .page {
   font-size: var(--font-ts, 11px);
   font-weight: 600;
   color: #FDC216;
-  -webkit-text-stroke: 1px #33CD95;
-  text-shadow: 0 1px 3px rgba(51, 205, 149, 0.75);
+  -webkit-text-stroke: 1px #3A3A4C;
+  text-shadow: 0 1px 3px rgba(58, 58, 76, 0.75);
   flex-shrink: 0;
   white-space: pre;
 }
@@ -890,8 +890,8 @@ body.wizard-active .page {
   font-size: var(--font-user, 13px);
   font-weight: 400;
   color: #FDC216;
-  -webkit-text-stroke: 1px #33CD95;
-  text-shadow: 0 1px 3px rgba(51, 205, 149, 0.75);
+  -webkit-text-stroke: 1px #3A3A4C;
+  text-shadow: 0 1px 3px rgba(58, 58, 76, 0.75);
   line-height: 1.15;
   flex: 1 1 auto;
   min-width: 0;
@@ -903,8 +903,8 @@ body.wizard-active .page {
   font-family: 'Rubik 80s Fade', cursive;
   font-size: var(--font-store, 12px);
   color: #FDC216;
-  -webkit-text-stroke: 1px #33CD95;
-  text-shadow: 0 1px 3px rgba(51, 205, 149, 0.75);
+  -webkit-text-stroke: 1px #3A3A4C;
+  text-shadow: 0 1px 3px rgba(58, 58, 76, 0.75);
   line-height: 1.15;
   flex-shrink: 0;
   white-space: nowrap;
@@ -914,8 +914,8 @@ body.wizard-active .page {
   font-size: var(--font-task, 11px);
   font-weight: 700;
   color: #FDC216;
-  -webkit-text-stroke: 1px #33CD95;
-  text-shadow: 0 1px 3px rgba(51, 205, 149, 0.75);
+  -webkit-text-stroke: 1px #3A3A4C;
+  text-shadow: 0 1px 3px rgba(58, 58, 76, 0.75);
   line-height: 1.15;
   flex-shrink: 1;
   min-width: 0;
@@ -935,8 +935,8 @@ body.wizard-active .page {
   font-weight: 600;
   color: #FDC216;
   white-space: nowrap;
-  -webkit-text-stroke: 1px #33CD95;
-  text-shadow: 0 1px 3px rgba(51, 205, 149, 0.75);
+  -webkit-text-stroke: 1px #3A3A4C;
+  text-shadow: 0 1px 3px rgba(58, 58, 76, 0.75);
   flex-shrink: 0;
 }
 .proof-ts-location { word-break: break-word; }
