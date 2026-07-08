@@ -1,6 +1,10 @@
 import { useMemo, type CSSProperties } from 'react';
 import type { ProofSnapshot } from '../lib/proofWatermarkDraw';
-import { computeStampLayout, createMeasureContext } from '../lib/proofStampLayout';
+import {
+  computeStampLayout,
+  createMeasureContext,
+  type StampSegment,
+} from '../lib/proofStampLayout';
 
 const FALLBACK_FRAME_WIDTH = 360;
 const FALLBACK_FRAME_HEIGHT = 640;
@@ -10,6 +14,19 @@ interface Props {
   className?: string;
   frameWidth?: number;
   frameHeight?: number;
+}
+
+function segmentClassName(seg: StampSegment): string {
+  switch (seg.kind) {
+    case 'store':
+      return 'proof-font-store';
+    case 'task':
+      return 'proof-font-task';
+    case 'timestamp':
+      return 'proof-ts-time';
+    case 'sep':
+      return 'proof-stamp-sep';
+  }
 }
 
 export default function ProofReviewOverlay({
@@ -36,6 +53,7 @@ export default function ProofReviewOverlay({
     proof.cameraOptionsSnapshot.logoEnabled && proof.proofLogoUrl.trim().length > 0;
 
   const rootStyle = layout.cssVars as CSSProperties;
+  const hasDetailRow = layout.row2.segments.length > 0;
 
   return (
     <div
@@ -52,34 +70,33 @@ export default function ProofReviewOverlay({
         )}
       </div>
       <div className="proof-stamp-box">
-        <div className="proof-stamp-row proof-stamp-row-logo-time">
-          {showLogo && (
-            <img
-              className="proof-ts-logo"
-              src={proof.proofLogoUrl}
-              alt=""
-              aria-hidden="true"
-            />
-          )}
-          <div className="proof-ts-time">{proof.displayTime}</div>
-        </div>
-        {(proof.userName || proof.storeCode) && (
-          <div
-            className={`proof-stamp-row proof-stamp-row-identity${
-              layout.row2.stacked ? ' proof-stamp-row-identity-stacked' : ''
-            }`}
-          >
-            {proof.userName && (
-              <span className="proof-font-user">{proof.userName}</span>
+        {(showLogo || proof.userName) && (
+          <div className="proof-stamp-row proof-stamp-row-logo-user">
+            {showLogo && (
+              <img
+                className="proof-ts-logo"
+                src={proof.proofLogoUrl}
+                alt=""
+                aria-hidden="true"
+              />
             )}
-            {proof.storeCode && (
-              <span className="proof-font-store">{proof.storeCode}</span>
+            {proof.userName && (
+              <span className="proof-font-user">{layout.row1.userLines[0] ?? proof.userName}</span>
             )}
           </div>
         )}
-        {proof.itemTitle && (
-          <div className="proof-stamp-row proof-stamp-row-task proof-font-task">
-            {proof.itemTitle}
+        {hasDetailRow && (
+          <div className="proof-stamp-row proof-stamp-row-detail">
+            {layout.row2.segments.map((seg, i) => (
+              <span key={`${seg.kind}-${i}`} className={segmentClassName(seg)}>
+                {seg.text}
+              </span>
+            ))}
+          </div>
+        )}
+        {layout.timestampOnRow3 && layout.row3.timestampLine && (
+          <div className="proof-stamp-row proof-stamp-row-ts-fallback">
+            <span className="proof-ts-time">{layout.row3.timestampLine}</span>
           </div>
         )}
       </div>

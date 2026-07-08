@@ -821,9 +821,9 @@ body.wizard-active .page {
   font-size: var(--font-detail, 11px);
   line-height: var(--stamp-line-height, 1.45);
   color: #FDC216;
-  -webkit-text-stroke: 1px #1A2B5E;
+  -webkit-text-stroke: 1px #33CD95;
   paint-order: stroke fill;
-  text-shadow: 0 1px 3px rgba(15, 26, 58, 0.85);
+  text-shadow: 0 1px 3px rgba(51, 205, 149, 0.75);
 }
 .proof-ts-ident {
   font-size: 12px;
@@ -854,64 +854,74 @@ body.wizard-active .page {
 .proof-stamp-row {
   width: 100%;
 }
-.proof-stamp-row-logo-time {
+.proof-stamp-row-logo-user {
   display: flex;
   flex-direction: row;
-  justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: var(--stamp-inline-gap, 6px);
   width: 100%;
+  min-width: 0;
 }
-.proof-stamp-row-identity {
+.proof-stamp-row-detail {
   display: flex;
   flex-direction: row;
-  justify-content: space-between;
+  flex-wrap: nowrap;
   align-items: baseline;
-  gap: 8px;
+  gap: 0;
   width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
-.proof-stamp-row-identity-stacked {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-}
-.proof-stamp-row-task {
+.proof-stamp-row-ts-fallback {
   width: 100%;
-  word-break: break-word;
+  min-width: 0;
+}
+.proof-stamp-sep {
+  font-size: var(--font-ts, 11px);
+  font-weight: 600;
+  color: #FDC216;
+  -webkit-text-stroke: 1px #33CD95;
+  text-shadow: 0 1px 3px rgba(51, 205, 149, 0.75);
+  flex-shrink: 0;
+  white-space: pre;
 }
 .proof-font-user {
   font-family: 'Rubik Dirt', cursive;
   font-size: var(--font-user, 13px);
   font-weight: 400;
   color: #FDC216;
-  -webkit-text-stroke: 1px #1A2B5E;
-  text-shadow: 0 1px 3px rgba(15, 26, 58, 0.85);
-  line-height: 1.3;
-  flex: 1 1 58%;
+  -webkit-text-stroke: 1px #33CD95;
+  text-shadow: 0 1px 3px rgba(51, 205, 149, 0.75);
+  line-height: 1.15;
+  flex: 1 1 auto;
   min-width: 0;
-  word-break: break-word;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .proof-font-store {
   font-family: 'Rubik 80s Fade', cursive;
   font-size: var(--font-store, 12px);
   color: #FDC216;
-  -webkit-text-stroke: 1px #1A2B5E;
-  text-shadow: 0 1px 3px rgba(15, 26, 58, 0.85);
-  line-height: 1.35;
-  flex: 0 1 auto;
-  text-align: right;
-  min-width: 0;
-  word-break: break-word;
+  -webkit-text-stroke: 1px #33CD95;
+  text-shadow: 0 1px 3px rgba(51, 205, 149, 0.75);
+  line-height: 1.15;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .proof-font-task {
   font-family: 'Big Shoulders Inline Text', sans-serif;
   font-size: var(--font-task, 11px);
   font-weight: 700;
   color: #FDC216;
-  -webkit-text-stroke: 1px #1A2B5E;
-  text-shadow: 0 1px 3px rgba(15, 26, 58, 0.85);
-  line-height: 1.35;
-  word-break: break-word;
+  -webkit-text-stroke: 1px #33CD95;
+  text-shadow: 0 1px 3px rgba(51, 205, 149, 0.75);
+  line-height: 1.15;
+  flex-shrink: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .proof-ts-logo {
   max-height: var(--logo-max-h, 32px);
@@ -925,9 +935,9 @@ body.wizard-active .page {
   font-weight: 600;
   color: #FDC216;
   white-space: nowrap;
-  -webkit-text-stroke: 1px #1A2B5E;
-  text-shadow: 0 1px 3px rgba(15, 26, 58, 0.85);
-  margin-left: auto;
+  -webkit-text-stroke: 1px #33CD95;
+  text-shadow: 0 1px 3px rgba(51, 205, 149, 0.75);
+  flex-shrink: 0;
 }
 .proof-ts-location { word-break: break-word; }
 .proof-ts-weather { word-break: break-word; }

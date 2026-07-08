@@ -1,6 +1,6 @@
-import { GOLD_FILL, PROOF_FONT } from './proofFonts';
+import { GOLD_FILL, MINT_STROKE, PROOF_FONT } from './proofFonts';
 import { computeStampLayout, createMeasureContext } from './proofStampLayout';
-import type { StampLayoutResult } from './proofStampLayout';
+import type { StampLayoutResult, StampSegmentKind } from './proofStampLayout';
 import type { CameraOptions, ProofWeather } from '../types';
 
 export interface ProofSnapshot {
@@ -17,8 +17,6 @@ export interface ProofSnapshot {
   proofLogoUrl: string;
   cameraOptionsSnapshot: CameraOptions;
 }
-
-const NAVY_STROKE = '#1A2B5E';
 
 function fillRoundedRect(
   ctx: CanvasRenderingContext2D,
@@ -55,9 +53,9 @@ function drawGoldOutlinedText(
   ctx.font = `${fontSize}px ${fontFamily}`;
   ctx.lineJoin = 'round';
   ctx.lineWidth = Math.max(2, fontSize * 0.12);
-  ctx.strokeStyle = NAVY_STROKE;
+  ctx.strokeStyle = MINT_STROKE;
   ctx.fillStyle = fillColor;
-  ctx.shadowColor = 'rgba(15, 26, 58, 0.75)';
+  ctx.shadowColor = 'rgba(51, 205, 149, 0.75)';
   ctx.shadowBlur = Math.max(4, fontSize * 0.35);
   ctx.shadowOffsetX = 1;
   ctx.shadowOffsetY = 2;
@@ -69,6 +67,18 @@ function drawGoldOutlinedText(
   ctx.shadowBlur = 0;
   ctx.shadowOffsetX = 0;
   ctx.shadowOffsetY = 0;
+}
+
+function segmentStyle(kind: StampSegmentKind, fonts: StampLayoutResult['fonts']) {
+  switch (kind) {
+    case 'store':
+      return { size: fonts.store, font: PROOF_FONT.store };
+    case 'task':
+      return { size: fonts.task, font: PROOF_FONT.task };
+    case 'timestamp':
+    case 'sep':
+      return { size: fonts.timestamp, font: PROOF_FONT.timestamp };
+  }
 }
 
 function drawFloatingText(
@@ -86,7 +96,6 @@ function drawFloatingText(
 
 function drawStampBox(
   ctx: CanvasRenderingContext2D,
-  proof: ProofSnapshot,
   logoImg: HTMLImageElement | null,
   layout: StampLayoutResult,
 ) {
@@ -96,10 +105,8 @@ function drawStampBox(
   fillRoundedRect(ctx, box.x, box.y, box.w, box.h, radius);
 
   const contentX = box.x + padding;
-  const innerRight = box.x + box.w - padding;
   let cursorY = box.y + padding;
 
-  const tsBaseline = cursorY + fonts.timestamp * 0.85;
   if (logo.show && logoImg) {
     ctx.shadowColor = 'rgba(58, 58, 76, 0.6)';
     ctx.shadowBlur = 6;
@@ -112,59 +119,44 @@ function drawStampBox(
     ctx.shadowOffsetY = 0;
   }
 
-  ctx.font = `${fonts.timestamp}px ${PROOF_FONT.timestamp}`;
-  const tsW = ctx.measureText(proof.displayTime).width;
-  drawGoldOutlinedText(
-    ctx,
-    proof.displayTime,
-    innerRight - tsW,
-    tsBaseline,
-    fonts.timestamp,
-    PROOF_FONT.timestamp,
-    GOLD_FILL,
-  );
+  const userX = contentX + (logo.show ? logo.w + logo.gap : 0);
+  if (layout.row1.userLines.length) {
+    const userBaseline = cursorY + fonts.user * 0.85;
+    drawGoldOutlinedText(
+      ctx,
+      layout.row1.userLines[0]!,
+      userX,
+      userBaseline,
+      fonts.user,
+      PROOF_FONT.user,
+    );
+  }
 
   cursorY += layout.row1H;
 
-  const { userLines, storeLines, stacked } = layout.row2;
-  if (userLines.length || storeLines.length) {
+  if (layout.row2.segments.length) {
     cursorY += rowGap;
-    if (stacked) {
-      for (const line of userLines) {
-        drawGoldOutlinedText(ctx, line, contentX, cursorY + fonts.user * 0.85, fonts.user, PROOF_FONT.user);
-        cursorY += Math.round(fonts.user * 1.2);
-      }
-      for (const line of storeLines) {
-        drawGoldOutlinedText(ctx, line, contentX, cursorY + fonts.store * 0.85, fonts.store, PROOF_FONT.store);
-        cursorY += Math.round(fonts.store * 1.2);
-      }
-    } else {
-      const rowBaseline = cursorY + Math.max(fonts.user, fonts.store) * 0.85;
-      if (userLines.length) {
-        drawGoldOutlinedText(ctx, userLines[0]!, contentX, rowBaseline, fonts.user, PROOF_FONT.user);
-      }
-      if (storeLines.length) {
-        ctx.font = `${fonts.store}px ${PROOF_FONT.store}`;
-        const storeW = ctx.measureText(storeLines[0]!).width;
-        drawGoldOutlinedText(
-          ctx,
-          storeLines[0]!,
-          innerRight - storeW,
-          rowBaseline,
-          fonts.store,
-          PROOF_FONT.store,
-        );
-      }
-      cursorY += layout.row2H;
+    const rowBaseline = cursorY + Math.max(fonts.store, fonts.task, fonts.timestamp) * 0.85;
+    let segX = contentX;
+    for (const seg of layout.row2.segments) {
+      const { size, font } = segmentStyle(seg.kind, fonts);
+      drawGoldOutlinedText(ctx, seg.text, segX, rowBaseline, size, font);
+      ctx.font = `${size}px ${font}`;
+      segX += ctx.measureText(seg.text).width;
     }
+    cursorY += layout.row2H;
   }
 
-  if (layout.row3.taskLines.length) {
+  if (layout.row3.timestampLine) {
     cursorY += rowGap;
-    for (const line of layout.row3.taskLines) {
-      drawGoldOutlinedText(ctx, line, contentX, cursorY + fonts.task * 0.85, fonts.task, PROOF_FONT.task);
-      cursorY += Math.round(fonts.task * 1.2);
-    }
+    drawGoldOutlinedText(
+      ctx,
+      layout.row3.timestampLine,
+      contentX,
+      cursorY + fonts.timestamp * 0.85,
+      fonts.timestamp,
+      PROOF_FONT.timestamp,
+    );
   }
 }
 
@@ -184,7 +176,7 @@ export function drawProofOverlay(
   });
 
   drawFloatingText(ctx, layout, layout.margin);
-  drawStampBox(ctx, proof, logoImg, layout);
+  drawStampBox(ctx, logoImg, layout);
 }
 
 export function loadImageForCanvas(url: string): Promise<HTMLImageElement | null> {

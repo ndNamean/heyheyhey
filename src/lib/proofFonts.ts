@@ -1,4 +1,5 @@
 const GOLD_FILL = '#FDC216';
+const MINT_STROKE = '#33CD95';
 
 export const PROOF_FONT = {
   user: "'Rubik Dirt', cursive",
@@ -32,4 +33,4 @@ export async function ensureProofFontsLoaded(baseFontSize: number): Promise<void
   }
 }
 
-export { GOLD_FILL };
+export { GOLD_FILL, MINT_STROKE };
