@@ -49,6 +49,7 @@ export default function SubmitReportPage({
   const [correctionReady, setCorrectionReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [cameraReviewPending, setCameraReviewPending] = useState(false);
   const correctionInitRef = useRef(false);
 
   const activeReportId = correctionReportId ?? newReportId;
@@ -166,6 +167,14 @@ export default function SubmitReportPage({
     else document.body.classList.remove('wizard-active');
     return () => document.body.classList.remove('wizard-active');
   }, [inChecklistFlow]);
+
+  function blockIfCameraReviewPending(): boolean {
+    if (cameraReviewPending) {
+      alert(t.submit.confirmCaptureFirst);
+      return true;
+    }
+    return false;
+  }
 
   function setResponse(itemId: string, patch: Partial<LocalResponse>) {
     setResponses((prev) => ({
@@ -609,6 +618,7 @@ export default function SubmitReportPage({
         {needsMedia(currentItem.proofType) && selectedStore && (
           <div style={{ marginTop: 12 }}>
             <TimemarkCamera
+              key={currentItem.id}
               store={selectedStore}
               itemTitle={currentItem.title}
               reportDate={reportDate}
@@ -618,6 +628,7 @@ export default function SubmitReportPage({
               proofType={currentItem.proofType}
               existingMedia={r.mediaItems}
               onCapture={(media) => addMedia(currentItem.id, media)}
+              onReviewPendingChange={setCameraReviewPending}
             />
           </div>
         )}
@@ -637,6 +648,7 @@ export default function SubmitReportPage({
             : t.submit.nextItem
         }
         onBack={() => {
+          if (blockIfCameraReviewPending()) return;
           if (step === 0) {
             if (correctionMode) {
               onCorrectionComplete?.();
@@ -649,6 +661,7 @@ export default function SubmitReportPage({
           }
         }}
         onNext={() => {
+          if (blockIfCameraReviewPending()) return;
           if (currentItem.required && !r.ticked) return alert(t.submit.markDoneFirst);
           if (step + 1 >= visibleItems.length) setStep(visibleItems.length);
           else setStep((s) => s + 1);

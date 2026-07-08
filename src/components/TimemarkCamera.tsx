@@ -24,6 +24,7 @@ interface Props {
   proofType?: string;
   existingMedia: UploadedMedia[];
   onCapture: (media: UploadedMedia) => void;
+  onReviewPendingChange?: (pending: boolean) => void;
 }
 
 type CamState = 'idle' | 'opening' | 'ready' | 'error';
@@ -41,12 +42,21 @@ function pickVideoMimeType(): string | null {
 }
 
 function extensionForMime(mime: string): string {
+  if (mime.includes('jpeg') || mime.includes('jpg')) return 'jpg';
+  if (mime.includes('png')) return 'png';
   if (mime.includes('mp4')) return 'mp4';
-  return 'webm';
+  if (mime.startsWith('video/')) return 'webm';
+  return 'jpg';
 }
 
 function isVideoMime(mime?: string): boolean {
   return !!mime?.startsWith('video/');
+}
+
+function resolveCaptureMime(blob: Blob | null, mimeFallback?: string): string {
+  if (blob?.type) return blob.type;
+  if (mimeFallback?.trim()) return mimeFallback;
+  return 'image/jpeg';
 }
 
 interface ProofSnapshot {
@@ -353,6 +363,7 @@ export default function TimemarkCamera({
   proofType = 'photo',
   existingMedia,
   onCapture,
+  onReviewPendingChange,
 }: Props) {
   const { t } = useLang();
   const videoMode = needsVideoProof(proofType);
@@ -621,6 +632,16 @@ export default function TimemarkCamera({
     return () => clearInterval(id);
   }, [cameraOn, frozenProof]);
 
+  const capturedUrlRef = useRef('');
+  useEffect(() => {
+    capturedUrlRef.current = capturedUrl;
+  }, [capturedUrl]);
+
+  useEffect(() => {
+    onReviewPendingChange?.(!!capturedBlob);
+    return () => onReviewPendingChange?.(false);
+  }, [capturedBlob, onReviewPendingChange]);
+
   useEffect(() => () => {
     clearRecordTimer();
     const recorder = mediaRecorderRef.current;
@@ -628,7 +649,10 @@ export default function TimemarkCamera({
       try { recorder.stop(); } catch { /* ignore */ }
     }
     mediaRecorderRef.current = null;
-  }, []);
+    const url = capturedUrlRef.current;
+    if (url) URL.revokeObjectURL(url);
+    onReviewPendingChange?.(false);
+  }, [onReviewPendingChange]);
 
   // ── Torch capability probe ───────────────────────────────────────────────
   useEffect(() => {
@@ -990,6 +1014,7 @@ export default function TimemarkCamera({
     setCamError('');
     setIsRecording(false);
     setRecordSeconds(0);
+    setCapturedMimeType('image/jpeg');
     setCameraOn(true);
   }
 
@@ -1163,6 +1188,7 @@ export default function TimemarkCamera({
     setOptionsOpen(false);
 
     const url = URL.createObjectURL(watermarked);
+    setCapturedMimeType('image/jpeg');
     setCapturedBlob(watermarked);
     setCapturedUrl(url);
   }
@@ -1171,8 +1197,9 @@ export default function TimemarkCamera({
     if (!capturedBlob || uploading || !frozenProof) return;
     setConfirmError('');
     try {
-      const ext = extensionForMime(capturedMimeType);
-      const isVideo = isVideoMime(capturedMimeType);
+      const mime = resolveCaptureMime(capturedBlob, capturedMimeType);
+      const ext = extensionForMime(mime);
+      const isVideo = isVideoMime(mime);
       const mode: CaptureMode = isVideo ? 'live_video' : 'live_camera';
       const prefix = isVideo ? 'video' : 'photo';
       await uploadBlob(
@@ -1180,7 +1207,7 @@ export default function TimemarkCamera({
         `${store?.code ?? prefix}_${Date.now()}.${ext}`,
         mode,
         frozenProof,
-        capturedMimeType,
+        mime,
       );
       URL.revokeObjectURL(capturedUrl);
       setCapturedBlob(null);
@@ -1211,6 +1238,8 @@ export default function TimemarkCamera({
   const gpsLabel  = gpsError ? 'GPS ✗' : gps ? `±${Math.round(gps.accuracy)}m` : 'GPS…';
 
   const showLiveOverlay = camState === 'ready' && !frozenProof;
+  const reviewMime = resolveCaptureMime(capturedBlob, capturedMimeType);
+  const reviewIsVideo = isVideoMime(reviewMime);
 
   return (
     <div>
@@ -1440,7 +1469,7 @@ export default function TimemarkCamera({
       {capturedBlob && frozenProof && createPortal(
         <div className="postcapture-sheet">
           <div style={{ color: '#fff', fontWeight: 700, fontSize: 17 }}>
-            {isVideoMime(capturedMimeType) ? t.camera.reviewVideo : t.camera.reviewPhoto}
+            {reviewIsVideo ? t.camera.reviewVideo : t.camera.reviewPhoto}
           </div>
 
           <div
@@ -1451,7 +1480,7 @@ export default function TimemarkCamera({
                 : undefined
             }
           >
-            {isVideoMime(capturedMimeType) ? (
+            {reviewIsVideo ? (
               <video src={capturedUrl} controls playsInline />
             ) : (
               <img src={capturedUrl} alt={t.camera.capturedPhoto} />
@@ -1492,7 +1521,7 @@ export default function TimemarkCamera({
             >
               {uploading
                 ? t.camera.saving
-                : isVideoMime(capturedMimeType)
+                : reviewIsVideo
                   ? `✓ ${t.camera.useVideo}`
                   : `✓ ${t.camera.usePhoto}`}
             </button>
