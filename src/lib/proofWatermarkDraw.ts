@@ -15,6 +15,15 @@ export interface ProofSnapshot {
   cameraOptionsSnapshot: CameraOptions;
 }
 
+type FloatTier = 'ident' | 'user' | 'detail';
+
+interface FloatingLine {
+  text: string;
+  tier: FloatTier;
+}
+
+const NAVY_STROKE = '#1A2B5E';
+
 function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
   const trimmed = text.trim();
   if (!trimmed || maxWidth <= 0) return trimmed ? [trimmed] : [];
@@ -58,20 +67,55 @@ function capWrappedLines(lines: string[], maxLines: number): string[] {
   return capped;
 }
 
+function tierFontSize(base: number, tier: FloatTier): number {
+  if (tier === 'user') return Math.round(base * 1.22);
+  if (tier === 'ident') return Math.round(base * 1.08);
+  return base;
+}
+
+function tierLineHeight(baseLineHeight: number, tier: FloatTier): number {
+  if (tier === 'user') return Math.round(baseLineHeight * 1.15);
+  if (tier === 'ident') return Math.round(baseLineHeight * 1.05);
+  return baseLineHeight;
+}
+
 function buildFloatingProofLines(
   ctx: CanvasRenderingContext2D,
   proof: ProofSnapshot,
   maxWidth: number,
-): string[] {
-  const result: string[] = [];
-  for (const field of [proof.storeCode, proof.itemTitle, proof.userName]) {
-    result.push(...wrapText(ctx, field, maxWidth));
+  baseFontSize: number,
+): FloatingLine[] {
+  const result: FloatingLine[] = [];
+
+  const addField = (text: string, tier: FloatTier) => {
+    const size = tierFontSize(baseFontSize, tier);
+    ctx.font = `${size}px Arial`;
+    for (const line of wrapText(ctx, text, maxWidth)) {
+      result.push({ text: line, tier });
+    }
+  };
+
+  if (proof.storeCode.trim()) addField(proof.storeCode, 'ident');
+  if (proof.itemTitle.trim()) addField(proof.itemTitle, 'ident');
+  if (proof.userName.trim()) addField(proof.userName, 'user');
+
+  ctx.font = `${baseFontSize}px Arial`;
+  for (const line of capWrappedLines(wrapText(ctx, proof.locationLine, maxWidth), 4)) {
+    result.push({ text: line, tier: 'detail' });
   }
-  result.push(...capWrappedLines(wrapText(ctx, proof.locationLine, maxWidth), 4));
+
   if (proof.cameraOptionsSnapshot.weatherEnabled && proof.weatherLine.trim()) {
-    result.push(...wrapText(ctx, proof.weatherLine, maxWidth));
+    ctx.font = `${baseFontSize}px Arial`;
+    for (const line of wrapText(ctx, proof.weatherLine, maxWidth)) {
+      result.push({ text: line, tier: 'detail' });
+    }
   }
+
   return result;
+}
+
+function floatingBlockHeight(lines: FloatingLine[], baseLineHeight: number): number {
+  return lines.reduce((sum, line) => sum + tierLineHeight(baseLineHeight, line.tier), 0);
 }
 
 interface StampMetrics {
@@ -142,34 +186,49 @@ function computeStampMetrics(
   return { boxX, boxY, boxW, boxH, logoDrawW, logoDrawH };
 }
 
-function drawFloatingText(
+function drawOutlinedText(
   ctx: CanvasRenderingContext2D,
-  lines: string[],
+  text: string,
   x: number,
   y: number,
   fontSize: number,
-  lineHeight: number,
 ) {
   ctx.font = `${fontSize}px Arial`;
-  ctx.fillStyle = '#FDC216';
-  ctx.strokeStyle = 'rgba(255,245,180,0.7)';
-  ctx.lineWidth = Math.max(1, fontSize * 0.08);
-  ctx.shadowColor = 'rgba(0,0,0,0.92)';
-  ctx.shadowBlur = 10;
-  ctx.shadowOffsetX = 3;
-  ctx.shadowOffsetY = 5;
   ctx.lineJoin = 'round';
+  ctx.lineWidth = Math.max(2, fontSize * 0.12);
+  ctx.strokeStyle = NAVY_STROKE;
+  ctx.fillStyle = '#FFFFFF';
+  ctx.shadowColor = 'rgba(15, 26, 58, 0.75)';
+  ctx.shadowBlur = Math.max(4, fontSize * 0.35);
+  ctx.shadowOffsetX = 1;
+  ctx.shadowOffsetY = 2;
 
-  lines.forEach((line, i) => {
-    const ly = y + lineHeight * (i + 0.75);
-    ctx.strokeText(line, x, ly);
-    ctx.fillText(line, x, ly);
-  });
+  ctx.strokeText(text, x, y);
+  ctx.fillText(text, x, y);
 
   ctx.shadowColor = 'transparent';
   ctx.shadowBlur = 0;
   ctx.shadowOffsetX = 0;
   ctx.shadowOffsetY = 0;
+}
+
+function drawFloatingText(
+  ctx: CanvasRenderingContext2D,
+  lines: FloatingLine[],
+  x: number,
+  y: number,
+  baseFontSize: number,
+  baseLineHeight: number,
+) {
+  let cursorY = y;
+
+  for (const line of lines) {
+    const size = tierFontSize(baseFontSize, line.tier);
+    const lh = tierLineHeight(baseLineHeight, line.tier);
+    const baseline = cursorY + lh * 0.75;
+    drawOutlinedText(ctx, line.text, x, baseline, size);
+    cursorY += lh;
+  }
 }
 
 function drawStampBox(
@@ -191,7 +250,15 @@ function drawStampBox(
 
   if (logoImg && metrics.logoDrawW > 0) {
     const logoY = midY - metrics.logoDrawH / 2;
+    ctx.shadowColor = 'rgba(58, 58, 76, 0.6)';
+    ctx.shadowBlur = 6;
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 3;
     ctx.drawImage(logoImg, contentX, logoY, metrics.logoDrawW, metrics.logoDrawH);
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
     contentX += metrics.logoDrawW + logoGap;
   }
 
@@ -229,8 +296,8 @@ export function drawProofOverlay(
   );
 
   const floatMaxWidth = canvas.width - padding * 2;
-  const floatLines = buildFloatingProofLines(ctx, proof, floatMaxWidth);
-  const floatBlockH = floatLines.length * lineHeight;
+  const floatLines = buildFloatingProofLines(ctx, proof, floatMaxWidth, fontSize);
+  const floatBlockH = floatingBlockHeight(floatLines, lineHeight);
   let floatTop = stampMetrics.boxY - zoneGap - floatBlockH;
   if (floatTop < padding) floatTop = padding;
 

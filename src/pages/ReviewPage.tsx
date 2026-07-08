@@ -214,7 +214,14 @@ export default function ReviewPage({ profile }: Props) {
                     <div className="proof-photo-grid">
                       {media.map((m) => (
                         <div className="proof-photo-card" key={m.id}>
-                          <ProofPhoto media={m} />
+                          <ProofPhoto
+                            media={m}
+                            reviewContext={{
+                              storeCode: report.storeCode,
+                              itemTitle: resp.title,
+                              watermarked: m.watermarked,
+                            }}
+                          />
                           {isVideoMedia(m.mimeType, m.fileName) && (
                             <ProofMediaDetails media={m} />
                           )}

@@ -18,6 +18,7 @@ import {
   type ProofSnapshot,
 } from '../lib/proofWatermarkDraw';
 import { needsVideoProof } from '../lib/roles';
+import ProofReviewOverlay from './ProofReviewOverlay';
 import type { CameraOptions, Profile, ProofWeather, Store, UploadedMedia } from '../types';
 
 interface Props {
@@ -101,36 +102,6 @@ function getWeatherCoords(
     return null;
   }
   return { lat, lon };
-}
-
-function ProofTimestampOverlay({ proof }: { proof: ProofSnapshot }) {
-  const showLogo =
-    proof.cameraOptionsSnapshot.logoEnabled && proof.proofLogoUrl.trim().length > 0;
-
-  return (
-    <div className="proof-overlay-root" aria-hidden="true">
-      <div className="proof-floating-lines">
-        <div className="proof-ts-store">{proof.storeCode}</div>
-        <div>{proof.itemTitle}</div>
-        <div>{proof.userName}</div>
-        <div className="proof-ts-location">{proof.locationLine}</div>
-        {proof.cameraOptionsSnapshot.weatherEnabled && proof.weatherLine && (
-          <div className="proof-ts-weather">{proof.weatherLine}</div>
-        )}
-      </div>
-      <div className="proof-stamp-box">
-        {showLogo && (
-          <img
-            className="proof-ts-logo"
-            src={proof.proofLogoUrl}
-            alt=""
-            aria-hidden="true"
-          />
-        )}
-        <div className="proof-ts-time">{proof.displayTime}</div>
-      </div>
-    </div>
-  );
 }
 
 export default function TimemarkCamera({
@@ -1061,7 +1032,7 @@ export default function TimemarkCamera({
   const gpsStatus = gpsError ? 'error' : !gps ? 'warn' : gps.accuracy > 50 ? 'warn' : 'ok';
   const gpsLabel  = gpsError ? 'GPS ✗' : gps ? `±${Math.round(gps.accuracy)}m` : 'GPS…';
 
-  const showLiveOverlay = camState === 'ready' && !frozenProof;
+  const showLiveOverlay = camState === 'ready' && !frozenProof && !(videoMode && isRecording);
   const reviewMime = resolveCaptureMime(capturedBlob, capturedMimeType);
   const reviewIsVideo = isVideoMime(reviewMime);
 
@@ -1214,7 +1185,7 @@ export default function TimemarkCamera({
             <video ref={videoRef} playsInline muted autoPlay />
 
             {showLiveOverlay && (
-              <ProofTimestampOverlay proof={liveProof} />
+              <ProofReviewOverlay proof={liveProof} />
             )}
 
             {isRecording && (

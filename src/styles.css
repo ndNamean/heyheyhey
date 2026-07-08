@@ -799,14 +799,37 @@ body.wizard-active .page {
   gap: 8px;
   align-items: flex-start;
 }
+.proof-media-frame {
+  position: relative;
+  display: block;
+}
+.proof-media-frame .proof-overlay-root {
+  bottom: 8px;
+  left: 8px;
+  max-width: 72%;
+}
 .proof-floating-lines {
   font-size: 11px;
   line-height: 1.45;
-  color: #FDC216;
-  -webkit-text-stroke: 0.4px rgba(255, 245, 180, 0.7);
-  text-shadow:
-    3px 5px 10px rgba(0, 0, 0, 0.92),
-    -1px -1px 0 rgba(0, 0, 0, 0.5);
+  color: #fff;
+  -webkit-text-stroke: 1px #1A2B5E;
+  paint-order: stroke fill;
+  text-shadow: 0 1px 3px rgba(15, 26, 58, 0.85);
+}
+.proof-ts-user {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.proof-ts-ident {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+.proof-ts-detail {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
 }
 .proof-stamp-box {
   display: flex;
@@ -827,11 +850,12 @@ body.wizard-active .page {
   max-width: 52px;
   object-fit: contain;
   flex-shrink: 0;
+  filter: drop-shadow(2px 3px 4px rgba(58, 58, 76, 0.6));
 }
 .proof-ts-store { font-weight: 700; }
 .proof-ts-time { font-weight: 600; color: #fff; white-space: nowrap; }
 .proof-ts-location { word-break: break-word; }
-.proof-ts-weather { font-size: 10px; word-break: break-word; }
+.proof-ts-weather { word-break: break-word; }
 .camera-topbar-actions {
   display: flex;
   align-items: center;

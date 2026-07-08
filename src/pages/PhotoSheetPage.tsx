@@ -90,6 +90,10 @@ export default function PhotoSheetPage({ profile }: Props) {
                     <ProofPhoto
                       media={p}
                       className="proof-photo-sheet-thumb"
+                      reviewContext={{
+                        storeCode: store?.code,
+                        watermarked: p.watermarked,
+                      }}
                     />
                   </td>
                 </tr>

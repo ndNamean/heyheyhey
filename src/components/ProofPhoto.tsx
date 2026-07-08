@@ -1,14 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLang } from '../i18n';
 import { isVideoMedia, videoProxyUrl } from '../lib/mediaMime';
+import {
+  buildReviewProofSnapshot,
+  shouldRenderReviewOverlay,
+  type ReviewContext,
+} from '../lib/proofReviewOverlay';
+import ProofReviewOverlay from './ProofReviewOverlay';
 import type { MediaRecord } from '../types';
 
 interface Props {
   media: MediaRecord;
   className?: string;
+  reviewContext?: ReviewContext;
 }
 
-export default function ProofPhoto({ media, className = '' }: Props) {
+export default function ProofPhoto({ media, className = '', reviewContext }: Props) {
   const { t } = useLang();
   const directUrl = media.fileUrl || media.file?.url || '';
   const [url, setUrl] = useState(directUrl);
@@ -18,6 +25,16 @@ export default function ProofPhoto({ media, className = '' }: Props) {
   const [videoError, setVideoError] = useState(false);
   const [useDirectVideo, setUseDirectVideo] = useState(false);
   const isVideo = isVideoMedia(media.mimeType, media.fileName);
+
+  const showReviewOverlay = useMemo(
+    () => shouldRenderReviewOverlay(media, reviewContext),
+    [media, reviewContext],
+  );
+
+  const legacyProof = useMemo(
+    () => (showReviewOverlay ? buildReviewProofSnapshot(media, reviewContext) : null),
+    [showReviewOverlay, media, reviewContext],
+  );
 
   useEffect(() => {
     setVideoError(false);
@@ -67,6 +84,11 @@ export default function ProofPhoto({ media, className = '' }: Props) {
     return videoProxyUrl(media.id);
   }, [isVideo, url, useDirectVideo, media.id]);
 
+  function renderLegacyOverlay() {
+    if (!showReviewOverlay || !legacyProof) return null;
+    return <ProofReviewOverlay proof={legacyProof} />;
+  }
+
   if (media.storageDeleted) {
     return (
       <div className={`proof-photo-removed${className ? ` ${className}` : ''}`}>
@@ -99,26 +121,29 @@ export default function ProofPhoto({ media, className = '' }: Props) {
   if (isVideo) {
     return (
       <div className={`proof-photo-link proof-photo-video${className ? ` ${className}` : ''}`}>
-        {!videoError ? (
-          <video
-            key={videoSrc}
-            src={videoSrc}
-            controls
-            playsInline
-            preload="metadata"
-            onError={() => {
-              if (!useDirectVideo) {
-                setUseDirectVideo(true);
-                return;
-              }
-              setVideoError(true);
-            }}
-          />
-        ) : (
-          <div className="proof-video-fallback">
-            <p>{t.photoSheet.videoPlaybackFailed}</p>
-          </div>
-        )}
+        <div className="proof-media-frame">
+          {!videoError ? (
+            <video
+              key={videoSrc}
+              src={videoSrc}
+              controls
+              playsInline
+              preload="metadata"
+              onError={() => {
+                if (!useDirectVideo) {
+                  setUseDirectVideo(true);
+                  return;
+                }
+                setVideoError(true);
+              }}
+            />
+          ) : (
+            <div className="proof-video-fallback">
+              <p>{t.photoSheet.videoPlaybackFailed}</p>
+            </div>
+          )}
+          {renderLegacyOverlay()}
+        </div>
         <a
           href={url}
           target="_blank"
@@ -138,7 +163,10 @@ export default function ProofPhoto({ media, className = '' }: Props) {
       rel="noreferrer"
       className={`proof-photo-link${className ? ` ${className}` : ''}`}
     >
-      <img src={url} alt={media.fileName || media.photoCode || t.photoSheet.title} />
+      <div className="proof-media-frame">
+        <img src={url} alt={media.fileName || media.photoCode || t.photoSheet.title} />
+        {renderLegacyOverlay()}
+      </div>
     </a>
   );
 }
