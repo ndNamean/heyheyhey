@@ -12,9 +12,6 @@ export default function ProofReviewOverlay({ proof, className = '' }: Props) {
   return (
     <div className={`proof-overlay-root${className ? ` ${className}` : ''}`} aria-hidden="true">
       <div className="proof-floating-lines">
-        {proof.storeCode && <div className="proof-ts-store proof-ts-ident">{proof.storeCode}</div>}
-        {proof.itemTitle && <div className="proof-ts-item proof-ts-ident">{proof.itemTitle}</div>}
-        {proof.userName && <div className="proof-ts-user">{proof.userName}</div>}
         {proof.locationLine && (
           <div className="proof-ts-location proof-ts-detail">{proof.locationLine}</div>
         )}
@@ -23,15 +20,26 @@ export default function ProofReviewOverlay({ proof, className = '' }: Props) {
         )}
       </div>
       <div className="proof-stamp-box">
-        {showLogo && (
-          <img
-            className="proof-ts-logo"
-            src={proof.proofLogoUrl}
-            alt=""
-            aria-hidden="true"
-          />
+        <div className="proof-stamp-row-logo-time">
+          {showLogo && (
+            <img
+              className="proof-ts-logo"
+              src={proof.proofLogoUrl}
+              alt=""
+              aria-hidden="true"
+            />
+          )}
+          <div className="proof-ts-time">{proof.displayTime}</div>
+        </div>
+        {proof.userName && (
+          <div className="proof-ts-user proof-font-user">{proof.userName}</div>
         )}
-        <div className="proof-ts-time">{proof.displayTime}</div>
+        {proof.storeCode && (
+          <div className="proof-ts-store proof-font-store">{proof.storeCode}</div>
+        )}
+        {proof.itemTitle && (
+          <div className="proof-ts-item proof-font-task">{proof.itemTitle}</div>
+        )}
       </div>
     </div>
   );

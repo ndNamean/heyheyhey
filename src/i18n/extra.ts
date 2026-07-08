@@ -354,6 +354,8 @@ export const sectionsEn = {
     gpsAccuracy: 'GPS accuracy',
     captureMode: 'Capture mode',
     watermarkedYes: 'Watermarked',
+    viewProofDetails: 'View proof details',
+    hideProofDetails: 'Hide proof details',
   },
   photoSheet: {
     title: 'Photo Sheet',
@@ -484,6 +486,7 @@ export const sectionsEn = {
     stopRecording: 'Stop recording',
     recording: 'Recording…',
     videoNotSupported: 'Video recording is not supported on this device or browser.',
+    micUnavailable: 'Microphone unavailable. Video will be recorded without sound.',
     capturedVideo: 'Captured video',
     logoPreview: 'Logo preview',
     capturedPhoto: 'Captured photo',
@@ -785,6 +788,8 @@ export const sectionsVi = {
     gpsAccuracy: 'Độ chính xác GPS',
     captureMode: 'Chế độ quay',
     watermarkedYes: 'Có watermark',
+    viewProofDetails: 'Xem chi tiết minh chứng',
+    hideProofDetails: 'Ẩn chi tiết minh chứng',
   },
   photoSheet: {
     title: 'Bảng ảnh',
@@ -915,6 +920,7 @@ export const sectionsVi = {
     stopRecording: 'Dừng quay',
     recording: 'Đang quay…',
     videoNotSupported: 'Thiết bị hoặc trình duyệt không hỗ trợ quay video.',
+    micUnavailable: 'Micro không khả dụng. Video sẽ được ghi không có âm thanh.',
     capturedVideo: 'Video đã quay',
     logoPreview: 'Xem trước logo',
     capturedPhoto: 'Ảnh đã chụp',

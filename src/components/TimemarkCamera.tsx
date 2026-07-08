@@ -12,6 +12,7 @@ import {
 } from '../lib/cameraSettings';
 import { generatePhotoCode, nowIso } from '../lib/utils';
 import { isVideoMedia, normalizeStoredMime, videoProxyUrl } from '../lib/mediaMime';
+import { ensureProofFontsLoaded } from '../lib/proofFonts';
 import {
   drawProofOverlay,
   loadImageForCanvas,
@@ -42,7 +43,14 @@ const MAX_VIDEO_SECONDS = 60;
 
 function pickVideoMimeType(): string | null {
   if (typeof MediaRecorder === 'undefined') return null;
-  for (const type of ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4']) {
+  for (const type of [
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm',
+    'video/mp4',
+  ]) {
     if (MediaRecorder.isTypeSupported(type)) return type;
   }
   return null;
@@ -153,6 +161,7 @@ export default function TimemarkCamera({
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoMsg, setLogoMsg] = useState('');
+  const [micUnavailableMsg, setMicUnavailableMsg] = useState('');
 
   const [cameraOn,  setCameraOn]  = useState(false);
   const [camState,  setCamState]  = useState<CamState>('idle');
@@ -464,24 +473,56 @@ export default function TimemarkCamera({
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: { ideal: facingMode } },
-          audio: false,
+          audio: videoMode,
         });
+        if (videoMode) setMicUnavailableMsg('');
       } catch (e) {
         if (cancelled) return;
         const err = e as DOMException;
-        let msg = '';
-        if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-          msg = t.camera.permissionDenied;
-        } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-          msg = t.camera.cameraInUse;
-        } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-          msg = t.camera.cameraNotFound;
+        if (
+          videoMode &&
+          (err.name === 'NotAllowedError' ||
+            err.name === 'PermissionDeniedError' ||
+            err.name === 'NotFoundError' ||
+            err.name === 'NotReadableError')
+        ) {
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: { ideal: facingMode } },
+              audio: false,
+            });
+            setMicUnavailableMsg(t.camera.micUnavailable);
+          } catch (retryErr) {
+            const retry = retryErr as DOMException;
+            let msg = '';
+            if (retry.name === 'NotAllowedError' || retry.name === 'PermissionDeniedError') {
+              msg = t.camera.permissionDenied;
+            } else if (retry.name === 'NotReadableError' || retry.name === 'TrackStartError') {
+              msg = t.camera.cameraInUse;
+            } else if (retry.name === 'NotFoundError' || retry.name === 'DevicesNotFoundError') {
+              msg = t.camera.cameraNotFound;
+            } else {
+              msg = retry.message || t.camera.cameraError;
+            }
+            setCamState('error');
+            setCamError(msg);
+            return;
+          }
         } else {
-          msg = err.message || t.camera.cameraError;
+          let msg = '';
+          if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+            msg = t.camera.permissionDenied;
+          } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+            msg = t.camera.cameraInUse;
+          } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+            msg = t.camera.cameraNotFound;
+          } else {
+            msg = err.message || t.camera.cameraError;
+          }
+          setCamState('error');
+          setCamError(msg);
+          return;
         }
-        setCamState('error');
-        setCamError(msg);
-        return;
       }
 
       if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
@@ -554,7 +595,7 @@ export default function TimemarkCamera({
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     };
-  }, [cameraOn, facingMode, retryTick, t]);
+  }, [cameraOn, facingMode, retryTick, t, videoMode]);
 
   useEffect(() => () => { streamRef.current?.getTracks().forEach((t) => t.stop()); }, []);
 
@@ -573,6 +614,8 @@ export default function TimemarkCamera({
       logoImg = await loadImageForCanvas(proof.proofLogoUrl);
     }
 
+    const fontSize = Math.max(14, Math.round(bitmap.width * 0.035));
+    await ensureProofFontsLoaded(fontSize);
     drawProofOverlay(ctx, canvas, proof, logoImg);
 
     return new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), 'image/jpeg', 0.85));
@@ -745,6 +788,7 @@ export default function TimemarkCamera({
     setIsRecording(false);
     setRecordSeconds(0);
     setCapturedMimeType('image/jpeg');
+    setMicUnavailableMsg('');
     setCameraOn(true);
   }
 
@@ -787,15 +831,16 @@ export default function TimemarkCamera({
   }
 
   function stopMediaRecorder() {
-    stopCompositor();
-    const recorder = mediaRecorderRef.current;
-    if (recorder && recorder.state !== 'inactive') {
-      recorder.stop();
-    }
-    mediaRecorderRef.current = null;
     clearRecordTimer();
     setIsRecording(false);
     setRecordSeconds(0);
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+    } else {
+      stopCompositor();
+    }
+    mediaRecorderRef.current = null;
   }
 
   async function finalizeVideoRecording(chunks: Blob[], mimeType: string) {
@@ -867,6 +912,9 @@ export default function TimemarkCamera({
     }
     recordingLogoRef.current = logoImg;
 
+    const fontSize = Math.max(14, Math.round(video.videoWidth * 0.035));
+    await ensureProofFontsLoaded(fontSize);
+
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -892,6 +940,10 @@ export default function TimemarkCamera({
     drawFrame();
 
     const compositeStream = canvas.captureStream(30);
+    const audioTrack = streamRef.current?.getAudioTracks()[0];
+    if (audioTrack) {
+      compositeStream.addTrack(audioTrack);
+    }
     compositeStreamRef.current = compositeStream;
 
     recordChunksRef.current = [];
@@ -909,11 +961,9 @@ export default function TimemarkCamera({
       setCamError(t.camera.cameraError);
     };
     recorder.onstop = () => {
+      stopCompositor();
       const chunks = recordChunksRef.current;
       recordChunksRef.current = [];
-      clearRecordTimer();
-      setIsRecording(false);
-      setRecordSeconds(0);
       void finalizeVideoRecording(chunks, mimeType);
     };
 
@@ -1184,6 +1234,10 @@ export default function TimemarkCamera({
           <div className="camera-viewfinder">
             <video ref={videoRef} playsInline muted autoPlay />
 
+            {micUnavailableMsg && (
+              <div className="cam-mic-banner">{micUnavailableMsg}</div>
+            )}
+
             {showLiveOverlay && (
               <ProofReviewOverlay proof={liveProof} />
             )}
@@ -1276,7 +1330,7 @@ export default function TimemarkCamera({
             }
           >
             {reviewIsVideo ? (
-              <video src={capturedUrl} controls playsInline />
+              <video src={capturedUrl} controls playsInline preload="metadata" />
             ) : (
               <img src={capturedUrl} alt={t.camera.capturedPhoto} />
             )}

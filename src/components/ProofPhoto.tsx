@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLang } from '../i18n';
 import { isVideoMedia, videoProxyUrl } from '../lib/mediaMime';
 import {
@@ -15,6 +15,12 @@ interface Props {
   reviewContext?: ReviewContext;
 }
 
+function logVideoDebug(tag: string, payload: unknown) {
+  if (import.meta.env.DEV) {
+    console.debug(`[ProofPhoto] ${tag}`, payload);
+  }
+}
+
 export default function ProofPhoto({ media, className = '', reviewContext }: Props) {
   const { t } = useLang();
   const directUrl = media.fileUrl || media.file?.url || '';
@@ -23,7 +29,8 @@ export default function ProofPhoto({ media, className = '', reviewContext }: Pro
     directUrl ? 'ready' : 'idle',
   );
   const [videoError, setVideoError] = useState(false);
-  const [useDirectVideo, setUseDirectVideo] = useState(false);
+  const [useProxyFallback, setUseProxyFallback] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const isVideo = isVideoMedia(media.mimeType, media.fileName);
 
   const showReviewOverlay = useMemo(
@@ -38,7 +45,7 @@ export default function ProofPhoto({ media, className = '', reviewContext }: Pro
 
   useEffect(() => {
     setVideoError(false);
-    setUseDirectVideo(false);
+    setUseProxyFallback(false);
   }, [media.id, directUrl]);
 
   useEffect(() => {
@@ -80,9 +87,29 @@ export default function ProofPhoto({ media, className = '', reviewContext }: Pro
 
   const videoSrc = useMemo(() => {
     if (!isVideo || !url) return '';
-    if (useDirectVideo) return url;
-    return videoProxyUrl(media.id);
-  }, [isVideo, url, useDirectVideo, media.id]);
+    if (useProxyFallback) return videoProxyUrl(media.id);
+    return url;
+  }, [isVideo, url, useProxyFallback, media.id]);
+
+  useEffect(() => {
+    if (isVideo && videoSrc) {
+      logVideoDebug('VIDEO_INLINE_SRC', { mediaId: media.id, src: videoSrc, useProxyFallback });
+    }
+  }, [isVideo, videoSrc, useProxyFallback, media.id]);
+
+  function handleVideoError() {
+    const el = videoRef.current;
+    logVideoDebug('VIDEO_ERROR', {
+      code: el?.error?.code,
+      message: el?.error?.message,
+      src: videoSrc,
+    });
+    if (!useProxyFallback) {
+      setUseProxyFallback(true);
+      return;
+    }
+    setVideoError(true);
+  }
 
   function renderLegacyOverlay() {
     if (!showReviewOverlay || !legacyProof) return null;
@@ -122,26 +149,26 @@ export default function ProofPhoto({ media, className = '', reviewContext }: Pro
     return (
       <div className={`proof-photo-link proof-photo-video${className ? ` ${className}` : ''}`}>
         <div className="proof-media-frame">
-          {!videoError ? (
-            <video
-              key={videoSrc}
-              src={videoSrc}
-              controls
-              playsInline
-              preload="metadata"
-              onError={() => {
-                if (!useDirectVideo) {
-                  setUseDirectVideo(true);
-                  return;
-                }
-                setVideoError(true);
-              }}
-            />
-          ) : (
-            <div className="proof-video-fallback">
-              <p>{t.photoSheet.videoPlaybackFailed}</p>
-            </div>
-          )}
+          <div className="proof-video-player">
+            {!videoError ? (
+              <video
+                ref={videoRef}
+                key={videoSrc}
+                src={videoSrc}
+                controls
+                playsInline
+                preload="metadata"
+                onLoadedMetadata={() => logVideoDebug('VIDEO_LOADED_METADATA', { src: videoSrc })}
+                onCanPlay={() => logVideoDebug('VIDEO_CAN_PLAY', { src: videoSrc })}
+                onPlay={() => logVideoDebug('VIDEO_PLAY_ATTEMPT', { src: videoSrc })}
+                onError={handleVideoError}
+              />
+            ) : (
+              <div className="proof-video-fallback">
+                <p>{t.photoSheet.videoPlaybackFailed}</p>
+              </div>
+            )}
+          </div>
           {renderLegacyOverlay()}
         </div>
         <a

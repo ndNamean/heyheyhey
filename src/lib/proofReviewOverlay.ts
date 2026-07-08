@@ -43,20 +43,26 @@ function hasLegacyOverlayData(media: MediaRecord, meta: ParsedProofMeta): boolea
   return hasTimestamp || hasLocation || hasWeather;
 }
 
-export function shouldRenderReviewOverlay(
+export function isWatermarkedMedia(
   media: MediaRecord,
-  report?: { watermarked?: boolean },
+  context?: ReviewContext,
 ): boolean {
   const meta = parseProofMetadata(media.proofMetadataJson);
-  const isAlreadyWatermarked =
+  return (
     media.watermarked === true ||
-    report?.watermarked === true ||
+    context?.watermarked === true ||
     (meta.cameraOptionsSnapshot as CameraOptions & { watermarkEmbedded?: boolean })
       ?.watermarkEmbedded === true ||
-    meta.proofWatermarkEmbedded === true;
+    meta.proofWatermarkEmbedded === true
+  );
+}
 
-  if (isAlreadyWatermarked) return false;
-
+export function shouldRenderReviewOverlay(
+  media: MediaRecord,
+  report?: ReviewContext,
+): boolean {
+  if (isWatermarkedMedia(media, report)) return false;
+  const meta = parseProofMetadata(media.proofMetadataJson);
   return hasLegacyOverlayData(media, meta);
 }
 

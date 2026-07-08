@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useLang } from '../i18n';
 import { formatWeatherLine } from '../lib/cameraSettings';
+import { isWatermarkedMedia } from '../lib/proofReviewOverlay';
 import { isVideoMedia } from '../lib/mediaMime';
 import type { MediaRecord, ProofWeather } from '../types';
 
@@ -33,6 +34,8 @@ function formatGpsLine(media: MediaRecord): string {
 
 export default function ProofMediaDetails({ media }: Props) {
   const { t } = useLang();
+  const watermarked = isWatermarkedMedia(media);
+  const [expanded, setExpanded] = useState(!watermarked);
 
   const details = useMemo(() => {
     const meta = parseProofMetadata(media.proofMetadataJson);
@@ -58,6 +61,14 @@ export default function ProofMediaDetails({ media }: Props) {
 
   if (!isVideoMedia(media.mimeType, media.fileName)) return null;
 
+  const hasExpandableDetails =
+    details.timestamp ||
+    details.location ||
+    details.weather ||
+    details.gpsOnly ||
+    details.accuracy ||
+    media.captureMode;
+
   return (
     <div className="proof-media-details">
       {media.photoCode && (
@@ -66,45 +77,59 @@ export default function ProofMediaDetails({ media }: Props) {
           <span className="proof-photo-code">{media.photoCode}</span>
         </div>
       )}
-      {details.timestamp && (
-        <div className="proof-media-details-row">
-          <span className="proof-media-details-label">{t.proofDetails.timestamp}</span>
-          <span>{details.timestamp}</span>
-        </div>
-      )}
-      {details.location && (
-        <div className="proof-media-details-row">
-          <span className="proof-media-details-label">{t.proofDetails.proofLocation}</span>
-          <span>{details.location}</span>
-        </div>
-      )}
-      {details.gpsOnly && details.location !== details.gpsOnly && (
-        <div className="proof-media-details-row">
-          <span className="proof-media-details-label">{t.proofDetails.gpsCoords}</span>
-          <span>{details.gpsOnly}</span>
-        </div>
-      )}
-      {details.accuracy && details.location && !details.location.includes('±') && (
-        <div className="proof-media-details-row">
-          <span className="proof-media-details-label">{t.proofDetails.gpsAccuracy}</span>
-          <span>{details.accuracy}</span>
-        </div>
-      )}
-      {details.weather && (
-        <div className="proof-media-details-row">
-          <span className="proof-media-details-label">{t.proofDetails.proofWeather}</span>
-          <span>{details.weather}</span>
-        </div>
-      )}
-      {media.captureMode && (
-        <div className="proof-media-details-row">
-          <span className="proof-media-details-label">{t.proofDetails.captureMode}</span>
-          <span>{media.captureMode}</span>
-        </div>
-      )}
       {media.watermarked && (
         <div className="proof-media-details-row">
           <span className="badge good">{t.proofDetails.watermarkedYes}</span>
+        </div>
+      )}
+      {watermarked && hasExpandableDetails && (
+        <button
+          type="button"
+          className="proof-details-toggle"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+        >
+          {expanded ? t.proofDetails.hideProofDetails : t.proofDetails.viewProofDetails}
+        </button>
+      )}
+      {(!watermarked || expanded) && (
+        <div className="proof-media-details-collapsible">
+          {details.timestamp && (
+            <div className="proof-media-details-row">
+              <span className="proof-media-details-label">{t.proofDetails.timestamp}</span>
+              <span>{details.timestamp}</span>
+            </div>
+          )}
+          {details.location && (
+            <div className="proof-media-details-row">
+              <span className="proof-media-details-label">{t.proofDetails.proofLocation}</span>
+              <span>{details.location}</span>
+            </div>
+          )}
+          {details.gpsOnly && details.location !== details.gpsOnly && (
+            <div className="proof-media-details-row">
+              <span className="proof-media-details-label">{t.proofDetails.gpsCoords}</span>
+              <span>{details.gpsOnly}</span>
+            </div>
+          )}
+          {details.accuracy && details.location && !details.location.includes('±') && (
+            <div className="proof-media-details-row">
+              <span className="proof-media-details-label">{t.proofDetails.gpsAccuracy}</span>
+              <span>{details.accuracy}</span>
+            </div>
+          )}
+          {details.weather && (
+            <div className="proof-media-details-row">
+              <span className="proof-media-details-label">{t.proofDetails.proofWeather}</span>
+              <span>{details.weather}</span>
+            </div>
+          )}
+          {media.captureMode && (
+            <div className="proof-media-details-row">
+              <span className="proof-media-details-label">{t.proofDetails.captureMode}</span>
+              <span>{media.captureMode}</span>
+            </div>
+          )}
         </div>
       )}
     </div>
