@@ -2,6 +2,7 @@ import { db } from '../db';
 import { useLang } from '../i18n';
 import { statusLabel } from '../lib/i18nUtils';
 import { badgeClass, nowIso } from '../lib/utils';
+import { formatIsoToLocalTime } from '../lib/proofTime';
 import type { Notification } from '../types';
 
 interface Props {
@@ -54,7 +55,7 @@ export default function FeedbackInbox({ userId, title, limit = 15 }: Props) {
           >
             <div className="feedback-item-top">
               <span className={badgeClass(n.actionStatus)}>{statusLabel(t, n.actionStatus)}</span>
-              <span className="feedback-item-time">{n.createdAt?.slice(0, 16)}</span>
+              <span className="feedback-item-time">{formatIsoToLocalTime(n.createdAt)}</span>
             </div>
             <div className="feedback-item-title">{n.title}</div>
             <div className="feedback-item-stats">

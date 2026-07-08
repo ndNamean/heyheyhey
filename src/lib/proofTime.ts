@@ -42,6 +42,28 @@ export function formatProofTime(at: Date, timeZone: string): string {
   });
 }
 
+export function formatIsoToLocalTime(
+  iso?: string,
+  timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+): string {
+  if (!iso?.trim()) return '';
+
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) {
+    return iso.slice(0, 16).replace('T', ' ');
+  }
+
+  return at.toLocaleString(PROOF_TIME_LOCALE, {
+    timeZone,
+    hour12: false,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 export function buildProofTimeFields(
   at: Date,
   gps: { lat: number; lng: number } | null,
