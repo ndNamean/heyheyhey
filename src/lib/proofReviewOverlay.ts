@@ -1,30 +1,16 @@
 import { DEFAULT_CAMERA_OPTIONS, formatWeatherLine } from './cameraSettings';
+import {
+  formatMediaCaptureTime,
+  parseProofMetadata,
+} from './proofTime';
 import type { ProofSnapshot } from './proofWatermarkDraw';
-import type { CameraOptions, MediaRecord, ProofWeather } from '../types';
+import type { CameraOptions, MediaRecord } from '../types';
 
 export interface ReviewContext {
   storeCode?: string;
   itemTitle?: string;
   userName?: string;
   watermarked?: boolean;
-}
-
-interface ParsedProofMeta {
-  proofTimestamp?: string;
-  proofLocation?: string;
-  proofWeather?: ProofWeather | null;
-  proofLogoUrl?: string;
-  cameraOptionsSnapshot?: CameraOptions;
-  proofWatermarkEmbedded?: boolean;
-}
-
-function parseProofMetadata(raw?: string): ParsedProofMeta {
-  if (!raw?.trim()) return {};
-  try {
-    return JSON.parse(raw) as ParsedProofMeta;
-  } catch {
-    return {};
-  }
 }
 
 function formatGpsLine(media: MediaRecord): string {
@@ -35,7 +21,7 @@ function formatGpsLine(media: MediaRecord): string {
   return '';
 }
 
-function hasLegacyOverlayData(media: MediaRecord, meta: ParsedProofMeta): boolean {
+function hasLegacyOverlayData(media: MediaRecord, meta: ReturnType<typeof parseProofMetadata>): boolean {
   const hasTimestamp = !!(meta.proofTimestamp || media.capturedAt);
   const hasLocation =
     !!(meta.proofLocation?.trim() || media.address?.trim() || formatGpsLine(media));
@@ -73,9 +59,7 @@ export function buildReviewProofSnapshot(
   const meta = parseProofMetadata(media.proofMetadataJson);
   const cameraOptionsSnapshot = meta.cameraOptionsSnapshot ?? { ...DEFAULT_CAMERA_OPTIONS };
 
-  const displayTime =
-    meta.proofTimestamp?.trim() ||
-    (media.capturedAt ? media.capturedAt.slice(0, 19).replace('T', ' ') : '');
+  const displayTime = formatMediaCaptureTime(media);
 
   const locationLine =
     meta.proofLocation?.trim() ||
@@ -96,6 +80,7 @@ export function buildReviewProofSnapshot(
   return {
     capturedAt: media.capturedAt ?? '',
     displayTime,
+    proofTimezone: meta.proofTimezone?.trim() ?? '',
     storeCode: context?.storeCode?.trim() ?? '',
     itemTitle: context?.itemTitle?.trim() ?? '',
     userName: context?.userName?.trim() ?? '',

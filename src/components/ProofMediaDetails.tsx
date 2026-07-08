@@ -2,31 +2,17 @@ import { useMemo, useState } from 'react';
 import { useLang } from '../i18n';
 import { formatWeatherLine } from '../lib/cameraSettings';
 import { isWatermarkedMedia } from '../lib/proofReviewOverlay';
+import { formatMediaCaptureTime, parseProofMetadata } from '../lib/proofTime';
 import { isVideoMedia } from '../lib/mediaMime';
-import type { MediaRecord, ProofWeather } from '../types';
+import type { MediaRecord } from '../types';
 
 interface Props {
   media: MediaRecord;
 }
 
-interface ParsedProofMeta {
-  proofTimestamp?: string;
-  proofLocation?: string;
-  proofWeather?: ProofWeather | null;
-}
-
-function parseProofMetadata(raw?: string): ParsedProofMeta {
-  if (!raw?.trim()) return {};
-  try {
-    return JSON.parse(raw) as ParsedProofMeta;
-  } catch {
-    return {};
-  }
-}
-
 function formatGpsLine(media: MediaRecord): string {
   if (media.lat || media.lng) {
-    const acc = media.accuracy ? ` (±${Math.round(media.accuracy)}m)` : '';
+    const acc = media.accuracy > 0 ? ` (±${Math.round(media.accuracy)}m)` : '';
     return `${media.lat.toFixed(5)}, ${media.lng.toFixed(5)}${acc}`;
   }
   return '';
@@ -39,7 +25,7 @@ export default function ProofMediaDetails({ media }: Props) {
 
   const details = useMemo(() => {
     const meta = parseProofMetadata(media.proofMetadataJson);
-    const timestamp = meta.proofTimestamp || media.capturedAt?.slice(0, 19) || '';
+    const timestamp = formatMediaCaptureTime(media);
     const location =
       meta.proofLocation?.trim() ||
       media.address?.trim() ||

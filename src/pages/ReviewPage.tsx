@@ -12,6 +12,7 @@ import ProofPhoto from '../components/ProofPhoto';
 import ProofMediaDetails from '../components/ProofMediaDetails';
 import ReviewFeedbackModal, { type FeedbackResult } from '../components/ReviewFeedbackModal';
 import { isVideoMedia } from '../lib/mediaMime';
+import { formatMediaCaptureTime } from '../lib/proofTime';
 import type { MediaRecord, Profile, Report, ReportResponse } from '../types';
 
 interface Props {
@@ -229,7 +230,7 @@ export default function ReviewPage({ profile }: Props) {
                             <div className="proof-photo-meta">
                               <span className="proof-photo-code">{m.photoCode}</span>
                               {m.capturedAt && (
-                                <span className="proof-photo-time">{m.capturedAt.slice(0, 16)}</span>
+                                <span className="proof-photo-time">{formatMediaCaptureTime(m)}</span>
                               )}
                             </div>
                           )}

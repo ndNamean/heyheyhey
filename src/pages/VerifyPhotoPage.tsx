@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
+import { formatMediaCaptureTime } from '../lib/proofTime';
 import type { MediaRecord, Profile } from '../types';
 
 interface Props {
@@ -49,7 +50,7 @@ export default function VerifyPhotoPage(_props: Props) {
         valid: true,
         reason: t.verifyPhoto.authenticReason,
         photoCode: match.photoCode,
-        capturedAt: match.capturedAt,
+        capturedAt: formatMediaCaptureTime(match),
         lat: match.lat,
         lng: match.lng,
         captureMode: match.captureMode,
@@ -92,7 +93,7 @@ export default function VerifyPhotoPage(_props: Props) {
               {[
                 [t.common.photoCode, result.photoCode],
                 [t.common.store, result.storeCode],
-                [t.verifyPhoto.capturedAt, result.capturedAt?.slice(0, 16)],
+                [t.verifyPhoto.capturedAt, result.capturedAt],
                 [t.verifyPhoto.coordinates, result.lat ? `${result.lat?.toFixed(5)}, ${result.lng?.toFixed(5)}` : t.photoSheet.noGps],
                 [t.photoSheet.captureMode, result.captureMode],
               ].map(([label, value]) => (

@@ -3,6 +3,7 @@ import { db } from '../db';
 import { useLang } from '../i18n';
 import { canReview } from '../lib/roles';
 import ProofPhoto from '../components/ProofPhoto';
+import { formatMediaCaptureTime } from '../lib/proofTime';
 import type { MediaRecord, Profile } from '../types';
 
 interface Props {
@@ -85,7 +86,7 @@ export default function PhotoSheetPage({ profile }: Props) {
                     </span>
                   </td>
                   <td className="small">{p.captureMode ?? '—'}</td>
-                  <td className="small">{p.capturedAt?.slice(0, 16) ?? '—'}</td>
+                  <td className="small">{p.capturedAt ? formatMediaCaptureTime(p) : '—'}</td>
                   <td>
                     <ProofPhoto
                       media={p}

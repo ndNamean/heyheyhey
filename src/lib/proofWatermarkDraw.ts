@@ -6,6 +6,7 @@ import type { CameraOptions, ProofWeather } from '../types';
 export interface ProofSnapshot {
   capturedAt: string;
   displayTime: string;
+  proofTimezone: string;
   storeCode: string;
   itemTitle: string;
   userName: string;

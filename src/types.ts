@@ -65,6 +65,7 @@ export interface ProofWeather {
 
 export interface ProofMetadata {
   proofTimestamp: string;
+  proofTimezone?: string;
   proofLocation: string;
   proofWeather: ProofWeather | null;
   proofLogoUrl: string;
@@ -102,6 +103,8 @@ export interface Store {
   updatedAt: string;
   proofLogoUrl?: string;
 }
+
+export interface Template {
   id: string;
   name: string;
   reportType: string;

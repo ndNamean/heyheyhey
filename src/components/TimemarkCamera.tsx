@@ -74,17 +74,7 @@ function resolveCaptureMime(blob: Blob | null, mimeFallback?: string): string {
   return 'image/jpeg';
 }
 
-function formatProofTime(d: Date): string {
-  return d.toLocaleString('en-GB', {
-    hour12: false,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-}
+import { buildProofTimeFields } from '../lib/proofTime';
 
 function buildLocationLine(
   gps: { lat: number; lng: number; accuracy: number } | null,
@@ -240,10 +230,12 @@ export default function TimemarkCamera({
         weather,
         weatherStatusMessages,
       );
+      const { capturedAt, displayTime, proofTimezone } = buildProofTimeFields(at, gpsSnap);
 
       return {
-        capturedAt: at.toISOString(),
-        displayTime: formatProofTime(at),
+        capturedAt,
+        displayTime,
+        proofTimezone,
         storeCode,
         itemTitle: title,
         userName,
@@ -676,6 +668,7 @@ export default function TimemarkCamera({
 
       const proofMetadataJson = JSON.stringify({
         proofTimestamp: proof.displayTime,
+        proofTimezone: proof.proofTimezone,
         proofLocation: proof.locationLine,
         proofWeather: proof.proofWeather,
         proofLogoUrl: proof.proofLogoUrl,

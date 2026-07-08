@@ -135,7 +135,7 @@ const _schema = i.schema({
       deletedAt: i.string(),               // '' while active; ISO date when storage file deleted
       storageDeleted: i.boolean(),         // true after cleanup job removes the file
       storageDeletedReason: i.string(),    // e.g. 'auto_cleanup_after_7_days_reviewed'
-      proofMetadataJson: i.string(),       // JSON: proofTimestamp, proofLocation, proofWeather, proofLogoUrl, cameraOptionsSnapshot
+      proofMetadataJson: i.string(),       // JSON: proofTimestamp, proofTimezone, proofLocation, proofWeather, proofLogoUrl, cameraOptionsSnapshot
     }),
 
     // ─── Watermark templates ─────────────────────────────────────────────────

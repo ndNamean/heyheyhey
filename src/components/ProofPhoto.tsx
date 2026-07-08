@@ -6,6 +6,7 @@ import {
   shouldRenderReviewOverlay,
   type ReviewContext,
 } from '../lib/proofReviewOverlay';
+import { formatMediaCaptureTime } from '../lib/proofTime';
 import ProofReviewOverlay from './ProofReviewOverlay';
 import type { MediaRecord } from '../types';
 
@@ -122,7 +123,7 @@ export default function ProofPhoto({ media, className = '', reviewContext }: Pro
         <div className="proof-photo-removed-title">{t.photoSheet.photoRemoved}</div>
         <div className="proof-photo-removed-meta">
           {media.photoCode && <span>{media.photoCode}</span>}
-          {media.capturedAt && <span>{media.capturedAt.slice(0, 16)}</span>}
+          {media.capturedAt && <span>{formatMediaCaptureTime(media)}</span>}
         </div>
       </div>
     );
