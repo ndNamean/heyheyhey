@@ -9,7 +9,7 @@ export interface StampLayoutInput {
   measureCtx: CanvasRenderingContext2D;
 }
 
-export type StampSegmentKind = 'store' | 'task' | 'timestamp' | 'sep';
+export type StampSegmentKind = 'user' | 'store' | 'task' | 'timestamp' | 'sep';
 
 export interface StampSegment {
   kind: StampSegmentKind;
@@ -19,24 +19,19 @@ export interface StampSegment {
 export interface StampLayoutResult {
   margin: number;
   padding: number;
-  rowGap: number;
   zoneGap: number;
   lineHeight: number;
   box: { x: number; y: number; w: number; h: number };
   fonts: { user: number; store: number; task: number; timestamp: number; detail: number };
   logo: { w: number; h: number; show: boolean; gap: number };
-  row1H: number;
-  row2H: number;
-  row3H: number;
-  row1: { userLines: string[] };
-  row2: { segments: StampSegment[]; height: number };
-  row3: { timestampLine: string | null; height: number };
-  timestampOnRow3: boolean;
+  rowH: number;
+  inlineRow: { segments: StampSegment[]; height: number; fontScale: number };
   floating: { maxWidth: number; lines: string[]; top: number };
   cssVars: Record<string, string>;
 }
 
 const SEPARATOR = ' · ';
+const FONT_SCALES = [1.0, 0.92, 0.85, 0.78] as const;
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
@@ -111,8 +106,22 @@ function truncateText(
   return lo > 0 ? text.slice(0, lo) + ellipsis : ellipsis;
 }
 
-function segmentFontSize(kind: StampSegmentKind, fonts: StampLayoutResult['fonts']): number {
+type StampFonts = StampLayoutResult['fonts'];
+
+function scaleFonts(base: StampFonts, scale: number): StampFonts {
+  return {
+    user: Math.round(base.user * scale),
+    store: Math.round(base.store * scale),
+    task: Math.round(base.task * scale),
+    timestamp: Math.round(base.timestamp * scale),
+    detail: base.detail,
+  };
+}
+
+function segmentFontSize(kind: StampSegmentKind, fonts: StampFonts): number {
   switch (kind) {
+    case 'user':
+      return fonts.user;
     case 'store':
       return fonts.store;
     case 'task':
@@ -126,6 +135,8 @@ function segmentFontSize(kind: StampSegmentKind, fonts: StampLayoutResult['fonts
 
 function segmentFontFamily(kind: StampSegmentKind): string {
   switch (kind) {
+    case 'user':
+      return PROOF_FONT.user;
     case 'store':
       return PROOF_FONT.store;
     case 'task':
@@ -136,25 +147,17 @@ function segmentFontFamily(kind: StampSegmentKind): string {
   }
 }
 
-function measureSegmentWidth(
-  ctx: CanvasRenderingContext2D,
-  seg: StampSegment,
-  fonts: StampLayoutResult['fonts'],
-): number {
+function measureSegmentWidth(ctx: CanvasRenderingContext2D, seg: StampSegment, fonts: StampFonts): number {
   const size = segmentFontSize(seg.kind, fonts);
   const font = segmentFontFamily(seg.kind);
   return measureTextW(ctx, seg.text, size, font);
 }
 
-function measureSegmentsWidth(
-  ctx: CanvasRenderingContext2D,
-  segments: StampSegment[],
-  fonts: StampLayoutResult['fonts'],
-): number {
+function measureSegmentsWidth(ctx: CanvasRenderingContext2D, segments: StampSegment[], fonts: StampFonts): number {
   return segments.reduce((sum, seg) => sum + measureSegmentWidth(ctx, seg, fonts), 0);
 }
 
-function buildSegments(parts: Array<{ kind: 'store' | 'task' | 'timestamp'; text: string }>): StampSegment[] {
+function buildSegments(parts: Array<{ kind: 'user' | 'store' | 'task' | 'timestamp'; text: string }>): StampSegment[] {
   const segments: StampSegment[] = [];
   for (let i = 0; i < parts.length; i++) {
     if (i > 0) segments.push({ kind: 'sep', text: SEPARATOR });
@@ -163,121 +166,96 @@ function buildSegments(parts: Array<{ kind: 'store' | 'task' | 'timestamp'; text
   return segments;
 }
 
-function detailRowHeight(fonts: StampLayoutResult['fonts']): number {
-  return Math.round(Math.max(fonts.store, fonts.task, fonts.timestamp) * 1.15);
+function inlineRowHeight(fonts: StampFonts): number {
+  return Math.round(Math.max(fonts.user, fonts.store, fonts.task, fonts.timestamp) * 1.1);
 }
 
-function layoutRow1User(
-  ctx: CanvasRenderingContext2D,
-  userText: string,
-  innerW: number,
-  logoW: number,
-  logoGap: number,
-  userSize: number,
-): { userLines: string[]; height: number; width: number } {
-  const trimmed = userText.trim();
-  if (!trimmed) return { userLines: [], height: 0, width: 0 };
-
-  const userMaxW = innerW - (logoW > 0 ? logoW + logoGap : 0);
-  const truncated = truncateText(ctx, trimmed, Math.max(userMaxW, 0), userSize, PROOF_FONT.user);
-  const width = measureTextW(ctx, truncated, userSize, PROOF_FONT.user);
-  return {
-    userLines: [truncated],
-    height: Math.round(userSize * 1.15),
-    width: (logoW > 0 ? logoW + logoGap : 0) + width,
-  };
-}
-
-function layoutDetailRow(
-  ctx: CanvasRenderingContext2D,
-  proof: ProofSnapshot,
-  innerW: number,
-  fonts: StampLayoutResult['fonts'],
-): {
-  segments: StampSegment[];
-  height: number;
-  timestampOnRow3: boolean;
-  row3Timestamp: string | null;
-  width: number;
-} {
+function buildPartsFromProof(proof: ProofSnapshot): Array<{ kind: 'user' | 'store' | 'task' | 'timestamp'; text: string }> {
+  const parts: Array<{ kind: 'user' | 'store' | 'task' | 'timestamp'; text: string }> = [];
+  const user = proof.userName.trim();
   const store = proof.storeCode.trim();
   const task = proof.itemTitle.trim();
   const timestamp = proof.displayTime.trim();
+  if (user) parts.push({ kind: 'user', text: user });
+  if (store) parts.push({ kind: 'store', text: store });
+  if (task) parts.push({ kind: 'task', text: task });
+  if (timestamp) parts.push({ kind: 'timestamp', text: timestamp });
+  return parts;
+}
 
-  const allParts: Array<{ kind: 'store' | 'task' | 'timestamp'; text: string }> = [];
-  if (store) allParts.push({ kind: 'store', text: store });
-  if (task) allParts.push({ kind: 'task', text: task });
-  if (timestamp) allParts.push({ kind: 'timestamp', text: timestamp });
+function fitPartsToWidth(
+  ctx: CanvasRenderingContext2D,
+  parts: Array<{ kind: 'user' | 'store' | 'task' | 'timestamp'; text: string }>,
+  fonts: StampFonts,
+  maxWidth: number,
+): StampSegment[] {
+  let segments = buildSegments(parts);
+  if (measureSegmentsWidth(ctx, segments, fonts) <= maxWidth) return segments;
 
-  if (allParts.length === 0) {
-    return { segments: [], height: 0, timestampOnRow3: false, row3Timestamp: null, width: 0 };
-  }
-
-  let segments = buildSegments(allParts);
-  let width = measureSegmentsWidth(ctx, segments, fonts);
-
-  if (width <= innerW) {
-    return {
-      segments,
-      height: detailRowHeight(fonts),
-      timestampOnRow3: false,
-      row3Timestamp: null,
-      width,
-    };
-  }
-
-  const partsNoTs = allParts.filter((p) => p.kind !== 'timestamp');
-  const row3Timestamp = timestamp || null;
-  const timestampOnRow3 = !!timestamp;
-
-  if (partsNoTs.length === 0) {
-    segments = [{ kind: 'timestamp', text: timestamp }];
-    width = measureSegmentsWidth(ctx, segments, fonts);
-    return {
-      segments,
-      height: detailRowHeight(fonts),
-      timestampOnRow3: false,
-      row3Timestamp: null,
-      width,
-    };
-  }
-
-  segments = buildSegments(partsNoTs);
-  width = measureSegmentsWidth(ctx, segments, fonts);
-
-  if (width <= innerW) {
-    return {
-      segments,
-      height: detailRowHeight(fonts),
-      timestampOnRow3,
-      row3Timestamp,
-      width,
-    };
-  }
-
-  const taskIdx = partsNoTs.findIndex((p) => p.kind === 'task');
+  const taskIdx = parts.findIndex((p) => p.kind === 'task');
   if (taskIdx >= 0) {
-    const storePart = partsNoTs.find((p) => p.kind === 'store');
-    let reserved = 0;
-    if (storePart) {
-      reserved += measureTextW(ctx, storePart.text, fonts.store, PROOF_FONT.store);
-      reserved += measureTextW(ctx, SEPARATOR, fonts.timestamp, PROOF_FONT.timestamp);
-    }
-    const maxTaskW = Math.max(innerW - reserved, 0);
-    partsNoTs[taskIdx] = {
+    const withoutTask = parts.filter((p) => p.kind !== 'task');
+    const reserved = measureSegmentsWidth(ctx, buildSegments(withoutTask), fonts);
+    const maxTaskW = Math.max(maxWidth - reserved, 0);
+    parts[taskIdx] = {
       kind: 'task',
-      text: truncateText(ctx, partsNoTs[taskIdx]!.text, maxTaskW, fonts.task, PROOF_FONT.task),
+      text: truncateText(ctx, parts[taskIdx]!.text, maxTaskW, fonts.task, PROOF_FONT.task),
     };
-    segments = buildSegments(partsNoTs);
-    width = measureSegmentsWidth(ctx, segments, fonts);
+    segments = buildSegments(parts);
+    if (measureSegmentsWidth(ctx, segments, fonts) <= maxWidth) return segments;
   }
 
+  const userIdx = parts.findIndex((p) => p.kind === 'user');
+  if (userIdx >= 0) {
+    const withoutUser = parts.filter((p) => p.kind !== 'user');
+    const reserved = measureSegmentsWidth(ctx, buildSegments(withoutUser), fonts);
+    const maxUserW = Math.max(maxWidth - reserved, 0);
+    parts[userIdx] = {
+      kind: 'user',
+      text: truncateText(ctx, parts[userIdx]!.text, maxUserW, fonts.user, PROOF_FONT.user),
+    };
+    segments = buildSegments(parts);
+  }
+
+  return segments;
+}
+
+function layoutInlineRow(
+  ctx: CanvasRenderingContext2D,
+  proof: ProofSnapshot,
+  textAreaW: number,
+  baseFonts: StampFonts,
+): { segments: StampSegment[]; height: number; fontScale: number; fonts: StampFonts; width: number } {
+  const rawParts = buildPartsFromProof(proof);
+  if (rawParts.length === 0) {
+    return { segments: [], height: 0, fontScale: 1, fonts: baseFonts, width: 0 };
+  }
+
+  for (const scale of FONT_SCALES) {
+    const fonts = scale === 1 ? baseFonts : scaleFonts(baseFonts, scale);
+    const parts = rawParts.map((p) => ({ ...p }));
+    const segments = fitPartsToWidth(ctx, parts, fonts, textAreaW);
+    const width = measureSegmentsWidth(ctx, segments, fonts);
+    if (width <= textAreaW) {
+      return {
+        segments,
+        height: inlineRowHeight(fonts),
+        fontScale: scale,
+        fonts,
+        width,
+      };
+    }
+  }
+
+  const fonts = scaleFonts(baseFonts, FONT_SCALES[FONT_SCALES.length - 1]!);
+  const parts = rawParts.map((p) => ({ ...p }));
+  const segments = fitPartsToWidth(ctx, parts, fonts, textAreaW);
   return {
     segments,
-    height: detailRowHeight(fonts),
-    timestampOnRow3,
-    row3Timestamp,
-    width,
+    height: inlineRowHeight(fonts),
+    fontScale: FONT_SCALES[FONT_SCALES.length - 1]!,
+    fonts,
+    width: measureSegmentsWidth(ctx, segments, fonts),
   };
 }
 
@@ -287,16 +265,15 @@ export function computeStampLayout(input: StampLayoutInput): StampLayoutResult {
   const fh = Math.max(frameHeight, 240);
 
   const margin = Math.round(fw * 0.035);
-  const padding = Math.round(fw * 0.022);
+  const padding = Math.round(fw * 0.018);
   const baseFontSize = Math.max(14, Math.round(fw * 0.035));
   const lineHeight = Math.round(baseFontSize * 1.3);
-  const logoGap = Math.max(8, Math.round(padding * 0.5));
-  const logoMaxW = Math.min(Math.round(fw * 0.14), 70);
-  const rowGap = Math.max(2, Math.round(padding * 0.25));
+  const logoGap = Math.max(6, Math.round(padding * 0.5));
+  const logoMaxW = Math.min(Math.round(fw * 0.1), 56);
   const zoneGap = Math.max(8, Math.round(padding * 0.6));
   const inlineGap = Math.max(4, Math.round(padding * 0.35));
 
-  const fonts = {
+  const baseFonts: StampFonts = {
     user: Math.round(baseFontSize * 1.22),
     store: Math.round(baseFontSize * 1.08),
     task: baseFontSize,
@@ -321,42 +298,30 @@ export function computeStampLayout(input: StampLayoutInput): StampLayoutResult {
     }
   }
 
-  const targetW = Math.round(fw * 0.72);
-  const minW = Math.round(fw * 0.58);
-  const maxW = Math.round(fw * 0.86);
+  const minW = Math.round(fw * 0.78);
+  const maxW = fw - margin * 2;
+  const targetW = maxW;
 
   let boxW = clamp(targetW, minW, maxW);
-  let innerW = boxW - padding * 2;
+  let textAreaW = boxW - padding * 2 - (logoW > 0 ? logoW + logoGap : 0);
 
-  let row1 = layoutRow1User(ctx, proof.userName, innerW, logoW, logoGap, fonts.user);
-  let detail = layoutDetailRow(ctx, proof, innerW, fonts);
+  let inline = layoutInlineRow(ctx, proof, Math.max(textAreaW, 0), baseFonts);
 
-  const row3TsW = detail.row3Timestamp
-    ? measureTextW(ctx, detail.row3Timestamp, fonts.timestamp, PROOF_FONT.timestamp)
-    : 0;
+  const contentNeedW =
+    (logoW > 0 ? logoW + logoGap : 0) + inline.width + padding * 2;
+  boxW = clamp(Math.max(contentNeedW, minW), minW, maxW);
+  textAreaW = boxW - padding * 2 - (logoW > 0 ? logoW + logoGap : 0);
 
-  const contentNeedW = Math.max(row1.width, detail.width, row3TsW, targetW - padding * 2);
-  boxW = clamp(Math.max(contentNeedW + padding * 2, minW), minW, maxW);
-  innerW = boxW - padding * 2;
+  inline = layoutInlineRow(ctx, proof, Math.max(textAreaW, 0), baseFonts);
 
-  row1 = layoutRow1User(ctx, proof.userName, innerW, logoW, logoGap, fonts.user);
-  detail = layoutDetailRow(ctx, proof, innerW, fonts);
-
-  const row1H = Math.max(logoH, row1.height);
-  const row2H = detail.height;
-  const row3H = detail.timestampOnRow3 && detail.row3Timestamp
-    ? Math.round(fonts.timestamp * 1.15)
-    : 0;
-
-  let boxH = padding * 2;
-  if (row1H > 0 || row1.userLines.length > 0 || logoW > 0) boxH += row1H;
-  if (row2H > 0) boxH += rowGap + row2H;
-  if (row3H > 0) boxH += rowGap + row3H;
+  const fonts = inline.fonts;
+  const rowH = Math.max(logoH, inline.height);
+  const boxH = padding * 2 + rowH;
 
   const boxX = margin;
   const boxY = fh - margin - boxH;
 
-  ctx.font = `${fonts.detail}px ${PROOF_FONT.detail}`;
+  ctx.font = `${baseFonts.detail}px ${PROOF_FONT.detail}`;
   const floatMaxWidth = fw - margin * 2;
   const floatingLines: string[] = [];
   if (proof.locationLine.trim()) {
@@ -374,7 +339,6 @@ export function computeStampLayout(input: StampLayoutInput): StampLayoutResult {
     '--stamp-box-min-w': `${minW}px`,
     '--stamp-pad-v': `${padding}px`,
     '--stamp-pad-h': `${padding}px`,
-    '--stamp-row-gap': `${rowGap}px`,
     '--stamp-inline-gap': `${inlineGap}px`,
     '--font-user': `${fonts.user}px`,
     '--font-store': `${fonts.store}px`,
@@ -389,22 +353,17 @@ export function computeStampLayout(input: StampLayoutInput): StampLayoutResult {
   return {
     margin,
     padding,
-    rowGap,
     zoneGap,
     lineHeight,
     box: { x: boxX, y: boxY, w: boxW, h: boxH },
     fonts,
     logo: { w: logoW, h: logoH, show: showLogo && logoW > 0, gap: logoGap },
-    row1H,
-    row2H,
-    row3H,
-    row1: { userLines: row1.userLines },
-    row2: { segments: detail.segments, height: detail.height },
-    row3: {
-      timestampLine: detail.timestampOnRow3 ? detail.row3Timestamp : null,
-      height: row3H,
+    rowH,
+    inlineRow: {
+      segments: inline.segments,
+      height: inline.height,
+      fontScale: inline.fontScale,
     },
-    timestampOnRow3: detail.timestampOnRow3,
     floating: { maxWidth: floatMaxWidth, lines: floatingLines, top: floatTop },
     cssVars,
   };

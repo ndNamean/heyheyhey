@@ -18,6 +18,8 @@ interface Props {
 
 function segmentClassName(seg: StampSegment): string {
   switch (seg.kind) {
+    case 'user':
+      return 'proof-font-user';
     case 'store':
       return 'proof-font-store';
     case 'task':
@@ -53,7 +55,7 @@ export default function ProofReviewOverlay({
     proof.cameraOptionsSnapshot.logoEnabled && proof.proofLogoUrl.trim().length > 0;
 
   const rootStyle = layout.cssVars as CSSProperties;
-  const hasDetailRow = layout.row2.segments.length > 0;
+  const hasContent = showLogo || layout.inlineRow.segments.length > 0;
 
   return (
     <div
@@ -69,9 +71,9 @@ export default function ProofReviewOverlay({
           <div className="proof-ts-weather proof-ts-detail">{proof.weatherLine}</div>
         )}
       </div>
-      <div className="proof-stamp-box">
-        {(showLogo || proof.userName) && (
-          <div className="proof-stamp-row proof-stamp-row-logo-user">
+      {hasContent && (
+        <div className="proof-stamp-box">
+          <div className="proof-stamp-row proof-stamp-row-inline">
             {showLogo && (
               <img
                 className="proof-ts-logo"
@@ -80,26 +82,14 @@ export default function ProofReviewOverlay({
                 aria-hidden="true"
               />
             )}
-            {proof.userName && (
-              <span className="proof-font-user">{layout.row1.userLines[0] ?? proof.userName}</span>
-            )}
-          </div>
-        )}
-        {hasDetailRow && (
-          <div className="proof-stamp-row proof-stamp-row-detail">
-            {layout.row2.segments.map((seg, i) => (
+            {layout.inlineRow.segments.map((seg, i) => (
               <span key={`${seg.kind}-${i}`} className={segmentClassName(seg)}>
                 {seg.text}
               </span>
             ))}
           </div>
-        )}
-        {layout.timestampOnRow3 && layout.row3.timestampLine && (
-          <div className="proof-stamp-row proof-stamp-row-ts-fallback">
-            <span className="proof-ts-time">{layout.row3.timestampLine}</span>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

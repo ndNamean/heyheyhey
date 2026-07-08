@@ -71,6 +71,8 @@ function drawGoldOutlinedText(
 
 function segmentStyle(kind: StampSegmentKind, fonts: StampLayoutResult['fonts']) {
   switch (kind) {
+    case 'user':
+      return { size: fonts.user, font: PROOF_FONT.user };
     case 'store':
       return { size: fonts.store, font: PROOF_FONT.store };
     case 'task':
@@ -99,64 +101,36 @@ function drawStampBox(
   logoImg: HTMLImageElement | null,
   layout: StampLayoutResult,
 ) {
-  const { box, padding, rowGap, fonts, logo } = layout;
+  const { box, padding, fonts, logo } = layout;
   const radius = Math.max(6, Math.round(fonts.task * 0.35));
   ctx.fillStyle = 'rgba(0,0,0,0.72)';
   fillRoundedRect(ctx, box.x, box.y, box.w, box.h, radius);
 
   const contentX = box.x + padding;
-  let cursorY = box.y + padding;
 
   if (logo.show && logoImg) {
+    const logoY = box.y + (box.h - logo.h) / 2;
     ctx.shadowColor = 'rgba(58, 58, 76, 0.6)';
     ctx.shadowBlur = 6;
     ctx.shadowOffsetX = 2;
     ctx.shadowOffsetY = 3;
-    ctx.drawImage(logoImg, contentX, cursorY, logo.w, logo.h);
+    ctx.drawImage(logoImg, contentX, logoY, logo.w, logo.h);
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
   }
 
-  const userX = contentX + (logo.show ? logo.w + logo.gap : 0);
-  if (layout.row1.userLines.length) {
-    const userBaseline = cursorY + fonts.user * 0.85;
-    drawGoldOutlinedText(
-      ctx,
-      layout.row1.userLines[0]!,
-      userX,
-      userBaseline,
-      fonts.user,
-      PROOF_FONT.user,
-    );
-  }
-
-  cursorY += layout.row1H;
-
-  if (layout.row2.segments.length) {
-    cursorY += rowGap;
-    const rowBaseline = cursorY + Math.max(fonts.store, fonts.task, fonts.timestamp) * 0.85;
-    let segX = contentX;
-    for (const seg of layout.row2.segments) {
+  if (layout.inlineRow.segments.length) {
+    const maxFontSize = Math.max(fonts.user, fonts.store, fonts.task, fonts.timestamp);
+    const baseline = box.y + box.h / 2 + maxFontSize * 0.35;
+    let segX = contentX + (logo.show ? logo.w + logo.gap : 0);
+    for (const seg of layout.inlineRow.segments) {
       const { size, font } = segmentStyle(seg.kind, fonts);
-      drawGoldOutlinedText(ctx, seg.text, segX, rowBaseline, size, font);
+      drawGoldOutlinedText(ctx, seg.text, segX, baseline, size, font);
       ctx.font = `${size}px ${font}`;
       segX += ctx.measureText(seg.text).width;
     }
-    cursorY += layout.row2H;
-  }
-
-  if (layout.row3.timestampLine) {
-    cursorY += rowGap;
-    drawGoldOutlinedText(
-      ctx,
-      layout.row3.timestampLine,
-      contentX,
-      cursorY + fonts.timestamp * 0.85,
-      fonts.timestamp,
-      PROOF_FONT.timestamp,
-    );
   }
 }
 

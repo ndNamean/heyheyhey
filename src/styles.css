@@ -838,12 +838,11 @@ body.wizard-active .page {
 }
 .proof-stamp-box {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--stamp-row-gap, 3px);
+  flex-direction: row;
+  align-items: center;
   background: rgba(0, 0, 0, 0.72);
   color: #fff;
-  line-height: 1.35;
+  line-height: 1.1;
   padding: var(--stamp-pad-v, 6px) var(--stamp-pad-h, 10px);
   border-radius: 8px;
   width: var(--stamp-box-w, fit-content);
@@ -851,30 +850,15 @@ body.wizard-active .page {
   max-width: 100%;
   box-sizing: border-box;
 }
-.proof-stamp-row {
-  width: 100%;
-}
-.proof-stamp-row-logo-user {
+.proof-stamp-row-inline {
   display: flex;
   flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
   gap: var(--stamp-inline-gap, 6px);
   width: 100%;
   min-width: 0;
-}
-.proof-stamp-row-detail {
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  align-items: baseline;
-  gap: 0;
-  width: 100%;
-  min-width: 0;
   overflow: hidden;
-}
-.proof-stamp-row-ts-fallback {
-  width: 100%;
-  min-width: 0;
 }
 .proof-stamp-sep {
   font-size: var(--font-ts, 11px);
@@ -893,7 +877,7 @@ body.wizard-active .page {
   -webkit-text-stroke: 1px #3A3A4C;
   text-shadow: 0 1px 3px rgba(58, 58, 76, 0.75);
   line-height: 1.15;
-  flex: 1 1 auto;
+  flex-shrink: 1;
   min-width: 0;
   white-space: nowrap;
   overflow: hidden;
