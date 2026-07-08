@@ -25,6 +25,10 @@
       "maxDuration": 15,
       "memory": 256
     },
+    "api/video-proxy.js": {
+      "maxDuration": 30,
+      "memory": 1024
+    },
     "api/cleanup-photos.js": {
       "maxDuration": 60
     }

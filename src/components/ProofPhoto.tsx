@@ -1,14 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLang } from '../i18n';
+import { isVideoMedia, videoProxyUrl } from '../lib/mediaMime';
 import type { MediaRecord } from '../types';
 
 interface Props {
   media: MediaRecord;
   className?: string;
-}
-
-function isVideoMedia(media: MediaRecord): boolean {
-  return media.mimeType?.startsWith('video/') ?? /\.(webm|mp4|mov)(\?|$)/i.test(media.fileName ?? '');
 }
 
 export default function ProofPhoto({ media, className = '' }: Props) {
@@ -18,7 +15,14 @@ export default function ProofPhoto({ media, className = '' }: Props) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>(
     directUrl ? 'ready' : 'idle',
   );
-  const isVideo = isVideoMedia(media);
+  const [videoError, setVideoError] = useState(false);
+  const [useDirectVideo, setUseDirectVideo] = useState(false);
+  const isVideo = isVideoMedia(media.mimeType, media.fileName);
+
+  useEffect(() => {
+    setVideoError(false);
+    setUseDirectVideo(false);
+  }, [media.id, directUrl]);
 
   useEffect(() => {
     if (media.storageDeleted) {
@@ -57,6 +61,12 @@ export default function ProofPhoto({ media, className = '' }: Props) {
     };
   }, [media.id, media.storageDeleted, directUrl]);
 
+  const videoSrc = useMemo(() => {
+    if (!isVideo || !url) return '';
+    if (useDirectVideo) return url;
+    return videoProxyUrl(media.id);
+  }, [isVideo, url, useDirectVideo, media.id]);
+
   if (media.storageDeleted) {
     return (
       <div className={`proof-photo-removed${className ? ` ${className}` : ''}`}>
@@ -88,8 +98,35 @@ export default function ProofPhoto({ media, className = '' }: Props) {
 
   if (isVideo) {
     return (
-      <div className={`proof-photo-link${className ? ` ${className}` : ''}`}>
-        <video src={url} controls playsInline preload="metadata" />
+      <div className={`proof-photo-link proof-photo-video${className ? ` ${className}` : ''}`}>
+        {!videoError ? (
+          <video
+            key={videoSrc}
+            src={videoSrc}
+            controls
+            playsInline
+            preload="metadata"
+            onError={() => {
+              if (!useDirectVideo) {
+                setUseDirectVideo(true);
+                return;
+              }
+              setVideoError(true);
+            }}
+          />
+        ) : (
+          <div className="proof-video-fallback">
+            <p>{t.photoSheet.videoPlaybackFailed}</p>
+          </div>
+        )}
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="proof-video-open-link"
+        >
+          {t.photoSheet.openVideoInNewTab}
+        </a>
       </div>
     );
   }

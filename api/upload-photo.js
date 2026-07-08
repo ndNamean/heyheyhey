@@ -49,6 +49,17 @@ function parseBody(raw) {
   return null;
 }
 
+function normalizeContentType(mime) {
+  const base = String(mime ?? '').split(';')[0]?.trim().toLowerCase() || '';
+  if (base.startsWith('video/')) {
+    if (base.includes('mp4')) return 'video/mp4';
+    return 'video/webm';
+  }
+  if (base === 'image/png') return 'image/png';
+  if (base.startsWith('image/')) return 'image/jpeg';
+  return base || 'image/jpeg';
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -78,7 +89,7 @@ export default async function handler(req, res) {
   try {
     const buffer = Buffer.from(body.fileBase64, 'base64');
     const m = body.metadata;
-    const contentType = body.contentType || body.mimeType || 'image/jpeg';
+    const contentType = normalizeContentType(body.contentType || body.mimeType || 'image/jpeg');
     const watermarked = m.watermarked ?? contentType.startsWith('image/');
 
     const { data: fileData } = await adminDb.storage.uploadFile(body.path, buffer, {

@@ -11,6 +11,7 @@ import {
   serializeCameraOptions,
 } from '../lib/cameraSettings';
 import { generatePhotoCode, nowIso } from '../lib/utils';
+import { isVideoMedia, normalizeStoredMime, videoProxyUrl } from '../lib/mediaMime';
 import { needsVideoProof } from '../lib/roles';
 import type { CameraOptions, Profile, ProofWeather, Store, UploadedMedia } from '../types';
 
@@ -866,10 +867,11 @@ export default function TimemarkCamera({
   ) {
     setUploading(true);
     try {
+      const storedMime = normalizeStoredMime(mimeType);
       const photoCode  = generatePhotoCode(store?.code ?? 'XX');
       const capturedAt = proof.capturedAt;
       const path       = `stores/${store.id}/reports/${reportId}/${reportResponseId}/${Date.now()}_${fileName}`;
-      const watermarked = mimeType.startsWith('image/');
+      const watermarked = storedMime.startsWith('image/');
 
       const proofMetadataJson = JSON.stringify({
         proofTimestamp: proof.displayTime,
@@ -885,7 +887,7 @@ export default function TimemarkCamera({
         body: JSON.stringify({
           path,
           fileName,
-          contentType: mimeType,
+          contentType: storedMime,
           fileBase64: await blobToBase64(blob),
           metadata: {
             reportId,
@@ -898,7 +900,7 @@ export default function TimemarkCamera({
             photoCode,
             captureMode: mode,
             watermarked,
-            mimeType,
+            mimeType: storedMime,
             uploadedByUserId: profile.userId,
             address: proof.address ?? '',
             proofMetadataJson,
@@ -937,7 +939,7 @@ export default function TimemarkCamera({
         fileName:      result.fileName ?? fileName,
         photoCode:     result.photoCode ?? photoCode,
         capturedAt:    result.capturedAt ?? capturedAt,
-        mimeType,
+        mimeType: storedMime,
       });
     } finally {
       setUploading(false);
@@ -1077,7 +1079,7 @@ export default function TimemarkCamera({
     setFrozenProof(proof);
 
     const blob = new Blob(chunks, { type: mimeType });
-    setCapturedMimeType(mimeType);
+    setCapturedMimeType(normalizeStoredMime(mimeType));
     setCaptureSize(null);
 
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -1122,7 +1124,7 @@ export default function TimemarkCamera({
       void finalizeVideoRecording(chunks, mimeType);
     };
 
-    recorder.start(1000);
+    recorder.start();
     recordStartedAtRef.current = Date.now();
     setIsRecording(true);
     setRecordSeconds(0);
@@ -1197,7 +1199,7 @@ export default function TimemarkCamera({
     if (!capturedBlob || uploading || !frozenProof) return;
     setConfirmError('');
     try {
-      const mime = resolveCaptureMime(capturedBlob, capturedMimeType);
+      const mime = normalizeStoredMime(resolveCaptureMime(capturedBlob, capturedMimeType));
       const ext = extensionForMime(mime);
       const isVideo = isVideoMime(mime);
       const mode: CaptureMode = isVideo ? 'live_video' : 'live_camera';
@@ -1534,8 +1536,13 @@ export default function TimemarkCamera({
         <div className="thumb-grid" style={{ marginTop: 10 }}>
           {existingMedia.map((m) => (
             <div key={m.mediaRecordId}>
-              {isVideoMime(m.mimeType) || /\.(webm|mp4|mov)(\?|$)/i.test(m.fileName) ? (
-                <video src={m.url} controls playsInline preload="metadata" />
+              {isVideoMedia(m.mimeType, m.fileName) ? (
+                <video
+                  src={videoProxyUrl(m.mediaRecordId)}
+                  controls
+                  playsInline
+                  preload="metadata"
+                />
               ) : (
                 <img src={m.url} alt={m.fileName} />
               )}
