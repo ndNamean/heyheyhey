@@ -127,6 +127,7 @@ export default function TimemarkCamera({
   const { t } = useLang();
   const videoMode = needsVideoProof(proofType);
   const videoRef   = useRef<HTMLVideoElement>(null);
+  const viewfinderRef = useRef<HTMLDivElement>(null);
   const streamRef  = useRef<MediaStream | null>(null);
   const bsTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const geocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -178,6 +179,7 @@ export default function TimemarkCamera({
   const [capturedMimeType, setCapturedMimeType] = useState('image/jpeg');
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
+  const [previewFrameSize, setPreviewFrameSize] = useState<{ w: number; h: number } | null>(null);
 
   const isAdminLogo = canEditStoreLogo(profile?.role);
   const activeLogoUrl = storeLogoUrl.trim() || resolveActiveLogoUrl(store);
@@ -396,6 +398,34 @@ export default function TimemarkCamera({
     const id = setInterval(() => setLiveNow(new Date()), 1000);
     return () => clearInterval(id);
   }, [cameraOn, frozenProof]);
+
+  const syncPreviewFrameSize = useCallback(() => {
+    const video = videoRef.current;
+    const viewfinder = viewfinderRef.current;
+    if (video && video.videoWidth > 0 && video.videoHeight > 0) {
+      setPreviewFrameSize({ w: video.videoWidth, h: video.videoHeight });
+      return;
+    }
+    if (viewfinder && viewfinder.clientWidth > 0 && viewfinder.clientHeight > 0) {
+      setPreviewFrameSize({ w: viewfinder.clientWidth, h: viewfinder.clientHeight });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (camState !== 'ready') return;
+    syncPreviewFrameSize();
+    const video = videoRef.current;
+    const viewfinder = viewfinderRef.current;
+    video?.addEventListener('loadedmetadata', syncPreviewFrameSize);
+    window.addEventListener('resize', syncPreviewFrameSize);
+    const ro = viewfinder ? new ResizeObserver(syncPreviewFrameSize) : null;
+    if (viewfinder && ro) ro.observe(viewfinder);
+    return () => {
+      video?.removeEventListener('loadedmetadata', syncPreviewFrameSize);
+      window.removeEventListener('resize', syncPreviewFrameSize);
+      ro?.disconnect();
+    };
+  }, [camState, syncPreviewFrameSize]);
 
   const capturedUrlRef = useRef('');
   useEffect(() => {
@@ -1231,7 +1261,7 @@ export default function TimemarkCamera({
             </div>
           )}
 
-          <div className="camera-viewfinder">
+          <div className="camera-viewfinder" ref={viewfinderRef}>
             <video ref={videoRef} playsInline muted autoPlay />
 
             {micUnavailableMsg && (
@@ -1239,7 +1269,11 @@ export default function TimemarkCamera({
             )}
 
             {showLiveOverlay && (
-              <ProofReviewOverlay proof={liveProof} />
+              <ProofReviewOverlay
+                proof={liveProof}
+                frameWidth={previewFrameSize?.w}
+                frameHeight={previewFrameSize?.h}
+              />
             )}
 
             {isRecording && (
