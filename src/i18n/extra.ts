@@ -346,6 +346,15 @@ export const sectionsEn = {
     closingNotePrompt: 'Closing note / evidence description?',
     noActionsWithStatus: 'No corrective actions with status:',
   },
+  proofDetails: {
+    timestamp: 'Timestamp',
+    proofLocation: 'Location',
+    proofWeather: 'Weather',
+    gpsCoords: 'GPS',
+    gpsAccuracy: 'GPS accuracy',
+    captureMode: 'Capture mode',
+    watermarkedYes: 'Watermarked',
+  },
   photoSheet: {
     title: 'Photo Sheet',
     subtitle: 'Browse proof photos across reports.',
@@ -767,6 +776,15 @@ export const sectionsVi = {
     markVerified: 'Đánh dấu đã xác minh',
     closingNotePrompt: 'Ghi chú đóng / mô tả bằng chứng?',
     noActionsWithStatus: 'Không có hành động khắc phục với trạng thái:',
+  },
+  proofDetails: {
+    timestamp: 'Thời gian',
+    proofLocation: 'Vị trí',
+    proofWeather: 'Thời tiết',
+    gpsCoords: 'GPS',
+    gpsAccuracy: 'Độ chính xác GPS',
+    captureMode: 'Chế độ quay',
+    watermarkedYes: 'Có watermark',
   },
   photoSheet: {
     title: 'Bảng ảnh',

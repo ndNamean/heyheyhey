@@ -9,7 +9,9 @@ import {
 } from '../lib/notifications';
 import { badgeClass, nowIso } from '../lib/utils';
 import ProofPhoto from '../components/ProofPhoto';
+import ProofMediaDetails from '../components/ProofMediaDetails';
 import ReviewFeedbackModal, { type FeedbackResult } from '../components/ReviewFeedbackModal';
+import { isVideoMedia } from '../lib/mediaMime';
 import type { MediaRecord, Profile, Report, ReportResponse } from '../types';
 
 interface Props {
@@ -213,7 +215,10 @@ export default function ReviewPage({ profile }: Props) {
                       {media.map((m) => (
                         <div className="proof-photo-card" key={m.id}>
                           <ProofPhoto media={m} />
-                          {m.photoCode && !m.storageDeleted && (
+                          {isVideoMedia(m.mimeType, m.fileName) && (
+                            <ProofMediaDetails media={m} />
+                          )}
+                          {!isVideoMedia(m.mimeType, m.fileName) && m.photoCode && !m.storageDeleted && (
                             <div className="proof-photo-meta">
                               <span className="proof-photo-code">{m.photoCode}</span>
                               {m.capturedAt && (

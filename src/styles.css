@@ -1035,6 +1035,37 @@ body.wizard-active .page {
   color: #888;
 }
 
+.proof-media-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: #151515;
+  border-top: 1px solid #2a2a2a;
+  font-size: 12px;
+  color: #ccc;
+}
+
+.proof-media-details-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.proof-media-details-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #888;
+}
+
+.proof-media-details-row span:not(.proof-media-details-label):not(.badge) {
+  font-family: monospace;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
 .proof-photo-loading,
 .proof-photo-missing,
 .proof-photo-removed {
