@@ -319,4 +319,5 @@ export interface UploadedMedia {
   fileName: string;
   photoCode: string;
   capturedAt: string;
+  mimeType?: string;
 }

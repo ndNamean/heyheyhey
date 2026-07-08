@@ -137,6 +137,7 @@ export default function SubmitReportPage({
             fileName: m.fileName,
             photoCode: m.photoCode,
             capturedAt: m.capturedAt,
+            mimeType: m.mimeType,
           }),
         ),
       };
@@ -614,6 +615,7 @@ export default function SubmitReportPage({
               reportId={activeReportId}
               reportResponseId={responseRecordId}
               profile={profile}
+              proofType={currentItem.proofType}
               existingMedia={r.mediaItems}
               onCapture={(media) => addMedia(currentItem.id, media)}
             />

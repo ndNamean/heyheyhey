@@ -10,7 +10,7 @@ const DEFAULT_APP_ID = 'f7ac027e-2079-41eb-8f34-aa0e4543ca71';
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: '10mb',
+      sizeLimit: '50mb',
     },
   },
 };
@@ -77,9 +77,12 @@ export default async function handler(req, res) {
 
   try {
     const buffer = Buffer.from(body.fileBase64, 'base64');
+    const m = body.metadata;
+    const contentType = body.contentType || body.mimeType || 'image/jpeg';
+    const watermarked = m.watermarked ?? contentType.startsWith('image/');
 
     const { data: fileData } = await adminDb.storage.uploadFile(body.path, buffer, {
-      contentType: 'image/jpeg',
+      contentType,
     });
     if (!fileData?.id) throw new Error('Upload returned no file ID');
 
@@ -90,7 +93,6 @@ export default async function handler(req, res) {
     const fileUrl = filesResult?.$files?.[0]?.url ?? '';
 
     const mediaId = id();
-    const m = body.metadata;
 
     await adminDb.transact(
       adminDb.tx.mediaRecords[mediaId]
@@ -99,12 +101,12 @@ export default async function handler(req, res) {
           reportResponseId: m.reportResponseId,
           storeId: m.storeId,
           fileName: body.fileName,
-          mimeType: 'image/jpeg',
+          mimeType: contentType,
           lat: m.lat ?? 0,
           lng: m.lng ?? 0,
           accuracy: m.accuracy ?? 0,
           capturedAt: m.capturedAt,
-          watermarked: true,
+          watermarked,
           photoCode: m.photoCode,
           verificationHash: '',
           captureMode: m.captureMode,

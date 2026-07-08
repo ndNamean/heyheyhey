@@ -96,6 +96,10 @@ export function needsMedia(proofType: string): boolean {
   return proofType.includes('photo') || proofType.includes('video');
 }
 
+export function needsVideoProof(proofType: string): boolean {
+  return proofType === 'video' || proofType === 'video_note';
+}
+
 export function needsNote(proofType: string): boolean {
   return proofType.includes('note');
 }

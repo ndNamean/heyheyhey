@@ -11,6 +11,7 @@ import {
   serializeCameraOptions,
 } from '../lib/cameraSettings';
 import { generatePhotoCode, nowIso } from '../lib/utils';
+import { needsVideoProof } from '../lib/roles';
 import type { CameraOptions, Profile, ProofWeather, Store, UploadedMedia } from '../types';
 
 interface Props {
@@ -20,12 +21,33 @@ interface Props {
   reportId: string;
   reportResponseId: string;
   profile: Profile;
+  proofType?: string;
   existingMedia: UploadedMedia[];
   onCapture: (media: UploadedMedia) => void;
 }
 
 type CamState = 'idle' | 'opening' | 'ready' | 'error';
 type WeatherStatus = 'waiting' | 'loading' | 'ready' | 'unavailable';
+type CaptureMode = 'live_camera' | 'file_fallback' | 'live_video';
+
+const MAX_VIDEO_SECONDS = 60;
+
+function pickVideoMimeType(): string | null {
+  if (typeof MediaRecorder === 'undefined') return null;
+  for (const type of ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4']) {
+    if (MediaRecorder.isTypeSupported(type)) return type;
+  }
+  return null;
+}
+
+function extensionForMime(mime: string): string {
+  if (mime.includes('mp4')) return 'mp4';
+  return 'webm';
+}
+
+function isVideoMime(mime?: string): boolean {
+  return !!mime?.startsWith('video/');
+}
 
 interface ProofSnapshot {
   capturedAt: string;
@@ -328,10 +350,12 @@ export default function TimemarkCamera({
   reportId,
   reportResponseId,
   profile,
+  proofType = 'photo',
   existingMedia,
   onCapture,
 }: Props) {
   const { t } = useLang();
+  const videoMode = needsVideoProof(proofType);
   const videoRef   = useRef<HTMLVideoElement>(null);
   const streamRef  = useRef<MediaStream | null>(null);
   const bsTimer    = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -339,6 +363,10 @@ export default function TimemarkCamera({
   const weatherTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchedWeatherKeyRef = useRef('');
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordChunksRef = useRef<Blob[]>([]);
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordStartedAtRef = useRef<number>(0);
 
   const [gps,      setGps]      = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
@@ -371,6 +399,9 @@ export default function TimemarkCamera({
 
   const [uploading,     setUploading]     = useState(false);
   const [confirmError, setConfirmError] = useState('');
+  const [capturedMimeType, setCapturedMimeType] = useState('image/jpeg');
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordSeconds, setRecordSeconds] = useState(0);
 
   const isAdminLogo = canEditStoreLogo(profile?.role);
   const activeLogoUrl = storeLogoUrl.trim() || resolveActiveLogoUrl(store);
@@ -590,6 +621,15 @@ export default function TimemarkCamera({
     return () => clearInterval(id);
   }, [cameraOn, frozenProof]);
 
+  useEffect(() => () => {
+    clearRecordTimer();
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      try { recorder.stop(); } catch { /* ignore */ }
+    }
+    mediaRecorderRef.current = null;
+  }, []);
+
   // ── Torch capability probe ───────────────────────────────────────────────
   useEffect(() => {
     if (!cameraOn || camState !== 'ready') {
@@ -796,14 +836,16 @@ export default function TimemarkCamera({
   async function uploadBlob(
     blob: Blob,
     fileName: string,
-    mode: 'live_camera' | 'file_fallback',
+    mode: CaptureMode,
     proof: ProofSnapshot,
+    mimeType: string,
   ) {
     setUploading(true);
     try {
       const photoCode  = generatePhotoCode(store?.code ?? 'XX');
       const capturedAt = proof.capturedAt;
       const path       = `stores/${store.id}/reports/${reportId}/${reportResponseId}/${Date.now()}_${fileName}`;
+      const watermarked = mimeType.startsWith('image/');
 
       const proofMetadataJson = JSON.stringify({
         proofTimestamp: proof.displayTime,
@@ -819,6 +861,7 @@ export default function TimemarkCamera({
         body: JSON.stringify({
           path,
           fileName,
+          contentType: mimeType,
           fileBase64: await blobToBase64(blob),
           metadata: {
             reportId,
@@ -830,6 +873,8 @@ export default function TimemarkCamera({
             capturedAt,
             photoCode,
             captureMode: mode,
+            watermarked,
+            mimeType,
             uploadedByUserId: profile.userId,
             address: proof.address ?? '',
             proofMetadataJson,
@@ -868,6 +913,7 @@ export default function TimemarkCamera({
         fileName:      result.fileName ?? fileName,
         photoCode:     result.photoCode ?? photoCode,
         capturedAt:    result.capturedAt ?? capturedAt,
+        mimeType,
       });
     } finally {
       setUploading(false);
@@ -942,10 +988,13 @@ export default function TimemarkCamera({
     setWeatherStatus('waiting');
     setCamState('idle');
     setCamError('');
+    setIsRecording(false);
+    setRecordSeconds(0);
     setCameraOn(true);
   }
 
   async function handleCloseCamera() {
+    stopMediaRecorder();
     await setTorchOff();
     setOptionsOpen(false);
     setCameraOn(false);
@@ -964,7 +1013,118 @@ export default function TimemarkCamera({
     setRetryTick((t) => t + 1);
   }
 
+  function clearRecordTimer() {
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current);
+      recordTimerRef.current = null;
+    }
+  }
+
+  function stopMediaRecorder() {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+    }
+    mediaRecorderRef.current = null;
+    clearRecordTimer();
+    setIsRecording(false);
+    setRecordSeconds(0);
+  }
+
+  async function finalizeVideoRecording(chunks: Blob[], mimeType: string) {
+    if (!chunks.length) {
+      setCamError(t.camera.videoNotSupported);
+      return;
+    }
+
+    await setTorchOff();
+
+    const captureMoment = new Date();
+    const proof = buildProofSnapshot(
+      captureMoment,
+      gps,
+      resolvedAddress,
+      liveWeather,
+      weatherStatus,
+      activeLogoUrl,
+      cameraOptions,
+    );
+    setFrozenProof(proof);
+
+    const blob = new Blob(chunks, { type: mimeType });
+    setCapturedMimeType(mimeType);
+    setCaptureSize(null);
+
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    setCameraOn(false);
+    setCamState('idle');
+    setOptionsOpen(false);
+
+    const url = URL.createObjectURL(blob);
+    setCapturedBlob(blob);
+    setCapturedUrl(url);
+  }
+
+  function startVideoRecording() {
+    const stream = streamRef.current;
+    const mimeType = pickVideoMimeType();
+    if (!stream || !mimeType) {
+      setCamError(t.camera.videoNotSupported);
+      return;
+    }
+
+    recordChunksRef.current = [];
+    const recorder = new MediaRecorder(stream, {
+      mimeType,
+      videoBitsPerSecond: 2_500_000,
+    });
+    mediaRecorderRef.current = recorder;
+
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) recordChunksRef.current.push(e.data);
+    };
+    recorder.onerror = () => {
+      stopMediaRecorder();
+      setCamError(t.camera.cameraError);
+    };
+    recorder.onstop = () => {
+      const chunks = recordChunksRef.current;
+      recordChunksRef.current = [];
+      clearRecordTimer();
+      setIsRecording(false);
+      setRecordSeconds(0);
+      void finalizeVideoRecording(chunks, mimeType);
+    };
+
+    recorder.start(1000);
+    recordStartedAtRef.current = Date.now();
+    setIsRecording(true);
+    setRecordSeconds(0);
+
+    recordTimerRef.current = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - recordStartedAtRef.current) / 1000);
+      setRecordSeconds(elapsed);
+      if (elapsed >= MAX_VIDEO_SECONDS) {
+        stopMediaRecorder();
+      }
+    }, 500);
+  }
+
+  function handleRecordToggle() {
+    if (camState !== 'ready') return;
+    if (isRecording) {
+      stopMediaRecorder();
+    } else {
+      startVideoRecording();
+    }
+  }
+
   async function handleCapture() {
+    if (videoMode) {
+      handleRecordToggle();
+      return;
+    }
     const video = videoRef.current;
     if (!video || camState !== 'ready') return;
     const videoW = video.videoWidth;
@@ -1011,24 +1171,37 @@ export default function TimemarkCamera({
     if (!capturedBlob || uploading || !frozenProof) return;
     setConfirmError('');
     try {
-      await uploadBlob(capturedBlob, `${store?.code ?? 'photo'}_${Date.now()}.jpg`, 'live_camera', frozenProof);
+      const ext = extensionForMime(capturedMimeType);
+      const isVideo = isVideoMime(capturedMimeType);
+      const mode: CaptureMode = isVideo ? 'live_video' : 'live_camera';
+      const prefix = isVideo ? 'video' : 'photo';
+      await uploadBlob(
+        capturedBlob,
+        `${store?.code ?? prefix}_${Date.now()}.${ext}`,
+        mode,
+        frozenProof,
+        capturedMimeType,
+      );
       URL.revokeObjectURL(capturedUrl);
       setCapturedBlob(null);
       setCapturedUrl('');
       setFrozenProof(null);
       setCaptureSize(null);
+      setCapturedMimeType('image/jpeg');
     } catch (e) {
       setConfirmError(e instanceof Error ? e.message : t.camera.uploadFailed);
     }
   }
 
   async function handleRetake() {
+    stopMediaRecorder();
     URL.revokeObjectURL(capturedUrl);
     setCapturedBlob(null);
     setCapturedUrl('');
     setConfirmError('');
     setFrozenProof(null);
     setCaptureSize(null);
+    setCapturedMimeType('image/jpeg');
     setLiveNow(new Date());
     setOptionsOpen(false);
     setCameraOn(true);
@@ -1044,7 +1217,7 @@ export default function TimemarkCamera({
       {!cameraOn && !capturedBlob && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <button onClick={handleOpenCamera} disabled={uploading}>
-            📷 {t.camera.openCamera}
+            {videoMode ? `🎬 ${t.camera.openVideo}` : `📷 ${t.camera.openCamera}`}
           </button>
         </div>
       )}
@@ -1060,7 +1233,9 @@ export default function TimemarkCamera({
             >
               ✕
             </button>
-            <span className="camera-topbar-title">{t.camera.captureTitle}</span>
+            <span className="camera-topbar-title">
+              {videoMode ? t.camera.captureVideoTitle : t.camera.captureTitle}
+            </span>
             <div className="camera-topbar-actions">
               {torchProbed && (
                 torchSupported ? (
@@ -1189,6 +1364,12 @@ export default function TimemarkCamera({
               <ProofTimestampOverlay proof={liveProof} />
             )}
 
+            {isRecording && (
+              <div className="cam-recording-badge">
+                ● {t.camera.recording} {recordSeconds}s
+              </div>
+            )}
+
             {camState === 'opening' && (
               <div className="cam-state-overlay">
                 <div className="cam-spinner" />
@@ -1227,7 +1408,7 @@ export default function TimemarkCamera({
             <button
               className="cam-icon-btn"
               onClick={handleSwitchCamera}
-              disabled={camState === 'opening'}
+              disabled={camState === 'opening' || isRecording}
               aria-label={t.camera.switchCamera}
               title={t.camera.switchCamera}
             >
@@ -1235,10 +1416,10 @@ export default function TimemarkCamera({
             </button>
 
             <button
-              className={`shutter${camState !== 'ready' ? ' disabled' : ''}`}
+              className={`shutter${camState !== 'ready' ? ' disabled' : ''}${isRecording ? ' shutter--recording' : ''}${videoMode ? ' shutter--video' : ''}`}
               onClick={handleCapture}
               disabled={camState !== 'ready'}
-              aria-label={t.camera.capturePhoto}
+              aria-label={videoMode ? (isRecording ? t.camera.stopRecording : t.camera.startRecording) : t.camera.capturePhoto}
             >
               <div className="shutter-inner" />
             </button>
@@ -1259,7 +1440,7 @@ export default function TimemarkCamera({
       {capturedBlob && frozenProof && createPortal(
         <div className="postcapture-sheet">
           <div style={{ color: '#fff', fontWeight: 700, fontSize: 17 }}>
-            {t.camera.reviewPhoto}
+            {isVideoMime(capturedMimeType) ? t.camera.reviewVideo : t.camera.reviewPhoto}
           </div>
 
           <div
@@ -1270,7 +1451,11 @@ export default function TimemarkCamera({
                 : undefined
             }
           >
-            <img src={capturedUrl} alt={t.camera.capturedPhoto} />
+            {isVideoMime(capturedMimeType) ? (
+              <video src={capturedUrl} controls playsInline />
+            ) : (
+              <img src={capturedUrl} alt={t.camera.capturedPhoto} />
+            )}
           </div>
 
           {confirmError && (
@@ -1305,7 +1490,11 @@ export default function TimemarkCamera({
               disabled={uploading}
               style={{ background: '#FDC216', color: '#111', fontWeight: 700, borderRadius: 12 }}
             >
-              {uploading ? t.camera.saving : `✓ ${t.camera.usePhoto}`}
+              {uploading
+                ? t.camera.saving
+                : isVideoMime(capturedMimeType)
+                  ? `✓ ${t.camera.useVideo}`
+                  : `✓ ${t.camera.usePhoto}`}
             </button>
           </div>
         </div>,
@@ -1316,7 +1505,11 @@ export default function TimemarkCamera({
         <div className="thumb-grid" style={{ marginTop: 10 }}>
           {existingMedia.map((m) => (
             <div key={m.mediaRecordId}>
-              <img src={m.url} alt={m.fileName} />
+              {isVideoMime(m.mimeType) || /\.(webm|mp4|mov)(\?|$)/i.test(m.fileName) ? (
+                <video src={m.url} controls playsInline preload="metadata" />
+              ) : (
+                <img src={m.url} alt={m.fileName} />
+              )}
               <div className="photo-code-box" style={{ marginTop: 4 }}>
                 <div className="photo-code-label">{t.camera.photoCode}</div>
                 <div className="photo-code-value">{m.photoCode}</div>

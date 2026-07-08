@@ -7,6 +7,10 @@ interface Props {
   className?: string;
 }
 
+function isVideoMedia(media: MediaRecord): boolean {
+  return media.mimeType?.startsWith('video/') ?? /\.(webm|mp4|mov)(\?|$)/i.test(media.fileName ?? '');
+}
+
 export default function ProofPhoto({ media, className = '' }: Props) {
   const { t } = useLang();
   const directUrl = media.fileUrl || media.file?.url || '';
@@ -14,6 +18,7 @@ export default function ProofPhoto({ media, className = '' }: Props) {
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>(
     directUrl ? 'ready' : 'idle',
   );
+  const isVideo = isVideoMedia(media);
 
   useEffect(() => {
     if (media.storageDeleted) {
@@ -77,6 +82,14 @@ export default function ProofPhoto({ media, className = '' }: Props) {
       <div className={`proof-photo-missing${className ? ` ${className}` : ''}`}>
         {t.photoSheet.photoMissing}
         {media.photoCode && <span className="proof-photo-code">{media.photoCode}</span>}
+      </div>
+    );
+  }
+
+  if (isVideo) {
+    return (
+      <div className={`proof-photo-link${className ? ` ${className}` : ''}`}>
+        <video src={url} controls playsInline preload="metadata" />
       </div>
     );
   }
