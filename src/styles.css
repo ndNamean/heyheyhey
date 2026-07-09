@@ -856,6 +856,9 @@ body.wizard-active .page {
   padding-top: calc(var(--stamp-pad-v, 6px) * 0.85);
   padding-bottom: calc(var(--stamp-pad-v, 6px) * 0.85);
 }
+.proof-stamp-box.proof-stamp--proof-strip {
+  line-height: 1.05;
+}
 .proof-stamp--transparent-floating .proof-font-user,
 .proof-stamp--transparent-floating .proof-font-store,
 .proof-stamp--transparent-floating .proof-font-task,

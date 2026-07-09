@@ -233,6 +233,12 @@ export function drawProofOverlay(
     return;
   }
 
+  if (watermarkStyle === 'blackBoxInline') {
+    drawStampBackground(ctx, layout);
+    drawStampContent(ctx, logoImg, layout, 'boxed');
+    return;
+  }
+
   const textVariant: TextDrawVariant = watermarkStyle === 'transparentFloating' ? 'floating' : 'boxed';
 
   drawFloatingText(ctx, layout, layout.margin, textVariant);

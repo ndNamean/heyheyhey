@@ -46,7 +46,7 @@ export type ClockType = 'clockIn' | 'clockOut';
 
 export type LogSeverity = 'info' | 'warning' | 'critical';
 
-export type WatermarkStyle = 'blackBox' | 'transparentFloating' | 'logoDock';
+export type WatermarkStyle = 'blackBox' | 'transparentFloating' | 'logoDock' | 'blackBoxInline';
 
 export interface CameraOptions {
   weatherEnabled: boolean;

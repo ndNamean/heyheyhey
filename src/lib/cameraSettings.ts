@@ -9,16 +9,38 @@ export const DEFAULT_CAMERA_OPTIONS: CameraOptions = {
   weatherEnabled: true,
   logoEnabled: true,
   flashlightLastUsed: false,
-  watermarkStyle: 'blackBox',
+  watermarkStyle: 'blackBoxInline',
 };
 
-const WATERMARK_STYLE_CYCLE: WatermarkStyle[] = ['blackBox', 'transparentFloating', 'logoDock'];
+const WATERMARK_STYLE_CYCLE: WatermarkStyle[] = [
+  'blackBox',
+  'transparentFloating',
+  'logoDock',
+  'blackBoxInline',
+];
 
 function normalizeWatermarkStyle(value: unknown): WatermarkStyle {
   if (value === 'transparentFloating' || value === 'floating') return 'transparentFloating';
   if (value === 'logoDock' || value === 'logo_dock') return 'logoDock';
+  if (value === 'blackBoxInline' || value === 'proof_strip') return 'blackBoxInline';
   if (value === 'blackBox' || value === 'black_box') return 'blackBox';
   return 'blackBox';
+}
+
+export function watermarkStyleLabel(
+  style: WatermarkStyle,
+  labels: { blackBox: string; floating: string; logoDock: string; proofStrip: string },
+): string {
+  switch (style) {
+    case 'transparentFloating':
+      return labels.floating;
+    case 'logoDock':
+      return labels.logoDock;
+    case 'blackBoxInline':
+      return labels.proofStrip;
+    default:
+      return labels.blackBox;
+  }
 }
 
 export function resolveWatermarkStyle(opts?: CameraOptions): WatermarkStyle {
@@ -95,18 +117,4 @@ export function buildWeatherLine(
 
 export function canEditStoreLogo(role: string | undefined): boolean {
   return role === 'owner' || role === 'areaManager';
-}
-
-export function watermarkStyleLabel(
-  style: WatermarkStyle,
-  labels: { blackBox: string; floating: string; logoDock: string },
-): string {
-  switch (style) {
-    case 'transparentFloating':
-      return labels.floating;
-    case 'logoDock':
-      return labels.logoDock;
-    default:
-      return labels.blackBox;
-  }
 }

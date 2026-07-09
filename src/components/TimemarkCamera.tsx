@@ -1221,6 +1221,7 @@ export default function TimemarkCamera({
                     blackBox: t.camera.watermarkBlackBox,
                     floating: t.camera.watermarkFloating,
                     logoDock: t.camera.watermarkLogoDock,
+                    proofStrip: t.camera.watermarkProofStrip,
                   })}
                 </button>
               </div>

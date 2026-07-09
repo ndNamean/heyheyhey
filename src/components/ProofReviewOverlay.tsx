@@ -57,6 +57,8 @@ export default function ProofReviewOverlay({
 
   const watermarkStyle = resolveWatermarkStyle(proof.cameraOptionsSnapshot);
   const isLogoDock = watermarkStyle === 'logoDock';
+  const isProofStrip = watermarkStyle === 'blackBoxInline';
+  const showFloatingLines = !isLogoDock && !isProofStrip;
   const detailLines = layout.logoDock?.detailLines ?? [];
   const rootStyle = layout.cssVars as CSSProperties;
   const hasContent = isLogoDock
@@ -75,7 +77,7 @@ export default function ProofReviewOverlay({
       style={rootStyle}
       aria-hidden="true"
     >
-      {!isLogoDock && (
+      {showFloatingLines && (
         <div className="proof-floating-lines">
           {proof.locationLine && (
             <div className="proof-ts-location proof-ts-detail">{proof.locationLine}</div>
@@ -113,7 +115,7 @@ export default function ProofReviewOverlay({
           <div
             className={`proof-stamp-box${
               watermarkStyle === 'transparentFloating' ? ' proof-stamp--transparent-floating' : ''
-            }`}
+            }${isProofStrip ? ' proof-stamp--proof-strip' : ''}`}
           >
             <div className="proof-stamp-row proof-stamp-row-inline">
               {showLogo && (

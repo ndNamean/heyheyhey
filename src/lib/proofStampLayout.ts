@@ -273,7 +273,110 @@ export function computeStampLayout(input: StampLayoutInput): StampLayoutResult {
   if (style === 'logoDock') {
     return computeLogoDockLayout(input);
   }
+  if (style === 'blackBoxInline') {
+    return computeProofStripLayout(input);
+  }
   return computeStandardStampLayout(input);
+}
+
+function computeProofStripLayout(input: StampLayoutInput): StampLayoutResult {
+  const { frameWidth, frameHeight, proof, logoImg, measureCtx: ctx } = input;
+  const fw = Math.max(frameWidth, 240);
+  const fh = Math.max(frameHeight, 240);
+
+  const margin = Math.round(fw * 0.035);
+  const basePadding = Math.round(fw * 0.018);
+  const paddingV = Math.round(basePadding * 0.9);
+  const paddingH = basePadding;
+  const baseFontSize = Math.max(14, Math.round(fw * 0.035));
+  const lineHeight = Math.round(baseFontSize * 1.3);
+  const logoGap = Math.max(6, Math.round(paddingH * 0.5));
+  const logoMaxW = Math.min(Math.round(fw * 0.1), 56);
+  const zoneGap = Math.max(8, Math.round(paddingH * 0.6));
+  const inlineGap = Math.max(4, Math.round(paddingH * 0.35));
+
+  const baseFonts: StampFonts = {
+    user: Math.round(baseFontSize * 1.22),
+    store: Math.round(baseFontSize * 1.08),
+    task: baseFontSize,
+    timestamp: Math.round(baseFontSize * 0.95),
+    detail: baseFontSize,
+  };
+
+  const showLogo =
+    proof.cameraOptionsSnapshot.logoEnabled &&
+    proof.proofLogoUrl.trim().length > 0;
+
+  let logoW = 0;
+  let logoH = 0;
+  if (showLogo) {
+    if (logoImg) {
+      const scale = logoMaxW / logoImg.width;
+      logoW = logoMaxW;
+      logoH = logoImg.height * scale;
+    } else {
+      logoW = logoMaxW;
+      logoH = Math.round(logoMaxW * 0.55);
+    }
+  }
+
+  const minW = Math.round(fw * 0.78);
+  const maxW = fw - margin * 2;
+
+  let boxW = clamp(maxW, minW, maxW);
+  let textAreaW = boxW - paddingH * 2 - (logoW > 0 ? logoW + logoGap : 0);
+
+  let inline = layoutInlineRow(ctx, proof, Math.max(textAreaW, 0), baseFonts);
+
+  const contentNeedW =
+    (logoW > 0 ? logoW + logoGap : 0) + inline.width + paddingH * 2;
+  boxW = clamp(Math.max(contentNeedW, minW), minW, maxW);
+  textAreaW = boxW - paddingH * 2 - (logoW > 0 ? logoW + logoGap : 0);
+
+  inline = layoutInlineRow(ctx, proof, Math.max(textAreaW, 0), baseFonts);
+
+  const fonts = inline.fonts;
+  const rowH = Math.max(logoH, inline.height);
+  const boxH = paddingV * 2 + rowH;
+
+  const boxX = margin;
+  const boxY = fh - margin - boxH;
+
+  const cssVars: Record<string, string> = {
+    '--stamp-box-w': `${boxW}px`,
+    '--stamp-box-min-w': `${minW}px`,
+    '--stamp-pad-v': `${paddingV}px`,
+    '--stamp-pad-h': `${paddingH}px`,
+    '--stamp-inline-gap': `${inlineGap}px`,
+    '--font-user': `${fonts.user}px`,
+    '--font-store': `${fonts.store}px`,
+    '--font-task': `${fonts.task}px`,
+    '--font-ts': `${fonts.timestamp}px`,
+    '--font-detail': `${fonts.detail}px`,
+    '--logo-max-w': `${logoW}px`,
+    '--logo-max-h': `${logoH}px`,
+    '--stamp-line-height': `${lineHeight}px`,
+  };
+
+  return {
+    margin,
+    paddingV,
+    paddingH,
+    zoneGap,
+    lineHeight,
+    box: { x: boxX, y: boxY, w: boxW, h: boxH },
+    fonts,
+    logo: { w: logoW, h: logoH, show: showLogo && logoW > 0, gap: logoGap },
+    rowH,
+    inlineRow: {
+      segments: inline.segments,
+      height: inline.height,
+      fontScale: inline.fontScale,
+    },
+    floating: { maxWidth: fw - margin * 2, lines: [], top: margin },
+    logoDock: null,
+    cssVars,
+  };
 }
 
 function computeLogoDockLayout(input: StampLayoutInput): StampLayoutResult {
