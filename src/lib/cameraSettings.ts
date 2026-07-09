@@ -12,8 +12,23 @@ export const DEFAULT_CAMERA_OPTIONS: CameraOptions = {
   watermarkStyle: 'blackBox',
 };
 
+const WATERMARK_STYLE_CYCLE: WatermarkStyle[] = ['blackBox', 'transparentFloating', 'logoDock'];
+
+function normalizeWatermarkStyle(value: unknown): WatermarkStyle {
+  if (value === 'transparentFloating' || value === 'floating') return 'transparentFloating';
+  if (value === 'logoDock' || value === 'logo_dock') return 'logoDock';
+  if (value === 'blackBox' || value === 'black_box') return 'blackBox';
+  return 'blackBox';
+}
+
 export function resolveWatermarkStyle(opts?: CameraOptions): WatermarkStyle {
-  return opts?.watermarkStyle === 'transparentFloating' ? 'transparentFloating' : 'blackBox';
+  return normalizeWatermarkStyle(opts?.watermarkStyle);
+}
+
+export function cycleWatermarkStyle(current?: WatermarkStyle): WatermarkStyle {
+  const resolved = normalizeWatermarkStyle(current);
+  const idx = WATERMARK_STYLE_CYCLE.indexOf(resolved);
+  return WATERMARK_STYLE_CYCLE[(idx + 1) % WATERMARK_STYLE_CYCLE.length]!;
 }
 
 export function parseCameraOptions(profile: Profile | null | undefined): CameraOptions {
@@ -25,7 +40,7 @@ export function parseCameraOptions(profile: Profile | null | undefined): CameraO
       weatherEnabled: parsed.weatherEnabled ?? true,
       logoEnabled: parsed.logoEnabled ?? true,
       flashlightLastUsed: parsed.flashlightLastUsed ?? false,
-      watermarkStyle: parsed.watermarkStyle === 'transparentFloating' ? 'transparentFloating' : 'blackBox',
+      watermarkStyle: normalizeWatermarkStyle(parsed.watermarkStyle),
     };
   } catch {
     return { ...DEFAULT_CAMERA_OPTIONS };
@@ -80,4 +95,18 @@ export function buildWeatherLine(
 
 export function canEditStoreLogo(role: string | undefined): boolean {
   return role === 'owner' || role === 'areaManager';
+}
+
+export function watermarkStyleLabel(
+  style: WatermarkStyle,
+  labels: { blackBox: string; floating: string; logoDock: string },
+): string {
+  switch (style) {
+    case 'transparentFloating':
+      return labels.floating;
+    case 'logoDock':
+      return labels.logoDock;
+    default:
+      return labels.blackBox;
+  }
 }

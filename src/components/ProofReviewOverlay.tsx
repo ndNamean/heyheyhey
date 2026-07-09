@@ -56,8 +56,18 @@ export default function ProofReviewOverlay({
     proof.cameraOptionsSnapshot.logoEnabled && proof.proofLogoUrl.trim().length > 0;
 
   const watermarkStyle = resolveWatermarkStyle(proof.cameraOptionsSnapshot);
+  const isLogoDock = watermarkStyle === 'logoDock';
+  const detailLines = layout.logoDock?.detailLines ?? [];
   const rootStyle = layout.cssVars as CSSProperties;
-  const hasContent = showLogo || layout.inlineRow.segments.length > 0;
+  const hasContent = isLogoDock
+    ? showLogo || layout.inlineRow.segments.length > 0 || detailLines.length > 0
+    : showLogo || layout.inlineRow.segments.length > 0;
+
+  const inlineSegments = layout.inlineRow.segments.map((seg, i) => (
+    <span key={`${seg.kind}-${i}`} className={segmentClassName(seg)}>
+      {seg.text}
+    </span>
+  ));
 
   return (
     <div
@@ -65,37 +75,59 @@ export default function ProofReviewOverlay({
       style={rootStyle}
       aria-hidden="true"
     >
-      <div className="proof-floating-lines">
-        {proof.locationLine && (
-          <div className="proof-ts-location proof-ts-detail">{proof.locationLine}</div>
-        )}
-        {proof.cameraOptionsSnapshot.weatherEnabled && proof.weatherLine && (
-          <div className="proof-ts-weather proof-ts-detail">{proof.weatherLine}</div>
-        )}
-      </div>
-      {hasContent && (
-        <div
-          className={`proof-stamp-box${
-            watermarkStyle === 'transparentFloating' ? ' proof-stamp--transparent-floating' : ''
-          }`}
-        >
-          <div className="proof-stamp-row proof-stamp-row-inline">
-            {showLogo && (
-              <img
-                className="proof-ts-logo"
-                src={proof.proofLogoUrl}
-                alt=""
-                aria-hidden="true"
-              />
-            )}
-            {layout.inlineRow.segments.map((seg, i) => (
-              <span key={`${seg.kind}-${i}`} className={segmentClassName(seg)}>
-                {seg.text}
-              </span>
-            ))}
-          </div>
+      {!isLogoDock && (
+        <div className="proof-floating-lines">
+          {proof.locationLine && (
+            <div className="proof-ts-location proof-ts-detail">{proof.locationLine}</div>
+          )}
+          {proof.cameraOptionsSnapshot.weatherEnabled && proof.weatherLine && (
+            <div className="proof-ts-weather proof-ts-detail">{proof.weatherLine}</div>
+          )}
         </div>
       )}
+      {hasContent &&
+        (isLogoDock ? (
+          <div className="proof-logo-dock">
+            {showLogo && (
+              <div className="proof-logo-dock-box">
+                <img
+                  className="proof-ts-logo"
+                  src={proof.proofLogoUrl}
+                  alt=""
+                  aria-hidden="true"
+                />
+              </div>
+            )}
+            <div className="proof-logo-dock-text">
+              {layout.inlineRow.segments.length > 0 && (
+                <div className="proof-stamp-row proof-stamp-row-inline">{inlineSegments}</div>
+              )}
+              {detailLines.map((line, i) => (
+                <div key={`dock-detail-${i}`} className="proof-ts-detail">
+                  {line}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div
+            className={`proof-stamp-box${
+              watermarkStyle === 'transparentFloating' ? ' proof-stamp--transparent-floating' : ''
+            }`}
+          >
+            <div className="proof-stamp-row proof-stamp-row-inline">
+              {showLogo && (
+                <img
+                  className="proof-ts-logo"
+                  src={proof.proofLogoUrl}
+                  alt=""
+                  aria-hidden="true"
+                />
+              )}
+              {inlineSegments}
+            </div>
+          </div>
+        ))}
     </div>
   );
 }

@@ -6,9 +6,12 @@ import {
   DEFAULT_LOGOS,
   buildWeatherLine,
   canEditStoreLogo,
+  cycleWatermarkStyle,
   parseCameraOptions,
   resolveActiveLogoUrl,
+  resolveWatermarkStyle,
   serializeCameraOptions,
+  watermarkStyleLabel,
 } from '../lib/cameraSettings';
 import { generatePhotoCode, nowIso } from '../lib/utils';
 import { isVideoMedia, normalizeStoredMime, videoProxyUrl } from '../lib/mediaMime';
@@ -1210,16 +1213,15 @@ export default function TimemarkCamera({
                   onClick={() =>
                     saveCameraOptions({
                       ...cameraOptions,
-                      watermarkStyle:
-                        cameraOptions.watermarkStyle === 'transparentFloating'
-                          ? 'blackBox'
-                          : 'transparentFloating',
+                      watermarkStyle: cycleWatermarkStyle(cameraOptions.watermarkStyle),
                     })
                   }
                 >
-                  {cameraOptions.watermarkStyle === 'transparentFloating'
-                    ? t.camera.watermarkFloating
-                    : t.camera.watermarkBlackBox}
+                  {watermarkStyleLabel(resolveWatermarkStyle(cameraOptions), {
+                    blackBox: t.camera.watermarkBlackBox,
+                    floating: t.camera.watermarkFloating,
+                    logoDock: t.camera.watermarkLogoDock,
+                  })}
                 </button>
               </div>
               {cameraOptions.logoEnabled && activeLogoUrl && (

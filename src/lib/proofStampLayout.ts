@@ -29,6 +29,13 @@ export interface StampLayoutResult {
   rowH: number;
   inlineRow: { segments: StampSegment[]; height: number; fontScale: number };
   floating: { maxWidth: number; lines: string[]; top: number };
+  logoDock: {
+    logoBox: { x: number; y: number; w: number; h: number };
+    textColumn: { x: number; y: number; w: number; h: number };
+    detailLines: string[];
+    dockH: number;
+    detailGap: number;
+  } | null;
   cssVars: Record<string, string>;
 }
 
@@ -262,6 +269,140 @@ function layoutInlineRow(
 }
 
 export function computeStampLayout(input: StampLayoutInput): StampLayoutResult {
+  const style = resolveWatermarkStyle(input.proof.cameraOptionsSnapshot);
+  if (style === 'logoDock') {
+    return computeLogoDockLayout(input);
+  }
+  return computeStandardStampLayout(input);
+}
+
+function computeLogoDockLayout(input: StampLayoutInput): StampLayoutResult {
+  const { frameWidth, frameHeight, proof, logoImg, measureCtx: ctx } = input;
+  const fw = Math.max(frameWidth, 240);
+  const fh = Math.max(frameHeight, 240);
+
+  const margin = Math.round(fw * 0.035);
+  const paddingV = Math.round(fw * 0.018);
+  const paddingH = Math.round(fw * 0.018);
+  const baseFontSize = Math.max(14, Math.round(fw * 0.035));
+  const lineHeight = Math.round(baseFontSize * 1.3);
+  const logoGap = Math.max(6, Math.round(paddingH * 0.5));
+  const logoMaxW = Math.min(Math.round(fw * 0.1), 56);
+  const zoneGap = Math.max(8, Math.round(paddingH * 0.6));
+  const inlineGap = Math.max(4, Math.round(paddingH * 0.35));
+  const detailGap = Math.max(2, Math.round(paddingH * 0.25));
+
+  const baseFonts: StampFonts = {
+    user: Math.round(baseFontSize * 1.22),
+    store: Math.round(baseFontSize * 1.08),
+    task: baseFontSize,
+    timestamp: Math.round(baseFontSize * 0.95),
+    detail: baseFontSize,
+  };
+
+  const showLogo =
+    proof.cameraOptionsSnapshot.logoEnabled &&
+    proof.proofLogoUrl.trim().length > 0;
+
+  let logoW = 0;
+  let logoH = 0;
+  if (showLogo) {
+    if (logoImg) {
+      const scale = logoMaxW / logoImg.width;
+      logoW = logoMaxW;
+      logoH = logoImg.height * scale;
+    } else {
+      logoW = logoMaxW;
+      logoH = Math.round(logoMaxW * 0.55);
+    }
+  }
+
+  const logoBoxW = showLogo && logoW > 0 ? logoW + paddingH * 2 : 0;
+  const logoBoxH = showLogo && logoH > 0 ? logoH + paddingV * 2 : 0;
+  const textColumnX = margin + (logoBoxW > 0 ? logoBoxW + logoGap : 0);
+  const textColumnMaxW = Math.max(fw - margin - textColumnX, 0);
+
+  let inline = layoutInlineRow(ctx, proof, textColumnMaxW, baseFonts);
+  const fonts = inline.fonts;
+
+  ctx.font = `${baseFonts.detail}px ${PROOF_FONT.detail}`;
+  const detailLines: string[] = [];
+  if (proof.locationLine.trim()) {
+    detailLines.push(...capWrappedLines(wrapText(ctx, proof.locationLine, textColumnMaxW), 4));
+  }
+  if (proof.cameraOptionsSnapshot.weatherEnabled && proof.weatherLine.trim()) {
+    detailLines.push(...wrapText(ctx, proof.weatherLine, textColumnMaxW));
+  }
+
+  const textBlockH =
+    inline.height +
+    (detailLines.length > 0 ? detailGap + detailLines.length * lineHeight : 0);
+  const dockH = Math.max(logoBoxH, textBlockH);
+  const dockY = fh - margin - dockH;
+
+  const logoBox = {
+    x: margin,
+    y: logoBoxH > 0 ? dockY + (dockH - logoBoxH) / 2 : dockY,
+    w: logoBoxW,
+    h: logoBoxH,
+  };
+
+  const textColumn = {
+    x: textColumnX,
+    y: dockY,
+    w: textColumnMaxW,
+    h: textBlockH,
+  };
+
+  const dockW = (logoBoxW > 0 ? logoBoxW + logoGap : 0) + Math.max(inline.width, textColumnMaxW * 0.5);
+  const box = { x: margin, y: dockY, w: Math.min(dockW, fw - margin * 2), h: dockH };
+
+  const cssVars: Record<string, string> = {
+    '--stamp-box-w': `${box.w}px`,
+    '--stamp-pad-v': `${paddingV}px`,
+    '--stamp-pad-h': `${paddingH}px`,
+    '--stamp-inline-gap': `${inlineGap}px`,
+    '--font-user': `${fonts.user}px`,
+    '--font-store': `${fonts.store}px`,
+    '--font-task': `${fonts.task}px`,
+    '--font-ts': `${fonts.timestamp}px`,
+    '--font-detail': `${fonts.detail}px`,
+    '--logo-max-w': `${logoW}px`,
+    '--logo-max-h': `${logoH}px`,
+    '--stamp-line-height': `${lineHeight}px`,
+    '--logo-dock-w': `${box.w}px`,
+    '--text-col-w': `${textColumnMaxW}px`,
+    '--dock-h': `${dockH}px`,
+  };
+
+  return {
+    margin,
+    paddingV,
+    paddingH,
+    zoneGap,
+    lineHeight,
+    box,
+    fonts,
+    logo: { w: logoW, h: logoH, show: showLogo && logoW > 0, gap: logoGap },
+    rowH: dockH,
+    inlineRow: {
+      segments: inline.segments,
+      height: inline.height,
+      fontScale: inline.fontScale,
+    },
+    floating: { maxWidth: fw - margin * 2, lines: [], top: margin },
+    logoDock: {
+      logoBox,
+      textColumn,
+      detailLines,
+      dockH,
+      detailGap,
+    },
+    cssVars,
+  };
+}
+
+function computeStandardStampLayout(input: StampLayoutInput): StampLayoutResult {
   const { frameWidth, frameHeight, proof, logoImg, measureCtx: ctx } = input;
   const fw = Math.max(frameWidth, 240);
   const fh = Math.max(frameHeight, 240);
@@ -371,6 +512,7 @@ export function computeStampLayout(input: StampLayoutInput): StampLayoutResult {
       fontScale: inline.fontScale,
     },
     floating: { maxWidth: floatMaxWidth, lines: floatingLines, top: floatTop },
+    logoDock: null,
     cssVars,
   };
 }

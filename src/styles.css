@@ -873,6 +873,38 @@ body.wizard-active .page {
   min-width: 0;
   overflow: hidden;
 }
+.proof-logo-dock {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--stamp-inline-gap, 6px);
+  max-width: 100%;
+  width: var(--logo-dock-w, fit-content);
+}
+.proof-logo-dock-box {
+  flex-shrink: 0;
+  background: rgba(0, 0, 0, 0.72);
+  border-radius: 8px;
+  padding: var(--stamp-pad-v, 6px) var(--stamp-pad-h, 10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.proof-logo-dock-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.proof-logo-dock-text .proof-font-user,
+.proof-logo-dock-text .proof-font-store,
+.proof-logo-dock-text .proof-font-task,
+.proof-logo-dock-text .proof-ts-time,
+.proof-logo-dock-text .proof-stamp-sep,
+.proof-logo-dock-text .proof-ts-detail {
+  text-shadow: 0 1px 4px rgba(58, 58, 76, 0.9), 0 0 6px rgba(58, 58, 76, 0.45);
+}
 .proof-stamp-sep {
   font-size: var(--font-ts, 11px);
   font-weight: 600;

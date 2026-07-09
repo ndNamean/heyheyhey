@@ -150,6 +150,67 @@ function drawStampContent(
   }
 }
 
+function drawLogoDock(
+  ctx: CanvasRenderingContext2D,
+  logoImg: HTMLImageElement | null,
+  layout: StampLayoutResult,
+) {
+  const dock = layout.logoDock;
+  if (!dock) return;
+
+  const variant: TextDrawVariant = 'floating';
+  const { logoBox, textColumn, detailLines, detailGap } = dock;
+  const { fonts, logo } = layout;
+
+  if (logo.show && logoBox.w > 0 && logoBox.h > 0) {
+    const radius = Math.max(6, Math.round(fonts.task * 0.35));
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    fillRoundedRect(ctx, logoBox.x, logoBox.y, logoBox.w, logoBox.h, radius);
+
+    if (logoImg) {
+      const logoX = logoBox.x + (logoBox.w - logo.w) / 2;
+      const logoY = logoBox.y + (logoBox.h - logo.h) / 2;
+      ctx.shadowColor = 'rgba(58, 58, 76, 0.6)';
+      ctx.shadowBlur = 6;
+      ctx.shadowOffsetX = 2;
+      ctx.shadowOffsetY = 3;
+      ctx.drawImage(logoImg, logoX, logoY, logo.w, logo.h);
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+    }
+  }
+
+  if (layout.inlineRow.segments.length) {
+    const maxFontSize = Math.max(fonts.user, fonts.store, fonts.task, fonts.timestamp);
+    const baseline = textColumn.y + maxFontSize * 0.85;
+    let segX = textColumn.x;
+    for (const seg of layout.inlineRow.segments) {
+      const { size, font } = segmentStyle(seg.kind, fonts);
+      drawGoldOutlinedText(ctx, seg.text, segX, baseline, size, font, GOLD_FILL, variant);
+      ctx.font = `${size}px ${font}`;
+      segX += ctx.measureText(seg.text).width;
+    }
+  }
+
+  let cursorY = textColumn.y + layout.inlineRow.height + detailGap;
+  for (const line of detailLines) {
+    const baseline = cursorY + layout.lineHeight * 0.75;
+    drawGoldOutlinedText(
+      ctx,
+      line,
+      textColumn.x,
+      baseline,
+      fonts.detail,
+      PROOF_FONT.detail,
+      GOLD_FILL,
+      variant,
+    );
+    cursorY += layout.lineHeight;
+  }
+}
+
 export function drawProofOverlay(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
@@ -166,6 +227,12 @@ export function drawProofOverlay(
   });
 
   const watermarkStyle: WatermarkStyle = resolveWatermarkStyle(proof.cameraOptionsSnapshot);
+
+  if (watermarkStyle === 'logoDock') {
+    drawLogoDock(ctx, logoImg, layout);
+    return;
+  }
+
   const textVariant: TextDrawVariant = watermarkStyle === 'transparentFloating' ? 'floating' : 'boxed';
 
   drawFloatingText(ctx, layout, layout.margin, textVariant);
