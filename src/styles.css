@@ -1980,3 +1980,117 @@ body.wizard-active .page {
   border-radius: 14px;
   font-family: inherit;
 }
+
+/* ── Report review timeline ───────────────────────────────────────────────── */
+.report-timeline {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--input-bg);
+  border: 1px solid var(--card-border);
+}
+
+.report-timeline--compact {
+  padding: 8px 10px;
+}
+
+.report-timeline-header,
+.report-timeline-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.report-timeline-toggle {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--accent-stat);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+  min-height: auto;
+}
+
+.report-timeline-partial {
+  color: var(--text-muted);
+  margin: 6px 0 0;
+}
+
+.report-timeline-section {
+  margin-top: 10px;
+}
+
+.report-timeline-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.report-timeline-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.report-timeline-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--card-border);
+  font-size: 12px;
+}
+
+.report-timeline-step:last-child {
+  border-bottom: none;
+}
+
+.report-timeline-step-time {
+  font-family: monospace;
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+
+.report-timeline-step-label {
+  font-weight: 600;
+}
+
+.report-timeline-step-note {
+  flex: 1 1 100%;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
+
+.report-timeline-item {
+  margin-top: 6px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: var(--card-bg);
+}
+
+.report-timeline-item summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.report-timeline-item .report-timeline-steps {
+  padding: 0 10px 8px;
+}
+
+.feedback-item-timeline {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--card-border);
+  text-align: left;
+}

@@ -229,6 +229,21 @@ const _schema = i.schema({
       updatedAt: i.string(),
     }),
 
+    // ─── Review audit trail ──────────────────────────────────────────────────
+    reviewEvents: i.entity({
+      reportId: i.string().indexed(),
+      reportResponseId: i.string().indexed(), // '' for report-level events
+      storeId: i.string().indexed(),
+      eventType: i.string().indexed(),
+      // submitted|resubmitted|item_approved|item_rejected|item_correction|report_finalized
+      itemTitle: i.string(),
+      statusAfter: i.string(),
+      actorUserId: i.string(),
+      actorRole: i.string(),
+      note: i.string(),
+      createdAt: i.string(),
+    }),
+
     // ─── Review feedback notifications ───────────────────────────────────────
     notifications: i.entity({
       recipientUserId: i.string().indexed(),

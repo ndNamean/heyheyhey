@@ -208,6 +208,17 @@ const rules = {
     },
   },
 
+  // ── Review audit trail ────────────────────────────────────────────────────
+  reviewEvents: {
+    allow: {
+      view: 'isApproved',
+      create: 'isApproved',
+      update: 'false',
+      delete: 'false',
+    },
+    bind: { ...COMMON_BIND },
+  },
+
   // ── Review feedback notifications ─────────────────────────────────────────
   notifications: {
     allow: {

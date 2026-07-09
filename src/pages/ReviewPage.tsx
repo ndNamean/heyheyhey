@@ -7,13 +7,18 @@ import {
   buildItemReviewNotifications,
   buildReportFinalizedNotifications,
 } from '../lib/notifications';
+import {
+  buildItemReviewEvent,
+  buildReportFinalizedEvent,
+} from '../lib/reviewEvents';
 import { badgeClass, nowIso } from '../lib/utils';
 import ProofPhoto from '../components/ProofPhoto';
 import ProofMediaDetails from '../components/ProofMediaDetails';
 import ReviewFeedbackModal, { type FeedbackResult } from '../components/ReviewFeedbackModal';
 import { isVideoMedia } from '../lib/mediaMime';
 import { formatMediaCaptureTime } from '../lib/proofTime';
-import type { MediaRecord, Profile, Report, ReportResponse } from '../types';
+import ReportTimeline from '../components/ReportTimeline';
+import type { MediaRecord, Profile, Report, ReportResponse, ReviewEvent } from '../types';
 
 interface Props {
   profile: Profile;
@@ -36,10 +41,12 @@ export default function ReviewPage({ profile }: Props) {
       store: {},
     },
     profiles: { stores: {} },
+    reviewEvents: {},
   });
 
   const reports: Report[] = (data?.reports ?? []) as Report[];
   const allProfiles: Profile[] = (data?.profiles ?? []) as Profile[];
+  const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];
 
   if (!canReview(profile.role)) {
     return <div className="card">{t.review.noPermission}</div>;
@@ -106,6 +113,7 @@ export default function ReviewPage({ profile }: Props) {
         approvedAt: now,
         updatedAt: now,
       }),
+      buildItemReviewEvent(report, response, status, reason, profile, now),
       ...notificationTxs,
     ]);
   }
@@ -144,6 +152,7 @@ export default function ReviewPage({ profile }: Props) {
         compliancePercent,
         updatedAt: nowIso(),
       }),
+      buildReportFinalizedEvent(report, newStatus, profile, nowIso()),
       ...notificationTxs,
     ]);
   }
@@ -184,6 +193,12 @@ export default function ReviewPage({ profile }: Props) {
                 <span className="badge warn">{pendingCount} {t.review.pendingItems}</span>
               )}
             </div>
+
+            <ReportTimeline
+              report={report}
+              events={allEvents.filter((e) => e.reportId === report.id)}
+              defaultExpanded
+            />
 
             {responses.map((resp) => {
               const media = (resp.media ?? []) as MediaRecord[];

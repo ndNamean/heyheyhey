@@ -2,7 +2,8 @@ import { db } from '../db';
 import { useLang } from '../i18n';
 import { statusLabel } from '../lib/i18nUtils';
 import { badgeClass } from '../lib/utils';
-import type { Profile, Report, ReportResponse } from '../types';
+import ReportTimeline from './ReportTimeline';
+import type { Profile, Report, ReportResponse, ReviewEvent } from '../types';
 
 interface Props {
   profile: Profile;
@@ -17,7 +18,10 @@ export default function MyReportsPanel({ profile, onFixReport }: Props) {
       $: { where: { submittedByUserId: profile.userId } },
       responses: {},
     },
+    reviewEvents: {},
   });
+
+  const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];
 
   const reports = ((data?.reports ?? []) as Report[])
     .sort((a, b) => (b.submittedAt ?? '').localeCompare(a.submittedAt ?? ''))
@@ -84,6 +88,12 @@ export default function MyReportsPanel({ profile, onFixReport }: Props) {
                 {flagged.length > 1 ? t.staffHome.items : t.staffHome.item})
               </button>
             )}
+
+            <ReportTimeline
+              report={report}
+              events={allEvents.filter((e) => e.reportId === report.id)}
+              compact
+            />
           </div>
         );
       })}

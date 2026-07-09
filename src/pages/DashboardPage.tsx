@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react';
 import { db } from '../db';
 import FeedbackInbox from '../components/FeedbackInbox';
+import ReportTimeline, { ReportTimelineLeadCell } from '../components/ReportTimeline';
 import { useLang } from '../i18n';
 import { statusLabel } from '../lib/i18nUtils';
 import { aggregateFeedbackFrequency } from '../lib/feedbackReasons';
 import { badgeClass, todayYmd } from '../lib/utils';
-import type { Profile, Report, ReportResponse } from '../types';
+import type { Profile, Report, ReportResponse, ReviewEvent } from '../types';
 
 interface Props {
   profile: Profile;
@@ -35,11 +36,13 @@ export default function DashboardPage({ profile }: Props) {
     },
     stores: {},
     profiles: {},
+    reviewEvents: {},
   });
 
   const allReports: Report[] = (data?.reports ?? []) as Report[];
   const stores = data?.stores ?? [];
   const profiles = data?.profiles ?? [];
+  const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];
 
   const reports = useMemo(() => {
     let filtered = allReports;
@@ -318,6 +321,7 @@ export default function DashboardPage({ profile }: Props) {
               <th>{t.common.date}</th>
               <th>{t.common.status}</th>
               <th>{t.dashboard.completion}</th>
+              <th>{t.dashboard.leadTime}</th>
             </tr>
           </thead>
           <tbody>
@@ -332,11 +336,17 @@ export default function DashboardPage({ profile }: Props) {
                   <span className={badgeClass(r.status)}>{statusLabel(t, r.status)}</span>
                 </td>
                 <td>{r.completionPercent ?? 0}%</td>
+                <td>
+                  <ReportTimelineLeadCell
+                    report={r}
+                    events={allEvents.filter((e) => e.reportId === r.id)}
+                  />
+                </td>
               </tr>
             ))}
             {!reports.length && (
               <tr>
-                <td colSpan={5}>{t.dashboard.noReportsInRange}</td>
+                <td colSpan={6}>{t.dashboard.noReportsInRange}</td>
               </tr>
             )}
           </tbody>

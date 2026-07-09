@@ -285,6 +285,28 @@ export interface LogbookEntry {
   photo?: { id: string; url: string };
 }
 
+export type ReviewEventType =
+  | 'submitted'
+  | 'resubmitted'
+  | 'item_approved'
+  | 'item_rejected'
+  | 'item_correction'
+  | 'report_finalized';
+
+export interface ReviewEvent {
+  id: string;
+  reportId: string;
+  reportResponseId: string;
+  storeId: string;
+  eventType: ReviewEventType;
+  itemTitle: string;
+  statusAfter: string;
+  actorUserId: string;
+  actorRole: string;
+  note: string;
+  createdAt: string;
+}
+
 export type NotificationType =
   | 'item_approved'
   | 'item_rejected'

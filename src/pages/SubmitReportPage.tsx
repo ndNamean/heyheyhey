@@ -4,6 +4,10 @@ import { db } from '../db';
 import { useLang } from '../i18n';
 import { needsMedia, needsNote, needsNumber, userCanAccessStore } from '../lib/roles';
 import { calcCompletion, nowIso, todayYmd } from '../lib/utils';
+import {
+  buildItemResubmittedEvents,
+  buildReportSubmittedEvents,
+} from '../lib/reviewEvents';
 import TimemarkCamera from '../components/TimemarkCamera';
 import type {
   LocalResponse,
@@ -326,7 +330,15 @@ export default function SubmitReportPage({
         ),
       );
 
-      await db.transact([reportTx, ...responseTxs, ...mediaLinkTxs]);
+      const reviewEventTxs = buildReportSubmittedEvents(
+        activeReportId,
+        selectedStore.id,
+        profile,
+        responseItems.map((r) => ({ id: r.id, title: r.title, status: r.status })),
+        now,
+      );
+
+      await db.transact([reportTx, ...responseTxs, ...mediaLinkTxs, ...reviewEventTxs]);
       setSubmitted(true);
     } catch (e) {
       alert(e instanceof Error ? e.message : t.submit.submissionFailed);
@@ -387,7 +399,19 @@ export default function SubmitReportPage({
         updatedAt: now,
       });
 
-      await db.transact([reportTx, ...responseUpdateTxs, ...mediaLinkTxs]);
+      const resubmittedItems = visibleItems.map((item) => ({
+        id: responseIdByItem[item.id]!,
+        title: item.title,
+      }));
+      const reviewEventTxs = buildItemResubmittedEvents(
+        correctionReport.id,
+        correctionReport.storeId,
+        profile,
+        resubmittedItems,
+        now,
+      );
+
+      await db.transact([reportTx, ...responseUpdateTxs, ...mediaLinkTxs, ...reviewEventTxs]);
       setSubmitted(true);
     } catch (e) {
       alert(e instanceof Error ? e.message : t.validation.resubmitFailed);
