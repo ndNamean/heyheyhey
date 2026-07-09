@@ -1,4 +1,5 @@
 import { PROOF_FONT } from './proofFonts';
+import { resolveWatermarkStyle } from './cameraSettings';
 import type { ProofSnapshot } from './proofWatermarkDraw';
 
 export interface StampLayoutInput {
@@ -18,7 +19,8 @@ export interface StampSegment {
 
 export interface StampLayoutResult {
   margin: number;
-  padding: number;
+  paddingV: number;
+  paddingH: number;
   zoneGap: number;
   lineHeight: number;
   box: { x: number; y: number; w: number; h: number };
@@ -265,13 +267,16 @@ export function computeStampLayout(input: StampLayoutInput): StampLayoutResult {
   const fh = Math.max(frameHeight, 240);
 
   const margin = Math.round(fw * 0.035);
-  const padding = Math.round(fw * 0.018);
+  const basePadding = Math.round(fw * 0.018);
+  const isTransparent = resolveWatermarkStyle(proof.cameraOptionsSnapshot) === 'transparentFloating';
+  const paddingV = isTransparent ? Math.round(basePadding * 0.85) : basePadding;
+  const paddingH = basePadding;
   const baseFontSize = Math.max(14, Math.round(fw * 0.035));
   const lineHeight = Math.round(baseFontSize * 1.3);
-  const logoGap = Math.max(6, Math.round(padding * 0.5));
+  const logoGap = Math.max(6, Math.round(paddingH * 0.5));
   const logoMaxW = Math.min(Math.round(fw * 0.1), 56);
-  const zoneGap = Math.max(8, Math.round(padding * 0.6));
-  const inlineGap = Math.max(4, Math.round(padding * 0.35));
+  const zoneGap = Math.max(8, Math.round(paddingH * 0.6));
+  const inlineGap = Math.max(4, Math.round(paddingH * 0.35));
 
   const baseFonts: StampFonts = {
     user: Math.round(baseFontSize * 1.22),
@@ -303,20 +308,20 @@ export function computeStampLayout(input: StampLayoutInput): StampLayoutResult {
   const targetW = maxW;
 
   let boxW = clamp(targetW, minW, maxW);
-  let textAreaW = boxW - padding * 2 - (logoW > 0 ? logoW + logoGap : 0);
+  let textAreaW = boxW - paddingH * 2 - (logoW > 0 ? logoW + logoGap : 0);
 
   let inline = layoutInlineRow(ctx, proof, Math.max(textAreaW, 0), baseFonts);
 
   const contentNeedW =
-    (logoW > 0 ? logoW + logoGap : 0) + inline.width + padding * 2;
+    (logoW > 0 ? logoW + logoGap : 0) + inline.width + paddingH * 2;
   boxW = clamp(Math.max(contentNeedW, minW), minW, maxW);
-  textAreaW = boxW - padding * 2 - (logoW > 0 ? logoW + logoGap : 0);
+  textAreaW = boxW - paddingH * 2 - (logoW > 0 ? logoW + logoGap : 0);
 
   inline = layoutInlineRow(ctx, proof, Math.max(textAreaW, 0), baseFonts);
 
   const fonts = inline.fonts;
   const rowH = Math.max(logoH, inline.height);
-  const boxH = padding * 2 + rowH;
+  const boxH = paddingV * 2 + rowH;
 
   const boxX = margin;
   const boxY = fh - margin - boxH;
@@ -337,8 +342,8 @@ export function computeStampLayout(input: StampLayoutInput): StampLayoutResult {
   const cssVars: Record<string, string> = {
     '--stamp-box-w': `${boxW}px`,
     '--stamp-box-min-w': `${minW}px`,
-    '--stamp-pad-v': `${padding}px`,
-    '--stamp-pad-h': `${padding}px`,
+    '--stamp-pad-v': `${paddingV}px`,
+    '--stamp-pad-h': `${paddingH}px`,
     '--stamp-inline-gap': `${inlineGap}px`,
     '--font-user': `${fonts.user}px`,
     '--font-store': `${fonts.store}px`,
@@ -352,7 +357,8 @@ export function computeStampLayout(input: StampLayoutInput): StampLayoutResult {
 
   return {
     margin,
-    padding,
+    paddingV,
+    paddingH,
     zoneGap,
     lineHeight,
     box: { x: boxX, y: boxY, w: boxW, h: boxH },

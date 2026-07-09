@@ -1,4 +1,4 @@
-import type { CameraOptions, Profile, ProofWeather, Store } from '../types';
+import type { CameraOptions, Profile, ProofWeather, Store, WatermarkStyle } from '../types';
 
 export const DEFAULT_LOGOS = [
   'https://www.heypelo.com/wp-content/uploads/2025/10/cropped-heypelonegatif.png',
@@ -9,7 +9,12 @@ export const DEFAULT_CAMERA_OPTIONS: CameraOptions = {
   weatherEnabled: true,
   logoEnabled: true,
   flashlightLastUsed: false,
+  watermarkStyle: 'blackBox',
 };
+
+export function resolveWatermarkStyle(opts?: CameraOptions): WatermarkStyle {
+  return opts?.watermarkStyle === 'transparentFloating' ? 'transparentFloating' : 'blackBox';
+}
 
 export function parseCameraOptions(profile: Profile | null | undefined): CameraOptions {
   const raw = profile?.cameraOptionsJson?.trim();
@@ -20,6 +25,7 @@ export function parseCameraOptions(profile: Profile | null | undefined): CameraO
       weatherEnabled: parsed.weatherEnabled ?? true,
       logoEnabled: parsed.logoEnabled ?? true,
       flashlightLastUsed: parsed.flashlightLastUsed ?? false,
+      watermarkStyle: parsed.watermarkStyle === 'transparentFloating' ? 'transparentFloating' : 'blackBox',
     };
   } catch {
     return { ...DEFAULT_CAMERA_OPTIONS };

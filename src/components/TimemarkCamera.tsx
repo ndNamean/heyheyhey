@@ -1202,6 +1202,26 @@ export default function TimemarkCamera({
                   {cameraOptions.logoEnabled ? t.camera.on : t.camera.off}
                 </button>
               </div>
+              <div className="camera-options-row">
+                <span>{t.camera.watermarkStyle}</span>
+                <button
+                  type="button"
+                  className="cam-opt-toggle"
+                  onClick={() =>
+                    saveCameraOptions({
+                      ...cameraOptions,
+                      watermarkStyle:
+                        cameraOptions.watermarkStyle === 'transparentFloating'
+                          ? 'blackBox'
+                          : 'transparentFloating',
+                    })
+                  }
+                >
+                  {cameraOptions.watermarkStyle === 'transparentFloating'
+                    ? t.camera.watermarkFloating
+                    : t.camera.watermarkBlackBox}
+                </button>
+              </div>
               {cameraOptions.logoEnabled && activeLogoUrl && (
                 <div className="camera-options-logo-preview">
                   <img src={activeLogoUrl} alt={t.camera.logoPreview} />

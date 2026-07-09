@@ -46,10 +46,13 @@ export type ClockType = 'clockIn' | 'clockOut';
 
 export type LogSeverity = 'info' | 'warning' | 'critical';
 
+export type WatermarkStyle = 'blackBox' | 'transparentFloating';
+
 export interface CameraOptions {
   weatherEnabled: boolean;
   logoEnabled: boolean;
   flashlightLastUsed: boolean;
+  watermarkStyle?: WatermarkStyle;
 }
 
 export interface ProofWeather {

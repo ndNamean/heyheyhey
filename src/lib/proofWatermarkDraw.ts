@@ -1,7 +1,8 @@
+import { resolveWatermarkStyle } from './cameraSettings';
 import { CHARCOAL_STROKE, GOLD_FILL, PROOF_FONT } from './proofFonts';
 import { computeStampLayout, createMeasureContext } from './proofStampLayout';
 import type { StampLayoutResult, StampSegmentKind } from './proofStampLayout';
-import type { CameraOptions, ProofWeather } from '../types';
+import type { CameraOptions, ProofWeather, WatermarkStyle } from '../types';
 
 export interface ProofSnapshot {
   capturedAt: string;
@@ -18,6 +19,8 @@ export interface ProofSnapshot {
   proofLogoUrl: string;
   cameraOptionsSnapshot: CameraOptions;
 }
+
+type TextDrawVariant = 'boxed' | 'floating';
 
 function fillRoundedRect(
   ctx: CanvasRenderingContext2D,
@@ -50,14 +53,21 @@ function drawGoldOutlinedText(
   fontSize: number,
   fontFamily: string,
   fillColor: string = GOLD_FILL,
+  variant: TextDrawVariant = 'boxed',
 ) {
   ctx.font = `${fontSize}px ${fontFamily}`;
   ctx.lineJoin = 'round';
   ctx.lineWidth = Math.max(2, fontSize * 0.12);
   ctx.strokeStyle = CHARCOAL_STROKE;
   ctx.fillStyle = fillColor;
-  ctx.shadowColor = 'rgba(58, 58, 76, 0.75)';
-  ctx.shadowBlur = Math.max(4, fontSize * 0.35);
+  const baseBlur = Math.max(4, fontSize * 0.35);
+  if (variant === 'floating') {
+    ctx.shadowColor = 'rgba(58, 58, 76, 0.85)';
+    ctx.shadowBlur = baseBlur * 1.15;
+  } else {
+    ctx.shadowColor = 'rgba(58, 58, 76, 0.75)';
+    ctx.shadowBlur = baseBlur;
+  }
   ctx.shadowOffsetX = 1;
   ctx.shadowOffsetY = 2;
 
@@ -88,26 +98,31 @@ function drawFloatingText(
   ctx: CanvasRenderingContext2D,
   layout: StampLayoutResult,
   margin: number,
+  variant: TextDrawVariant,
 ) {
   let cursorY = layout.floating.top;
   for (const line of layout.floating.lines) {
     const baseline = cursorY + layout.lineHeight * 0.75;
-    drawGoldOutlinedText(ctx, line, margin, baseline, layout.fonts.detail, PROOF_FONT.detail);
+    drawGoldOutlinedText(ctx, line, margin, baseline, layout.fonts.detail, PROOF_FONT.detail, GOLD_FILL, variant);
     cursorY += layout.lineHeight;
   }
 }
 
-function drawStampBox(
-  ctx: CanvasRenderingContext2D,
-  logoImg: HTMLImageElement | null,
-  layout: StampLayoutResult,
-) {
-  const { box, padding, fonts, logo } = layout;
+function drawStampBackground(ctx: CanvasRenderingContext2D, layout: StampLayoutResult) {
+  const { box, fonts } = layout;
   const radius = Math.max(6, Math.round(fonts.task * 0.35));
   ctx.fillStyle = 'rgba(0,0,0,0.72)';
   fillRoundedRect(ctx, box.x, box.y, box.w, box.h, radius);
+}
 
-  const contentX = box.x + padding;
+function drawStampContent(
+  ctx: CanvasRenderingContext2D,
+  logoImg: HTMLImageElement | null,
+  layout: StampLayoutResult,
+  variant: TextDrawVariant,
+) {
+  const { box, paddingH, fonts, logo } = layout;
+  const contentX = box.x + paddingH;
 
   if (logo.show && logoImg) {
     const logoY = box.y + (box.h - logo.h) / 2;
@@ -128,7 +143,7 @@ function drawStampBox(
     let segX = contentX + (logo.show ? logo.w + logo.gap : 0);
     for (const seg of layout.inlineRow.segments) {
       const { size, font } = segmentStyle(seg.kind, fonts);
-      drawGoldOutlinedText(ctx, seg.text, segX, baseline, size, font);
+      drawGoldOutlinedText(ctx, seg.text, segX, baseline, size, font, GOLD_FILL, variant);
       ctx.font = `${size}px ${font}`;
       segX += ctx.measureText(seg.text).width;
     }
@@ -150,8 +165,14 @@ export function drawProofOverlay(
     measureCtx,
   });
 
-  drawFloatingText(ctx, layout, layout.margin);
-  drawStampBox(ctx, logoImg, layout);
+  const watermarkStyle: WatermarkStyle = resolveWatermarkStyle(proof.cameraOptionsSnapshot);
+  const textVariant: TextDrawVariant = watermarkStyle === 'transparentFloating' ? 'floating' : 'boxed';
+
+  drawFloatingText(ctx, layout, layout.margin, textVariant);
+  if (watermarkStyle === 'blackBox') {
+    drawStampBackground(ctx, layout);
+  }
+  drawStampContent(ctx, logoImg, layout, textVariant);
 }
 
 export function loadImageForCanvas(url: string): Promise<HTMLImageElement | null> {

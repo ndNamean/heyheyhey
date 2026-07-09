@@ -850,6 +850,19 @@ body.wizard-active .page {
   max-width: 100%;
   box-sizing: border-box;
 }
+.proof-stamp-box.proof-stamp--transparent-floating {
+  background: transparent;
+  border-radius: 0;
+  padding-top: calc(var(--stamp-pad-v, 6px) * 0.85);
+  padding-bottom: calc(var(--stamp-pad-v, 6px) * 0.85);
+}
+.proof-stamp--transparent-floating .proof-font-user,
+.proof-stamp--transparent-floating .proof-font-store,
+.proof-stamp--transparent-floating .proof-font-task,
+.proof-stamp--transparent-floating .proof-ts-time,
+.proof-stamp--transparent-floating .proof-stamp-sep {
+  text-shadow: 0 1px 4px rgba(58, 58, 76, 0.9), 0 0 6px rgba(58, 58, 76, 0.45);
+}
 .proof-stamp-row-inline {
   display: flex;
   flex-direction: row;

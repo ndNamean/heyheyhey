@@ -1,4 +1,5 @@
 import { useMemo, type CSSProperties } from 'react';
+import { resolveWatermarkStyle } from '../lib/cameraSettings';
 import type { ProofSnapshot } from '../lib/proofWatermarkDraw';
 import {
   computeStampLayout,
@@ -54,6 +55,7 @@ export default function ProofReviewOverlay({
   const showLogo =
     proof.cameraOptionsSnapshot.logoEnabled && proof.proofLogoUrl.trim().length > 0;
 
+  const watermarkStyle = resolveWatermarkStyle(proof.cameraOptionsSnapshot);
   const rootStyle = layout.cssVars as CSSProperties;
   const hasContent = showLogo || layout.inlineRow.segments.length > 0;
 
@@ -72,7 +74,11 @@ export default function ProofReviewOverlay({
         )}
       </div>
       {hasContent && (
-        <div className="proof-stamp-box">
+        <div
+          className={`proof-stamp-box${
+            watermarkStyle === 'transparentFloating' ? ' proof-stamp--transparent-floating' : ''
+          }`}
+        >
           <div className="proof-stamp-row proof-stamp-row-inline">
             {showLogo && (
               <img
