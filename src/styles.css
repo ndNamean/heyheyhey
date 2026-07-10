@@ -2234,3 +2234,54 @@ body.wizard-active .page {
   border-top: 1px solid var(--card-border);
   text-align: left;
 }
+
+/* ── Manager report review status ───────────────────────────────────────── */
+.report-review-status {
+  margin-top: 0;
+}
+
+.report-review-status-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.report-review-status-table {
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+.report-review-status-table th,
+.report-review-status-table td {
+  vertical-align: top;
+  padding: 8px 6px;
+}
+
+.report-review-status-nowrap {
+  white-space: nowrap;
+}
+
+.report-review-status-feedback {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-review-status-expanded-row td {
+  padding: 0 6px 12px;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.report-review-status-expanded {
+  padding: 8px 0 4px;
+}
+
+@media (max-width: 900px) {
+  .report-review-status-table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+}

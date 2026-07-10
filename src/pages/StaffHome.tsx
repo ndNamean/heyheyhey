@@ -1,7 +1,9 @@
 import { db } from '../db';
 import FeedbackInbox from '../components/FeedbackInbox';
 import MyReportsPanel from '../components/MyReportsPanel';
+import ReportReviewStatusPanel from '../components/ReportReviewStatusPanel';
 import { useLang } from '../i18n';
+import { canEditMaster, canReview } from '../lib/roles';
 import type { Profile } from '../types';
 
 interface Props {
@@ -38,6 +40,10 @@ export default function StaffHome({ profile, onStartReport, onFixReport }: Props
     <div>
       <FeedbackInbox userId={profile.userId} />
       <MyReportsPanel profile={profile} onFixReport={onFixReport} />
+
+      {canReview(profile.role) && !canEditMaster(profile.role) && (
+        <ReportReviewStatusPanel profile={profile} />
+      )}
 
       <div className="card">
         <h1>{t.common.hello}, {profile.displayName || profile.email.split('@')[0]}</h1>
