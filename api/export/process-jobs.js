@@ -2,8 +2,8 @@
  * POST /api/export/process-jobs — worker (cron + fire-and-forget).
  */
 
-import { verifyCronSecret } from '../../server/lib/export/instant-admin.js';
-import { processExportJob, processPendingJobs } from '../../server/lib/export/job-runner.js';
+import { verifyCronSecret } from '../_lib/export/instant-admin.js';
+import { processExportJob, processPendingJobs } from '../_lib/export/job-runner.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {

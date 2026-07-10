@@ -2,8 +2,8 @@
  * GET /api/export/job-status — poll export job status.
  */
 
-import { getAdminDb } from '../../server/lib/export/instant-admin.js';
-import { authenticateExportRequest } from '../../server/lib/export/auth.js';
+import { getAdminDb } from '../_lib/export/instant-admin.js';
+import { authenticateExportRequest } from '../_lib/export/auth.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {

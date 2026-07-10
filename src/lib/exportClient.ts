@@ -35,9 +35,24 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   };
 }
 
+async function parseJsonResponse(resp: Response): Promise<Record<string, unknown>> {
+  const text = await resp.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    const snippet = text.slice(0, 160).replace(/\s+/g, ' ').trim();
+    throw new Error(
+      resp.ok
+        ? `Invalid server response: ${snippet || 'empty body'}`
+        : `Export request failed (${resp.status}): ${snippet || resp.statusText}`,
+    );
+  }
+}
+
 export async function createExportJob(
   params: CreateExportJobParams,
-): Promise<{ jobId: string; status: string; downloadUrl?: string }> {
+): Promise<{ jobId: string; status: string; downloadUrl?: string; rowCount?: number; truncated?: boolean }> {
   const headers = await getAuthHeaders();
   const resp = await fetch('/api/export/create-job', {
     method: 'POST',
@@ -45,12 +60,12 @@ export async function createExportJob(
     body: JSON.stringify(params),
   });
 
-  const data = await resp.json();
+  const data = await parseJsonResponse(resp);
   if (!resp.ok) {
-    throw new Error(data.error ?? 'Failed to create export job');
+    throw new Error(String(data.error ?? `Failed to create export job (${resp.status})`));
   }
 
-  return data;
+  return data as { jobId: string; status: string; downloadUrl?: string; rowCount?: number; truncated?: boolean };
 }
 
 export async function fetchExportJobStatus(jobId: string): Promise<ExportJobStatusResponse> {
@@ -59,12 +74,12 @@ export async function fetchExportJobStatus(jobId: string): Promise<ExportJobStat
     headers,
   });
 
-  const data = await resp.json();
+  const data = await parseJsonResponse(resp);
   if (!resp.ok) {
-    throw new Error(data.error ?? 'Failed to check export status');
+    throw new Error(String(data.error ?? `Failed to check export status (${resp.status})`));
   }
 
-  return data;
+  return data as unknown as ExportJobStatusResponse;
 }
 
 export async function ackExportDownload(jobId: string): Promise<void> {
@@ -124,8 +139,8 @@ export async function runExportFlow(
       jobId: created.jobId,
       status: 'completed',
       downloadUrl: created.downloadUrl,
-      rowCount: (created as { rowCount?: number }).rowCount ?? 0,
-      truncated: (created as { truncated?: boolean }).truncated ?? false,
+      rowCount: created.rowCount ?? 0,
+      truncated: created.truncated ?? false,
       warningHeader: '',
       errorMessage: '',
       format: params.format,
