@@ -1,8 +1,9 @@
 import { resolveWatermarkStyle } from './cameraSettings';
 import { CHARCOAL_STROKE, GOLD_FILL, PROOF_FONT } from './proofFonts';
 import { computeStampLayout, createMeasureContext } from './proofStampLayout';
-import type { StampLayoutResult, StampSegmentKind } from './proofStampLayout';
+import type { StampLayoutResult, StampSegment, StampSegmentKind } from './proofStampLayout';
 import type { CameraOptions, ProofWeather, WatermarkStyle } from '../types';
+import { fillRoundedGradientRect, fillRoundedSolidRect } from './watermarkGradients';
 
 export interface ProofSnapshot {
   capturedAt: string;
@@ -211,6 +212,190 @@ function drawLogoDock(
   }
 }
 
+function drawInlineSegments(
+  ctx: CanvasRenderingContext2D,
+  segments: StampSegment[],
+  x: number,
+  baseline: number,
+  fonts: StampLayoutResult['fonts'],
+  variant: TextDrawVariant,
+) {
+  let segX = x;
+  for (const seg of segments) {
+    const { size, font } = segmentStyle(seg.kind, fonts);
+    drawGoldOutlinedText(ctx, seg.text, segX, baseline, size, font, GOLD_FILL, variant);
+    ctx.font = `${size}px ${font}`;
+    segX += ctx.measureText(seg.text).width;
+  }
+}
+
+function drawDetailLines(
+  ctx: CanvasRenderingContext2D,
+  lines: string[],
+  x: number,
+  startY: number,
+  layout: StampLayoutResult,
+  variant: TextDrawVariant,
+  gapBefore = 0,
+) {
+  let cursorY = startY + gapBefore;
+  for (const line of lines) {
+    const baseline = cursorY + layout.lineHeight * 0.75;
+    drawGoldOutlinedText(
+      ctx,
+      line,
+      x,
+      baseline,
+      layout.fonts.detail,
+      PROOF_FONT.detail,
+      GOLD_FILL,
+      variant,
+    );
+    cursorY += layout.lineHeight;
+  }
+}
+
+function drawUltimateBoxBackground(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  radius: number,
+  layout: StampLayoutResult,
+) {
+  const u = layout.ultimate;
+  if (!u || w <= 0 || h <= 0) return;
+  if (u.gradientEnabled) {
+    fillRoundedGradientRect(ctx, x, y, w, h, radius, u.gradientPreset);
+  } else {
+    fillRoundedSolidRect(ctx, x, y, w, h, radius);
+  }
+}
+
+function drawUltimateLogo(
+  ctx: CanvasRenderingContext2D,
+  logoImg: HTMLImageElement | null,
+  x: number,
+  y: number,
+  layout: StampLayoutResult,
+) {
+  const { logo } = layout;
+  if (!logo.show || !logoImg) return;
+  ctx.shadowColor = 'rgba(58, 58, 76, 0.6)';
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetX = 2;
+  ctx.shadowOffsetY = 3;
+  ctx.drawImage(logoImg, x, y, logo.w, logo.h);
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+}
+
+function drawUltimateOverlay(
+  ctx: CanvasRenderingContext2D,
+  logoImg: HTMLImageElement | null,
+  layout: StampLayoutResult,
+) {
+  const u = layout.ultimate;
+  if (!u) return;
+
+  const { fonts, paddingH, paddingV, margin, logo } = layout;
+  const radius = Math.max(6, Math.round(fonts.task * 0.35));
+  const floatVariant: TextDrawVariant = 'floating';
+  const boxVariant: TextDrawVariant = 'boxed';
+
+  if (u.layoutMode === 'strip' && (u.floatDetailLines.length > 0 || u.floatInline.length > 0)) {
+    let cursorY = u.floatTop;
+    if (u.floatDetailLines.length > 0) {
+      drawDetailLines(ctx, u.floatDetailLines, margin, cursorY, layout, floatVariant);
+      cursorY += u.floatDetailLines.length * layout.lineHeight;
+    }
+    if (u.floatInline.length > 0) {
+      const maxFontSize = Math.max(fonts.user, fonts.store, fonts.task, fonts.timestamp);
+      const baseline = cursorY + (u.floatDetailLines.length > 0 ? u.detailGap : 0) + maxFontSize * 0.85;
+      drawInlineSegments(ctx, u.floatInline, margin, baseline, fonts, floatVariant);
+    }
+  }
+
+  if (u.layoutMode === 'logo_dock' && u.boxEnabled && u.logoBox) {
+    const lb = u.logoBox;
+    drawUltimateBoxBackground(ctx, lb.x, lb.y, lb.w, lb.h, radius, layout);
+
+    const contentX = lb.x + paddingH;
+    const rowTop = lb.y + paddingV;
+    let inlineX = contentX;
+
+    if (u.boxHasLogo && logoImg) {
+      const logoY = rowTop + (Math.max(logo.h, u.boxInline.length ? inlineRowHeight(fonts) : logo.h) - logo.h) / 2;
+      drawUltimateLogo(ctx, logoImg, contentX, logoY, layout);
+      inlineX = contentX + logo.w + logo.gap;
+    }
+
+    if (u.boxInline.length > 0) {
+      const maxFontSize = Math.max(fonts.user, fonts.store, fonts.task, fonts.timestamp);
+      const baseline = rowTop + maxFontSize * 0.85;
+      drawInlineSegments(ctx, u.boxInline, inlineX, baseline, fonts, boxVariant);
+    }
+
+    if (u.boxDetailLines.length > 0) {
+      const rowH = Math.max(u.boxHasLogo ? logo.h : 0, u.boxInline.length ? inlineRowHeight(fonts) : 0);
+      drawDetailLines(
+        ctx,
+        u.boxDetailLines,
+        contentX,
+        rowTop + rowH,
+        layout,
+        boxVariant,
+        u.detailGap,
+      );
+    }
+
+    if (u.textColumn && (u.floatInline.length > 0 || u.floatDetailLines.length > 0)) {
+      const tc = u.textColumn;
+      if (u.floatInline.length > 0) {
+        const maxFontSize = Math.max(fonts.user, fonts.store, fonts.task, fonts.timestamp);
+        const baseline = tc.y + maxFontSize * 0.85;
+        drawInlineSegments(ctx, u.floatInline, tc.x, baseline, fonts, floatVariant);
+      }
+      if (u.floatDetailLines.length > 0) {
+        const afterInline = u.floatInline.length > 0 ? inlineRowHeight(fonts) + u.detailGap : 0;
+        drawDetailLines(ctx, u.floatDetailLines, tc.x, tc.y + afterInline, layout, floatVariant);
+      }
+    }
+    return;
+  }
+
+  if (u.boxEnabled && u.box.w > 0 && u.box.h > 0) {
+    drawUltimateBoxBackground(ctx, u.box.x, u.box.y, u.box.w, u.box.h, radius, layout);
+    const contentX = u.box.x + paddingH;
+    const rowTop = u.box.y + paddingV;
+    let inlineX = contentX;
+
+    if (u.boxHasLogo && logoImg) {
+      const logoY = rowTop + (Math.max(logo.h, u.boxInline.length ? inlineRowHeight(fonts) : logo.h) - logo.h) / 2;
+      drawUltimateLogo(ctx, logoImg, contentX, logoY, layout);
+      inlineX = contentX + logo.w + logo.gap;
+    }
+
+    if (u.boxInline.length > 0) {
+      const maxFontSize = Math.max(fonts.user, fonts.store, fonts.task, fonts.timestamp);
+      const baseline = rowTop + maxFontSize * 0.85;
+      drawInlineSegments(ctx, u.boxInline, inlineX, baseline, fonts, boxVariant);
+    }
+
+    if (u.boxDetailLines.length > 0) {
+      const rowH = Math.max(u.boxHasLogo ? logo.h : 0, u.boxInline.length ? inlineRowHeight(fonts) : 0);
+      drawDetailLines(ctx, u.boxDetailLines, contentX, rowTop + rowH, layout, boxVariant, u.detailGap);
+    }
+  }
+}
+
+function inlineRowHeight(fonts: StampLayoutResult['fonts']): number {
+  return Math.round(Math.max(fonts.user, fonts.store, fonts.task, fonts.timestamp) * 1.1);
+}
+
 export function drawProofOverlay(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
@@ -236,6 +421,11 @@ export function drawProofOverlay(
   if (watermarkStyle === 'blackBoxInline') {
     drawStampBackground(ctx, layout);
     drawStampContent(ctx, logoImg, layout, 'boxed');
+    return;
+  }
+
+  if (watermarkStyle === 'ultimate_custom') {
+    drawUltimateOverlay(ctx, logoImg, layout);
     return;
   }
 

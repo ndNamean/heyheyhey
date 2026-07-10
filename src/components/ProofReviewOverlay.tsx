@@ -32,6 +32,14 @@ function segmentClassName(seg: StampSegment): string {
   }
 }
 
+function renderSegments(segments: StampSegment[]) {
+  return segments.map((seg, i) => (
+    <span key={`${seg.kind}-${i}`} className={segmentClassName(seg)}>
+      {seg.text}
+    </span>
+  ));
+}
+
 export default function ProofReviewOverlay({
   proof,
   className = '',
@@ -58,18 +66,130 @@ export default function ProofReviewOverlay({
   const watermarkStyle = resolveWatermarkStyle(proof.cameraOptionsSnapshot);
   const isLogoDock = watermarkStyle === 'logoDock';
   const isProofStrip = watermarkStyle === 'blackBoxInline';
-  const showFloatingLines = !isLogoDock && !isProofStrip;
+  const isUltimate = watermarkStyle === 'ultimate_custom';
+  const showFloatingLines = !isLogoDock && !isProofStrip && !isUltimate;
   const detailLines = layout.logoDock?.detailLines ?? [];
+  const ultimate = layout.ultimate;
   const rootStyle = layout.cssVars as CSSProperties;
-  const hasContent = isLogoDock
-    ? showLogo || layout.inlineRow.segments.length > 0 || detailLines.length > 0
-    : showLogo || layout.inlineRow.segments.length > 0;
+  const hasContent = isUltimate
+    ? !!ultimate &&
+      (ultimate.boxEnabled ||
+        ultimate.boxInline.length > 0 ||
+        ultimate.boxDetailLines.length > 0 ||
+        ultimate.floatInline.length > 0 ||
+        ultimate.floatDetailLines.length > 0 ||
+        (ultimate.boxHasLogo && showLogo))
+    : isLogoDock
+      ? showLogo || layout.inlineRow.segments.length > 0 || detailLines.length > 0
+      : showLogo || layout.inlineRow.segments.length > 0;
 
-  const inlineSegments = layout.inlineRow.segments.map((seg, i) => (
-    <span key={`${seg.kind}-${i}`} className={segmentClassName(seg)}>
-      {seg.text}
-    </span>
-  ));
+  const inlineSegments = renderSegments(layout.inlineRow.segments);
+
+  const ultimateGradientStyle =
+    ultimate?.gradientEnabled && ultimate.gradientCss
+      ? ({ '--ultimate-gradient': ultimate.gradientCss } as CSSProperties)
+      : undefined;
+
+  if (isUltimate && ultimate) {
+    const floatSegments = renderSegments(ultimate.floatInline);
+    const boxSegments = renderSegments(ultimate.boxInline);
+
+    return (
+      <div
+        className={`proof-overlay-root${className ? ` ${className}` : ''}`}
+        style={rootStyle}
+        aria-hidden="true"
+      >
+        {ultimate.layoutMode === 'strip' &&
+          (ultimate.floatDetailLines.length > 0 || ultimate.floatInline.length > 0) && (
+            <div className="proof-floating-lines proof-ultimate-float">
+              {ultimate.floatDetailLines.map((line, i) => (
+                <div key={`uf-${i}`} className="proof-ts-detail">
+                  {line}
+                </div>
+              ))}
+              {ultimate.floatInline.length > 0 && (
+                <div className="proof-stamp-row proof-stamp-row-inline">{floatSegments}</div>
+              )}
+            </div>
+          )}
+
+        {hasContent &&
+          (ultimate.layoutMode === 'logo_dock' && ultimate.boxEnabled ? (
+            <div className="proof-logo-dock">
+              {ultimate.logoBox && (ultimate.boxHasLogo || ultimate.boxInline.length > 0 || ultimate.boxDetailLines.length > 0) && (
+                <div
+                  className="proof-logo-dock-box proof-stamp--ultimate-box"
+                  style={ultimateGradientStyle}
+                >
+                  {(ultimate.boxHasLogo || ultimate.boxInline.length > 0) && (
+                    <div className="proof-stamp-row proof-stamp-row-inline">
+                      {ultimate.boxHasLogo && showLogo && (
+                        <img
+                          className="proof-ts-logo"
+                          src={proof.proofLogoUrl}
+                          alt=""
+                          aria-hidden="true"
+                        />
+                      )}
+                      {boxSegments}
+                    </div>
+                  )}
+                  {ultimate.boxDetailLines.map((line, i) => (
+                    <div key={`ub-${i}`} className="proof-ts-detail">
+                      {line}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="proof-logo-dock-text">
+                {ultimate.floatInline.length > 0 && (
+                  <div className="proof-stamp-row proof-stamp-row-inline">{floatSegments}</div>
+                )}
+                {ultimate.floatDetailLines.map((line, i) => (
+                  <div key={`ufd-${i}`} className="proof-ts-detail">
+                    {line}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : ultimate.boxEnabled && ultimate.box.w > 0 ? (
+            <div
+              className="proof-stamp-box proof-stamp--ultimate proof-stamp--proof-strip"
+              style={ultimateGradientStyle}
+            >
+              <div className="proof-stamp-row proof-stamp-row-inline">
+                {ultimate.boxHasLogo && showLogo && (
+                  <img
+                    className="proof-ts-logo"
+                    src={proof.proofLogoUrl}
+                    alt=""
+                    aria-hidden="true"
+                  />
+                )}
+                {boxSegments}
+              </div>
+              {ultimate.boxDetailLines.map((line, i) => (
+                <div key={`ub-${i}`} className="proof-ts-detail">
+                  {line}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="proof-ultimate-float-only proof-floating-lines">
+              {ultimate.floatDetailLines.map((line, i) => (
+                <div key={`uf-${i}`} className="proof-ts-detail">
+                  {line}
+                </div>
+              ))}
+              {ultimate.floatInline.length > 0 && (
+                <div className="proof-stamp-row proof-stamp-row-inline">{floatSegments}</div>
+              )}
+            </div>
+          ))}
+      </div>
+    );
+  }
 
   return (
     <div

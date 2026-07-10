@@ -1,4 +1,9 @@
 import type { CameraOptions, Profile, ProofWeather, Store, WatermarkStyle } from '../types';
+import {
+  DEFAULT_ULTIMATE_WATERMARK_CONFIG,
+  normalizeUltimateConfig,
+  resetUltimateConfig,
+} from './ultimateWatermarkConfig';
 
 export const DEFAULT_LOGOS = [
   'https://www.heypelo.com/wp-content/uploads/2025/10/cropped-heypelonegatif.png',
@@ -17,19 +22,27 @@ const WATERMARK_STYLE_CYCLE: WatermarkStyle[] = [
   'transparentFloating',
   'logoDock',
   'blackBoxInline',
+  'ultimate_custom',
 ];
 
 function normalizeWatermarkStyle(value: unknown): WatermarkStyle {
   if (value === 'transparentFloating' || value === 'floating') return 'transparentFloating';
   if (value === 'logoDock' || value === 'logo_dock') return 'logoDock';
   if (value === 'blackBoxInline' || value === 'proof_strip') return 'blackBoxInline';
+  if (value === 'ultimate_custom' || value === 'ultimate') return 'ultimate_custom';
   if (value === 'blackBox' || value === 'black_box') return 'blackBox';
   return 'blackBox';
 }
 
 export function watermarkStyleLabel(
   style: WatermarkStyle,
-  labels: { blackBox: string; floating: string; logoDock: string; proofStrip: string },
+  labels: {
+    blackBox: string;
+    floating: string;
+    logoDock: string;
+    proofStrip: string;
+    ultimate: string;
+  },
 ): string {
   switch (style) {
     case 'transparentFloating':
@@ -38,6 +51,8 @@ export function watermarkStyleLabel(
       return labels.logoDock;
     case 'blackBoxInline':
       return labels.proofStrip;
+    case 'ultimate_custom':
+      return labels.ultimate;
     default:
       return labels.blackBox;
   }
@@ -53,17 +68,29 @@ export function cycleWatermarkStyle(current?: WatermarkStyle): WatermarkStyle {
   return WATERMARK_STYLE_CYCLE[(idx + 1) % WATERMARK_STYLE_CYCLE.length]!;
 }
 
+export function ensureUltimateConfig(opts: CameraOptions): CameraOptions {
+  if (resolveWatermarkStyle(opts) !== 'ultimate_custom') return opts;
+  return {
+    ...opts,
+    watermarkConfig: normalizeUltimateConfig(opts.watermarkConfig),
+  };
+}
+
 export function parseCameraOptions(profile: Profile | null | undefined): CameraOptions {
   const raw = profile?.cameraOptionsJson?.trim();
   if (!raw) return { ...DEFAULT_CAMERA_OPTIONS };
   try {
     const parsed = JSON.parse(raw) as Partial<CameraOptions>;
-    return {
+    const opts: CameraOptions = {
       weatherEnabled: parsed.weatherEnabled ?? true,
       logoEnabled: parsed.logoEnabled ?? true,
       flashlightLastUsed: parsed.flashlightLastUsed ?? false,
       watermarkStyle: normalizeWatermarkStyle(parsed.watermarkStyle),
     };
+    if (opts.watermarkStyle === 'ultimate_custom') {
+      opts.watermarkConfig = normalizeUltimateConfig(parsed.watermarkConfig);
+    }
+    return opts;
   } catch {
     return { ...DEFAULT_CAMERA_OPTIONS };
   }
@@ -72,6 +99,8 @@ export function parseCameraOptions(profile: Profile | null | undefined): CameraO
 export function serializeCameraOptions(opts: CameraOptions): string {
   return JSON.stringify(opts);
 }
+
+export { resetUltimateConfig, DEFAULT_ULTIMATE_WATERMARK_CONFIG, normalizeUltimateConfig };
 
 export function resolveActiveLogoUrl(store: Store | null | undefined): string {
   const saved = store?.proofLogoUrl?.trim();

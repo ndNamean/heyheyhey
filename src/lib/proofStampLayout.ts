@@ -1,5 +1,12 @@
 import { PROOF_FONT } from './proofFonts';
 import { resolveWatermarkStyle } from './cameraSettings';
+import { resolveGradientCss } from './watermarkGradients';
+import {
+  deriveFloatingItems,
+  resolveEffectiveBoxItems,
+  resolveUltimateConfig,
+} from './ultimateWatermarkConfig';
+import type { UltimateBoxItems, UltimateGradientPreset, UltimateLayoutMode } from '../types';
 import type { ProofSnapshot } from './proofWatermarkDraw';
 
 export interface StampLayoutInput {
@@ -34,6 +41,23 @@ export interface StampLayoutResult {
     textColumn: { x: number; y: number; w: number; h: number };
     detailLines: string[];
     dockH: number;
+    detailGap: number;
+  } | null;
+  ultimate: {
+    layoutMode: UltimateLayoutMode;
+    gradientEnabled: boolean;
+    gradientPreset: UltimateGradientPreset;
+    gradientCss: string;
+    boxEnabled: boolean;
+    box: { x: number; y: number; w: number; h: number };
+    logoBox: { x: number; y: number; w: number; h: number } | null;
+    textColumn: { x: number; y: number; w: number; h: number } | null;
+    boxInline: StampSegment[];
+    boxDetailLines: string[];
+    floatInline: StampSegment[];
+    floatDetailLines: string[];
+    boxHasLogo: boolean;
+    floatTop: number;
     detailGap: number;
   } | null;
   cssVars: Record<string, string>;
@@ -180,16 +204,47 @@ function inlineRowHeight(fonts: StampFonts): number {
 }
 
 function buildPartsFromProof(proof: ProofSnapshot): Array<{ kind: 'user' | 'store' | 'task' | 'timestamp'; text: string }> {
+  return buildInlineParts(proof, {
+    logo: true,
+    userName: true,
+    storeCode: true,
+    taskItem: true,
+    timestamp: true,
+    address: false,
+    weather: false,
+  });
+}
+
+function buildInlineParts(
+  proof: ProofSnapshot,
+  items: Pick<UltimateBoxItems, 'userName' | 'storeCode' | 'taskItem' | 'timestamp'>,
+): Array<{ kind: 'user' | 'store' | 'task' | 'timestamp'; text: string }> {
   const parts: Array<{ kind: 'user' | 'store' | 'task' | 'timestamp'; text: string }> = [];
   const user = proof.userName.trim();
   const store = proof.storeCode.trim();
   const task = proof.itemTitle.trim();
   const timestamp = proof.displayTime.trim();
-  if (user) parts.push({ kind: 'user', text: user });
-  if (store) parts.push({ kind: 'store', text: store });
-  if (task) parts.push({ kind: 'task', text: task });
-  if (timestamp) parts.push({ kind: 'timestamp', text: timestamp });
+  if (items.userName && user) parts.push({ kind: 'user', text: user });
+  if (items.storeCode && store) parts.push({ kind: 'store', text: store });
+  if (items.taskItem && task) parts.push({ kind: 'task', text: task });
+  if (items.timestamp && timestamp) parts.push({ kind: 'timestamp', text: timestamp });
   return parts;
+}
+
+function buildDetailLinesForItems(
+  ctx: CanvasRenderingContext2D,
+  proof: ProofSnapshot,
+  items: Pick<UltimateBoxItems, 'address' | 'weather'>,
+  maxWidth: number,
+): string[] {
+  const lines: string[] = [];
+  if (items.address && proof.locationLine.trim()) {
+    lines.push(...capWrappedLines(wrapText(ctx, proof.locationLine, maxWidth), 4));
+  }
+  if (items.weather && proof.weatherLine.trim()) {
+    lines.push(...wrapText(ctx, proof.weatherLine, maxWidth));
+  }
+  return lines;
 }
 
 function fitPartsToWidth(
@@ -229,21 +284,20 @@ function fitPartsToWidth(
   return segments;
 }
 
-function layoutInlineRow(
+function layoutInlineRowFromParts(
   ctx: CanvasRenderingContext2D,
-  proof: ProofSnapshot,
+  parts: Array<{ kind: 'user' | 'store' | 'task' | 'timestamp'; text: string }>,
   textAreaW: number,
   baseFonts: StampFonts,
 ): { segments: StampSegment[]; height: number; fontScale: number; fonts: StampFonts; width: number } {
-  const rawParts = buildPartsFromProof(proof);
-  if (rawParts.length === 0) {
+  if (parts.length === 0) {
     return { segments: [], height: 0, fontScale: 1, fonts: baseFonts, width: 0 };
   }
 
   for (const scale of FONT_SCALES) {
     const fonts = scale === 1 ? baseFonts : scaleFonts(baseFonts, scale);
-    const parts = rawParts.map((p) => ({ ...p }));
-    const segments = fitPartsToWidth(ctx, parts, fonts, textAreaW);
+    const scaledParts = parts.map((p) => ({ ...p }));
+    const segments = fitPartsToWidth(ctx, scaledParts, fonts, textAreaW);
     const width = measureSegmentsWidth(ctx, segments, fonts);
     if (width <= textAreaW) {
       return {
@@ -257,8 +311,8 @@ function layoutInlineRow(
   }
 
   const fonts = scaleFonts(baseFonts, FONT_SCALES[FONT_SCALES.length - 1]!);
-  const parts = rawParts.map((p) => ({ ...p }));
-  const segments = fitPartsToWidth(ctx, parts, fonts, textAreaW);
+  const scaledParts = parts.map((p) => ({ ...p }));
+  const segments = fitPartsToWidth(ctx, scaledParts, fonts, textAreaW);
   return {
     segments,
     height: inlineRowHeight(fonts),
@@ -266,6 +320,15 @@ function layoutInlineRow(
     fonts,
     width: measureSegmentsWidth(ctx, segments, fonts),
   };
+}
+
+function layoutInlineRow(
+  ctx: CanvasRenderingContext2D,
+  proof: ProofSnapshot,
+  textAreaW: number,
+  baseFonts: StampFonts,
+): { segments: StampSegment[]; height: number; fontScale: number; fonts: StampFonts; width: number } {
+  return layoutInlineRowFromParts(ctx, buildPartsFromProof(proof), textAreaW, baseFonts);
 }
 
 export function computeStampLayout(input: StampLayoutInput): StampLayoutResult {
@@ -276,7 +339,288 @@ export function computeStampLayout(input: StampLayoutInput): StampLayoutResult {
   if (style === 'blackBoxInline') {
     return computeProofStripLayout(input);
   }
+  if (style === 'ultimate_custom') {
+    return computeUltimateLayout(input);
+  }
   return computeStandardStampLayout(input);
+}
+
+function computeLogoDimensions(
+  showLogo: boolean,
+  logoImg: HTMLImageElement | null,
+  logoMaxW: number,
+): { logoW: number; logoH: number } {
+  if (!showLogo) return { logoW: 0, logoH: 0 };
+  if (logoImg) {
+    const scale = logoMaxW / logoImg.width;
+    return { logoW: logoMaxW, logoH: logoImg.height * scale };
+  }
+  return { logoW: logoMaxW, logoH: Math.round(logoMaxW * 0.55) };
+}
+
+function computeUltimateLayout(input: StampLayoutInput): StampLayoutResult {
+  const { frameWidth, frameHeight, proof, logoImg, measureCtx: ctx } = input;
+  const fw = Math.max(frameWidth, 240);
+  const fh = Math.max(frameHeight, 240);
+  const opts = proof.cameraOptionsSnapshot;
+  const config = resolveUltimateConfig(opts);
+  const boxItems = config.boxEnabled
+    ? resolveEffectiveBoxItems(config, opts)
+    : { logo: false, userName: false, storeCode: false, taskItem: false, timestamp: false, address: false, weather: false };
+  const floatItems = deriveFloatingItems(boxItems);
+
+  const margin = Math.round(fw * 0.035);
+  const basePadding = Math.round(fw * 0.018);
+  const paddingV = Math.round(basePadding * 0.9);
+  const paddingH = basePadding;
+  const baseFontSize = Math.max(14, Math.round(fw * 0.035));
+  const lineHeight = Math.round(baseFontSize * 1.3);
+  const logoGap = Math.max(6, Math.round(paddingH * 0.5));
+  const logoMaxW = Math.min(Math.round(fw * 0.1), 56);
+  const zoneGap = Math.max(8, Math.round(paddingH * 0.6));
+  const inlineGap = Math.max(4, Math.round(paddingH * 0.35));
+  const detailGap = Math.max(2, Math.round(paddingH * 0.25));
+  const maxW = fw - margin * 2;
+
+  const baseFonts: StampFonts = {
+    user: Math.round(baseFontSize * 1.22),
+    store: Math.round(baseFontSize * 1.08),
+    task: baseFontSize,
+    timestamp: Math.round(baseFontSize * 0.95),
+    detail: baseFontSize,
+  };
+
+  const showLogo =
+    boxItems.logo && opts.logoEnabled && proof.proofLogoUrl.trim().length > 0;
+  const { logoW, logoH } = computeLogoDimensions(showLogo, logoImg, logoMaxW);
+
+  ctx.font = `${baseFonts.detail}px ${PROOF_FONT.detail}`;
+
+  const gradientCss = config.boxGradientEnabled
+    ? resolveGradientCss(config.boxGradientPreset)
+    : '';
+
+  const boxInlineParts = buildInlineParts(proof, boxItems);
+  const floatInlineParts = buildInlineParts(proof, floatItems);
+
+  if (config.layoutMode === 'logo_dock' && config.boxEnabled) {
+    const boxDetailLines = buildDetailLinesForItems(ctx, proof, boxItems, maxW);
+    const floatDetailLines = buildDetailLinesForItems(ctx, proof, floatItems, maxW);
+
+    const boxInlineInnerParts = buildInlineParts(proof, {
+      userName: boxItems.userName,
+      storeCode: boxItems.storeCode,
+      taskItem: boxItems.taskItem,
+      timestamp: boxItems.timestamp,
+    });
+
+    const logoBoxInnerMaxW = Math.max(maxW - paddingH * 2, 0);
+    let boxInline = layoutInlineRowFromParts(
+      ctx,
+      boxInlineInnerParts,
+      Math.max(logoBoxInnerMaxW - (showLogo ? logoW + logoGap : 0), 0),
+      baseFonts,
+    );
+    const fonts = boxInline.fonts;
+
+    const logoBoxContentW =
+      (showLogo ? logoW + (boxInline.width > 0 ? logoGap : 0) : 0) + boxInline.width;
+    const logoBoxInnerW = Math.max(logoBoxContentW, showLogo ? logoW : 0);
+    const logoBoxW = logoBoxInnerW > 0 || boxDetailLines.length > 0 ? logoBoxInnerW + paddingH * 2 : 0;
+
+    const boxInlineRowH = Math.max(showLogo ? logoH : 0, boxInline.height);
+    const logoBoxInnerH =
+      boxInlineRowH +
+      (boxDetailLines.length > 0 ? detailGap + boxDetailLines.length * lineHeight : 0);
+    const logoBoxH = logoBoxInnerH > 0 ? logoBoxInnerH + paddingV * 2 : 0;
+
+    const textColumnX = margin + (logoBoxW > 0 ? logoBoxW + logoGap : 0);
+    const textColumnMaxW = Math.max(fw - margin - textColumnX, 0);
+
+    let floatInline = layoutInlineRowFromParts(ctx, floatInlineParts, textColumnMaxW, baseFonts);
+    if (floatInline.segments.length === 0 && floatInlineParts.length > 0) {
+      floatInline = layoutInlineRowFromParts(ctx, floatInlineParts, textColumnMaxW, baseFonts);
+    }
+
+    const floatDetailAtMax = buildDetailLinesForItems(ctx, proof, floatItems, textColumnMaxW);
+    const textBlockH =
+      floatInline.height +
+      (floatDetailAtMax.length > 0 ? detailGap + floatDetailAtMax.length * lineHeight : 0);
+    const dockH = Math.max(logoBoxH, textBlockH);
+    const dockY = fh - margin - dockH;
+
+    const logoBox =
+      logoBoxW > 0
+        ? {
+            x: margin,
+            y: dockY + (dockH - logoBoxH) / 2,
+            w: logoBoxW,
+            h: logoBoxH,
+          }
+        : null;
+
+    const textColumn =
+      textColumnMaxW > 0 && (floatInline.segments.length > 0 || floatDetailAtMax.length > 0)
+        ? { x: textColumnX, y: dockY, w: textColumnMaxW, h: textBlockH }
+        : null;
+
+    const dockW =
+      (logoBoxW > 0 ? logoBoxW + logoGap : 0) +
+      (textColumn ? Math.max(floatInline.width, textColumnMaxW * 0.4) : 0);
+    const box = {
+      x: margin,
+      y: dockY,
+      w: Math.min(Math.max(dockW, logoBoxW), maxW),
+      h: dockH,
+    };
+
+    let floatTop = dockY - zoneGap;
+    if (floatTop < margin) floatTop = margin;
+
+    const cssVars: Record<string, string> = {
+      '--stamp-box-w': `${box.w}px`,
+      '--stamp-pad-v': `${paddingV}px`,
+      '--stamp-pad-h': `${paddingH}px`,
+      '--stamp-inline-gap': `${inlineGap}px`,
+      '--font-user': `${fonts.user}px`,
+      '--font-store': `${fonts.store}px`,
+      '--font-task': `${fonts.task}px`,
+      '--font-ts': `${fonts.timestamp}px`,
+      '--font-detail': `${fonts.detail}px`,
+      '--logo-max-w': `${logoW}px`,
+      '--logo-max-h': `${logoH}px`,
+      '--stamp-line-height': `${lineHeight}px`,
+      '--logo-dock-w': `${box.w}px`,
+      '--text-col-w': `${textColumnMaxW}px`,
+      '--dock-h': `${dockH}px`,
+      '--ultimate-gradient': gradientCss,
+    };
+
+    return {
+      margin,
+      paddingV,
+      paddingH,
+      zoneGap,
+      lineHeight,
+      box,
+      fonts,
+      logo: { w: logoW, h: logoH, show: showLogo && logoW > 0, gap: logoGap },
+      rowH: dockH,
+      inlineRow: { segments: boxInline.segments, height: boxInline.height, fontScale: boxInline.fontScale },
+      floating: { maxWidth: maxW, lines: [], top: floatTop },
+      logoDock: null,
+      ultimate: {
+        layoutMode: 'logo_dock',
+        gradientEnabled: config.boxGradientEnabled,
+        gradientPreset: config.boxGradientPreset,
+        gradientCss,
+        boxEnabled: config.boxEnabled,
+        box,
+        logoBox,
+        textColumn,
+        boxInline: boxInline.segments,
+        boxDetailLines,
+        floatInline: floatInline.segments,
+        floatDetailLines: floatDetailAtMax,
+        boxHasLogo: showLogo,
+        floatTop,
+        detailGap,
+      },
+      cssVars,
+    };
+  }
+
+  // strip mode (or logo_dock with box disabled falls through to floating-only strip)
+  const boxDetailLines = config.boxEnabled
+    ? buildDetailLinesForItems(ctx, proof, boxItems, maxW - paddingH * 2)
+    : [];
+  const floatDetailLines = buildDetailLinesForItems(ctx, proof, floatItems, maxW);
+
+  const boxTextMaxW = Math.max(maxW - paddingH * 2 - (showLogo && config.boxEnabled ? logoW + logoGap : 0), 0);
+  let boxInline = config.boxEnabled
+    ? layoutInlineRowFromParts(ctx, boxInlineParts, boxTextMaxW, baseFonts)
+    : { segments: [], height: 0, fontScale: 1, fonts: baseFonts, width: 0 };
+  let floatInline = layoutInlineRowFromParts(ctx, floatInlineParts, maxW, baseFonts);
+  const fonts = boxInline.segments.length > 0 ? boxInline.fonts : floatInline.fonts;
+
+  const boxRowH = Math.max(showLogo && config.boxEnabled ? logoH : 0, boxInline.height);
+  const boxInnerH =
+    boxRowH + (boxDetailLines.length > 0 ? detailGap + boxDetailLines.length * lineHeight : 0);
+  const boxH = config.boxEnabled && (boxInnerH > 0 || showLogo)
+    ? paddingV * 2 + boxInnerH
+    : 0;
+
+  const contentNeedW = config.boxEnabled
+    ? (showLogo ? logoW + logoGap : 0) + boxInline.width + paddingH * 2
+    : 0;
+  const boxW = config.boxEnabled
+    ? clamp(Math.max(contentNeedW, showLogo ? logoW + paddingH * 2 : 48), 0, maxW)
+    : 0;
+
+  if (config.boxEnabled && boxW > 0) {
+    const refinedTextW = Math.max(boxW - paddingH * 2 - (showLogo ? logoW + logoGap : 0), 0);
+    boxInline = layoutInlineRowFromParts(ctx, boxInlineParts, refinedTextW, baseFonts);
+  }
+
+  const boxX = margin;
+  const boxY = boxH > 0 ? fh - margin - boxH : fh - margin;
+
+  const floatBlockH =
+    floatDetailLines.length * lineHeight +
+    (floatInline.segments.length > 0 ? floatInline.height + (floatDetailLines.length > 0 ? detailGap : 0) : 0);
+  let floatTop = (boxH > 0 ? boxY : fh - margin) - zoneGap - floatBlockH;
+  if (floatTop < margin) floatTop = margin;
+
+  const box = { x: boxX, y: boxY, w: boxW, h: boxH };
+
+  const cssVars: Record<string, string> = {
+    '--stamp-box-w': `${boxW}px`,
+    '--stamp-pad-v': `${paddingV}px`,
+    '--stamp-pad-h': `${paddingH}px`,
+    '--stamp-inline-gap': `${inlineGap}px`,
+    '--font-user': `${fonts.user}px`,
+    '--font-store': `${fonts.store}px`,
+    '--font-task': `${fonts.task}px`,
+    '--font-ts': `${fonts.timestamp}px`,
+    '--font-detail': `${fonts.detail}px`,
+    '--logo-max-w': `${logoW}px`,
+    '--logo-max-h': `${logoH}px`,
+    '--stamp-line-height': `${lineHeight}px`,
+    '--ultimate-gradient': gradientCss,
+  };
+
+  return {
+    margin,
+    paddingV,
+    paddingH,
+    zoneGap,
+    lineHeight,
+    box,
+    fonts,
+    logo: { w: logoW, h: logoH, show: showLogo && logoW > 0, gap: logoGap },
+    rowH: boxH,
+    inlineRow: { segments: boxInline.segments, height: boxInline.height, fontScale: boxInline.fontScale },
+    floating: { maxWidth: maxW, lines: floatDetailLines, top: floatTop },
+    logoDock: null,
+    ultimate: {
+      layoutMode: 'strip',
+      gradientEnabled: config.boxGradientEnabled,
+      gradientPreset: config.boxGradientPreset,
+      gradientCss,
+      boxEnabled: config.boxEnabled && boxW > 0,
+      box,
+      logoBox: null,
+      textColumn: null,
+      boxInline: boxInline.segments,
+      boxDetailLines,
+      floatInline: floatInline.segments,
+      floatDetailLines,
+      boxHasLogo: showLogo && config.boxEnabled,
+      floatTop,
+      detailGap,
+    },
+    cssVars,
+  };
 }
 
 function computeProofStripLayout(input: StampLayoutInput): StampLayoutResult {
@@ -375,6 +719,7 @@ function computeProofStripLayout(input: StampLayoutInput): StampLayoutResult {
     },
     floating: { maxWidth: fw - margin * 2, lines: [], top: margin },
     logoDock: null,
+    ultimate: null,
     cssVars,
   };
 }
@@ -501,6 +846,7 @@ function computeLogoDockLayout(input: StampLayoutInput): StampLayoutResult {
       dockH,
       detailGap,
     },
+    ultimate: null,
     cssVars,
   };
 }
@@ -616,6 +962,7 @@ function computeStandardStampLayout(input: StampLayoutInput): StampLayoutResult 
     },
     floating: { maxWidth: floatMaxWidth, lines: floatingLines, top: floatTop },
     logoDock: null,
+    ultimate: null,
     cssVars,
   };
 }

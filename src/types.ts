@@ -46,13 +46,47 @@ export type ClockType = 'clockIn' | 'clockOut';
 
 export type LogSeverity = 'info' | 'warning' | 'critical';
 
-export type WatermarkStyle = 'blackBox' | 'transparentFloating' | 'logoDock' | 'blackBoxInline';
+export type WatermarkStyle =
+  | 'blackBox'
+  | 'transparentFloating'
+  | 'logoDock'
+  | 'blackBoxInline'
+  | 'ultimate_custom';
+
+export type UltimateLayoutMode = 'strip' | 'logo_dock';
+
+export type UltimateGradientPreset =
+  | 'luxury_ceo'
+  | 'cyberpunk'
+  | 'royal_mystique'
+  | 'volcanic_energy'
+  | 'moody_monochrome';
+
+export interface UltimateBoxItems {
+  logo: boolean;
+  userName: boolean;
+  storeCode: boolean;
+  taskItem: boolean;
+  timestamp: boolean;
+  address: boolean;
+  weather: boolean;
+}
+
+export interface UltimateWatermarkConfig {
+  boxEnabled: boolean;
+  boxGradientEnabled: boolean;
+  boxGradientPreset: UltimateGradientPreset;
+  boxItems: UltimateBoxItems;
+  layoutMode: UltimateLayoutMode;
+  autoResize: boolean;
+}
 
 export interface CameraOptions {
   weatherEnabled: boolean;
   logoEnabled: boolean;
   flashlightLastUsed: boolean;
   watermarkStyle?: WatermarkStyle;
+  watermarkConfig?: UltimateWatermarkConfig;
 }
 
 export interface ProofWeather {

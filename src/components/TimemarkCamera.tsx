@@ -7,6 +7,7 @@ import {
   buildWeatherLine,
   canEditStoreLogo,
   cycleWatermarkStyle,
+  ensureUltimateConfig,
   parseCameraOptions,
   resolveActiveLogoUrl,
   resolveWatermarkStyle,
@@ -23,6 +24,7 @@ import {
 } from '../lib/proofWatermarkDraw';
 import { needsVideoProof } from '../lib/roles';
 import ProofReviewOverlay from './ProofReviewOverlay';
+import UltimateWatermarkSettings from './UltimateWatermarkSettings';
 import type { CameraOptions, Profile, ProofWeather, Store, UploadedMedia } from '../types';
 
 interface Props {
@@ -1211,10 +1213,12 @@ export default function TimemarkCamera({
                   type="button"
                   className="cam-opt-toggle"
                   onClick={() =>
-                    saveCameraOptions({
-                      ...cameraOptions,
-                      watermarkStyle: cycleWatermarkStyle(cameraOptions.watermarkStyle),
-                    })
+                    saveCameraOptions(
+                      ensureUltimateConfig({
+                        ...cameraOptions,
+                        watermarkStyle: cycleWatermarkStyle(cameraOptions.watermarkStyle),
+                      }),
+                    )
                   }
                 >
                   {watermarkStyleLabel(resolveWatermarkStyle(cameraOptions), {
@@ -1222,9 +1226,38 @@ export default function TimemarkCamera({
                     floating: t.camera.watermarkFloating,
                     logoDock: t.camera.watermarkLogoDock,
                     proofStrip: t.camera.watermarkProofStrip,
+                    ultimate: t.camera.watermarkUltimate,
                   })}
                 </button>
               </div>
+              {resolveWatermarkStyle(cameraOptions) === 'ultimate_custom' && (
+                <UltimateWatermarkSettings
+                  cameraOptions={cameraOptions}
+                  onSave={saveCameraOptions}
+                  labels={{
+                    boxItems: t.camera.ultimateBoxItems,
+                    gradient: t.camera.ultimateGradient,
+                    gradientOn: t.camera.ultimateGradientOn,
+                    gradientOff: t.camera.ultimateGradientOff,
+                    layoutMode: t.camera.ultimateLayoutMode,
+                    layoutStrip: t.camera.ultimateLayoutStrip,
+                    layoutLogoDock: t.camera.ultimateLayoutLogoDock,
+                    resetDefault: t.camera.ultimateResetDefault,
+                    itemLogo: t.camera.ultimateItemLogo,
+                    itemUser: t.camera.ultimateItemUser,
+                    itemStore: t.camera.ultimateItemStore,
+                    itemTask: t.camera.ultimateItemTask,
+                    itemTimestamp: t.camera.ultimateItemTimestamp,
+                    itemAddress: t.camera.ultimateItemAddress,
+                    itemWeather: t.camera.ultimateItemWeather,
+                    gradientLuxuryCeo: t.camera.gradientLuxuryCeo,
+                    gradientCyberpunk: t.camera.gradientCyberpunk,
+                    gradientRoyalMystique: t.camera.gradientRoyalMystique,
+                    gradientVolcanicEnergy: t.camera.gradientVolcanicEnergy,
+                    gradientMoodyMonochrome: t.camera.gradientMoodyMonochrome,
+                  }}
+                />
+              )}
               {cameraOptions.logoEnabled && activeLogoUrl && (
                 <div className="camera-options-logo-preview">
                   <img src={activeLogoUrl} alt={t.camera.logoPreview} />

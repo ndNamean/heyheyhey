@@ -859,6 +859,35 @@ body.wizard-active .page {
 .proof-stamp-box.proof-stamp--proof-strip {
   line-height: 1.05;
 }
+.proof-stamp-box.proof-stamp--ultimate,
+.proof-logo-dock-box.proof-stamp--ultimate-box {
+  background: rgba(0, 0, 0, 0.72);
+  background-image: var(--ultimate-gradient, none);
+}
+.proof-stamp-box.proof-stamp--ultimate {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.proof-stamp--ultimate-box {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.proof-ultimate-float .proof-stamp-row-inline,
+.proof-logo-dock-text .proof-font-user,
+.proof-logo-dock-text .proof-font-store,
+.proof-logo-dock-text .proof-font-task,
+.proof-logo-dock-text .proof-ts-time,
+.proof-logo-dock-text .proof-stamp-sep,
+.proof-ultimate-float .proof-font-user,
+.proof-ultimate-float .proof-font-store,
+.proof-ultimate-float .proof-font-task,
+.proof-ultimate-float .proof-ts-time,
+.proof-ultimate-float .proof-stamp-sep,
+.proof-ultimate-float .proof-ts-detail {
+  text-shadow: 0 1px 4px rgba(58, 58, 76, 0.9), 0 0 6px rgba(58, 58, 76, 0.45);
+}
 .proof-stamp--transparent-floating .proof-font-user,
 .proof-stamp--transparent-floating .proof-font-store,
 .proof-stamp--transparent-floating .proof-font-task,
@@ -1055,6 +1084,61 @@ body.wizard-active .page {
 .camera-options-defaults {
   display: flex;
   gap: 8px;
+}
+.camera-options-ultimate {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.camera-options-ultimate-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.camera-options-ultimate-label {
+  color: #ccc;
+  font-size: 12px;
+}
+.camera-options-item-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.cam-opt-toggle-sm {
+  font-size: 11px;
+  padding: 3px 8px;
+  text-align: center;
+}
+.cam-opt-toggle-sm.active,
+.cam-opt-preset.active {
+  color: #FDC216;
+  border-color: #FDC216;
+}
+.camera-options-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cam-opt-preset {
+  flex: 1 1 calc(50% - 6px);
+  min-height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 4px 6px;
+  color: #fff;
+  font-size: 10px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.cam-opt-preset span {
+  display: block;
+  line-height: 1.2;
+}
+.cam-opt-reset {
+  width: 100%;
+  margin-top: 2px;
 }
 .cam-opt-default-thumb {
   background: rgba(255, 255, 255, 0.08);
