@@ -3,6 +3,7 @@ import { id } from '@instantdb/react';
 import { db } from '../db';
 import { nowIso } from '../lib/utils';
 import { useLang } from '../i18n';
+import { BACK_PRIORITY, useNativeBack } from '../lib/nativeBack';
 import LanguageSelector from './LanguageSelector';
 import type { Profile } from '../types';
 
@@ -123,6 +124,17 @@ function LoginScreen() {
       setLoading(false);
     }
   }
+
+  useNativeBack(
+    () => {
+      setSent(false);
+      setCode('');
+      setError('');
+      return true;
+    },
+    sent && !loading,
+    BACK_PRIORITY.MODAL,
+  );
 
   // Spinner while auto-processing invite link
   if (loading && inviteEmail && !sent) {

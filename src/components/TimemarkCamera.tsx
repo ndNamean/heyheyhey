@@ -24,6 +24,7 @@ import {
   type ProofSnapshot,
 } from '../lib/proofWatermarkDraw';
 import { needsVideoProof } from '../lib/roles';
+import { BACK_PRIORITY, useNativeBack } from '../lib/nativeBack';
 import ProofReviewOverlay from './ProofReviewOverlay';
 import UltimateWatermarkSettings from './UltimateWatermarkSettings';
 import type { CameraOptions, Profile, ProofWeather, Store, UploadedMedia } from '../types';
@@ -868,6 +869,47 @@ export default function TimemarkCamera({
     setCamState('idle');
     setCamError('');
   }
+
+  function handleDiscardCapture() {
+    stopMediaRecorder();
+    if (capturedUrl) URL.revokeObjectURL(capturedUrl);
+    setCapturedBlob(null);
+    setCapturedUrl('');
+    setConfirmError('');
+    setFrozenProof(null);
+    setCaptureSize(null);
+    setCapturedMimeType('image/jpeg');
+    setOptionsOpen(false);
+    setCameraOn(false);
+    setCamState('idle');
+  }
+
+  useNativeBack(
+    () => {
+      setOptionsOpen(false);
+      return true;
+    },
+    optionsOpen && cameraOn,
+    BACK_PRIORITY.CAMERA_OPTIONS,
+  );
+
+  useNativeBack(
+    () => {
+      void handleCloseCamera();
+      return true;
+    },
+    cameraOn && !optionsOpen,
+    BACK_PRIORITY.CAMERA,
+  );
+
+  useNativeBack(
+    () => {
+      handleDiscardCapture();
+      return true;
+    },
+    !!capturedBlob,
+    BACK_PRIORITY.POST_CAPTURE,
+  );
 
   async function handleSwitchCamera() {
     await setTorchOff();

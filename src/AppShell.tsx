@@ -13,6 +13,7 @@ import PhotoSheetPage from './pages/PhotoSheetPage';
 import VerifyPhotoPage from './pages/VerifyPhotoPage';
 import ShiftsPage from './pages/ShiftsPage';
 import LogbookPage from './pages/LogbookPage';
+import { BACK_PRIORITY, useNativeBack } from './lib/nativeBack';
 import type { Profile } from './types';
 
 interface Props {
@@ -22,6 +23,17 @@ interface Props {
 export default function AppShell({ profile }: Props) {
   const [page, setPage] = useState<Page>('home');
   const [correctionReportId, setCorrectionReportId] = useState<string | null>(null);
+
+  useNativeBack(
+    () => {
+      if (page === 'home') return false;
+      setCorrectionReportId(null);
+      setPage('home');
+      return true;
+    },
+    page !== 'home',
+    BACK_PRIORITY.PAGE,
+  );
 
   function startNewReport() {
     setCorrectionReportId(null);

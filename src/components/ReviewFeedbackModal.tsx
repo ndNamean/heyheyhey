@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLang } from '../i18n';
 import { FEEDBACK_REASONS, type FeedbackCode } from '../lib/feedbackReasons';
+import { BACK_PRIORITY, useNativeBack } from '../lib/nativeBack';
 
 export interface FeedbackResult {
   feedbackCode: FeedbackCode;
@@ -37,6 +38,15 @@ export default function ReviewFeedbackModal({ open, mode, itemTitle, onConfirm, 
       document.body.style.overflow = prev;
     };
   }, [open]);
+
+  useNativeBack(
+    () => {
+      onCancel();
+      return true;
+    },
+    open,
+    BACK_PRIORITY.MODAL,
+  );
 
   if (!open) return null;
 

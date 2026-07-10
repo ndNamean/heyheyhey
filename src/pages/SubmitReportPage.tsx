@@ -8,6 +8,7 @@ import {
   buildItemResubmittedEvents,
   buildReportSubmittedEvents,
 } from '../lib/reviewEvents';
+import { BACK_PRIORITY, useNativeBack } from '../lib/nativeBack';
 import TimemarkCamera from '../components/TimemarkCamera';
 import type {
   LocalResponse,
@@ -179,6 +180,42 @@ export default function SubmitReportPage({
     }
     return false;
   }
+
+  function goWizardBack(): boolean {
+    if (submitted) {
+      if (correctionMode) {
+        onCorrectionComplete?.();
+        return true;
+      }
+      // Let AppShell page back navigate home
+      return false;
+    }
+
+    if (blockIfCameraReviewPending()) return true;
+
+    // Final review/submit screen (step past last item)
+    if (!currentItem && visibleItems.length > 0) {
+      setStep(visibleItems.length - 1);
+      return true;
+    }
+
+    if (!inChecklistFlow) return false;
+
+    if (step === 0) {
+      if (correctionMode) {
+        onCorrectionComplete?.();
+        return true;
+      }
+      setTemplateId('');
+      setStep(0);
+      return true;
+    }
+
+    setStep((s) => s - 1);
+    return true;
+  }
+
+  useNativeBack(goWizardBack, inChecklistFlow || submitted, BACK_PRIORITY.WIZARD);
 
   function setResponse(itemId: string, patch: Partial<LocalResponse>) {
     setResponses((prev) => ({
@@ -551,7 +588,9 @@ export default function SubmitReportPage({
                 ? t.submit.resubmitCorrectionsCheck
                 : t.submit.submitReportCheck
           }
-          onBack={() => setStep(visibleItems.length - 1)}
+          onBack={() => {
+            goWizardBack();
+          }}
           onNext={correctionMode ? resubmitCorrections : submitReport}
           nextDisabled={submitting}
         />
@@ -672,17 +711,7 @@ export default function SubmitReportPage({
             : t.submit.nextItem
         }
         onBack={() => {
-          if (blockIfCameraReviewPending()) return;
-          if (step === 0) {
-            if (correctionMode) {
-              onCorrectionComplete?.();
-            } else {
-              setTemplateId('');
-              setStep(0);
-            }
-          } else {
-            setStep((s) => s - 1);
-          }
+          goWizardBack();
         }}
         onNext={() => {
           if (blockIfCameraReviewPending()) return;
