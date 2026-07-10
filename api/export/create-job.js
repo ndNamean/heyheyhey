@@ -3,12 +3,12 @@
  */
 
 import { id } from '@instantdb/admin';
-import { getAdminDb, parseBody } from '../lib/export/instant-admin.js';
-import { authenticateExportRequest } from '../lib/export/auth.js';
-import { assertExportJobAccess } from '../lib/export/rbac.js';
-import { resolveDashboardScope, resolveReviewStatusScope } from '../lib/export/scope.js';
-import { logExportRequested } from '../lib/export/audit.js';
-import { processExportJob } from '../lib/export/job-runner.js';
+import { getAdminDb, parseBody } from '../../server/lib/export/instant-admin.js';
+import { authenticateExportRequest } from '../../server/lib/export/auth.js';
+import { assertExportJobAccess } from '../../server/lib/export/rbac.js';
+import { resolveDashboardScope, resolveReviewStatusScope } from '../../server/lib/export/scope.js';
+import { logExportRequested } from '../../server/lib/export/audit.js';
+import { processExportJob } from '../../server/lib/export/job-runner.js';
 
 const INLINE_BUDGET_MS = 5000;
 

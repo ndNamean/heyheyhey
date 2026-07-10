@@ -2,10 +2,10 @@
  * POST /api/export/download-ack — record download timestamp for audit.
  */
 
-import { parseBody } from '../lib/export/instant-admin.js';
-import { authenticateExportRequest } from '../lib/export/auth.js';
-import { logExportDownloaded } from '../lib/export/audit.js';
-import { getAdminDb } from '../lib/export/instant-admin.js';
+import { parseBody } from '../../server/lib/export/instant-admin.js';
+import { authenticateExportRequest } from '../../server/lib/export/auth.js';
+import { logExportDownloaded } from '../../server/lib/export/audit.js';
+import { getAdminDb } from '../../server/lib/export/instant-admin.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
