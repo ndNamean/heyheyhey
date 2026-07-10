@@ -12,12 +12,12 @@ import {
   logExportCompleted,
   logExportFailed,
 } from './audit.js';
+import { renderExportPdf } from './pdf/render-pdf.js';
 
 const MEDIA_EXPIRY_FOOTER =
   'Note: Photo/Video links expire 7 days after report approval.';
 
 async function renderPdf(job, profileCtx, params, reports, statusRows) {
-  const { renderExportPdf } = await import('./pdf/render-pdf.js');
   return renderExportPdf({
     exportType: job.exportType,
     format: job.format,

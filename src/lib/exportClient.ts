@@ -54,7 +54,7 @@ export async function createExportJob(
   params: CreateExportJobParams,
 ): Promise<{ jobId: string; status: string; downloadUrl?: string; rowCount?: number; truncated?: boolean }> {
   const headers = await getAuthHeaders();
-  const resp = await fetch('/api/export/create-job', {
+  const resp = await fetch('/api/export?action=create', {
     method: 'POST',
     headers,
     body: JSON.stringify(params),
@@ -70,9 +70,10 @@ export async function createExportJob(
 
 export async function fetchExportJobStatus(jobId: string): Promise<ExportJobStatusResponse> {
   const headers = await getAuthHeaders();
-  const resp = await fetch(`/api/export/job-status?jobId=${encodeURIComponent(jobId)}`, {
-    headers,
-  });
+  const resp = await fetch(
+    `/api/export?action=status&jobId=${encodeURIComponent(jobId)}`,
+    { headers },
+  );
 
   const data = await parseJsonResponse(resp);
   if (!resp.ok) {
@@ -84,7 +85,7 @@ export async function fetchExportJobStatus(jobId: string): Promise<ExportJobStat
 
 export async function ackExportDownload(jobId: string): Promise<void> {
   const headers = await getAuthHeaders();
-  await fetch('/api/export/download-ack', {
+  await fetch('/api/export?action=ack', {
     method: 'POST',
     headers,
     body: JSON.stringify({ jobId }),

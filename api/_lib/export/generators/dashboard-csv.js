@@ -2,16 +2,16 @@
  * Dashboard CSV generator.
  */
 
-import { buildCsv } from './csv-builder.js';
+import { buildCsv } from '../csv-builder.js';
 import {
   fetchReportsWithResponses,
   fetchMediaByResponseIds,
-} from './queries.js';
+} from '../queries.js';
 import {
   DASHBOARD_CSV_HEADERS,
   mapDashboardRows,
-} from './row-mappers.js';
-import { resolveDashboardScope } from './scope.js';
+} from '../row-mappers.js';
+import { resolveDashboardScope } from '../scope.js';
 
 export async function generateDashboardCsv(profileCtx, params) {
   const scopeResult = resolveDashboardScope(profileCtx, params);
