@@ -13,7 +13,7 @@
     },
     {
       "path": "/api/export/process-jobs",
-      "schedule": "* * * * *"
+      "schedule": "0 3 * * *"
     }
   ],
   "functions": {
