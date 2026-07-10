@@ -34,3 +34,16 @@ export async function ensureProofFontsLoaded(baseFontSize: number): Promise<void
 }
 
 export { GOLD_FILL, CHARCOAL_STROKE };
+
+export function baseFontSizeForFrame(frameWidth: number): number {
+  return Math.max(14, Math.round(Math.max(frameWidth, 240) * 0.035));
+}
+
+export function configureMeasureFonts(
+  ctx: CanvasRenderingContext2D,
+  frameWidth: number,
+): number {
+  const baseFontSize = baseFontSizeForFrame(frameWidth);
+  ctx.font = `${baseFontSize}px ${PROOF_FONT.detail}`;
+  return baseFontSize;
+}

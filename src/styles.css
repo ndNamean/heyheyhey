@@ -799,6 +799,27 @@ body.wizard-active .page {
   align-items: flex-start;
   max-width: calc(100% - 24px);
 }
+.proof-overlay-letterbox {
+  position: absolute;
+  pointer-events: none;
+  z-index: 3;
+  transform-origin: bottom left;
+}
+.proof-overlay-letterbox .proof-overlay-root {
+  bottom: var(--stamp-margin, 12px);
+  left: var(--stamp-margin, 12px);
+  max-width: calc(100% - var(--stamp-margin, 12px) * 2);
+}
+.proof-overlay-root .proof-font-user,
+.proof-overlay-root .proof-font-task {
+  overflow: visible;
+  text-overflow: clip;
+  flex-shrink: 0;
+}
+.proof-overlay-root .proof-ts-detail {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .proof-media-frame {
   position: relative;
   display: block;

@@ -15,6 +15,8 @@ interface Props {
   className?: string;
   frameWidth?: number;
   frameHeight?: number;
+  logoImg?: HTMLImageElement | null;
+  layoutKey?: number;
 }
 
 function segmentClassName(seg: StampSegment): string {
@@ -45,6 +47,8 @@ export default function ProofReviewOverlay({
   className = '',
   frameWidth,
   frameHeight,
+  logoImg = null,
+  layoutKey = 0,
 }: Props) {
   const fw = frameWidth && frameWidth > 0 ? frameWidth : FALLBACK_FRAME_WIDTH;
   const fh = frameHeight && frameHeight > 0 ? frameHeight : FALLBACK_FRAME_HEIGHT;
@@ -55,10 +59,10 @@ export default function ProofReviewOverlay({
       frameWidth: fw,
       frameHeight: fh,
       proof,
-      logoImg: null,
+      logoImg,
       measureCtx,
     });
-  }, [fw, fh, proof]);
+  }, [fw, fh, proof, logoImg, layoutKey]);
 
   const showLogo =
     proof.cameraOptionsSnapshot.logoEnabled && proof.proofLogoUrl.trim().length > 0;
@@ -70,7 +74,10 @@ export default function ProofReviewOverlay({
   const showFloatingLines = !isLogoDock && !isProofStrip && !isUltimate;
   const detailLines = layout.logoDock?.detailLines ?? [];
   const ultimate = layout.ultimate;
-  const rootStyle = layout.cssVars as CSSProperties;
+  const rootStyle = {
+    ...(layout.cssVars as CSSProperties),
+    '--stamp-margin': `${layout.margin}px`,
+  } as CSSProperties;
   const hasContent = isUltimate
     ? !!ultimate &&
       (ultimate.boxEnabled ||

@@ -17,6 +17,7 @@ import {
 import { generatePhotoCode, nowIso } from '../lib/utils';
 import { isVideoMedia, normalizeStoredMime, videoProxyUrl } from '../lib/mediaMime';
 import { ensureProofFontsLoaded } from '../lib/proofFonts';
+import { computeLetterboxLayout, type LetterboxLayout } from '../lib/proofOverlayLetterbox';
 import {
   drawProofOverlay,
   loadImageForCanvas,
@@ -175,6 +176,9 @@ export default function TimemarkCamera({
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [previewFrameSize, setPreviewFrameSize] = useState<{ w: number; h: number } | null>(null);
+  const [letterboxLayout, setLetterboxLayout] = useState<LetterboxLayout | null>(null);
+  const [overlayLogoImg, setOverlayLogoImg] = useState<HTMLImageElement | null>(null);
+  const [overlayLayoutKey, setOverlayLayoutKey] = useState(0);
 
   const isAdminLogo = canEditStoreLogo(profile?.role);
   const activeLogoUrl = storeLogoUrl.trim() || resolveActiveLogoUrl(store);
@@ -401,10 +405,21 @@ export default function TimemarkCamera({
     const viewfinder = viewfinderRef.current;
     if (video && video.videoWidth > 0 && video.videoHeight > 0) {
       setPreviewFrameSize({ w: video.videoWidth, h: video.videoHeight });
+      if (viewfinder && viewfinder.clientWidth > 0 && viewfinder.clientHeight > 0) {
+        setLetterboxLayout(
+          computeLetterboxLayout(
+            viewfinder.clientWidth,
+            viewfinder.clientHeight,
+            video.videoWidth,
+            video.videoHeight,
+          ),
+        );
+      }
       return;
     }
     if (viewfinder && viewfinder.clientWidth > 0 && viewfinder.clientHeight > 0) {
       setPreviewFrameSize({ w: viewfinder.clientWidth, h: viewfinder.clientHeight });
+      setLetterboxLayout(null);
     }
   }, []);
 
@@ -423,6 +438,31 @@ export default function TimemarkCamera({
       ro?.disconnect();
     };
   }, [camState, syncPreviewFrameSize]);
+
+  useEffect(() => {
+    if (camState !== 'ready' || !previewFrameSize) return;
+    let cancelled = false;
+    void ensureProofFontsLoaded(Math.max(14, Math.round(previewFrameSize.w * 0.035))).then(() => {
+      if (!cancelled) setOverlayLayoutKey((k) => k + 1);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [camState, previewFrameSize?.w, previewFrameSize?.h]);
+
+  useEffect(() => {
+    if (!cameraOn || !cameraOptions.logoEnabled || !activeLogoUrl) {
+      setOverlayLogoImg(null);
+      return;
+    }
+    let cancelled = false;
+    void loadImageForCanvas(activeLogoUrl).then((img) => {
+      if (!cancelled) setOverlayLogoImg(img);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cameraOn, cameraOptions.logoEnabled, activeLogoUrl]);
 
   const capturedUrlRef = useRef('');
   useEffect(() => {
@@ -1318,11 +1358,28 @@ export default function TimemarkCamera({
             )}
 
             {showLiveOverlay && (
-              <ProofReviewOverlay
-                proof={liveProof}
-                frameWidth={previewFrameSize?.w}
-                frameHeight={previewFrameSize?.h}
-              />
+              <div
+                className="proof-overlay-letterbox"
+                style={
+                  letterboxLayout
+                    ? ({
+                        left: letterboxLayout.offsetX,
+                        bottom: letterboxLayout.offsetY,
+                        width: letterboxLayout.videoW,
+                        height: letterboxLayout.videoH,
+                        transform: `scale(${letterboxLayout.scale})`,
+                      } as CSSProperties)
+                    : undefined
+                }
+              >
+                <ProofReviewOverlay
+                  proof={liveProof}
+                  frameWidth={previewFrameSize?.w}
+                  frameHeight={previewFrameSize?.h}
+                  logoImg={overlayLogoImg}
+                  layoutKey={overlayLayoutKey}
+                />
+              </div>
             )}
 
             {isRecording && (

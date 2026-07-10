@@ -1,4 +1,4 @@
-import { PROOF_FONT } from './proofFonts';
+import { PROOF_FONT, configureMeasureFonts } from './proofFonts';
 import { resolveWatermarkStyle } from './cameraSettings';
 import { resolveGradientCss } from './watermarkGradients';
 import {
@@ -332,6 +332,7 @@ function layoutInlineRow(
 }
 
 export function computeStampLayout(input: StampLayoutInput): StampLayoutResult {
+  configureMeasureFonts(input.measureCtx, input.frameWidth);
   const style = resolveWatermarkStyle(input.proof.cameraOptionsSnapshot);
   if (style === 'logoDock') {
     return computeLogoDockLayout(input);
@@ -404,9 +405,6 @@ function computeUltimateLayout(input: StampLayoutInput): StampLayoutResult {
   const floatInlineParts = buildInlineParts(proof, floatItems);
 
   if (config.layoutMode === 'logo_dock' && config.boxEnabled) {
-    const boxDetailLines = buildDetailLinesForItems(ctx, proof, boxItems, maxW);
-    const floatDetailLines = buildDetailLinesForItems(ctx, proof, floatItems, maxW);
-
     const boxInlineInnerParts = buildInlineParts(proof, {
       userName: boxItems.userName,
       storeCode: boxItems.storeCode,
@@ -414,19 +412,41 @@ function computeUltimateLayout(input: StampLayoutInput): StampLayoutResult {
       timestamp: boxItems.timestamp,
     });
 
-    const logoBoxInnerMaxW = Math.max(maxW - paddingH * 2, 0);
-    let boxInline = layoutInlineRowFromParts(
-      ctx,
-      boxInlineInnerParts,
-      Math.max(logoBoxInnerMaxW - (showLogo ? logoW + logoGap : 0), 0),
-      baseFonts,
-    );
+    const hasFloatInline = floatInlineParts.length > 0;
+    const hasFloatDetail =
+      (floatItems.address && proof.locationLine.trim().length > 0) ||
+      (floatItems.weather && proof.weatherLine.trim().length > 0);
+
+    const logoInlineReserve = showLogo ? logoW + logoGap : 0;
+    let inlineBudget = Math.max(maxW - paddingH * 2 - logoInlineReserve, 0);
+
+    if (hasFloatInline || hasFloatDetail) {
+      const reservedTextColW = Math.round(maxW * 0.42);
+      inlineBudget = Math.max(maxW - paddingH * 2 - logoInlineReserve - reservedTextColW - logoGap, 0);
+    }
+
+    let boxInline = layoutInlineRowFromParts(ctx, boxInlineInnerParts, inlineBudget, baseFonts);
     const fonts = boxInline.fonts;
 
-    const logoBoxContentW =
+    let logoBoxContentW =
       (showLogo ? logoW + (boxInline.width > 0 ? logoGap : 0) : 0) + boxInline.width;
-    const logoBoxInnerW = Math.max(logoBoxContentW, showLogo ? logoW : 0);
-    const logoBoxW = logoBoxInnerW > 0 || boxDetailLines.length > 0 ? logoBoxInnerW + paddingH * 2 : 0;
+    let logoBoxInnerW = Math.max(logoBoxContentW, showLogo ? logoW : 0);
+    let logoBoxW =
+      logoBoxInnerW > 0 || boxItems.address || boxItems.weather
+        ? Math.min(logoBoxInnerW + paddingH * 2, maxW)
+        : 0;
+
+    if (!hasFloatInline && !hasFloatDetail) {
+      inlineBudget = Math.max(logoBoxW - paddingH * 2 - logoInlineReserve, 0);
+      boxInline = layoutInlineRowFromParts(ctx, boxInlineInnerParts, inlineBudget, baseFonts);
+      logoBoxContentW =
+        (showLogo ? logoW + (boxInline.width > 0 ? logoGap : 0) : 0) + boxInline.width;
+      logoBoxInnerW = Math.max(logoBoxContentW, showLogo ? logoW : 0);
+      logoBoxW = logoBoxInnerW > 0 ? Math.min(logoBoxInnerW + paddingH * 2, maxW) : 0;
+    }
+
+    const logoBoxDetailMaxW = Math.max(logoBoxW - paddingH * 2, 0);
+    const boxDetailLines = buildDetailLinesForItems(ctx, proof, boxItems, logoBoxDetailMaxW);
 
     const boxInlineRowH = Math.max(showLogo ? logoH : 0, boxInline.height);
     const logoBoxInnerH =
@@ -438,10 +458,6 @@ function computeUltimateLayout(input: StampLayoutInput): StampLayoutResult {
     const textColumnMaxW = Math.max(fw - margin - textColumnX, 0);
 
     let floatInline = layoutInlineRowFromParts(ctx, floatInlineParts, textColumnMaxW, baseFonts);
-    if (floatInline.segments.length === 0 && floatInlineParts.length > 0) {
-      floatInline = layoutInlineRowFromParts(ctx, floatInlineParts, textColumnMaxW, baseFonts);
-    }
-
     const floatDetailAtMax = buildDetailLinesForItems(ctx, proof, floatItems, textColumnMaxW);
     const textBlockH =
       floatInline.height +
@@ -531,9 +547,7 @@ function computeUltimateLayout(input: StampLayoutInput): StampLayoutResult {
   }
 
   // strip mode (or logo_dock with box disabled falls through to floating-only strip)
-  const boxDetailLines = config.boxEnabled
-    ? buildDetailLinesForItems(ctx, proof, boxItems, maxW - paddingH * 2)
-    : [];
+  let boxDetailLines: string[] = [];
   const floatDetailLines = buildDetailLinesForItems(ctx, proof, floatItems, maxW);
 
   const boxTextMaxW = Math.max(maxW - paddingH * 2 - (showLogo && config.boxEnabled ? logoW + logoGap : 0), 0);
@@ -543,24 +557,29 @@ function computeUltimateLayout(input: StampLayoutInput): StampLayoutResult {
   let floatInline = layoutInlineRowFromParts(ctx, floatInlineParts, maxW, baseFonts);
   const fonts = boxInline.segments.length > 0 ? boxInline.fonts : floatInline.fonts;
 
-  const boxRowH = Math.max(showLogo && config.boxEnabled ? logoH : 0, boxInline.height);
-  const boxInnerH =
-    boxRowH + (boxDetailLines.length > 0 ? detailGap + boxDetailLines.length * lineHeight : 0);
-  const boxH = config.boxEnabled && (boxInnerH > 0 || showLogo)
-    ? paddingV * 2 + boxInnerH
-    : 0;
-
   const contentNeedW = config.boxEnabled
     ? (showLogo ? logoW + logoGap : 0) + boxInline.width + paddingH * 2
     : 0;
-  const boxW = config.boxEnabled
+  let boxW = config.boxEnabled
     ? clamp(Math.max(contentNeedW, showLogo ? logoW + paddingH * 2 : 48), 0, maxW)
     : 0;
 
   if (config.boxEnabled && boxW > 0) {
     const refinedTextW = Math.max(boxW - paddingH * 2 - (showLogo ? logoW + logoGap : 0), 0);
     boxInline = layoutInlineRowFromParts(ctx, boxInlineParts, refinedTextW, baseFonts);
+    const refinedNeedW =
+      (showLogo ? logoW + logoGap : 0) + boxInline.width + paddingH * 2;
+    boxW = clamp(Math.max(refinedNeedW, showLogo ? logoW + paddingH * 2 : 48), 0, maxW);
+    const boxDetailMaxW = Math.max(boxW - paddingH * 2, 0);
+    boxDetailLines = buildDetailLinesForItems(ctx, proof, boxItems, boxDetailMaxW);
   }
+
+  const boxRowH = Math.max(showLogo && config.boxEnabled ? logoH : 0, boxInline.height);
+  const boxInnerH =
+    boxRowH + (boxDetailLines.length > 0 ? detailGap + boxDetailLines.length * lineHeight : 0);
+  const boxH = config.boxEnabled && (boxInnerH > 0 || showLogo)
+    ? paddingV * 2 + boxInnerH
+    : 0;
 
   const boxX = margin;
   const boxY = boxH > 0 ? fh - margin - boxH : fh - margin;
