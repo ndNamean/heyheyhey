@@ -10,6 +10,10 @@
     {
       "path": "/api/cleanup-photos",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/export/process-jobs",
+      "schedule": "* * * * *"
     }
   ],
   "functions": {
@@ -31,6 +35,14 @@
     },
     "api/cleanup-photos.js": {
       "maxDuration": 60
+    },
+    "api/export/process-jobs.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
+    "api/export/create-job.js": {
+      "maxDuration": 30,
+      "memory": 512
     }
   },
   "rewrites": [

@@ -1,5 +1,6 @@
 import { Fragment, useMemo, useState } from 'react';
 import { db } from '../db';
+import ExportModal from './ExportModal';
 import { useLang } from '../i18n';
 import { statusLabel } from '../lib/i18nUtils';
 import {
@@ -9,7 +10,7 @@ import {
 import { formatDurationMs } from '../lib/reviewTimeline';
 import { badgeClass } from '../lib/utils';
 import ReportTimeline from './ReportTimeline';
-import type { Profile, Report, ReviewEvent } from '../types';
+import type { ExportFormat, Profile, Report, ReviewEvent } from '../types';
 
 interface Props {
   profile: Profile;
@@ -18,6 +19,7 @@ interface Props {
 export default function ReportReviewStatusPanel({ profile }: Props) {
   const { t } = useLang();
   const [expandedReportId, setExpandedReportId] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
 
   const { data } = db.useQuery({
     reports: { responses: {} },
@@ -44,18 +46,51 @@ export default function ReportReviewStatusPanel({ profile }: Props) {
 
   if (!rows.length) {
     return (
-      <div className="card table-wrap report-review-status">
-        <h2 style={{ margin: 0 }}>{t.reportReviewStatus.title}</h2>
-        <p className="small" style={{ marginTop: 8 }}>
-          {t.reportReviewStatus.noReports}
-        </p>
-      </div>
+      <>
+        <div className="card table-wrap report-review-status">
+          <div className="dashboard-filters-header">
+            <h2 style={{ margin: 0 }}>{t.reportReviewStatus.title}</h2>
+            <button type="button" className="export-trigger-btn" onClick={() => setExportOpen(true)}>
+              {t.export.exportTable}
+            </button>
+          </div>
+          <p className="small" style={{ marginTop: 8 }}>
+            {t.reportReviewStatus.noReports}
+          </p>
+        </div>
+        <ExportModal
+          open={exportOpen}
+          onClose={() => setExportOpen(false)}
+          exportType="review_status"
+          title={t.export.exportTable}
+          showDaysBack
+          defaultDaysBack={30}
+          scopeOptions={[
+            { value: 'current_list', label: t.export.scopeCurrentList },
+            { value: 'all_assigned', label: t.export.scopeAllAssigned },
+          ]}
+          defaultScope="current_list"
+          buildParams={(format: ExportFormat, scope: string, daysBack?: number) => ({
+            exportType: 'review_status',
+            format,
+            scope,
+            daysBack: daysBack ?? 30,
+            limit: 200,
+          })}
+        />
+      </>
     );
   }
 
   return (
+    <>
     <div className="card table-wrap report-review-status">
-      <h2 style={{ margin: 0 }}>{t.reportReviewStatus.title}</h2>
+      <div className="dashboard-filters-header">
+        <h2 style={{ margin: 0 }}>{t.reportReviewStatus.title}</h2>
+        <button type="button" className="export-trigger-btn" onClick={() => setExportOpen(true)}>
+          {t.export.exportTable}
+        </button>
+      </div>
 
       <div className="report-review-status-chips">
         {summary.pending > 0 && (
@@ -165,5 +200,27 @@ export default function ReportReviewStatusPanel({ profile }: Props) {
         </tbody>
       </table>
     </div>
+
+    <ExportModal
+      open={exportOpen}
+      onClose={() => setExportOpen(false)}
+      exportType="review_status"
+      title={t.export.exportTable}
+      showDaysBack
+      defaultDaysBack={30}
+      scopeOptions={[
+        { value: 'current_list', label: t.export.scopeCurrentList },
+        { value: 'all_assigned', label: t.export.scopeAllAssigned },
+      ]}
+      defaultScope="current_list"
+      buildParams={(format: ExportFormat, scope: string, daysBack?: number) => ({
+        exportType: 'review_status',
+        format,
+        scope,
+        daysBack: daysBack ?? 30,
+        limit: 200,
+      })}
+    />
+    </>
   );
 }

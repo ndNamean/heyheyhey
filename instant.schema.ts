@@ -244,6 +244,41 @@ const _schema = i.schema({
       createdAt: i.string(),
     }),
 
+    // ─── Export jobs (async CSV/PDF generation) ─────────────────────────────
+    exportJobs: i.entity({
+      requesterUserId: i.string().indexed(),
+      exportType: i.string(),              // dashboard|review_status
+      format: i.string(),                  // csv|pdf
+      status: i.string().indexed(),        // pending|processing|completed|failed
+      paramsJson: i.string(),
+      rowCount: i.number(),
+      truncated: i.boolean(),
+      warningHeader: i.string(),
+      filePath: i.string(),
+      downloadUrl: i.string(),
+      errorMessage: i.string(),
+      startedAt: i.string(),
+      completedAt: i.string(),
+      createdAt: i.string(),
+    }),
+
+    // ─── Export audit trail ──────────────────────────────────────────────────
+    exportAuditLogs: i.entity({
+      userId: i.string().indexed(),
+      role: i.string(),
+      exportType: i.string(),
+      format: i.string(),
+      dateRangeJson: i.string(),
+      storeScopeJson: i.string(),
+      paramsJson: i.string(),
+      rowCount: i.number(),
+      truncated: i.boolean(),
+      jobId: i.string().indexed(),
+      status: i.string(),                  // requested|completed|failed|downloaded
+      downloadAt: i.string(),
+      createdAt: i.string(),
+    }),
+
     // ─── Review feedback notifications ───────────────────────────────────────
     notifications: i.entity({
       recipientUserId: i.string().indexed(),

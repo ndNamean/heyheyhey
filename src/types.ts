@@ -366,6 +366,46 @@ export interface Notification {
   createdAt: string;
 }
 
+export type ExportJobStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type ExportType = 'dashboard' | 'review_status';
+export type ExportFormat = 'csv' | 'pdf';
+export type ExportAuditStatus = 'requested' | 'completed' | 'failed' | 'downloaded';
+
+export interface ExportJob {
+  id: string;
+  requesterUserId: string;
+  exportType: ExportType;
+  format: ExportFormat;
+  status: ExportJobStatus;
+  paramsJson: string;
+  rowCount: number;
+  truncated: boolean;
+  warningHeader: string;
+  filePath: string;
+  downloadUrl: string;
+  errorMessage: string;
+  startedAt: string;
+  completedAt: string;
+  createdAt: string;
+}
+
+export interface ExportAuditLog {
+  id: string;
+  userId: string;
+  role: Role;
+  exportType: ExportType;
+  format: ExportFormat;
+  dateRangeJson: string;
+  storeScopeJson: string;
+  paramsJson: string;
+  rowCount: number;
+  truncated: boolean;
+  jobId: string;
+  status: ExportAuditStatus;
+  downloadAt: string;
+  createdAt: string;
+}
+
 // Local response state used during report submission wizard
 export interface LocalResponse {
   ticked: boolean;

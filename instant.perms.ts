@@ -219,6 +219,28 @@ const rules = {
     bind: { ...COMMON_BIND },
   },
 
+  // ── Export jobs (server-managed via Admin SDK) ─────────────────────────────
+  exportJobs: {
+    allow: {
+      view: "isApproved && data.requesterUserId == auth.id",
+      create: 'false',
+      update: 'false',
+      delete: 'false',
+    },
+    bind: { ...COMMON_BIND },
+  },
+
+  // ── Export audit logs (server-managed via Admin SDK) ───────────────────────
+  exportAuditLogs: {
+    allow: {
+      view: "isApproved && data.userId == auth.id",
+      create: 'false',
+      update: 'false',
+      delete: 'false',
+    },
+    bind: { ...COMMON_BIND },
+  },
+
   // ── Review feedback notifications ─────────────────────────────────────────
   notifications: {
     allow: {

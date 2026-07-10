@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { db } from '../db';
 import FeedbackInbox from '../components/FeedbackInbox';
+import ExportModal from '../components/ExportModal';
 import ReportTimeline, { ReportTimelineLeadCell } from '../components/ReportTimeline';
 import { useLang } from '../i18n';
 import { statusLabel } from '../lib/i18nUtils';
 import { aggregateFeedbackFrequency } from '../lib/feedbackReasons';
 import { badgeClass, todayYmd } from '../lib/utils';
-import type { Profile, Report, ReportResponse, ReviewEvent } from '../types';
+import type { ExportFormat, Profile, Report, ReportResponse, ReviewEvent } from '../types';
 
 interface Props {
   profile: Profile;
@@ -23,6 +24,7 @@ export default function DashboardPage({ profile }: Props) {
   const [to, setTo] = useState(todayYmd);
   const [filterStoreId, setFilterStoreId] = useState('all');
   const [showOtherDetails, setShowOtherDetails] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   const { data } = db.useQuery({
     reports: {
@@ -139,7 +141,12 @@ export default function DashboardPage({ profile }: Props) {
       </div>
 
       <div className="card">
-        <h2>{t.dashboard.filters}</h2>
+        <div className="dashboard-filters-header">
+          <h2 style={{ margin: 0 }}>{t.dashboard.filters}</h2>
+          <button type="button" className="export-trigger-btn" onClick={() => setExportOpen(true)}>
+            {t.export.export}
+          </button>
+        </div>
         <div className="grid two">
           <label>
             {t.dashboard.from}
@@ -162,6 +169,25 @@ export default function DashboardPage({ profile }: Props) {
           </label>
         </div>
       </div>
+
+      <ExportModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        exportType="dashboard"
+        scopeOptions={[
+          { value: 'filtered', label: t.export.scopeFiltered },
+          { value: 'full_history', label: t.export.scopeFullHistory },
+        ]}
+        defaultScope="filtered"
+        buildParams={(format: ExportFormat, scope: string) => ({
+          exportType: 'dashboard',
+          format,
+          scope,
+          startDate: from,
+          endDate: to,
+          filterStoreId,
+        })}
+      />
 
       <div className="grid four">
         <div className="card">

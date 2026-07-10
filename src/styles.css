@@ -2285,3 +2285,80 @@ body.wizard-active .page {
     white-space: nowrap;
   }
 }
+
+/* ── Export modal ─────────────────────────────────────────────────────────── */
+.dashboard-filters-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.export-trigger-btn {
+  flex-shrink: 0;
+  font-size: 13px;
+  padding: 6px 14px;
+}
+
+.export-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.export-modal {
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.export-modal label {
+  display: block;
+  margin-bottom: 12px;
+}
+
+.export-modal select,
+.export-modal input[type='number'] {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.export-media-warning {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  color: #856404;
+  padding: 10px 12px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.export-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.export-status {
+  margin: 12px 0 0;
+  font-size: 14px;
+}
+
+.export-status-ready {
+  color: var(--good, #2e7d32);
+}
+
+.export-status-error {
+  color: var(--bad, #c62828);
+}
+
