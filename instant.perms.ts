@@ -1,14 +1,14 @@
 import type { InstantRules } from '@instantdb/react';
 
 // Common bind expressions reused across namespaces.
-// auth.ref('profile.X') traverses the reverse 'profile' link on $users → profiles.
+// auth.ref('$user.profile.X') traverses the reverse 'profile' link on $users → profiles.
 const COMMON_BIND = {
   isSignedIn: 'auth.id != null',
-  isApproved: "'approved' in auth.ref('profile.approvalStatus')",
-  isOwner: "'owner' in auth.ref('profile.role')",
-  isAreaManager: "'areaManager' in auth.ref('profile.role')",
-  isManager: "'manager' in auth.ref('profile.role')",
-  isLeader: "'leader' in auth.ref('profile.role') || 'subleader' in auth.ref('profile.role')",
+  isApproved: "'approved' in auth.ref('$user.profile.approvalStatus')",
+  isOwner: "'owner' in auth.ref('$user.profile.role')",
+  isAreaManager: "'areaManager' in auth.ref('$user.profile.role')",
+  isManager: "'manager' in auth.ref('$user.profile.role')",
+  isLeader: "'leader' in auth.ref('$user.profile.role') || 'subleader' in auth.ref('$user.profile.role')",
   canEditMaster: "isOwner || isAreaManager",
   canReview: "isApproved && (isOwner || isAreaManager || isManager || isLeader)",
 };
@@ -42,16 +42,16 @@ const rules = {
   // Owners/areaManagers can update any profile; users can update only own displayName.
   profiles: {
     allow: {
-      view: "auth.id != null && ('approved' in auth.ref('profile.approvalStatus') || data.userId == auth.id)",
+      view: "auth.id != null && ('approved' in auth.ref('$user.profile.approvalStatus') || data.userId == auth.id)",
       create: "auth.id != null && data.userId == auth.id && data.approvalStatus == 'pending'",
       update: "isAdmin || (isOwnProfile && onlyDisplayName)",
       delete: 'false',
     },
     bind: {
       isOwnProfile: 'auth.id != null && data.userId == auth.id',
-      isApproved: "'approved' in auth.ref('profile.approvalStatus')",
-      isOwner: "'owner' in auth.ref('profile.role')",
-      isAreaManager: "'areaManager' in auth.ref('profile.role')",
+      isApproved: "'approved' in auth.ref('$user.profile.approvalStatus')",
+      isOwner: "'owner' in auth.ref('$user.profile.role')",
+      isAreaManager: "'areaManager' in auth.ref('$user.profile.role')",
       isAdmin: 'isOwner || isAreaManager',
       onlyDisplayName: "request.modifiedFields.all(f, f in ['displayName', 'cameraOptionsJson', 'updatedAt'])",
     },
