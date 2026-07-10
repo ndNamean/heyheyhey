@@ -25,8 +25,9 @@ export interface ExportJobStatusResponse {
 }
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
-  const auth = await db.getAuth();
-  const token = auth?.user?.refresh_token;
+  // db.getAuth() returns the user object directly (not { user }).
+  const user = await db.getAuth();
+  const token = user?.refresh_token;
   if (!token) throw new Error('Not authenticated');
   return {
     Authorization: `Bearer ${token}`,
