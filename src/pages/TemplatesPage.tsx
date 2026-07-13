@@ -1,68 +1,20 @@
-import { useRef, useState } from 'react';
-import { id } from '@instantdb/react';
+import { useEffect, useRef, useState } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import { canEditMaster, PROOF_TYPES } from '../lib/roles';
 import { nowIso } from '../lib/utils';
+import {
+  createTemplate,
+  templateItemToDraft,
+  updateTemplate,
+  type TemplateItemDraft,
+} from '../lib/templatePersistence';
+import { exportTemplateToFile } from '../lib/templateTransfer';
+import TemplateImportModal from '../components/TemplateImportModal';
 import type { Profile, Store, Template, TemplateItem } from '../types';
 
 interface Props {
   profile: Profile;
-}
-
-interface ItemDraft {
-  id: string;
-  section: string;
-  title: string;
-  requirement: string;
-  proofType: string;
-  required: boolean;
-  assignedRole: string;
-  approverRoles: string[];
-  weight: number;
-  failureCategory: string;
-}
-
-const DEFAULT_APPROVER_ROLES = ['leader', 'subleader', 'manager'];
-
-function parseApproverRoles(json: string | undefined): string[] {
-  if (!json?.trim()) return [...DEFAULT_APPROVER_ROLES];
-  try {
-    const parsed = JSON.parse(json);
-    return Array.isArray(parsed) && parsed.length ? parsed : [...DEFAULT_APPROVER_ROLES];
-  } catch {
-    return [...DEFAULT_APPROVER_ROLES];
-  }
-}
-
-function templateItemToDraft(item: TemplateItem): ItemDraft {
-  return {
-    id: item.id,
-    section: item.section,
-    title: item.title,
-    requirement: item.requirement,
-    proofType: item.proofType,
-    required: item.required,
-    assignedRole: item.assignedRole,
-    approverRoles: parseApproverRoles(item.approverRolesJson),
-    weight: item.weight,
-    failureCategory: item.failureCategory,
-  };
-}
-
-function itemPayload(item: ItemDraft, sortOrder: number) {
-  return {
-    section: item.section,
-    title: item.title,
-    requirement: item.requirement,
-    proofType: item.proofType,
-    required: item.required,
-    assignedRole: item.assignedRole,
-    approverRolesJson: JSON.stringify(item.approverRoles),
-    weight: item.weight,
-    failureCategory: item.failureCategory,
-    sortOrder,
-  };
 }
 
 export default function TemplatesPage({ profile }: Props) {
@@ -72,8 +24,10 @@ export default function TemplatesPage({ profile }: Props) {
   const [name, setName] = useState('');
   const [reportType, setReportType] = useState('Daily Hygiene');
   const [storeIds, setStoreIds] = useState<string[]>([]);
-  const [items, setItems] = useState<ItemDraft[]>([]);
+  const [items, setItems] = useState<TemplateItemDraft[]>([]);
   const [saving, setSaving] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [pendingOpenTemplateId, setPendingOpenTemplateId] = useState<string | null>(null);
 
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [editingTemplateName, setEditingTemplateName] = useState('');
@@ -86,6 +40,15 @@ export default function TemplatesPage({ profile }: Props) {
   const templates: Template[] = (data?.templates ?? []) as Template[];
 
   const isEditMode = editingTemplateId !== null;
+
+  useEffect(() => {
+    if (!pendingOpenTemplateId) return;
+    const template = templates.find((tmpl) => tmpl.id === pendingOpenTemplateId);
+    if (template) {
+      loadTemplateForEdit(template);
+      setPendingOpenTemplateId(null);
+    }
+  }, [templates, pendingOpenTemplateId]);
 
   if (!canEditMaster(profile.role)) {
     return <div className="card">{t.templates.noPermission}</div>;
@@ -122,6 +85,18 @@ export default function TemplatesPage({ profile }: Props) {
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  function handleImportSuccess(templateId: string) {
+    setPendingOpenTemplateId(templateId);
+  }
+
+  function handleExport(template: Template) {
+    try {
+      exportTemplateToFile(template);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.templates.exportFailed);
+    }
+  }
+
   function addItem() {
     setItems((prev) => [
       ...prev,
@@ -133,14 +108,14 @@ export default function TemplatesPage({ profile }: Props) {
         proofType: 'photo',
         required: true,
         assignedRole: 'staff',
-        approverRoles: [...DEFAULT_APPROVER_ROLES],
+        approverRoles: ['leader', 'subleader', 'manager'],
         weight: 1,
         failureCategory: 'Hygiene',
       },
     ]);
   }
 
-  function updateItem(itemId: string, patch: Partial<ItemDraft>) {
+  function updateItem(itemId: string, patch: Partial<TemplateItemDraft>) {
     setItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, ...patch } : i)));
   }
 
@@ -158,30 +133,15 @@ export default function TemplatesPage({ profile }: Props) {
   }
 
   async function saveCreate() {
-    const templateId = id();
-
-    const templateTx = db.tx.templates[templateId].update({
+    await createTemplate({
+      profileUserId: profile.userId,
       name: name.trim(),
       reportType,
       scheduleJson: JSON.stringify({ enabled: false }),
       active: true,
-      createdByUserId: profile.userId,
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
+      storeIds,
+      items,
     });
-
-    const storeLinkTxs = storeIds.map((sid) =>
-      db.tx.templates[templateId].link({ stores: sid }),
-    );
-
-    const itemTxs = items.map((item, i) => {
-      const itemId = id();
-      return db.tx.templateItems[itemId]
-        .update(itemPayload(item, i))
-        .link({ template: templateId });
-    });
-
-    await db.transact([templateTx, ...storeLinkTxs, ...itemTxs]);
     resetForm();
   }
 
@@ -189,45 +149,15 @@ export default function TemplatesPage({ profile }: Props) {
     if (!editingTemplateId) return;
     if (!confirm(buildEditConfirmMessage())) return;
 
-    const templateTx = db.tx.templates[editingTemplateId].update({
+    await updateTemplate({
+      templateId: editingTemplateId,
       name: name.trim(),
       reportType,
-      updatedAt: nowIso(),
+      storeIds,
+      prevStoreIds,
+      items,
+      originalItemIds,
     });
-
-    const storeIdSet = new Set(storeIds);
-    const prevSet = new Set(prevStoreIds);
-    const storeLinkTxs = storeIds
-      .filter((sid) => !prevSet.has(sid))
-      .map((sid) => db.tx.templates[editingTemplateId].link({ stores: sid }));
-    const storeUnlinkTxs = prevStoreIds
-      .filter((sid) => !storeIdSet.has(sid))
-      .map((sid) => db.tx.templates[editingTemplateId].unlink({ stores: sid }));
-
-    const draftIds = new Set(items.map((i) => i.id));
-    const removedItemIds = [...originalItemIds].filter((oid) => !draftIds.has(oid));
-
-    const itemUpdateTxs = items.map((item, i) => {
-      if (originalItemIds.has(item.id)) {
-        return db.tx.templateItems[item.id].update(itemPayload(item, i));
-      }
-      const newItemId = id();
-      return db.tx.templateItems[newItemId]
-        .update(itemPayload(item, i))
-        .link({ template: editingTemplateId });
-    });
-
-    const itemDeleteTxs = removedItemIds.map((removedId) =>
-      db.tx.templateItems[removedId].delete(),
-    );
-
-    await db.transact([
-      templateTx,
-      ...storeLinkTxs,
-      ...storeUnlinkTxs,
-      ...itemUpdateTxs,
-      ...itemDeleteTxs,
-    ]);
     resetForm();
     alert(t.templates.updateSuccess);
   }
@@ -267,7 +197,12 @@ export default function TemplatesPage({ profile }: Props) {
   return (
     <div>
       <div className="card">
-        <h1>{t.templates.title}</h1>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <h1 style={{ margin: 0 }}>{t.templates.title}</h1>
+          <button type="button" className="secondary" onClick={() => setImportOpen(true)}>
+            {t.templates.importTemplate}
+          </button>
+        </div>
       </div>
 
       <div className="card" ref={formRef}>
@@ -440,6 +375,13 @@ export default function TemplatesPage({ profile }: Props) {
                     >
                       {t.templates.edit}
                     </button>
+                    <button
+                      className="secondary"
+                      style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
+                      onClick={() => handleExport(tmpl)}
+                    >
+                      {t.templates.downloadJson}
+                    </button>
                     {tmpl.active ? (
                       <button
                         className="danger"
@@ -468,6 +410,15 @@ export default function TemplatesPage({ profile }: Props) {
           </tbody>
         </table>
       </div>
+
+      <TemplateImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        profile={profile}
+        stores={stores}
+        templates={templates}
+        onSuccess={handleImportSuccess}
+      />
     </div>
   );
 }
