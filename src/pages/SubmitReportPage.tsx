@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { id } from '@instantdb/react';
 import { db } from '../db';
 import { useLang } from '../i18n';
-import { needsMedia, needsNote, needsNumber, userCanAccessStore } from '../lib/roles';
+import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
+import { needsMedia, needsNote, needsNumber, seesAllTemplateItems, userCanAccessStore } from '../lib/roles';
 import { calcCompletion, nowIso, todayYmd } from '../lib/utils';
 import {
   buildItemResubmittedEvents,
@@ -41,6 +42,7 @@ export default function SubmitReportPage({
   onCorrectionComplete,
 }: Props) {
   const { t } = useLang();
+  const { defs } = useRoleDefinitions();
   const correctionMode = !!correctionReportId;
   const [newReportId] = useState(() => id());
   const [storeId, setStoreId] = useState('');
@@ -80,7 +82,7 @@ export default function SubmitReportPage({
   const allTemplates: Template[] = (data?.templates ?? []) as Template[];
 
   const accessibleStores = allStores.filter(
-    (s) => s.active && userCanAccessStore(profile.role, (profile.stores ?? []).map((st) => st.id), s.id),
+    (s) => s.active && userCanAccessStore(profile.role, (profile.stores ?? []).map((st) => st.id), s.id, defs),
   );
 
   const selectedStore = accessibleStores.find((s) => s.id === storeId);
@@ -106,9 +108,9 @@ export default function SubmitReportPage({
       return sorted.filter((i) => flaggedItemIds.has(i.id));
     }
 
-    if (profile.role === 'owner' || profile.role === 'areaManager') return sorted;
+    if (seesAllTemplateItems(profile.role, defs)) return sorted;
     return sorted.filter((i) => i.assignedRole === profile.role);
-  }, [selectedTemplate, profile.role, correctionMode, flaggedResponses]);
+  }, [selectedTemplate, profile.role, correctionMode, flaggedResponses, defs]);
 
   useEffect(() => {
     if (!correctionMode || !correctionReport || correctionInitRef.current) return;

@@ -39,7 +39,7 @@ async function handleCreate(req, res) {
     return res.status(400).json({ error: 'Invalid exportType' });
   }
 
-  assertExportJobAccess(profileCtx.role, exportType);
+  assertExportJobAccess(profileCtx.role, exportType, profileCtx.roleDefinition);
 
   const scopeMeta =
     exportType === 'dashboard'

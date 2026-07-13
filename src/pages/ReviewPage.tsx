@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
+import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import { canApproveItem, canReview } from '../lib/roles';
 import { statusLabel } from '../lib/i18nUtils';
 import {
@@ -32,6 +33,7 @@ interface PendingFeedback {
 
 export default function ReviewPage({ profile }: Props) {
   const { t } = useLang();
+  const { defs } = useRoleDefinitions();
   const [pendingFeedback, setPendingFeedback] = useState<PendingFeedback | null>(null);
 
   const { data } = db.useQuery({
@@ -48,7 +50,7 @@ export default function ReviewPage({ profile }: Props) {
   const allProfiles: Profile[] = (data?.profiles ?? []) as Profile[];
   const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];
 
-  if (!canReview(profile.role)) {
+  if (!canReview(profile.role, defs)) {
     return <div className="card">{t.review.noPermission}</div>;
   }
 
@@ -63,6 +65,7 @@ export default function ReviewPage({ profile }: Props) {
         response.submittedByRole as import('../types').Role,
         profile.role,
         approverRoles,
+        defs,
       )
     ) {
       alert(t.review.noPermissionItem);
@@ -83,6 +86,7 @@ export default function ReviewPage({ profile }: Props) {
         response.submittedByRole as import('../types').Role,
         profile.role,
         approverRoles,
+        defs,
       )
     ) {
       alert(t.review.noPermissionItem);

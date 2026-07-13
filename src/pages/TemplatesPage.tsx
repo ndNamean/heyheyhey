@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
+import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import { canEditMaster, PROOF_TYPES } from '../lib/roles';
 import { nowIso } from '../lib/utils';
 import {
@@ -19,6 +20,7 @@ interface Props {
 
 export default function TemplatesPage({ profile }: Props) {
   const { t } = useLang();
+  const { defs } = useRoleDefinitions();
   const formRef = useRef<HTMLDivElement>(null);
 
   const [name, setName] = useState('');
@@ -50,7 +52,7 @@ export default function TemplatesPage({ profile }: Props) {
     }
   }, [templates, pendingOpenTemplateId]);
 
-  if (!canEditMaster(profile.role)) {
+  if (!canEditMaster(profile.role, defs)) {
     return <div className="card">{t.templates.noPermission}</div>;
   }
 

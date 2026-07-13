@@ -304,6 +304,29 @@ const _schema = i.schema({
       readAt: i.string(),                   // '' = unread
       createdAt: i.string(),
     }),
+
+    roleDefinitions: i.entity({
+      key: i.string().unique().indexed(),
+      label: i.string(),
+      rank: i.number().indexed(),
+      isSystem: i.boolean(),
+      active: i.boolean(),
+      canEditMaster: i.boolean(),
+      canManageUsers: i.boolean(),
+      canReview: i.boolean(),
+      canPreApproveAccess: i.boolean(),
+      canAccessAllStores: i.boolean(),
+      seesAllTemplateItems: i.boolean(),
+      canExportDashboard: i.boolean(),
+      canExportReviewStatus: i.boolean(),
+      canScheduleShifts: i.boolean(),
+      canDeleteShifts: i.boolean(),
+      canUseOpsTools: i.boolean(),
+      canClockIn: i.boolean(),
+      approvesSubmitterRolesJson: i.string(),
+      createdAt: i.string(),
+      updatedAt: i.string(),
+    }),
   },
 
   links: {
@@ -311,6 +334,12 @@ const _schema = i.schema({
     profileUser: {
       forward: { on: 'profiles', has: 'one', label: '$user' },
       reverse: { on: '$users', has: 'one', label: 'profile' },
+    },
+
+    // ─── Profiles <-> roleDefinitions (many:one) ─────────────────────────────
+    profileRoleDefinition: {
+      forward: { on: 'profiles', has: 'one', label: 'roleDefinition' },
+      reverse: { on: 'roleDefinitions', has: 'many', label: 'profiles' },
     },
 
     // ─── Profiles <-> stores (many:many) ─────────────────────────────────────

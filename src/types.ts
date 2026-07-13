@@ -1,13 +1,36 @@
 // Shared domain types derived from the schema's shape.
 
-export type Role =
-  | 'owner'
-  | 'areaManager'
-  | 'manager'
-  | 'leader'
-  | 'subleader'
-  | 'staff'
-  | 'viewer';
+export type Role = string;
+
+export const OWNER_ROLE_KEY = 'owner';
+export const AREA_MANAGER_ROLE_KEY = 'areaManager';
+
+export interface RoleDefinitionSeed {
+  key: string;
+  label: string;
+  rank: number;
+  isSystem: boolean;
+  active: boolean;
+  canEditMaster: boolean;
+  canManageUsers: boolean;
+  canReview: boolean;
+  canPreApproveAccess: boolean;
+  canAccessAllStores: boolean;
+  seesAllTemplateItems: boolean;
+  canExportDashboard: boolean;
+  canExportReviewStatus: boolean;
+  canScheduleShifts: boolean;
+  canDeleteShifts: boolean;
+  canUseOpsTools: boolean;
+  canClockIn: boolean;
+  approvesSubmitterRolesJson: string;
+}
+
+export interface RoleDefinition extends RoleDefinitionSeed {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export type ApprovalStatus =
   | 'pending'
@@ -135,6 +158,7 @@ export interface Profile {
   createdAt: string;
   updatedAt: string;
   cameraOptionsJson?: string;
+  roleDefinition?: RoleDefinition;
   // Optional linked data from useQuery:
   stores?: Store[];
 }

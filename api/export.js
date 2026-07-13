@@ -67,8 +67,10 @@ async function loadProfileContext(userId) {
   const result = await adminDb.query({
     profiles: {
       $: { where: { userId } },
-      stores: {}
-    }
+      stores: {},
+      roleDefinition: {}
+    },
+    roleDefinitions: {}
   });
   const profile = result.profiles?.[0];
   if (!profile) {
@@ -82,10 +84,12 @@ async function loadProfileContext(userId) {
     throw err;
   }
   const storeIds = (profile.stores ?? []).map((s) => s.id);
+  const roleDefinition = profile.roleDefinition ?? (result.roleDefinitions ?? []).find((d) => d.key === profile.role && d.active !== false);
   return {
     profileId: profile.id,
     userId: profile.userId,
     role: profile.role,
+    roleDefinition: roleDefinition ?? null,
     approvalStatus: profile.approvalStatus,
     displayName: profile.displayName ?? "",
     email: profile.email ?? "",
@@ -99,29 +103,48 @@ async function authenticateExportRequest(req) {
   return { ...ctx, email };
 }
 
+// api/_lib/export/role-capabilities.js
+var DEFAULT_CAPS = {
+  owner: { canExportDashboard: true, canExportReviewStatus: false },
+  areaManager: { canExportDashboard: true, canExportReviewStatus: false },
+  manager: { canExportDashboard: false, canExportReviewStatus: true },
+  leader: { canExportDashboard: false, canExportReviewStatus: true },
+  subleader: { canExportDashboard: false, canExportReviewStatus: true },
+  staff: { canExportDashboard: false, canExportReviewStatus: false },
+  viewer: { canExportDashboard: false, canExportReviewStatus: false }
+};
+function getRoleCapabilities(role, roleDefinition) {
+  if (roleDefinition) {
+    return {
+      canExportDashboard: !!roleDefinition.canExportDashboard,
+      canExportReviewStatus: !!roleDefinition.canExportReviewStatus
+    };
+  }
+  return DEFAULT_CAPS[role] ?? { canExportDashboard: false, canExportReviewStatus: false };
+}
+
 // api/_lib/export/rbac.js
-var DASHBOARD_ROLES = /* @__PURE__ */ new Set(["owner", "areaManager"]);
-var REVIEW_EXPORT_ROLES = /* @__PURE__ */ new Set(["manager", "leader", "subleader"]);
-var DENIED_ROLES = /* @__PURE__ */ new Set(["staff", "viewer"]);
-function assertDashboardExportRole(role) {
-  if (DENIED_ROLES.has(role) || !DASHBOARD_ROLES.has(role)) {
-    const err = new Error("Forbidden: dashboard export requires owner or areaManager role");
+function assertDashboardExportRole(role, roleDefinition) {
+  const caps = getRoleCapabilities(role, roleDefinition);
+  if (!caps.canExportDashboard) {
+    const err = new Error("Forbidden: dashboard export requires canExportDashboard capability");
     err.status = 403;
     throw err;
   }
 }
-function assertReviewStatusExportRole(role) {
-  if (DENIED_ROLES.has(role) || !REVIEW_EXPORT_ROLES.has(role)) {
-    const err = new Error("Forbidden: review status export requires manager, leader, or subleader role");
+function assertReviewStatusExportRole(role, roleDefinition) {
+  const caps = getRoleCapabilities(role, roleDefinition);
+  if (!caps.canExportReviewStatus) {
+    const err = new Error("Forbidden: review status export requires canExportReviewStatus capability");
     err.status = 403;
     throw err;
   }
 }
-function assertExportJobAccess(role, exportType) {
+function assertExportJobAccess(role, exportType, roleDefinition) {
   if (exportType === "dashboard") {
-    assertDashboardExportRole(role);
+    assertDashboardExportRole(role, roleDefinition);
   } else if (exportType === "review_status") {
-    assertReviewStatusExportRole(role);
+    assertReviewStatusExportRole(role, roleDefinition);
   } else {
     const err = new Error("Invalid export type");
     err.status = 400;
@@ -955,7 +978,7 @@ async function processExportJob(jobId) {
   );
   try {
     const profileCtx = await loadProfileContext(job.requesterUserId);
-    assertExportJobAccess(profileCtx.role, job.exportType);
+    assertExportJobAccess(profileCtx.role, job.exportType, profileCtx.roleDefinition);
     const params = JSON.parse(job.paramsJson || "{}");
     let content;
     let rowCount = 0;
@@ -1082,7 +1105,7 @@ async function handleCreate(req, res) {
   if (!exportType || !["dashboard", "review_status"].includes(exportType)) {
     return res.status(400).json({ error: "Invalid exportType" });
   }
-  assertExportJobAccess(profileCtx.role, exportType);
+  assertExportJobAccess(profileCtx.role, exportType, profileCtx.roleDefinition);
   const scopeMeta = exportType === "dashboard" ? resolveDashboardScope(profileCtx, body) : resolveReviewStatusScope(profileCtx, body);
   const jobId = id2();
   const now = (/* @__PURE__ */ new Date()).toISOString();

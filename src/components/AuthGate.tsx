@@ -286,6 +286,8 @@ export default function AuthGate({ children }: Props) {
       : null,
   );
 
+  const { data: roleDefData } = db.useQuery(user ? { roleDefinitions: {} } : null);
+
   useEffect(() => {
     if (!user || !profileData || profileData.profiles.length > 0 || creatingRef.current) return;
     creatingRef.current = true;
@@ -295,29 +297,36 @@ export default function AuthGate({ children }: Props) {
     sessionStorage.removeItem('inviteRole');
 
     const profileId = id();
-    db.transact(
-      db.tx.profiles[profileId]
-        .update({
-          userId: user.id,
-          email: user.email ?? '',
-          displayName: (user.email ?? '').split('@')[0],
-          role: storedRole,
-          approvalStatus: 'pending',
-          approvedAt: '',
-          approvedByEmail: '',
-          accessReviewStoreIdsJson: '[]',
-          accessReviewNote: '',
-          preApprovedByUserId: '',
-          preApprovedByEmail: '',
-          preApprovedAt: '',
-          accessReviewRequestedByEmail: '',
-          accessReviewRequestedAt: '',
-          createdAt: nowIso(),
-          updatedAt: nowIso(),
-        })
-        .link({ '$user': user.id }),
-    ).catch(() => { creatingRef.current = false; });
-  }, [user, profileData]);
+    const roleDefs = roleDefData?.roleDefinitions ?? [];
+    const roleDef = roleDefs.find((d: { key: string }) => d.key === storedRole);
+
+    const profileTx = db.tx.profiles[profileId]
+      .update({
+        userId: user.id,
+        email: user.email ?? '',
+        displayName: (user.email ?? '').split('@')[0],
+        role: storedRole,
+        approvalStatus: 'pending',
+        approvedAt: '',
+        approvedByEmail: '',
+        accessReviewStoreIdsJson: '[]',
+        accessReviewNote: '',
+        preApprovedByUserId: '',
+        preApprovedByEmail: '',
+        preApprovedAt: '',
+        accessReviewRequestedByEmail: '',
+        accessReviewRequestedAt: '',
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      })
+      .link({ '$user': user.id });
+
+    const txs = roleDef
+      ? [profileTx.link({ roleDefinition: roleDef.id })]
+      : [profileTx];
+
+    db.transact(txs).catch(() => { creatingRef.current = false; });
+  }, [user, profileData, roleDefData]);
 
   if (authLoading || (user && profileLoading)) {
     return <div className="loading-screen">{t.common.loading}</div>;

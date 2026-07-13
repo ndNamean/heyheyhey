@@ -2,31 +2,31 @@
  * Role-based access control for export endpoints.
  */
 
-const DASHBOARD_ROLES = new Set(['owner', 'areaManager']);
-const REVIEW_EXPORT_ROLES = new Set(['manager', 'leader', 'subleader']);
-const DENIED_ROLES = new Set(['staff', 'viewer']);
+import { getRoleCapabilities } from './role-capabilities.js';
 
-export function assertDashboardExportRole(role) {
-  if (DENIED_ROLES.has(role) || !DASHBOARD_ROLES.has(role)) {
-    const err = new Error('Forbidden: dashboard export requires owner or areaManager role');
+export function assertDashboardExportRole(role, roleDefinition) {
+  const caps = getRoleCapabilities(role, roleDefinition);
+  if (!caps.canExportDashboard) {
+    const err = new Error('Forbidden: dashboard export requires canExportDashboard capability');
     err.status = 403;
     throw err;
   }
 }
 
-export function assertReviewStatusExportRole(role) {
-  if (DENIED_ROLES.has(role) || !REVIEW_EXPORT_ROLES.has(role)) {
-    const err = new Error('Forbidden: review status export requires manager, leader, or subleader role');
+export function assertReviewStatusExportRole(role, roleDefinition) {
+  const caps = getRoleCapabilities(role, roleDefinition);
+  if (!caps.canExportReviewStatus) {
+    const err = new Error('Forbidden: review status export requires canExportReviewStatus capability');
     err.status = 403;
     throw err;
   }
 }
 
-export function assertExportJobAccess(role, exportType) {
+export function assertExportJobAccess(role, exportType, roleDefinition) {
   if (exportType === 'dashboard') {
-    assertDashboardExportRole(role);
+    assertDashboardExportRole(role, roleDefinition);
   } else if (exportType === 'review_status') {
-    assertReviewStatusExportRole(role);
+    assertReviewStatusExportRole(role, roleDefinition);
   } else {
     const err = new Error('Invalid export type');
     err.status = 400;

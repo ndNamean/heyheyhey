@@ -29,7 +29,9 @@ export async function loadProfileContext(userId) {
     profiles: {
       $: { where: { userId } },
       stores: {},
+      roleDefinition: {},
     },
+    roleDefinitions: {},
   });
 
   const profile = result.profiles?.[0];
@@ -46,11 +48,15 @@ export async function loadProfileContext(userId) {
   }
 
   const storeIds = (profile.stores ?? []).map((s) => s.id);
+  const roleDefinition =
+    profile.roleDefinition ??
+    (result.roleDefinitions ?? []).find((d) => d.key === profile.role && d.active !== false);
 
   return {
     profileId: profile.id,
     userId: profile.userId,
     role: profile.role,
+    roleDefinition: roleDefinition ?? null,
     approvalStatus: profile.approvalStatus,
     displayName: profile.displayName ?? '',
     email: profile.email ?? '',

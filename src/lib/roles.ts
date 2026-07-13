@@ -1,14 +1,123 @@
-import type { Role } from '../types';
+import type { Role, RoleDefinition } from '../types';
+import {
+  capability,
+  getRoleDef,
+  orderedRoleKeys,
+  canApproveItem as resolveCanApproveItem,
+  isHigherPositionReview as resolveIsHigherPositionReview,
+  supervisorRolesToNotify as resolveSupervisorRolesToNotify,
+  usesDashboardHome,
+  canViewRolesPermissions,
+  defaultDefinitionsAsEntities,
+} from './roleResolver';
+import { LEGACY_ROLES } from './defaultRoleDefinitions';
 
-export const ROLES: Role[] = [
-  'owner',
-  'areaManager',
-  'manager',
-  'leader',
-  'subleader',
-  'staff',
-  'viewer',
-];
+export { LEGACY_ROLES as ROLES };
+
+function defsOrDefault(defs?: RoleDefinition[]): RoleDefinition[] {
+  return defs?.length ? defs : defaultDefinitionsAsEntities();
+}
+
+export function isOwner(role: Role): boolean {
+  return role === 'owner';
+}
+
+export function isAreaManager(role: Role): boolean {
+  return role === 'areaManager';
+}
+
+export function canEditMaster(role: Role, defs?: RoleDefinition[]): boolean {
+  return capability(role, defsOrDefault(defs), 'canEditMaster');
+}
+
+export function canReview(role: Role, defs?: RoleDefinition[]): boolean {
+  return capability(role, defsOrDefault(defs), 'canReview');
+}
+
+export function canManageUsers(role: Role, defs?: RoleDefinition[]): boolean {
+  return capability(role, defsOrDefault(defs), 'canManageUsers');
+}
+
+export function canPreApproveAccess(role: Role, defs?: RoleDefinition[]): boolean {
+  return capability(role, defsOrDefault(defs), 'canPreApproveAccess');
+}
+
+export function canAccessUsersPage(role: Role, defs?: RoleDefinition[]): boolean {
+  return canManageUsers(role, defs) || canPreApproveAccess(role, defs);
+}
+
+export function canAccessAllStores(role: Role, defs?: RoleDefinition[]): boolean {
+  return capability(role, defsOrDefault(defs), 'canAccessAllStores');
+}
+
+export function seesAllTemplateItems(role: Role, defs?: RoleDefinition[]): boolean {
+  return capability(role, defsOrDefault(defs), 'seesAllTemplateItems');
+}
+
+export function canExportDashboard(role: Role, defs?: RoleDefinition[]): boolean {
+  return capability(role, defsOrDefault(defs), 'canExportDashboard');
+}
+
+export function canExportReviewStatus(role: Role, defs?: RoleDefinition[]): boolean {
+  return capability(role, defsOrDefault(defs), 'canExportReviewStatus');
+}
+
+export function canScheduleShifts(role: Role, defs?: RoleDefinition[]): boolean {
+  return capability(role, defsOrDefault(defs), 'canScheduleShifts');
+}
+
+export function canDeleteShifts(role: Role, defs?: RoleDefinition[]): boolean {
+  return capability(role, defsOrDefault(defs), 'canDeleteShifts');
+}
+
+export function canUseOpsTools(role: Role, defs?: RoleDefinition[]): boolean {
+  return capability(role, defsOrDefault(defs), 'canUseOpsTools');
+}
+
+export function canClockIn(role: Role, defs?: RoleDefinition[]): boolean {
+  return capability(role, defsOrDefault(defs), 'canClockIn');
+}
+
+export function canEditStoreLogo(role: Role, defs?: RoleDefinition[]): boolean {
+  return canEditMaster(role, defs);
+}
+
+export function getOrderedRoles(defs?: RoleDefinition[]): Role[] {
+  return orderedRoleKeys(defsOrDefault(defs));
+}
+
+export function canApproveItem(
+  submittedByRole: Role,
+  approverRole: Role,
+  approverRoles: Role[],
+  defs?: RoleDefinition[],
+): boolean {
+  return resolveCanApproveItem(submittedByRole, approverRole, approverRoles, defsOrDefault(defs));
+}
+
+export function isHigherPositionReview(
+  approverRole: Role,
+  submitterRole: Role,
+  defs?: RoleDefinition[],
+): boolean {
+  return resolveIsHigherPositionReview(approverRole, submitterRole, defsOrDefault(defs));
+}
+
+export function supervisorRolesToNotify(submitterRole: Role, defs?: RoleDefinition[]): Role[] {
+  return resolveSupervisorRolesToNotify(submitterRole, defsOrDefault(defs));
+}
+
+export function userCanAccessStore(
+  userRole: Role,
+  userStoreIds: string[],
+  storeId: string,
+  defs?: RoleDefinition[],
+): boolean {
+  if (canAccessAllStores(userRole, defs)) return true;
+  return userStoreIds.includes(storeId);
+}
+
+export { usesDashboardHome, canViewRolesPermissions, getRoleDef };
 
 export const PROOF_TYPES = [
   'tick',
@@ -20,85 +129,6 @@ export const PROOF_TYPES = [
   'photo_number',
   'video_note',
 ] as const;
-
-export function isOwner(role: Role): boolean {
-  return role === 'owner';
-}
-
-export function isAreaManager(role: Role): boolean {
-  return role === 'areaManager';
-}
-
-export function canEditMaster(role: Role): boolean {
-  return role === 'owner' || role === 'areaManager';
-}
-
-export function canReview(role: Role): boolean {
-  return ['owner', 'areaManager', 'manager', 'leader', 'subleader'].includes(role);
-}
-
-export function canManageUsers(role: Role): boolean {
-  return role === 'owner' || role === 'areaManager';
-}
-
-export function canPreApproveAccess(role: Role): boolean {
-  return role === 'manager';
-}
-
-export function canAccessUsersPage(role: Role): boolean {
-  return canManageUsers(role) || canPreApproveAccess(role);
-}
-
-export function canApproveItem(submittedByRole: Role, approverRole: Role, approverRoles: Role[]): boolean {
-  if (approverRole === 'owner') return true;
-  if (approverRoles.includes(approverRole)) return true;
-  if (submittedByRole === 'staff') {
-    return ['leader', 'subleader', 'manager'].includes(approverRole);
-  }
-  if (submittedByRole === 'leader' || submittedByRole === 'subleader') {
-    return ['manager', 'areaManager'].includes(approverRole);
-  }
-  if (submittedByRole === 'manager') {
-    return approverRole === 'areaManager';
-  }
-  return false;
-}
-
-/** Lowest role index among typical first-line approvers for a submitter role. */
-export function typicalApproverMinIndex(submitterRole: Role): number {
-  switch (submitterRole) {
-    case 'staff':
-      return ROLES.indexOf('manager');
-    case 'subleader':
-    case 'leader':
-      return ROLES.indexOf('areaManager');
-    case 'manager':
-      return ROLES.indexOf('areaManager');
-    default:
-      return ROLES.indexOf('owner');
-  }
-}
-
-/** True when the reviewer is above the usual first-line approver for this submitter. */
-export function isHigherPositionReview(approverRole: Role, submitterRole: Role): boolean {
-  const approverIdx = ROLES.indexOf(approverRole);
-  if (approverIdx < 0) return false;
-  return approverIdx < typicalApproverMinIndex(submitterRole);
-}
-
-/** Reviewer roles above the submitter in the org chart. */
-export function supervisorRolesToNotify(submitterRole: Role): Role[] {
-  const submitterIdx = ROLES.indexOf(submitterRole);
-  return ROLES.filter((r) => {
-    const idx = ROLES.indexOf(r);
-    return idx >= 0 && idx < submitterIdx && canReview(r);
-  });
-}
-
-export function userCanAccessStore(userRole: Role, userStoreIds: string[], storeId: string): boolean {
-  if (userRole === 'owner') return true;
-  return userStoreIds.includes(storeId);
-}
 
 export function needsMedia(proofType: string): boolean {
   return proofType.includes('photo') || proofType.includes('video');

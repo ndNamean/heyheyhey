@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { createPortal } from 'react-dom';
 import { db } from '../db';
 import { useLang } from '../i18n';
+import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
+import { canEditStoreLogo as roleCanEditStoreLogo } from '../lib/roles';
 import {
   DEFAULT_LOGOS,
   buildWeatherLine,
-  canEditStoreLogo,
   cycleWatermarkStyle,
   ensureUltimateConfig,
   parseCameraOptions,
@@ -122,6 +123,7 @@ export default function TimemarkCamera({
   onReviewPendingChange,
 }: Props) {
   const { t } = useLang();
+  const { defs } = useRoleDefinitions();
   const videoMode = needsVideoProof(proofType);
   const videoRef   = useRef<HTMLVideoElement>(null);
   const viewfinderRef = useRef<HTMLDivElement>(null);
@@ -181,7 +183,7 @@ export default function TimemarkCamera({
   const [overlayLogoImg, setOverlayLogoImg] = useState<HTMLImageElement | null>(null);
   const [overlayLayoutKey, setOverlayLayoutKey] = useState(0);
 
-  const isAdminLogo = canEditStoreLogo(profile?.role);
+  const isAdminLogo = roleCanEditStoreLogo(profile?.role ?? '', defs);
   const activeLogoUrl = storeLogoUrl.trim() || resolveActiveLogoUrl(store);
   const weatherCoords = getWeatherCoords(gps);
   const weatherKey =

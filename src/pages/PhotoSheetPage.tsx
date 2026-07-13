@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
-import { canReview } from '../lib/roles';
+import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
+import { canUseOpsTools } from '../lib/roles';
 import ProofPhoto from '../components/ProofPhoto';
 import { formatMediaCaptureTime } from '../lib/proofTime';
 import type { MediaRecord, Profile } from '../types';
@@ -12,6 +13,7 @@ interface Props {
 
 export default function PhotoSheetPage({ profile }: Props) {
   const { t } = useLang();
+  const { defs } = useRoleDefinitions();
   const [filterStoreId, setFilterStoreId] = useState('all');
 
   const { data } = db.useQuery({
@@ -32,7 +34,7 @@ export default function PhotoSheetPage({ profile }: Props) {
     (b.capturedAt ?? '').localeCompare(a.capturedAt ?? ''),
   );
 
-  if (!canReview(profile.role)) {
+  if (!canUseOpsTools(profile.role, defs)) {
     return <div className="card">{t.photoSheet.noPermission}</div>;
   }
 

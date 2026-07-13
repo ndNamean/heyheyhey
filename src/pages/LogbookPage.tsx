@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { id } from '@instantdb/react';
 import { db } from '../db';
 import { useLang } from '../i18n';
-import { canReview } from '../lib/roles';
+import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
+import { canUseOpsTools } from '../lib/roles';
 import { nowIso, todayYmd } from '../lib/utils';
 import type { LogbookEntry, Profile, Store } from '../types';
 
@@ -12,6 +13,7 @@ interface Props {
 
 export default function LogbookPage({ profile }: Props) {
   const { t } = useLang();
+  const { defs } = useRoleDefinitions();
   const [storeId, setStoreId] = useState('all');
   const [date, setDate] = useState(todayYmd);
   const [showForm, setShowForm] = useState(false);
@@ -44,7 +46,7 @@ export default function LogbookPage({ profile }: Props) {
     })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-  if (!canReview(profile.role)) {
+  if (!canUseOpsTools(profile.role, defs)) {
     return <div className="card">{t.logbook.noPermission}</div>;
   }
 

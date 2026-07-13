@@ -3,6 +3,7 @@ import { id } from '@instantdb/react';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import { db } from '../db';
 import { useLang } from '../i18n';
+import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import { canEditMaster } from '../lib/roles';
 import type { NominatimResult } from '../lib/nominatim';
 import { nowIso } from '../lib/utils';
@@ -26,6 +27,7 @@ const EMPTY_FORM = {
 
 export default function StoresPage({ profile }: Props) {
   const { t } = useLang();
+  const { defs } = useRoleDefinitions();
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -34,7 +36,7 @@ export default function StoresPage({ profile }: Props) {
   const { data } = db.useQuery({ stores: {} });
   const stores: Store[] = (data?.stores ?? []) as Store[];
 
-  if (!canEditMaster(profile.role)) {
+  if (!canEditMaster(profile.role, defs)) {
     return <div className="card">{t.stores.noPermission}</div>;
   }
 

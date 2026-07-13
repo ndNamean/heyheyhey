@@ -7,6 +7,8 @@ import { useLang } from '../i18n';
 import { statusLabel } from '../lib/i18nUtils';
 import { aggregateFeedbackFrequency } from '../lib/feedbackReasons';
 import { badgeClass, todayYmd } from '../lib/utils';
+import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
+import { canAccessAllStores } from '../lib/roles';
 import type { ExportFormat, Profile, Report, ReportResponse, ReviewEvent } from '../types';
 
 interface Props {
@@ -20,6 +22,7 @@ function firstDayOfMonth() {
 
 export default function DashboardPage({ profile }: Props) {
   const { t } = useLang();
+  const { defs } = useRoleDefinitions();
   const [from, setFrom] = useState(firstDayOfMonth);
   const [to, setTo] = useState(todayYmd);
   const [filterStoreId, setFilterStoreId] = useState('all');
@@ -50,7 +53,7 @@ export default function DashboardPage({ profile }: Props) {
     let filtered = allReports;
 
     // Scope to accessible stores for non-owner users
-    if (profile.role !== 'owner' && profile.role !== 'areaManager') {
+    if (!canAccessAllStores(profile.role, defs)) {
       const accessibleIds = new Set((profile.stores ?? []).map((s) => s.id));
       filtered = filtered.filter((r) => accessibleIds.has(r.storeId));
     }
@@ -60,7 +63,7 @@ export default function DashboardPage({ profile }: Props) {
     }
 
     return filtered;
-  }, [allReports, profile, filterStoreId]);
+  }, [allReports, profile, filterStoreId, defs]);
 
   const metrics = useMemo(() => {
     if (!reports.length) return { completion: 0, compliance: 0, reportCount: 0, failed: [] };
@@ -125,7 +128,7 @@ export default function DashboardPage({ profile }: Props) {
     [reports, profiles],
   );
 
-  const displayStores = profile.role === 'owner' || profile.role === 'areaManager'
+  const displayStores = canAccessAllStores(profile.role, defs)
     ? stores
     : (profile.stores ?? []);
 

@@ -56,7 +56,7 @@ export async function processExportJob(jobId) {
 
   try {
     const profileCtx = await loadProfileContext(job.requesterUserId);
-    assertExportJobAccess(profileCtx.role, job.exportType);
+    assertExportJobAccess(profileCtx.role, job.exportType, profileCtx.roleDefinition);
 
     const params = JSON.parse(job.paramsJson || '{}');
     let content;

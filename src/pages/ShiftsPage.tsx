@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { id } from '@instantdb/react';
 import { db } from '../db';
 import { useLang } from '../i18n';
-import { canReview } from '../lib/roles';
+import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
+import { canClockIn, canReview, canScheduleShifts, canAccessAllStores } from '../lib/roles';
 import { statusLabel } from '../lib/i18nUtils';
 import { badgeClass, nowIso, todayYmd } from '../lib/utils';
 import type { Profile, Shift, Store } from '../types';
@@ -13,6 +14,7 @@ interface Props {
 
 export default function ShiftsPage({ profile }: Props) {
   const { t } = useLang();
+  const { defs } = useRoleDefinitions();
   const [date, setDate] = useState(todayYmd);
   const [tab, setTab] = useState<'schedule' | 'clockin'>('schedule');
   const [newShift, setNewShift] = useState({
@@ -42,7 +44,7 @@ export default function ShiftsPage({ profile }: Props) {
   const stores: Store[] = (data?.stores ?? []) as Store[];
 
   const myShifts =
-    profile.role === 'owner' || profile.role === 'areaManager'
+    canAccessAllStores(profile.role, defs)
       ? shifts
       : shifts.filter(
           (s) =>
@@ -133,7 +135,7 @@ export default function ShiftsPage({ profile }: Props) {
     );
   }
 
-  if (!canReview(profile.role) && profile.role !== 'staff') {
+  if (!canScheduleShifts(profile.role, defs) && !canClockIn(profile.role, defs)) {
     return <div className="card">{t.shifts.noAccess}</div>;
   }
 
@@ -160,7 +162,7 @@ export default function ShiftsPage({ profile }: Props) {
         </div>
       </div>
 
-      {tab === 'schedule' && canReview(profile.role) && (
+      {tab === 'schedule' && canScheduleShifts(profile.role, defs) && (
         <div className="card">
           <h2>{t.shifts.addShift}</h2>
           <div className="grid two">

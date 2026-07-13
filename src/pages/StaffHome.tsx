@@ -3,6 +3,7 @@ import FeedbackInbox from '../components/FeedbackInbox';
 import MyReportsPanel from '../components/MyReportsPanel';
 import ReportReviewStatusPanel from '../components/ReportReviewStatusPanel';
 import { useLang } from '../i18n';
+import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import { canEditMaster, canReview } from '../lib/roles';
 import type { Profile } from '../types';
 
@@ -15,6 +16,7 @@ interface Props {
 
 export default function StaffHome({ profile, onStartReport, onFixReport }: Props) {
   const { t } = useLang();
+  const { defs } = useRoleDefinitions();
   const today = new Date().toISOString().slice(0, 10);
 
   const { data } = db.useQuery({
@@ -41,7 +43,7 @@ export default function StaffHome({ profile, onStartReport, onFixReport }: Props
       <FeedbackInbox userId={profile.userId} />
       <MyReportsPanel profile={profile} onFixReport={onFixReport} />
 
-      {canReview(profile.role) && !canEditMaster(profile.role) && (
+      {canReview(profile.role, defs) && !canEditMaster(profile.role, defs) && (
         <ReportReviewStatusPanel profile={profile} />
       )}
 

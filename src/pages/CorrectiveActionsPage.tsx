@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
-import { canReview } from '../lib/roles';
+import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
+import { canUseOpsTools } from '../lib/roles';
 import { statusLabel } from '../lib/i18nUtils';
 import { badgeClass, nowIso } from '../lib/utils';
 import type { CorrectiveAction, Profile } from '../types';
@@ -12,6 +13,7 @@ interface Props {
 
 export default function CorrectiveActionsPage({ profile }: Props) {
   const { t } = useLang();
+  const { defs } = useRoleDefinitions();
   const [filter, setFilter] = useState<'open' | 'overdue' | 'verified' | 'all'>('open');
 
   const { data } = db.useQuery({
@@ -25,7 +27,7 @@ export default function CorrectiveActionsPage({ profile }: Props) {
     return a.status === filter;
   });
 
-  if (!canReview(profile.role)) {
+  if (!canUseOpsTools(profile.role, defs)) {
     return <div className="card">{t.corrective.noPermission}</div>;
   }
 

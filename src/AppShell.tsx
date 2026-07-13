@@ -13,6 +13,8 @@ import PhotoSheetPage from './pages/PhotoSheetPage';
 import VerifyPhotoPage from './pages/VerifyPhotoPage';
 import ShiftsPage from './pages/ShiftsPage';
 import LogbookPage from './pages/LogbookPage';
+import { useRoleDefinitions } from './contexts/RoleDefinitionsContext';
+import { usesDashboardHome } from './lib/roles';
 import { BACK_PRIORITY, useNativeBack } from './lib/nativeBack';
 import type { Profile } from './types';
 
@@ -21,6 +23,7 @@ interface Props {
 }
 
 export default function AppShell({ profile }: Props) {
+  const { defs } = useRoleDefinitions();
   const [page, setPage] = useState<Page>('home');
   const [correctionReportId, setCorrectionReportId] = useState<string | null>(null);
 
@@ -48,7 +51,7 @@ export default function AppShell({ profile }: Props) {
   function renderPage() {
     switch (page) {
       case 'home':
-        return profile.role === 'owner' || profile.role === 'areaManager' ? (
+        return usesDashboardHome(profile.role, defs) ? (
           <DashboardPage profile={profile} />
         ) : (
           <StaffHome

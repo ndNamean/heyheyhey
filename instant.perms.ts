@@ -1,7 +1,6 @@
 import type { InstantRules } from '@instantdb/react';
 
-// Common bind expressions reused across namespaces.
-// auth.ref('$user.profile.X') traverses the reverse 'profile' link on $users → profiles.
+// Capability flags from linked roleDefinition; legacy role strings as fallback.
 const COMMON_BIND = {
   isSignedIn: 'auth.id != null',
   isApproved: "'approved' in auth.ref('$user.profile.approvalStatus')",
@@ -9,8 +8,17 @@ const COMMON_BIND = {
   isAreaManager: "'areaManager' in auth.ref('$user.profile.role')",
   isManager: "'manager' in auth.ref('$user.profile.role')",
   isLeader: "'leader' in auth.ref('$user.profile.role') || 'subleader' in auth.ref('$user.profile.role')",
-  canEditMaster: "isOwner || isAreaManager",
-  canReview: "isApproved && (isOwner || isAreaManager || isManager || isLeader)",
+  legacyCanEditMaster: 'isOwner || isAreaManager',
+  roleCanEditMaster: "true == auth.ref('$user.profile.roleDefinition.canEditMaster')",
+  canEditMaster: 'legacyCanEditMaster || roleCanEditMaster',
+  legacyCanManageUsers: 'isOwner || isAreaManager',
+  roleCanManageUsers: "true == auth.ref('$user.profile.roleDefinition.canManageUsers')",
+  legacyCanReview: 'isOwner || isAreaManager || isManager || isLeader',
+  roleCanReview: "true == auth.ref('$user.profile.roleDefinition.canReview')",
+  canReview: "isApproved && (legacyCanReview || roleCanReview)",
+  roleCanPreApproveAccess: "true == auth.ref('$user.profile.roleDefinition.canPreApproveAccess')",
+  roleCanScheduleShifts: "true == auth.ref('$user.profile.roleDefinition.canScheduleShifts')",
+  canScheduleShifts: 'legacyCanEditMaster || isManager || roleCanScheduleShifts',
 };
 
 const rules = {
@@ -54,10 +62,26 @@ const rules = {
       isOwner: "'owner' in auth.ref('$user.profile.role')",
       isAreaManager: "'areaManager' in auth.ref('$user.profile.role')",
       isManager: "'manager' in auth.ref('$user.profile.role')",
-      isAdmin: 'isOwner || isAreaManager',
+      legacyCanManageUsers: 'isOwner || isAreaManager',
+      roleCanManageUsers: "true == auth.ref('$user.profile.roleDefinition.canManageUsers')",
+      isAdmin: 'legacyCanManageUsers || roleCanManageUsers',
+      roleCanPreApproveAccess: "true == auth.ref('$user.profile.roleDefinition.canPreApproveAccess')",
       onlyDisplayName: "request.modifiedFields.all(f, f in ['displayName', 'cameraOptionsJson', 'updatedAt'])",
       managerAccessReview:
-        "isManager && request.modifiedFields.all(f, f in ['approvalStatus', 'accessReviewNote', 'preApprovedByUserId', 'preApprovedByEmail', 'preApprovedAt', 'updatedAt']) && (data.approvalStatus == 'pre_approved' || data.approvalStatus == 'pending')",
+        "roleCanPreApproveAccess && request.modifiedFields.all(f, f in ['approvalStatus', 'accessReviewNote', 'preApprovedByUserId', 'preApprovedByEmail', 'preApprovedAt', 'updatedAt']) && (data.approvalStatus == 'pre_approved' || data.approvalStatus == 'pending')",
+    },
+  },
+
+  roleDefinitions: {
+    allow: {
+      view: 'isApproved',
+      create: 'isOwner',
+      update: 'isOwner',
+      delete: 'isOwner',
+    },
+    bind: {
+      isApproved: "'approved' in auth.ref('$user.profile.approvalStatus')",
+      isOwner: "'owner' in auth.ref('$user.profile.role')",
     },
   },
 
@@ -180,8 +204,8 @@ const rules = {
   shifts: {
     allow: {
       view: 'isApproved',
-      create: 'isManager || canEditMaster',
-      update: 'isManager || canEditMaster',
+      create: 'canScheduleShifts',
+      update: 'canScheduleShifts',
       delete: 'canEditMaster',
     },
     bind: { ...COMMON_BIND },

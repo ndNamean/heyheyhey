@@ -1,6 +1,13 @@
 import { db } from '../db';
-import { canEditMaster, canReview, canAccessUsersPage } from '../lib/roles';
+import {
+  canAccessUsersPage,
+  canEditMaster,
+  canReview,
+  canScheduleShifts,
+  canUseOpsTools,
+} from '../lib/roles';
 import { useLang } from '../i18n';
+import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import LanguageSelector from './LanguageSelector';
 import { useUnreadNotificationCount } from './FeedbackInbox';
 import type { Profile } from '../types';
@@ -16,32 +23,34 @@ interface NavProps {
   profile: Profile;
 }
 
-function canShowUsersNav(role: string): boolean {
-  return canAccessUsersPage(role as import('../types').Role);
-}
-
 export function DesktopNav({ page, setPage, profile }: NavProps) {
   const { t } = useLang();
+  const { defs } = useRoleDefinitions();
 
   const links: { id: Page; label: string }[] = [
     { id: 'home',    label: t.nav.dashboard },
     { id: 'submit',  label: t.nav.submit },
-    { id: 'review',  label: t.nav.review },
   ];
 
-  if (canEditMaster(profile.role)) {
+  if (canReview(profile.role, defs)) {
+    links.push({ id: 'review', label: t.nav.review });
+  }
+
+  if (canEditMaster(profile.role, defs)) {
     links.push({ id: 'templates', label: t.nav.templates });
     links.push({ id: 'stores',    label: t.nav.stores });
   }
-  if (canShowUsersNav(profile.role)) {
+  if (canAccessUsersPage(profile.role, defs)) {
     links.push({ id: 'users', label: t.nav.users });
   }
-  if (canReview(profile.role)) {
+  if (canUseOpsTools(profile.role, defs)) {
     links.push({ id: 'corrective', label: t.nav.corrective });
     links.push({ id: 'photos',     label: t.nav.photos });
     links.push({ id: 'verify',     label: t.nav.verify });
-    links.push({ id: 'shifts',     label: t.nav.shifts });
     links.push({ id: 'logbook',    label: t.nav.logbook });
+  }
+  if (canScheduleShifts(profile.role, defs) || canReview(profile.role, defs)) {
+    links.push({ id: 'shifts', label: t.nav.shifts });
   }
 
   return (
@@ -56,10 +65,8 @@ export function DesktopNav({ page, setPage, profile }: NavProps) {
         </button>
       ))}
 
-      {/* Spacer */}
       <div style={{ flex: 1 }} />
 
-      {/* Language selector */}
       <LanguageSelector />
 
       <button className="secondary" onClick={() => db.auth.signOut()}>

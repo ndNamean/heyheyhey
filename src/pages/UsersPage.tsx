@@ -1,6 +1,8 @@
 import { useRef, useState, useCallback } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
+import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
+import RolesPermissionsPanel from '../components/RolesPermissionsPanel';
 import { statusLabel } from '../lib/i18nUtils';
 import {
   accessStatusBadgeClass,
@@ -8,13 +10,21 @@ import {
   managerCanReviewAccess,
   parseAccessReviewStoreIds,
 } from '../lib/accessReview';
+import { profileRoleAssignTx } from '../lib/roleResolver';
 import {
   buildAccessAdminNotifications,
   buildAccessFinalizedNotification,
   buildAccessManagerRequestedNotifications,
   buildAccessRecheckNotifications,
 } from '../lib/notifications';
-import { canAccessUsersPage, canManageUsers, canPreApproveAccess, ROLES } from '../lib/roles';
+import {
+  canAccessUsersPage,
+  canManageUsers,
+  canPreApproveAccess,
+  canViewRolesPermissions,
+  getOrderedRoles,
+} from '../lib/roles';
+import { AREA_MANAGER_ROLE_KEY, OWNER_ROLE_KEY } from '../types';
 import { badgeClass, nowIso } from '../lib/utils';
 import type { ApprovalStatus, Profile, Role, Store } from '../types';
 
@@ -86,7 +96,13 @@ function StorePicker({
   );
 }
 
-function InviteUserForm({ currentProfile }: { currentProfile: Profile }) {
+function InviteUserForm({
+  currentProfile,
+  assignableRoles,
+}: {
+  currentProfile: Profile;
+  assignableRoles: Role[];
+}) {
   const { t } = useLang();
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Role>('staff');
@@ -95,11 +111,9 @@ function InviteUserForm({ currentProfile }: { currentProfile: Profile }) {
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const isOwner = currentProfile.role === 'owner';
+  const isOwner = currentProfile.role === OWNER_ROLE_KEY;
 
-  const assignableRoles = ROLES.filter(
-    (r) => isOwner || !['owner', 'areaManager'].includes(r),
-  );
+  const rolesForInvite = assignableRoles;
 
   const copyLink = useCallback(async (link: string) => {
     try {
@@ -203,7 +217,7 @@ function InviteUserForm({ currentProfile }: { currentProfile: Profile }) {
             onChange={(e) => setRole(e.target.value as Role)}
             style={{ marginTop: 6 }}
           >
-            {assignableRoles.map((r) => (
+            {rolesForInvite.map((r) => (
               <option key={r} value={r}>{r}</option>
             ))}
           </select>
@@ -321,11 +335,15 @@ function ApproveModal({
   pending,
   stores,
   currentProfile,
+  defs,
+  assignableRoles,
   onClose,
 }: {
   pending: Profile;
   stores: Store[];
   currentProfile: Profile;
+  defs: import('../types').RoleDefinition[];
+  assignableRoles: Role[];
   onClose: () => void;
 }) {
   const { t } = useLang();
@@ -335,26 +353,22 @@ function ApproveModal({
   );
   const [saving, setSaving] = useState(false);
 
-  const assignableRoles = ROLES.filter(
-    (r) => currentProfile.role === 'owner' || !['owner', 'areaManager'].includes(r),
-  );
-
   async function approve() {
     setSaving(true);
     try {
       const now = nowIso();
-      const tx = db.tx.profiles[pending.id].update({
-        role,
-        approvalStatus: 'approved',
-        approvedAt: now,
-        approvedByEmail: currentProfile.email,
-        updatedAt: now,
-      });
-      const storeLinkTxs = selectedStoreIds.map((sid) =>
-        db.tx.profiles[pending.id].link({ stores: sid }),
-      );
-      const notifTxs = buildAccessFinalizedNotification(pending, 'approved', currentProfile);
-      await db.transact([tx, ...storeLinkTxs, ...notifTxs]);
+      const txs = [
+        ...profileRoleAssignTx(pending.id, role, defs),
+        db.tx.profiles[pending.id].update({
+          approvalStatus: 'approved',
+          approvedAt: now,
+          approvedByEmail: currentProfile.email,
+          updatedAt: now,
+        }),
+        ...selectedStoreIds.map((sid) => db.tx.profiles[pending.id].link({ stores: sid })),
+        ...buildAccessFinalizedNotification(pending, 'approved', currentProfile),
+      ];
+      await db.transact(txs);
       onClose();
     } catch (e) {
       alert(e instanceof Error ? e.message : t.users.approveFailed);
@@ -689,7 +703,8 @@ function AccessRequestCard({
 
 export default function UsersPage({ currentProfile }: Props) {
   const { t } = useLang();
-  const [tab, setTab] = useState<'pending' | 'all'>('pending');
+  const { defs } = useRoleDefinitions();
+  const [tab, setTab] = useState<'pending' | 'all' | 'roles'>('pending');
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [requestManagerId, setRequestManagerId] = useState<string | null>(null);
   const [checkAgainId, setCheckAgainId] = useState<string | null>(null);
@@ -704,11 +719,17 @@ export default function UsersPage({ currentProfile }: Props) {
   const profiles: Profile[] = (data?.profiles ?? []) as Profile[];
   const stores: Store[] = (data?.stores ?? []) as Store[];
 
-  const isOwner = currentProfile.role === 'owner';
-  const isAdmin = canManageUsers(currentProfile.role);
-  const isManager = canPreApproveAccess(currentProfile.role);
+  const isOwner = currentProfile.role === OWNER_ROLE_KEY;
+  const isAdmin = canManageUsers(currentProfile.role, defs);
+  const isManager = canPreApproveAccess(currentProfile.role, defs);
+  const showRolesTab = canViewRolesPermissions(currentProfile.role, defs);
 
-  if (!canAccessUsersPage(currentProfile.role)) {
+  const allRoleKeys = getOrderedRoles(defs);
+  const assignableRoles = allRoleKeys.filter(
+    (r) => isOwner || ![OWNER_ROLE_KEY, AREA_MANAGER_ROLE_KEY].includes(r),
+  );
+
+  if (!canAccessUsersPage(currentProfile.role, defs)) {
     return <div className="card">{t.users.noPermission}</div>;
   }
 
@@ -720,11 +741,11 @@ export default function UsersPage({ currentProfile }: Props) {
     : [];
 
   async function updateRole(profile: Profile, role: Role) {
-    if (!isOwner && ['owner', 'areaManager'].includes(role)) {
+    if (!isOwner && [OWNER_ROLE_KEY, AREA_MANAGER_ROLE_KEY].includes(role)) {
       alert(t.users.ownerRoleOnly);
       return;
     }
-    await db.transact(db.tx.profiles[profile.id].update({ role, updatedAt: nowIso() }));
+    await db.transact(profileRoleAssignTx(profile.id, role, defs));
   }
 
   async function rejectAccess(profile: Profile) {
@@ -832,6 +853,8 @@ export default function UsersPage({ currentProfile }: Props) {
           pending={approvingProfile}
           stores={stores}
           currentProfile={currentProfile}
+          defs={defs}
+          assignableRoles={assignableRoles}
           onClose={() => setApprovingId(null)}
         />
       )}
@@ -876,7 +899,7 @@ export default function UsersPage({ currentProfile }: Props) {
         {showInvite && (
           <div className="panel-inset" style={{ marginBottom: 16 }}>
             <h3 style={{ margin: '0 0 4px', fontSize: 15 }}>{t.users.sendSignInCodeTitle}</h3>
-            <InviteUserForm currentProfile={currentProfile} />
+            <InviteUserForm currentProfile={currentProfile} assignableRoles={assignableRoles} />
           </div>
         )}
 
@@ -893,8 +916,24 @@ export default function UsersPage({ currentProfile }: Props) {
           >
             {t.users.allUsers} ({allProfiles.length})
           </button>
+          {showRolesTab && (
+            <button
+              className={tab === 'roles' ? 'active' : ''}
+              onClick={() => setTab('roles')}
+            >
+              {t.users.rolesPermissions.tab}
+            </button>
+          )}
         </div>
       </div>
+
+      {tab === 'roles' && showRolesTab && (
+        <RolesPermissionsPanel
+          currentProfile={currentProfile}
+          allProfiles={profiles}
+          readOnly={!isOwner}
+        />
+      )}
 
       {tab === 'pending' && (
         <>
@@ -934,7 +973,7 @@ export default function UsersPage({ currentProfile }: Props) {
             <tbody>
               {allProfiles.map((p) => {
                 const canEditRole =
-                  isOwner || !['owner', 'areaManager'].includes(p.role);
+                  isOwner || ![OWNER_ROLE_KEY, AREA_MANAGER_ROLE_KEY].includes(p.role);
                 return (
                   <tr key={p.id}>
                     <td>
@@ -956,8 +995,8 @@ export default function UsersPage({ currentProfile }: Props) {
                         disabled={!canEditRole}
                         style={{ minWidth: 120, fontSize: 13 }}
                       >
-                        {ROLES.filter(
-                          (r) => isOwner || !['owner', 'areaManager'].includes(r),
+                        {allRoleKeys.filter(
+                          (r) => isOwner || ![OWNER_ROLE_KEY, AREA_MANAGER_ROLE_KEY].includes(r),
                         ).map((r) => (
                           <option key={r} value={r}>
                             {r}
