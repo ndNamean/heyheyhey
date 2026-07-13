@@ -35,14 +35,14 @@ async function handleCreate(req, res) {
   const exportType = body.exportType;
   const format = body.format === 'pdf' ? 'pdf' : 'csv';
 
-  if (!exportType || !['dashboard', 'review_status'].includes(exportType)) {
+  if (!exportType || !['dashboard', 'review_status', 'failure_history'].includes(exportType)) {
     return res.status(400).json({ error: 'Invalid exportType' });
   }
 
   assertExportJobAccess(profileCtx.role, exportType, profileCtx.roleDefinition);
 
   const scopeMeta =
-    exportType === 'dashboard'
+    exportType === 'dashboard' || exportType === 'failure_history'
       ? resolveDashboardScope(profileCtx, body)
       : resolveReviewStatusScope(profileCtx, body);
 

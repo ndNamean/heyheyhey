@@ -8,18 +8,31 @@ interface EventBase {
   storeId: string;
   actorUserId: string;
   actorRole: string;
+  actorDisplayNameSnapshot?: string;
   createdAt?: string;
+}
+
+interface EventFields {
+  reportResponseId?: string;
+  itemTitle?: string;
+  templateItemId?: string;
+  sectionSnapshot?: string;
+  categorySnapshot?: string;
+  statusAfter: string;
+  previousStatus?: string;
+  note?: string;
+  feedbackCode?: string;
+  feedbackNote?: string;
+}
+
+function actorDisplayName(profile: Profile): string {
+  return profile.displayName?.trim() || profile.email?.split('@')[0] || profile.userId;
 }
 
 function createEventTx(
   base: EventBase,
   eventType: ReviewEventType,
-  fields: {
-    reportResponseId?: string;
-    itemTitle?: string;
-    statusAfter: string;
-    note?: string;
-  },
+  fields: EventFields,
 ) {
   return db.tx.reviewEvents[id()].update({
     reportId: base.reportId,
@@ -27,10 +40,17 @@ function createEventTx(
     storeId: base.storeId,
     eventType,
     itemTitle: fields.itemTitle ?? '',
+    templateItemId: fields.templateItemId ?? '',
+    sectionSnapshot: fields.sectionSnapshot ?? '',
+    categorySnapshot: fields.categorySnapshot ?? '',
     statusAfter: fields.statusAfter,
+    previousStatus: fields.previousStatus ?? '',
     actorUserId: base.actorUserId,
     actorRole: base.actorRole,
+    actorDisplayNameSnapshot: base.actorDisplayNameSnapshot ?? '',
     note: fields.note ?? '',
+    feedbackCode: fields.feedbackCode ?? '',
+    feedbackNote: fields.feedbackNote ?? '',
     createdAt: base.createdAt ?? nowIso(),
   });
 }
@@ -39,7 +59,14 @@ export function buildReportSubmittedEvents(
   reportId: string,
   storeId: string,
   profile: Profile,
-  responses: Array<{ id: string; title: string; status: string }>,
+  responses: Array<{
+    id: string;
+    title: string;
+    status: string;
+    templateItemId?: string;
+    section?: string;
+    failureCategory?: string;
+  }>,
   createdAt?: string,
 ) {
   const base: EventBase = {
@@ -47,12 +74,14 @@ export function buildReportSubmittedEvents(
     storeId,
     actorUserId: profile.userId,
     actorRole: profile.role,
+    actorDisplayNameSnapshot: actorDisplayName(profile),
     createdAt,
   };
 
   const txs = [
     createEventTx(base, 'submitted', {
       statusAfter: 'waiting_approval',
+      previousStatus: 'not_started',
     }),
   ];
 
@@ -62,7 +91,11 @@ export function buildReportSubmittedEvents(
       createEventTx(base, 'submitted', {
         reportResponseId: resp.id,
         itemTitle: resp.title,
+        templateItemId: resp.templateItemId,
+        sectionSnapshot: resp.section,
+        categorySnapshot: resp.failureCategory,
         statusAfter: 'waiting_approval',
+        previousStatus: 'not_started',
       }),
     );
   }
@@ -74,7 +107,14 @@ export function buildItemResubmittedEvents(
   reportId: string,
   storeId: string,
   profile: Profile,
-  items: Array<{ id: string; title: string }>,
+  items: Array<{
+    id: string;
+    title: string;
+    templateItemId?: string;
+    section?: string;
+    failureCategory?: string;
+    previousStatus?: string;
+  }>,
   createdAt?: string,
 ) {
   const base: EventBase = {
@@ -82,6 +122,7 @@ export function buildItemResubmittedEvents(
     storeId,
     actorUserId: profile.userId,
     actorRole: profile.role,
+    actorDisplayNameSnapshot: actorDisplayName(profile),
     createdAt,
   };
 
@@ -89,7 +130,11 @@ export function buildItemResubmittedEvents(
     createEventTx(base, 'resubmitted', {
       reportResponseId: item.id,
       itemTitle: item.title,
+      templateItemId: item.templateItemId,
+      sectionSnapshot: item.section,
+      categorySnapshot: item.failureCategory,
       statusAfter: 'waiting_approval',
+      previousStatus: item.previousStatus ?? 'rejected',
     }),
   );
 }
@@ -101,6 +146,7 @@ export function buildItemReviewEvent(
   note: string,
   approver: Profile,
   createdAt?: string,
+  feedback?: { feedbackCode?: string; feedbackNote?: string },
 ) {
   const eventType: ReviewEventType =
     status === 'approved'
@@ -114,14 +160,21 @@ export function buildItemReviewEvent(
     storeId: report.storeId,
     actorUserId: approver.userId,
     actorRole: approver.role,
+    actorDisplayNameSnapshot: actorDisplayName(approver),
     createdAt,
   };
 
   return createEventTx(base, eventType, {
     reportResponseId: response.id,
     itemTitle: response.title,
+    templateItemId: response.templateItemId,
+    sectionSnapshot: response.section,
+    categorySnapshot: response.failureCategory,
     statusAfter: status,
+    previousStatus: response.status,
     note,
+    feedbackCode: feedback?.feedbackCode,
+    feedbackNote: feedback?.feedbackNote,
   });
 }
 
@@ -136,10 +189,12 @@ export function buildReportFinalizedEvent(
     storeId: report.storeId,
     actorUserId: approver.userId,
     actorRole: approver.role,
+    actorDisplayNameSnapshot: actorDisplayName(approver),
     createdAt,
   };
 
   return createEventTx(base, 'report_finalized', {
     statusAfter: reportStatus,
+    previousStatus: report.status,
   });
 }

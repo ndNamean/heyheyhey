@@ -2,10 +2,12 @@ import { useMemo, useState } from 'react';
 import { db } from '../db';
 import FeedbackInbox from '../components/FeedbackInbox';
 import ExportModal from '../components/ExportModal';
+import FailureCorrectionHistory from '../components/FailureCorrectionHistory';
 import ReportTimeline, { ReportTimelineLeadCell } from '../components/ReportTimeline';
 import { useLang } from '../i18n';
 import { statusLabel } from '../lib/i18nUtils';
 import { aggregateFeedbackFrequency } from '../lib/feedbackReasons';
+import { isFailureHistoryEnabled } from '../lib/failureHistoryFlag';
 import { badgeClass, todayYmd } from '../lib/utils';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import { canAccessAllStores } from '../lib/roles';
@@ -28,14 +30,10 @@ export default function DashboardPage({ profile }: Props) {
   const [filterStoreId, setFilterStoreId] = useState('all');
   const [showOtherDetails, setShowOtherDetails] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [failureExportOpen, setFailureExportOpen] = useState(false);
 
   const { data } = db.useQuery({
     reports: {
-      $: {
-        where: {
-          reportDate: { $gte: from, $lte: to },
-        },
-      },
       responses: {},
       store: {},
     },
@@ -50,7 +48,7 @@ export default function DashboardPage({ profile }: Props) {
   const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];
 
   const reports = useMemo(() => {
-    let filtered = allReports;
+    let filtered = allReports.filter((r) => r.reportDate >= from && r.reportDate <= to);
 
     // Scope to accessible stores for non-owner users
     if (!canAccessAllStores(profile.role, defs)) {
@@ -63,7 +61,25 @@ export default function DashboardPage({ profile }: Props) {
     }
 
     return filtered;
+  }, [allReports, profile, filterStoreId, defs, from, to]);
+
+  const historyReports = useMemo(() => {
+    let filtered = allReports;
+    if (!canAccessAllStores(profile.role, defs)) {
+      const accessibleIds = new Set((profile.stores ?? []).map((s) => s.id));
+      filtered = filtered.filter((r) => accessibleIds.has(r.storeId));
+    }
+    if (filterStoreId !== 'all') {
+      filtered = filtered.filter((r) => r.storeId === filterStoreId);
+    }
+    return filtered;
   }, [allReports, profile, filterStoreId, defs]);
+
+  const historyStoreIds = useMemo(() => {
+    if (filterStoreId !== 'all') return [filterStoreId];
+    if (canAccessAllStores(profile.role, defs)) return null;
+    return (profile.stores ?? []).map((s) => s.id);
+  }, [filterStoreId, profile, defs]);
 
   const metrics = useMemo(() => {
     if (!reports.length) return { completion: 0, compliance: 0, reportCount: 0, failed: [] };
@@ -310,6 +326,40 @@ export default function DashboardPage({ profile }: Props) {
           <p className="small">{t.dashboard.noFeedbackPeriod}</p>
         )}
       </div>
+
+      {isFailureHistoryEnabled() && (
+        <>
+          <FailureCorrectionHistory
+            events={allEvents}
+            reports={historyReports}
+            profiles={profiles as Profile[]}
+            from={from}
+            to={to}
+            storeIds={historyStoreIds}
+            onExport={() => setFailureExportOpen(true)}
+          />
+          <ExportModal
+            open={failureExportOpen}
+            onClose={() => setFailureExportOpen(false)}
+            exportType="failure_history"
+            defaultFormat="csv"
+            csvOnly
+            scopeOptions={[
+              { value: 'filtered', label: t.export.scopeFiltered },
+              { value: 'full_history', label: t.export.scopeFullHistory },
+            ]}
+            defaultScope="filtered"
+            buildParams={(format: ExportFormat, scope: string) => ({
+              exportType: 'failure_history',
+              format,
+              scope,
+              startDate: from,
+              endDate: to,
+              filterStoreId,
+            })}
+          />
+        </>
+      )}
 
       <div className="card table-wrap">
         <h2>{t.dashboard.failedItems}</h2>

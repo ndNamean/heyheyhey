@@ -24,6 +24,7 @@ interface Props {
   showDaysBack?: boolean;
   defaultDaysBack?: number;
   title?: string;
+  csvOnly?: boolean;
 }
 
 type Phase = 'idle' | 'creating' | 'generating' | 'ready' | 'failed';
@@ -39,6 +40,7 @@ export default function ExportModal({
   showDaysBack = false,
   defaultDaysBack = 30,
   title,
+  csvOnly = false,
 }: Props) {
   const { t } = useLang();
   const [format, setFormat] = useState<ExportFormat>(defaultFormat);
@@ -69,7 +71,12 @@ export default function ExportModal({
 
       if (result.downloadUrl) {
         const ext = format === 'pdf' ? 'pdf' : 'csv';
-        const prefix = exportType === 'dashboard' ? 'dashboard' : 'review-status';
+        const prefix =
+          exportType === 'dashboard'
+            ? 'dashboard'
+            : exportType === 'failure_history'
+              ? 'failure-history'
+              : 'review-status';
         triggerDownload(result.downloadUrl, `${prefix}-export.${ext}`);
         await ackExportDownload(result.jobId);
       }
@@ -100,14 +107,18 @@ export default function ExportModal({
 
         <label>
           {t.export.formatLabel}
-          <select
-            value={format}
-            onChange={(e) => setFormat(e.target.value as ExportFormat)}
-            disabled={busy}
-          >
-            <option value="csv">{t.export.downloadCsv}</option>
-            <option value="pdf">{t.export.downloadPdf}</option>
-          </select>
+          {csvOnly ? (
+            <input type="text" value="CSV" readOnly disabled />
+          ) : (
+            <select
+              value={format}
+              onChange={(e) => setFormat(e.target.value as ExportFormat)}
+              disabled={busy}
+            >
+              <option value="csv">{t.export.downloadCsv}</option>
+              <option value="pdf">{t.export.downloadPdf}</option>
+            </select>
+          )}
         </label>
 
         {format === 'pdf' && (

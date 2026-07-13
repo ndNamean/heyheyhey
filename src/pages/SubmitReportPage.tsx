@@ -373,7 +373,14 @@ export default function SubmitReportPage({
         activeReportId,
         selectedStore.id,
         profile,
-        responseItems.map((r) => ({ id: r.id, title: r.title, status: r.status })),
+        responseItems.map((r) => ({
+          id: r.id,
+          title: r.title,
+          status: r.status,
+          templateItemId: r.templateItemId,
+          section: r.section,
+          failureCategory: r.failureCategory,
+        })),
         now,
       );
 
@@ -438,10 +445,18 @@ export default function SubmitReportPage({
         updatedAt: now,
       });
 
-      const resubmittedItems = visibleItems.map((item) => ({
-        id: responseIdByItem[item.id]!,
-        title: item.title,
-      }));
+      const resubmittedItems = visibleItems.map((item) => {
+        const respId = responseIdByItem[item.id]!;
+        const prev = allResponses.find((r) => r.id === respId);
+        return {
+          id: respId,
+          title: item.title,
+          templateItemId: item.id,
+          section: item.section,
+          failureCategory: item.failureCategory,
+          previousStatus: prev?.status,
+        };
+      });
       const reviewEventTxs = buildItemResubmittedEvents(
         correctionReport.id,
         correctionReport.storeId,

@@ -371,10 +371,17 @@ export interface ReviewEvent {
   storeId: string;
   eventType: ReviewEventType;
   itemTitle: string;
+  templateItemId?: string;
+  sectionSnapshot?: string;
+  categorySnapshot?: string;
   statusAfter: string;
+  previousStatus?: string;
   actorUserId: string;
   actorRole: string;
+  actorDisplayNameSnapshot?: string;
   note: string;
+  feedbackCode?: string;
+  feedbackNote?: string;
   createdAt: string;
 }
 
@@ -404,7 +411,7 @@ export interface Notification {
 }
 
 export type ExportJobStatus = 'pending' | 'processing' | 'completed' | 'failed';
-export type ExportType = 'dashboard' | 'review_status';
+export type ExportType = 'dashboard' | 'review_status' | 'failure_history';
 export type ExportFormat = 'csv' | 'pdf';
 export type ExportAuditStatus = 'requested' | 'completed' | 'failed' | 'downloaded';
 

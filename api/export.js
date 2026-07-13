@@ -141,7 +141,7 @@ function assertReviewStatusExportRole(role, roleDefinition) {
   }
 }
 function assertExportJobAccess(role, exportType, roleDefinition) {
-  if (exportType === "dashboard") {
+  if (exportType === "dashboard" || exportType === "failure_history") {
     assertDashboardExportRole(role, roleDefinition);
   } else if (exportType === "review_status") {
     assertReviewStatusExportRole(role, roleDefinition);
@@ -485,6 +485,94 @@ var REVIEW_STATUS_CSV_HEADERS = [
   "lead_time_ms",
   "correction_duration_ms"
 ];
+function msToMinutes(ms) {
+  if (ms == null || ms < 0) return "";
+  return Math.round(ms / 6e4);
+}
+function mapFailureHistoryRows(instances) {
+  return instances.map((inst) => ({
+    report_id: inst.reportId,
+    report_date: inst.reportDate,
+    store_code: inst.storeCode,
+    template_name: inst.templateName,
+    report_response_id: inst.reportResponseId,
+    template_item_id: inst.templateItemId,
+    item_title: inst.itemTitle,
+    section: inst.section,
+    category: inst.category,
+    issue_type: inst.issueType,
+    issue_at: inst.issueAt,
+    issue_by_user_id: inst.issueByUserId,
+    issue_by_name: inst.issueByName,
+    issue_by_role: inst.issueByRole,
+    rejection_reason: inst.rejectionReason,
+    feedback_code: inst.feedbackCode,
+    feedback_note: inst.feedbackNote,
+    original_submitted_by_user_id: inst.originalSubmittedByUserId,
+    original_submitted_by_role: inst.originalSubmittedByRole,
+    original_submitted_at: inst.originalSubmittedAt,
+    resubmitted_at: inst.resubmittedAt,
+    resubmitted_by_user_id: inst.resubmittedByUserId,
+    resubmitted_by_name: inst.resubmittedByName,
+    resubmitted_by_role: inst.resubmittedByRole,
+    correction_duration_minutes: msToMinutes(inst.correctionDurationMs),
+    next_review_at: inst.nextReviewAt,
+    next_review_by_user_id: inst.nextReviewByUserId,
+    next_review_by_name: inst.nextReviewByName,
+    next_review_by_role: inst.nextReviewByRole,
+    next_review_decision: inst.nextReviewDecision,
+    rereview_duration_minutes: msToMinutes(inst.rereviewDurationMs),
+    final_approved_at: inst.finalApprovedAt,
+    final_approved_by_user_id: inst.finalApprovedByUserId,
+    final_approved_by_name: inst.finalApprovedByName,
+    final_approved_by_role: inst.finalApprovedByRole,
+    time_to_final_approval_minutes: msToMinutes(inst.timeToFinalApprovalMs),
+    cycle_number: inst.cycleNumber,
+    current_status: inst.currentStatus,
+    report_final_status: inst.reportFinalStatus
+  }));
+}
+var FAILURE_HISTORY_CSV_HEADERS = [
+  "report_id",
+  "report_date",
+  "store_code",
+  "template_name",
+  "report_response_id",
+  "template_item_id",
+  "item_title",
+  "section",
+  "category",
+  "issue_type",
+  "issue_at",
+  "issue_by_user_id",
+  "issue_by_name",
+  "issue_by_role",
+  "rejection_reason",
+  "feedback_code",
+  "feedback_note",
+  "original_submitted_by_user_id",
+  "original_submitted_by_role",
+  "original_submitted_at",
+  "resubmitted_at",
+  "resubmitted_by_user_id",
+  "resubmitted_by_name",
+  "resubmitted_by_role",
+  "correction_duration_minutes",
+  "next_review_at",
+  "next_review_by_user_id",
+  "next_review_by_name",
+  "next_review_by_role",
+  "next_review_decision",
+  "rereview_duration_minutes",
+  "final_approved_at",
+  "final_approved_by_user_id",
+  "final_approved_by_name",
+  "final_approved_by_role",
+  "time_to_final_approval_minutes",
+  "cycle_number",
+  "current_status",
+  "report_final_status"
+];
 
 // api/_lib/export/generators/dashboard-csv.js
 async function generateDashboardCsv(profileCtx, params) {
@@ -687,6 +775,142 @@ async function generateReviewStatusCsv(profileCtx, params) {
     scopeResult,
     statusRows,
     reports
+  };
+}
+
+// api/_lib/export/failure-history-aggregate.js
+var DECISION_TYPES = /* @__PURE__ */ new Set(["item_approved", "item_rejected", "item_correction"]);
+var ISSUE_TYPES = /* @__PURE__ */ new Set(["item_rejected", "item_correction"]);
+function parseMs2(iso) {
+  if (!iso?.trim()) return null;
+  const ms = new Date(iso).getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
+function dateInRange(iso, from, to) {
+  const d = iso.slice(0, 10);
+  return d >= from && d <= to;
+}
+function actorName(userId, snapshot, profiles) {
+  if (snapshot?.trim()) return snapshot.trim();
+  const p = profiles.find((x) => x.userId === userId);
+  if (p?.displayName?.trim()) return p.displayName.trim();
+  if (p?.email) return p.email.split("@")[0] ?? p.email;
+  if (userId) return `Former user \u2014 ${userId.slice(0, 8)}`;
+  return "Unknown";
+}
+function dedupeEvents(events) {
+  const seen = /* @__PURE__ */ new Set();
+  const out = [];
+  for (const e of events) {
+    const key = `${e.reportResponseId}|${e.eventType}|${e.createdAt}|${e.actorUserId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(e);
+  }
+  return out;
+}
+function buildIssueInstancesForExport(events, reports, profiles) {
+  const responsesById = /* @__PURE__ */ new Map();
+  for (const report of reports) {
+    for (const resp of report.responses ?? []) {
+      responsesById.set(resp.id, { ...resp, report });
+    }
+  }
+  const reportById = new Map(reports.map((r) => [r.id, r]));
+  const sorted = dedupeEvents([...events]).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const instances = [];
+  const issueCountByResponse = /* @__PURE__ */ new Map();
+  for (const ev of sorted) {
+    if (!ISSUE_TYPES.has(ev.eventType) || !ev.reportResponseId) continue;
+    const respMeta = responsesById.get(ev.reportResponseId);
+    const report = reportById.get(ev.reportId);
+    const cycleNum = (issueCountByResponse.get(ev.reportResponseId) ?? 0) + 1;
+    issueCountByResponse.set(ev.reportResponseId, cycleNum);
+    const responseEvents = sorted.filter((e) => e.reportResponseId === ev.reportResponseId);
+    const afterIssue = responseEvents.filter((e) => e.createdAt > ev.createdAt);
+    const resubmit = afterIssue.find((e) => e.eventType === "resubmitted");
+    const nextDecision = afterIssue.find((e) => DECISION_TYPES.has(e.eventType));
+    const finalApproval = afterIssue.find((e) => e.eventType === "item_approved");
+    const firstSubmit = responseEvents.find((e) => e.eventType === "submitted");
+    const issueMs = parseMs2(ev.createdAt);
+    const resubmitMs = resubmit ? parseMs2(resubmit.createdAt) : null;
+    const nextDecisionMs = nextDecision ? parseMs2(nextDecision.createdAt) : null;
+    const finalApprovalMs = finalApproval ? parseMs2(finalApproval.createdAt) : null;
+    instances.push({
+      eventId: ev.id,
+      reportId: ev.reportId,
+      reportResponseId: ev.reportResponseId,
+      templateItemId: ev.templateItemId || respMeta?.templateItemId || "",
+      storeId: ev.storeId,
+      itemTitle: ev.itemTitle || respMeta?.title || "",
+      section: ev.sectionSnapshot || respMeta?.section || "",
+      category: ev.categorySnapshot || respMeta?.failureCategory || "",
+      issueType: ev.eventType === "item_rejected" ? "rejected" : "need_correction",
+      issueAt: ev.createdAt,
+      issueByUserId: ev.actorUserId,
+      issueByRole: ev.actorRole,
+      issueByName: actorName(ev.actorUserId, ev.actorDisplayNameSnapshot, profiles),
+      rejectionReason: ev.note || "",
+      feedbackCode: ev.feedbackCode || "",
+      feedbackNote: ev.feedbackNote || "",
+      resubmittedAt: resubmit?.createdAt ?? "",
+      resubmittedByUserId: resubmit?.actorUserId ?? "",
+      resubmittedByRole: resubmit?.actorRole ?? "",
+      resubmittedByName: resubmit ? actorName(resubmit.actorUserId, resubmit.actorDisplayNameSnapshot, profiles) : "",
+      correctionDurationMs: issueMs != null && resubmitMs != null ? resubmitMs - issueMs : null,
+      nextReviewAt: nextDecision?.createdAt ?? "",
+      nextReviewByUserId: nextDecision?.actorUserId ?? "",
+      nextReviewByRole: nextDecision?.actorRole ?? "",
+      nextReviewByName: nextDecision ? actorName(nextDecision.actorUserId, nextDecision.actorDisplayNameSnapshot, profiles) : "",
+      nextReviewDecision: nextDecision?.statusAfter ?? "",
+      rereviewDurationMs: resubmitMs != null && nextDecisionMs != null ? nextDecisionMs - resubmitMs : null,
+      finalApprovedAt: finalApproval?.createdAt ?? "",
+      finalApprovedByUserId: finalApproval?.actorUserId ?? "",
+      finalApprovedByRole: finalApproval?.actorRole ?? "",
+      finalApprovedByName: finalApproval ? actorName(finalApproval.actorUserId, finalApproval.actorDisplayNameSnapshot, profiles) : "",
+      timeToFinalApprovalMs: issueMs != null && finalApprovalMs != null ? finalApprovalMs - issueMs : null,
+      cycleNumber: cycleNum,
+      currentStatus: respMeta?.status ?? "",
+      reportFinalStatus: report?.status ?? "",
+      reportDate: report?.reportDate ?? "",
+      storeCode: report?.storeCode ?? "",
+      templateName: report?.templateName ?? "",
+      originalSubmittedByUserId: firstSubmit?.actorUserId || respMeta?.submittedByUserId || report?.submittedByUserId || "",
+      originalSubmittedByRole: firstSubmit?.actorRole || respMeta?.submittedByRole || report?.submittedByRole || "",
+      originalSubmittedAt: firstSubmit?.createdAt ?? respMeta?.submittedAt ?? report?.submittedAt ?? ""
+    });
+  }
+  return instances;
+}
+function filterIssueInstances(instances, filters) {
+  return instances.filter((inst) => {
+    if (!dateInRange(inst.issueAt, filters.startDate, filters.endDate)) return false;
+    if (filters.storeIds?.length && !filters.storeIds.includes(inst.storeId)) return false;
+    return true;
+  });
+}
+
+// api/_lib/export/generators/failure-history-csv.js
+async function generateFailureHistoryCsv(profileCtx, params) {
+  const scopeResult = resolveDashboardScope(profileCtx, params);
+  const { allowedStoreIds, dateFilter } = scopeResult;
+  const { reports, reviewEvents, profiles } = await fetchReviewStatusData(allowedStoreIds);
+  const allInstances = buildIssueInstancesForExport(reviewEvents, reports, profiles);
+  const instances = dateFilter?.startDate && dateFilter?.endDate ? filterIssueInstances(allInstances, {
+    startDate: dateFilter.startDate,
+    endDate: dateFilter.endDate,
+    storeIds: allowedStoreIds
+  }) : allInstances.filter((inst) => {
+    if (allowedStoreIds?.length && !allowedStoreIds.includes(inst.storeId)) return false;
+    return true;
+  });
+  const rows = mapFailureHistoryRows(instances);
+  const result = buildCsv(FAILURE_HISTORY_CSV_HEADERS, rows);
+  return {
+    ...result,
+    scopeResult,
+    reports,
+    instances
   };
 }
 
@@ -994,6 +1218,16 @@ async function processExportJob(jobId) {
         truncated = gen.truncated;
         warningHeader = gen.warningHeader;
         reports = gen.reports;
+      } else if (job.exportType === "failure_history") {
+        if (job.format !== "csv") {
+          throw new Error("Failure history export supports CSV only");
+        }
+        const gen = await generateFailureHistoryCsv(profileCtx, params);
+        content = gen.csv;
+        rowCount = gen.rowCount;
+        truncated = gen.truncated;
+        warningHeader = gen.warningHeader;
+        reports = gen.reports;
       } else {
         const gen = await generateReviewStatusCsv(profileCtx, params);
         content = gen.csv;
@@ -1102,11 +1336,11 @@ async function handleCreate(req, res) {
   const body = parseBody(req.body) ?? {};
   const exportType = body.exportType;
   const format = body.format === "pdf" ? "pdf" : "csv";
-  if (!exportType || !["dashboard", "review_status"].includes(exportType)) {
+  if (!exportType || !["dashboard", "review_status", "failure_history"].includes(exportType)) {
     return res.status(400).json({ error: "Invalid exportType" });
   }
   assertExportJobAccess(profileCtx.role, exportType, profileCtx.roleDefinition);
-  const scopeMeta = exportType === "dashboard" ? resolveDashboardScope(profileCtx, body) : resolveReviewStatusScope(profileCtx, body);
+  const scopeMeta = exportType === "dashboard" || exportType === "failure_history" ? resolveDashboardScope(profileCtx, body) : resolveReviewStatusScope(profileCtx, body);
   const jobId = id2();
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const adminDb = getAdminDb();

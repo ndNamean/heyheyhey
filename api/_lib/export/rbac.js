@@ -23,7 +23,7 @@ export function assertReviewStatusExportRole(role, roleDefinition) {
 }
 
 export function assertExportJobAccess(role, exportType, roleDefinition) {
-  if (exportType === 'dashboard') {
+  if (exportType === 'dashboard' || exportType === 'failure_history') {
     assertDashboardExportRole(role, roleDefinition);
   } else if (exportType === 'review_status') {
     assertReviewStatusExportRole(role, roleDefinition);

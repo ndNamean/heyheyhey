@@ -1795,6 +1795,84 @@ body.wizard-active .page {
   font-size: 13px;
 }
 
+/* ── Failure & Correction History ─────────────────────────────────────────── */
+.failure-history-section {
+  margin-top: 0;
+}
+
+.failure-history-card {
+  border-top: 2px solid var(--accent);
+}
+
+.failure-history-tracking,
+.failure-history-partial {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+}
+
+.failure-history-partial {
+  color: var(--warn, #e6a817);
+}
+
+.failure-history-filters {
+  margin-top: 12px;
+}
+
+.failure-history-kpis {
+  margin-top: 16px;
+}
+
+.failure-history-kpi {
+  min-height: 88px;
+}
+
+.failure-history-kpi-sub {
+  margin-top: 4px;
+  opacity: 0.85;
+}
+
+.failure-history-subheading {
+  margin: 20px 0 8px;
+  font-size: 1rem;
+}
+
+.failure-history-sort {
+  margin-bottom: 8px;
+}
+
+.failure-history-sort label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.failure-history-breakdown tbody tr.failure-history-row-clickable {
+  cursor: pointer;
+}
+
+.failure-history-breakdown tbody tr.failure-history-row-clickable:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.failure-history-modal {
+  max-width: min(96vw, 1100px);
+  max-height: 85vh;
+  overflow: auto;
+  margin: auto;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 24px 12px;
+  z-index: 1000;
+  overflow: auto;
+}
+
 /* ── Camera controls safe-area padding ──────────────────────────────────── */
 .camera-controls {
   padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));

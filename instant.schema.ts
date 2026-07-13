@@ -244,11 +244,18 @@ const _schema = i.schema({
       eventType: i.string().indexed(),
       // submitted|resubmitted|item_approved|item_rejected|item_correction|report_finalized
       itemTitle: i.string(),
+      templateItemId: i.string().indexed(),
+      sectionSnapshot: i.string(),
+      categorySnapshot: i.string(),
       statusAfter: i.string(),
+      previousStatus: i.string(),
       actorUserId: i.string(),
       actorRole: i.string(),
+      actorDisplayNameSnapshot: i.string(),
       note: i.string(),
-      createdAt: i.string(),
+      feedbackCode: i.string(),
+      feedbackNote: i.string(),
+      createdAt: i.string().indexed(),
     }),
 
     // ─── Export jobs (async CSV/PDF generation) ─────────────────────────────

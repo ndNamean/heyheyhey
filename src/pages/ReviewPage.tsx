@@ -117,7 +117,10 @@ export default function ReviewPage({ profile }: Props) {
         approvedAt: now,
         updatedAt: now,
       }),
-      buildItemReviewEvent(report, response, status, reason, profile, now),
+      buildItemReviewEvent(report, response, status, reason, profile, now, {
+        feedbackCode: feedback?.feedbackCode,
+        feedbackNote: feedback?.feedbackNote,
+      }),
       ...notificationTxs,
     ]);
   }

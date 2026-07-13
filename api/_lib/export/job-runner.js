@@ -7,6 +7,7 @@ import { loadProfileContext } from './auth.js';
 import { assertExportJobAccess } from './rbac.js';
 import { generateDashboardCsv } from './generators/dashboard-csv.js';
 import { generateReviewStatusCsv } from './generators/review-status-csv.js';
+import { generateFailureHistoryCsv } from './generators/failure-history-csv.js';
 import { uploadExportFile } from './storage.js';
 import {
   logExportCompleted,
@@ -69,6 +70,16 @@ export async function processExportJob(jobId) {
     if (job.format === 'csv') {
       if (job.exportType === 'dashboard') {
         const gen = await generateDashboardCsv(profileCtx, params);
+        content = gen.csv;
+        rowCount = gen.rowCount;
+        truncated = gen.truncated;
+        warningHeader = gen.warningHeader;
+        reports = gen.reports;
+      } else if (job.exportType === 'failure_history') {
+        if (job.format !== 'csv') {
+          throw new Error('Failure history export supports CSV only');
+        }
+        const gen = await generateFailureHistoryCsv(profileCtx, params);
         content = gen.csv;
         rowCount = gen.rowCount;
         truncated = gen.truncated;
