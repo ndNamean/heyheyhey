@@ -96,28 +96,46 @@ export function buildSeedTransactions() {
 }
 
 export function linkProfilesToRoleDefinitions(
-  profiles: { id: string; role: string }[],
+  profiles: { id: string; role: string; roleDefinition?: { id: string; key?: string } | null }[],
   defs: RoleDefinition[],
 ) {
-  return profiles
-    .map((p) => {
-      const def = defs.find((d) => d.key === p.role);
-      if (!def || def.id.startsWith('default-') || def.id.startsWith('fallback-')) return null;
-      return db.tx.profiles[p.id].link({ roleDefinition: def.id });
-    })
-    .filter((tx): tx is NonNullable<typeof tx> => tx !== null);
+  const txs: ReturnType<typeof db.tx.profiles[string]['link']>[] = [];
+
+  for (const p of profiles) {
+    const def = defs.find((d) => d.key === p.role && d.active !== false);
+    if (!def || def.id.startsWith('default-') || def.id.startsWith('fallback-')) continue;
+
+    const linkedId = p.roleDefinition?.id;
+    if (linkedId && linkedId !== def.id) {
+      txs.push(db.tx.profiles[p.id].unlink({ roleDefinition: linkedId }));
+    }
+    if (!linkedId || linkedId !== def.id) {
+      txs.push(db.tx.profiles[p.id].link({ roleDefinition: def.id }));
+    }
+  }
+
+  return txs;
 }
+
+export { getRoleLinkStatus, type RoleLinkStatus } from './roleLinkStatus';
 
 export function profileRoleAssignTx(
   profileId: string,
   role: Role,
   defs: RoleDefinition[],
+  linkedDefId?: string | null,
 ) {
-  const def = defs.find((d) => d.key === role);
+  const def = defs.find((d) => d.key === role && d.active !== false);
   const txs = [db.tx.profiles[profileId].update({ role, updatedAt: nowIso() })];
+
+  if (linkedDefId) {
+    txs.push(db.tx.profiles[profileId].unlink({ roleDefinition: linkedDefId }));
+  }
+
   if (def && !def.id.startsWith('default-') && !def.id.startsWith('fallback-')) {
     txs.push(db.tx.profiles[profileId].link({ roleDefinition: def.id }));
   }
+
   return txs;
 }
 

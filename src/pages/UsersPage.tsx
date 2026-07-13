@@ -11,7 +11,8 @@ import {
   managerCanReviewAccess,
   parseAccessReviewStoreIds,
 } from '../lib/accessReview';
-import { profileRoleAssignTx } from '../lib/roleResolver';
+import { getRoleLinkStatus, profileRoleAssignTx } from '../lib/roleResolver';
+import { getRoleDef } from '../lib/roles';
 import {
   buildAccessAdminNotifications,
   buildAccessFinalizedNotification,
@@ -326,7 +327,7 @@ function ApproveModal({
     try {
       const now = nowIso();
       const txs = [
-        ...profileRoleAssignTx(pending.id, role, defs),
+        ...profileRoleAssignTx(pending.id, role, defs, pending.roleDefinition?.id),
         db.tx.profiles[pending.id].update({
           approvalStatus: 'approved',
           approvedAt: now,
@@ -666,9 +667,14 @@ export default function UsersPage({ currentProfile }: Props) {
   const [checkAgainId, setCheckAgainId] = useState<string | null>(null);
   const [flagId, setFlagId] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
+  const [pendingRoleChange, setPendingRoleChange] = useState<{
+    profile: Profile;
+    role: Role;
+  } | null>(null);
+  const [roleChangeSaving, setRoleChangeSaving] = useState(false);
 
   const { data } = db.useQuery({
-    profiles: { stores: {} },
+    profiles: { stores: {}, roleDefinition: {} },
     stores: {},
   });
 
@@ -701,7 +707,33 @@ export default function UsersPage({ currentProfile }: Props) {
       alert(t.users.ownerRoleOnly);
       return;
     }
-    await db.transact(profileRoleAssignTx(profile.id, role, defs));
+    await db.transact(profileRoleAssignTx(profile.id, role, defs, profile.roleDefinition?.id));
+  }
+
+  async function confirmRoleChange() {
+    if (!pendingRoleChange) return;
+    setRoleChangeSaving(true);
+    try {
+      await updateRole(pendingRoleChange.profile, pendingRoleChange.role);
+      setPendingRoleChange(null);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.errors.saveFailed);
+    } finally {
+      setRoleChangeSaving(false);
+    }
+  }
+
+  async function fixRoleLink(profile: Profile) {
+    setRoleChangeSaving(true);
+    try {
+      await db.transact(
+        profileRoleAssignTx(profile.id, profile.role as Role, defs, profile.roleDefinition?.id),
+      );
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.errors.saveFailed);
+    } finally {
+      setRoleChangeSaving(false);
+    }
   }
 
   async function rejectAccess(profile: Profile) {
@@ -804,6 +836,32 @@ export default function UsersPage({ currentProfile }: Props) {
 
   return (
     <div>
+      {pendingRoleChange && (
+        <ModalShell
+          title={t.common.role}
+          onClose={() => !roleChangeSaving && setPendingRoleChange(null)}
+        >
+          <p className="small" style={{ marginTop: 0 }}>
+            {t.users.confirmRoleChange
+              .replace('{name}', pendingRoleChange.profile.displayName || pendingRoleChange.profile.email)
+              .replace('{from}', pendingRoleChange.profile.role)
+              .replace('{to}', pendingRoleChange.role)}
+          </p>
+          <div className="capture-actions" style={{ marginTop: 20 }}>
+            <button
+              className="secondary"
+              onClick={() => setPendingRoleChange(null)}
+              disabled={roleChangeSaving}
+            >
+              {t.common.cancel}
+            </button>
+            <button onClick={confirmRoleChange} disabled={roleChangeSaving}>
+              {roleChangeSaving ? t.common.saving : t.common.update}
+            </button>
+          </div>
+        </ModalShell>
+      )}
+
       {approvingProfile && (
         <ApproveModal
           pending={approvingProfile}
@@ -930,6 +988,9 @@ export default function UsersPage({ currentProfile }: Props) {
               {allProfiles.map((p) => {
                 const canEditRole =
                   isOwner || ![OWNER_ROLE_KEY, AREA_MANAGER_ROLE_KEY].includes(p.role);
+                const linkStatus = getRoleLinkStatus(p, defs);
+                const roleDef = getRoleDef(p.role, defs);
+                const linkedKey = p.roleDefinition?.key;
                 return (
                   <tr key={p.id}>
                     <td>
@@ -947,8 +1008,12 @@ export default function UsersPage({ currentProfile }: Props) {
                     <td>
                       <select
                         value={p.role}
-                        onChange={(e) => updateRole(p, e.target.value as Role)}
-                        disabled={!canEditRole}
+                        onChange={(e) => {
+                          const nextRole = e.target.value as Role;
+                          if (nextRole === p.role) return;
+                          setPendingRoleChange({ profile: p, role: nextRole });
+                        }}
+                        disabled={!canEditRole || roleChangeSaving}
                         style={{ minWidth: 120, fontSize: 13 }}
                       >
                         {allRoleKeys.filter(
@@ -959,6 +1024,41 @@ export default function UsersPage({ currentProfile }: Props) {
                           </option>
                         ))}
                       </select>
+                      <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {linkStatus === 'ok' && roleDef && (
+                          <span className="small" style={{ color: '#94A3B8' }}>
+                            {t.users.roleLinkOk}: {roleDef.label}
+                          </span>
+                        )}
+                        {linkStatus === 'missing_link' && (
+                          <span className="badge warn" style={{ width: 'fit-content' }}>
+                            {t.users.roleLinkMissing}
+                          </span>
+                        )}
+                        {linkStatus === 'wrong_key' && (
+                          <span className="badge warn" style={{ width: 'fit-content' }}>
+                            {t.users.roleLinkMismatch
+                              .replace('{linked}', linkedKey || p.roleDefinition?.id || '?')
+                              .replace('{role}', p.role)}
+                          </span>
+                        )}
+                        {linkStatus === 'unknown_role' && (
+                          <span className="badge bad" style={{ width: 'fit-content' }}>
+                            {t.users.roleLinkUnknown.replace('{role}', p.role)}
+                          </span>
+                        )}
+                        {isOwner && linkStatus !== 'ok' && (
+                          <button
+                            type="button"
+                            className="secondary"
+                            style={{ fontSize: 11, padding: '4px 8px', minHeight: 26, width: 'fit-content' }}
+                            onClick={() => fixRoleLink(p)}
+                            disabled={roleChangeSaving}
+                          >
+                            {t.users.fixRoleLink}
+                          </button>
+                        )}
+                      </div>
                     </td>
 
                     <td>

@@ -508,6 +508,13 @@ export const sectionsEn = {
     noPermissionStores: 'No permission',
     user: 'User',
     selectStoreRequired: 'Select at least one store.',
+    confirmRoleChange:
+      'Change {name} from "{from}" to "{to}"? Permissions update immediately for logged-in users.',
+    roleLinkOk: 'Definition linked',
+    roleLinkMissing: 'Role definition not linked — server permissions may be wrong.',
+    roleLinkMismatch: 'Linked as "{linked}" but profile role is "{role}".',
+    roleLinkUnknown: 'Role "{role}" has no definition in Roles & permissions.',
+    fixRoleLink: 'Fix link',
     rolesPermissions: {
       tab: 'Roles & permissions',
       title: 'Roles & permissions',
@@ -1182,6 +1189,13 @@ export const sectionsVi = {
     noPermissionStores: 'Không có quyền',
     user: 'Người dùng',
     selectStoreRequired: 'Chọn ít nhất một cửa hàng.',
+    confirmRoleChange:
+      'Đổi {name} từ "{from}" sang "{to}"? Quyền cập nhật ngay cho người đang đăng nhập.',
+    roleLinkOk: 'Đã liên kết định nghĩa',
+    roleLinkMissing: 'Chưa liên kết định nghĩa vai trò — quyền máy chủ có thể sai.',
+    roleLinkMismatch: 'Liên kết là "{linked}" nhưng vai trò hồ sơ là "{role}".',
+    roleLinkUnknown: 'Vai trò "{role}" không có trong Vai trò & quyền.',
+    fixRoleLink: 'Sửa liên kết',
     rolesPermissions: {
       tab: 'Vai trò & quyền',
       title: 'Vai trò & quyền',
