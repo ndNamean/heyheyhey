@@ -107,11 +107,7 @@ export function linkProfilesToRoleDefinitions(
 
     const linkedId = p.roleDefinition?.id;
     if (!linkedId || linkedId !== def.id) {
-      txs.push(
-        db.tx.profiles[p.id]
-          .update({ updatedAt: nowIso() })
-          .link({ roleDefinition: def.id }),
-      );
+      txs.push(db.tx.profiles[p.id].link({ roleDefinition: def.id }));
     }
   }
 
@@ -142,9 +138,8 @@ export function profileRoleAssignTx(
   }
 
   return [
-    db.tx.profiles[profileId]
-      .update({ role, updatedAt: nowIso() })
-      .link({ roleDefinition: def.id }),
+    db.tx.profiles[profileId].update({ role, updatedAt: nowIso() }),
+    db.tx.profiles[profileId].link({ roleDefinition: def.id }),
   ];
 }
 

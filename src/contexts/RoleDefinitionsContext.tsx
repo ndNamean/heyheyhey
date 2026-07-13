@@ -20,7 +20,7 @@ const RoleDefinitionsContext = createContext<RoleDefinitionsContextValue>({
 function useLinkProfilesToDefinitions(
   isOwner: boolean,
   defs: RoleDefinition[],
-  profiles: { id: string; role: string }[] | undefined,
+  profiles: { id: string; role: string; roleDefinition?: { id: string; key?: string } | null }[] | undefined,
 ) {
   const linkedRef = useRef(false);
 
@@ -29,8 +29,9 @@ function useLinkProfilesToDefinitions(
     const txs = linkProfilesToRoleDefinitions(profiles, defs);
     if (!txs.length) return;
     linkedRef.current = true;
-    db.transact(txs).catch(() => {
+    db.transact(txs).catch((err) => {
       linkedRef.current = false;
+      console.error('Failed to link profiles to role definitions:', err);
     });
   }, [isOwner, defs, profiles]);
 }

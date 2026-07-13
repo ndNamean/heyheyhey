@@ -1,24 +1,20 @@
 import type { InstantRules } from '@instantdb/react';
 
-// Capability flags from linked roleDefinition; legacy role strings as fallback.
-const COMMON_BIND = {
+// Server-side capability checks use legacy profile.role strings so permissions
+// work before every profile has a linked roleDefinition. The app UI still reads
+// capabilities from roleDefinitions on the client.
+const LEGACY_BIND = {
   isSignedIn: 'auth.id != null',
   isApproved: "'approved' in auth.ref('$user.profile.approvalStatus')",
   isOwner: "'owner' in auth.ref('$user.profile.role')",
   isAreaManager: "'areaManager' in auth.ref('$user.profile.role')",
   isManager: "'manager' in auth.ref('$user.profile.role')",
   isLeader: "'leader' in auth.ref('$user.profile.role') || 'subleader' in auth.ref('$user.profile.role')",
-  legacyCanEditMaster: 'isOwner || isAreaManager',
-  roleCanEditMaster: "true in auth.ref('$user.profile.roleDefinition.canEditMaster')",
-  canEditMaster: 'legacyCanEditMaster || roleCanEditMaster',
-  legacyCanManageUsers: 'isOwner || isAreaManager',
-  roleCanManageUsers: "true in auth.ref('$user.profile.roleDefinition.canManageUsers')",
-  legacyCanReview: 'isOwner || isAreaManager || isManager || isLeader',
-  roleCanReview: "true in auth.ref('$user.profile.roleDefinition.canReview')",
-  canReview: "isApproved && (legacyCanReview || roleCanReview)",
-  roleCanPreApproveAccess: "true in auth.ref('$user.profile.roleDefinition.canPreApproveAccess')",
-  roleCanScheduleShifts: "true in auth.ref('$user.profile.roleDefinition.canScheduleShifts')",
-  canScheduleShifts: 'legacyCanEditMaster || isManager || roleCanScheduleShifts',
+  canEditMaster: 'isOwner || isAreaManager',
+  canManageUsers: 'isOwner || isAreaManager',
+  canReview: "isApproved && (isOwner || isAreaManager || isManager || isLeader)",
+  canPreApproveAccess: 'isManager',
+  canScheduleShifts: 'isOwner || isAreaManager || isManager',
 };
 
 const rules = {
@@ -45,18 +41,14 @@ const rules = {
   },
 
   // ── Profiles ─────────────────────────────────────────────────────────────
-  // New users can create their own pending profile.
-  // Approved users can view all profiles.
-  // Owners/areaManagers can update any profile; managers can pre-approve access;
-  // users can update only own displayName. Link/unlink for stores + roleDefinition
-  // requires explicit rules (global $default denies unset actions).
   profiles: {
     allow: {
       view: "auth.id != null && ('approved' in auth.ref('$user.profile.approvalStatus') || data.userId == auth.id)",
       create: "auth.id != null && data.userId == auth.id && data.approvalStatus == 'pending'",
-      update: 'adminProfileUpdate || managerAccessReview || (isOwnProfile && onlyDisplayName)',
+      update: 'isAdmin || managerAccessReview || (isOwnProfile && onlyDisplayName)',
       delete: 'false',
       link: {
+        '$user': "auth.id != null && data.userId == auth.id",
         stores: 'isAdmin',
         roleDefinition: 'isAdmin',
       },
@@ -67,19 +59,13 @@ const rules = {
     },
     bind: {
       isOwnProfile: 'auth.id != null && data.userId == auth.id',
-      isApproved: "'approved' in auth.ref('$user.profile.approvalStatus')",
       isOwner: "'owner' in auth.ref('$user.profile.role')",
       isAreaManager: "'areaManager' in auth.ref('$user.profile.role')",
       isManager: "'manager' in auth.ref('$user.profile.role')",
-      legacyCanManageUsers: 'isOwner || isAreaManager',
-      isAdmin: 'legacyCanManageUsers',
-      roleCanPreApproveAccess: "true in auth.ref('$user.profile.roleDefinition.canPreApproveAccess')",
-      adminProfileFields:
-        "request.modifiedFields.all(f, f in ['role', 'displayName', 'approvalStatus', 'approvedAt', 'approvedByEmail', 'accessReviewStoreIdsJson', 'accessReviewNote', 'preApprovedByUserId', 'preApprovedByEmail', 'preApprovedAt', 'accessReviewRequestedByEmail', 'accessReviewRequestedAt', 'cameraOptionsJson', 'updatedAt'])",
-      adminProfileUpdate: 'isAdmin && adminProfileFields',
+      isAdmin: 'isOwner || isAreaManager',
       onlyDisplayName: "request.modifiedFields.all(f, f in ['displayName', 'cameraOptionsJson', 'updatedAt'])",
       managerAccessReview:
-        "roleCanPreApproveAccess && request.modifiedFields.all(f, f in ['approvalStatus', 'accessReviewNote', 'preApprovedByUserId', 'preApprovedByEmail', 'preApprovedAt', 'updatedAt']) && (data.approvalStatus == 'pre_approved' || data.approvalStatus == 'pending')",
+        "isManager && request.modifiedFields.all(f, f in ['approvalStatus', 'accessReviewNote', 'preApprovedByUserId', 'preApprovedByEmail', 'preApprovedAt', 'updatedAt']) && (data.approvalStatus == 'pre_approved' || data.approvalStatus == 'pending')",
     },
   },
 
@@ -100,8 +86,7 @@ const rules = {
       isApproved: "'approved' in auth.ref('$user.profile.approvalStatus')",
       isOwner: "'owner' in auth.ref('$user.profile.role')",
       isAreaManager: "'areaManager' in auth.ref('$user.profile.role')",
-      legacyCanManageUsers: 'isOwner || isAreaManager',
-      isAdmin: 'legacyCanManageUsers',
+      isAdmin: 'isOwner || isAreaManager',
     },
   },
 
@@ -113,7 +98,7 @@ const rules = {
       update: 'canEditMaster',
       delete: 'isOwner',
     },
-    bind: { ...COMMON_BIND },
+    bind: { ...LEGACY_BIND },
   },
 
   // ── Templates ────────────────────────────────────────────────────────────
@@ -123,8 +108,14 @@ const rules = {
       create: 'canEditMaster',
       update: 'canEditMaster',
       delete: 'isOwner',
+      link: {
+        stores: 'canEditMaster',
+      },
+      unlink: {
+        stores: 'canEditMaster',
+      },
     },
-    bind: { ...COMMON_BIND },
+    bind: { ...LEGACY_BIND },
   },
 
   templateItems: {
@@ -133,29 +124,46 @@ const rules = {
       create: 'canEditMaster',
       update: 'canEditMaster',
       delete: 'canEditMaster',
+      link: {
+        template: 'canEditMaster',
+      },
+      unlink: {
+        template: 'canEditMaster',
+      },
     },
-    bind: { ...COMMON_BIND },
+    bind: { ...LEGACY_BIND },
   },
 
   // ── Reports ──────────────────────────────────────────────────────────────
-  // All approved users can read reports for their scope.
-  // Any approved user can submit (create). Reviewers can update status.
   reports: {
     allow: {
       view: 'isApproved',
       create: 'isApproved',
-      update: 'canReview || canSubmitterUpdateReport',
+      update: 'canReview || canSubmitterUpdateReport || canSubmitterSubmitReport',
       delete: 'isOwner',
+      link: {
+        store: 'isApproved',
+        template: 'isApproved',
+        submitter: 'isApproved',
+      },
+      unlink: {
+        store: 'isOwner',
+        template: 'isOwner',
+        submitter: 'isOwner',
+      },
     },
     bind: {
-      ...COMMON_BIND,
+      ...LEGACY_BIND,
       isReportSubmitter: 'auth.id != null && data.submittedByUserId == auth.id',
       reportOpenForCorrection:
         "data.status == 'waiting_approval' || data.status == 'need_correction' || data.status == 'rejected'",
       onlyReportResubmitFields:
         "request.modifiedFields.all(f, f in ['status', 'completionPercent', 'updatedAt'])",
+      onlyReportSubmitFields:
+        "request.modifiedFields.all(f, f in ['storeId', 'storeCode', 'storeName', 'templateId', 'templateName', 'reportType', 'reportDate', 'submittedByUserId', 'submittedByRole', 'submittedAt', 'status', 'completionPercent', 'compliancePercent', 'archived', 'archiveMonth', 'createdAt', 'updatedAt'])",
       canSubmitterUpdateReport:
         'isReportSubmitter && reportOpenForCorrection && onlyReportResubmitFields',
+      canSubmitterSubmitReport: 'isApproved && onlyReportSubmitFields',
     },
   },
 
@@ -163,16 +171,27 @@ const rules = {
     allow: {
       view: 'isApproved',
       create: 'isApproved',
-      update: 'canReview || canResubmitCorrection',
+      update: 'canReview || canResubmitCorrection || canSubmitterSubmitResponse',
       delete: 'isOwner',
+      link: {
+        report: 'isApproved',
+        templateItem: 'isApproved',
+      },
+      unlink: {
+        report: 'isOwner',
+        templateItem: 'isOwner',
+      },
     },
     bind: {
-      ...COMMON_BIND,
+      ...LEGACY_BIND,
       isResponseSubmitter: 'auth.id != null && data.submittedByUserId == auth.id',
       isCorrectable: "data.status == 'need_correction' || data.status == 'rejected'",
       onlyResubmitFields:
         "request.modifiedFields.all(f, f in ['ticked', 'numberValue', 'note', 'status', 'rejectionReason', 'feedbackCode', 'feedbackNote', 'submittedAt', 'updatedAt', 'approvedByUserId', 'approvedAt'])",
+      onlyResponseSubmitFields:
+        "request.modifiedFields.all(f, f in ['reportId', 'templateItemId', 'section', 'title', 'proofType', 'required', 'assignedRole', 'approverRolesJson', 'weight', 'failureCategory', 'ticked', 'numberValue', 'note', 'status', 'rejectionReason', 'feedbackCode', 'feedbackNote', 'submittedByUserId', 'submittedByRole', 'submittedAt', 'approvedByUserId', 'approvedAt', 'updatedAt'])",
       canResubmitCorrection: 'isResponseSubmitter && isCorrectable && onlyResubmitFields',
+      canSubmitterSubmitResponse: 'isApproved && onlyResponseSubmitFields',
     },
   },
 
@@ -183,8 +202,16 @@ const rules = {
       create: 'isApproved',
       update: 'canEditMaster',
       delete: 'canEditMaster',
+      link: {
+        file: 'isApproved',
+        reportResponse: 'isApproved',
+      },
+      unlink: {
+        file: 'canEditMaster',
+        reportResponse: 'canEditMaster',
+      },
     },
-    bind: { ...COMMON_BIND },
+    bind: { ...LEGACY_BIND },
   },
 
   // ── Watermark templates ───────────────────────────────────────────────────
@@ -194,8 +221,16 @@ const rules = {
       create: 'canEditMaster',
       update: 'canEditMaster',
       delete: 'isOwner',
+      link: {
+        stores: 'canEditMaster',
+        logo: 'canEditMaster',
+      },
+      unlink: {
+        stores: 'canEditMaster',
+        logo: 'canEditMaster',
+      },
     },
-    bind: { ...COMMON_BIND },
+    bind: { ...LEGACY_BIND },
   },
 
   // ── Corrective actions ────────────────────────────────────────────────────
@@ -205,8 +240,16 @@ const rules = {
       create: 'canReview',
       update: 'canReview',
       delete: 'isOwner',
+      link: {
+        report: 'canReview',
+        evidencePhoto: 'canReview',
+      },
+      unlink: {
+        report: 'isOwner',
+        evidencePhoto: 'isOwner',
+      },
     },
-    bind: { ...COMMON_BIND },
+    bind: { ...LEGACY_BIND },
   },
 
   // ── Report slots ─────────────────────────────────────────────────────────
@@ -216,8 +259,16 @@ const rules = {
       create: 'canEditMaster',
       update: 'canEditMaster',
       delete: 'canEditMaster',
+      link: {
+        template: 'canEditMaster',
+        store: 'canEditMaster',
+      },
+      unlink: {
+        template: 'canEditMaster',
+        store: 'canEditMaster',
+      },
     },
-    bind: { ...COMMON_BIND },
+    bind: { ...LEGACY_BIND },
   },
 
   // ── Shifts ────────────────────────────────────────────────────────────────
@@ -227,8 +278,16 @@ const rules = {
       create: 'canScheduleShifts',
       update: 'canScheduleShifts',
       delete: 'canEditMaster',
+      link: {
+        store: 'canScheduleShifts',
+        employee: 'canScheduleShifts',
+      },
+      unlink: {
+        store: 'canEditMaster',
+        employee: 'canEditMaster',
+      },
     },
-    bind: { ...COMMON_BIND },
+    bind: { ...LEGACY_BIND },
   },
 
   // ── Clock events ──────────────────────────────────────────────────────────
@@ -238,8 +297,16 @@ const rules = {
       create: 'isApproved',
       update: 'false',
       delete: 'isOwner',
+      link: {
+        shift: 'isApproved',
+        photo: 'isApproved',
+      },
+      unlink: {
+        shift: 'isOwner',
+        photo: 'isOwner',
+      },
     },
-    bind: { ...COMMON_BIND },
+    bind: { ...LEGACY_BIND },
   },
 
   // ── Logbook entries ───────────────────────────────────────────────────────
@@ -249,9 +316,17 @@ const rules = {
       create: 'canReview',
       update: 'isAuthor || canEditMaster',
       delete: 'isOwner',
+      link: {
+        store: 'isApproved',
+        photo: 'isApproved',
+      },
+      unlink: {
+        store: 'isOwner',
+        photo: 'isOwner',
+      },
     },
     bind: {
-      ...COMMON_BIND,
+      ...LEGACY_BIND,
       isAuthor: "auth.id != null && data.authorUserId == auth.id",
     },
   },
@@ -264,7 +339,7 @@ const rules = {
       update: 'false',
       delete: 'false',
     },
-    bind: { ...COMMON_BIND },
+    bind: { ...LEGACY_BIND },
   },
 
   // ── Export jobs (server-managed via Admin SDK) ─────────────────────────────
@@ -275,7 +350,7 @@ const rules = {
       update: 'false',
       delete: 'false',
     },
-    bind: { ...COMMON_BIND },
+    bind: { ...LEGACY_BIND },
   },
 
   // ── Export audit logs (server-managed via Admin SDK) ───────────────────────
@@ -286,7 +361,7 @@ const rules = {
       update: 'false',
       delete: 'false',
     },
-    bind: { ...COMMON_BIND },
+    bind: { ...LEGACY_BIND },
   },
 
   // ── Review feedback notifications ─────────────────────────────────────────
@@ -298,7 +373,7 @@ const rules = {
       delete: 'false',
     },
     bind: {
-      ...COMMON_BIND,
+      ...LEGACY_BIND,
       onlyReadAt: "request.modifiedFields.all(f, f in ['readAt'])",
     },
   },
