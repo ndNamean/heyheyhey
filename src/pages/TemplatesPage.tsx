@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
-import { canEditMaster, PROOF_TYPES } from '../lib/roles';
+import { canEditMaster, failureCategoryOptions, PROOF_TYPES } from '../lib/roles';
 import { nowIso } from '../lib/utils';
 import {
   createTemplate,
@@ -296,15 +296,22 @@ export default function TemplatesPage({ profile }: Props) {
               </label>
               <label>
                 {t.templates.failureCategory}
-                <input
+                <select
                   value={item.failureCategory}
                   onChange={(e) => updateItem(item.id, { failureCategory: e.target.value })}
-                />
+                >
+                  {failureCategoryOptions(item.failureCategory).map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
               </label>
             </div>
-            <label style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <label className="ui-checkbox-label" style={{ marginTop: 8 }}>
               <input
                 type="checkbox"
+                className="ui-checkbox"
                 checked={item.required}
                 onChange={(e) => updateItem(item.id, { required: e.target.checked })}
               />

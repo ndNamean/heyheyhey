@@ -130,6 +130,24 @@ export const PROOF_TYPES = [
   'video_note',
 ] as const;
 
+export const FAILURE_CATEGORIES = ['Hygiene', 'Safety', 'Operations'] as const;
+export type FailureCategory = (typeof FAILURE_CATEGORIES)[number];
+
+export const FAILURE_CATEGORY_SET = new Set<string>(FAILURE_CATEGORIES);
+
+export function normalizeFailureCategory(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return 'Hygiene';
+  const match = FAILURE_CATEGORIES.find((c) => c.toLowerCase() === trimmed.toLowerCase());
+  return match ?? trimmed;
+}
+
+export function failureCategoryOptions(current: string): string[] {
+  const normalized = normalizeFailureCategory(current);
+  if (FAILURE_CATEGORY_SET.has(normalized)) return [...FAILURE_CATEGORIES];
+  return [...FAILURE_CATEGORIES, normalized];
+}
+
 export function needsMedia(proofType: string): boolean {
   return proofType.includes('photo') || proofType.includes('video');
 }

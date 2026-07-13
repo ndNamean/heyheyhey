@@ -1,5 +1,6 @@
 import { id } from '@instantdb/react';
 import { db } from '../db';
+import { normalizeFailureCategory } from './roles';
 import { nowIso } from './utils';
 import type { TemplateItem } from '../types';
 
@@ -39,7 +40,7 @@ export function templateItemToDraft(item: TemplateItem): TemplateItemDraft {
     assignedRole: item.assignedRole,
     approverRoles: parseApproverRoles(item.approverRolesJson),
     weight: item.weight,
-    failureCategory: item.failureCategory,
+    failureCategory: normalizeFailureCategory(item.failureCategory),
   };
 }
 

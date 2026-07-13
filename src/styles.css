@@ -152,7 +152,9 @@ button.success:hover:not(:disabled) {
   box-shadow: 0 0 12px rgba(52, 211, 153, 0.25);
 }
 
-input, select, textarea {
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
   width: 100%;
   padding: 12px;
   border: 1px solid var(--input-border);
@@ -167,7 +169,9 @@ textarea::placeholder {
   color: var(--placeholder);
 }
 
-input:focus, select:focus, textarea:focus {
+input:not([type="checkbox"]):not([type="radio"]):focus,
+select:focus,
+textarea:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: var(--focus-ring);
@@ -583,6 +587,7 @@ tbody tr:hover td {
   background: var(--input-bg);
 }
 
+.ui-checkbox,
 .roles-check {
   appearance: none;
   -webkit-appearance: none;
@@ -599,11 +604,13 @@ tbody tr:hover td {
   flex-shrink: 0;
 }
 
+.ui-checkbox:checked,
 .roles-check:checked {
   border-color: #FCC116;
   background: rgba(252, 193, 22, 0.12);
 }
 
+.ui-checkbox:checked::after,
 .roles-check:checked::after {
   content: "✓";
   color: #FCC116;
@@ -612,14 +619,24 @@ tbody tr:hover td {
   line-height: 1;
 }
 
+.ui-checkbox:disabled,
 .roles-check:disabled {
   cursor: default;
   opacity: 0.45;
 }
 
+.ui-checkbox:focus-visible,
 .roles-check:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
+}
+
+.ui-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  width: fit-content;
 }
 
 /* ── Badges ───────────────────────────────────────────────────────────────── */

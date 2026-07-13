@@ -1,4 +1,4 @@
-import { PROOF_TYPES, ROLES } from './roles';
+import { FAILURE_CATEGORY_SET, normalizeFailureCategory, PROOF_TYPES, ROLES } from './roles';
 import type { Store, Template, TemplateItem } from '../types';
 import {
   TEMPLATE_SCHEMA,
@@ -181,6 +181,7 @@ function validateItem(
   raw: unknown,
   index: number,
   errors: ValidationIssue[],
+  warnings: ValidationIssue[],
 ): NormalizedImportItem | null {
   if (!isPlainObject(raw)) {
     pushIssue(errors, `items[${index}]`, 'Each item must be an object.', 'error', index);
@@ -249,8 +250,18 @@ function validateItem(
     weight = raw.weight;
   }
 
-  const failureCategory =
-    typeof raw.failureCategory === 'string' ? raw.failureCategory.trim() : '';
+  const failureCategory = normalizeFailureCategory(
+    typeof raw.failureCategory === 'string' ? raw.failureCategory : '',
+  );
+  if (!FAILURE_CATEGORY_SET.has(failureCategory)) {
+    pushIssue(
+      warnings,
+      `items[${index}].failureCategory`,
+      `Unknown failure category "${failureCategory}". Kept as-is; choose Hygiene, Safety, or Operations when editing.`,
+      'warning',
+      index,
+    );
+  }
 
   let sortOrder = index;
   if ('sortOrder' in raw) {
@@ -391,7 +402,7 @@ export function validateImportFile(
 
   const parsedItems: NormalizedImportItem[] = [];
   for (let i = 0; i < root.items.length; i++) {
-    const item = validateItem(root.items[i], i, errors);
+    const item = validateItem(root.items[i], i, errors, warnings);
     if (item) parsedItems.push(item);
   }
 

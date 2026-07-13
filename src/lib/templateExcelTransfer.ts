@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { PROOF_TYPES, ROLES } from './roles';
+import { FAILURE_CATEGORIES, PROOF_TYPES, ROLES } from './roles';
 import {
   booleanToSpreadsheet,
   normalizeSpreadsheetBoolean,
@@ -177,9 +177,7 @@ function buildAllowedValuesRows(reportTypes: string[]): string[][] {
   rows.push(['Boolean', 'TRUE']);
   rows.push(['Boolean', 'FALSE']);
   for (const rt of reportTypes) rows.push(['Report Type', rt]);
-  rows.push(['Failure Category', 'Hygiene']);
-  rows.push(['Failure Category', 'Safety']);
-  rows.push(['Failure Category', 'Operations']);
+  for (const fc of FAILURE_CATEGORIES) rows.push(['Failure Category', fc]);
   rows.push(['Day', 'Monday']);
   rows.push(['Day', 'Tuesday']);
   rows.push(['Day', 'Wednesday']);

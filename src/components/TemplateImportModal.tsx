@@ -389,6 +389,7 @@ export default function TemplateImportModal({
               <label className="template-import-checkbox">
                 <input
                   type="checkbox"
+                  className="ui-checkbox"
                   checked={excludeUnknownStores}
                   onChange={(e) => setExcludeUnknownStores(e.target.checked)}
                   disabled={saving}
@@ -465,6 +466,7 @@ export default function TemplateImportModal({
               <label className="template-import-checkbox">
                 <input
                   type="checkbox"
+                  className="ui-checkbox"
                   checked={ackDuplicateName}
                   onChange={(e) => setAckDuplicateName(e.target.checked)}
                   disabled={saving}
