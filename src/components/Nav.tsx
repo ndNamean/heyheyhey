@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { canEditMaster, canReview } from '../lib/roles';
+import { canEditMaster, canReview, canAccessUsersPage } from '../lib/roles';
 import { useLang } from '../i18n';
 import LanguageSelector from './LanguageSelector';
 import { useUnreadNotificationCount } from './FeedbackInbox';
@@ -16,8 +16,8 @@ interface NavProps {
   profile: Profile;
 }
 
-function canManageUsers(role: string): boolean {
-  return role === 'owner' || role === 'areaManager';
+function canShowUsersNav(role: string): boolean {
+  return canAccessUsersPage(role as import('../types').Role);
 }
 
 export function DesktopNav({ page, setPage, profile }: NavProps) {
@@ -33,7 +33,7 @@ export function DesktopNav({ page, setPage, profile }: NavProps) {
     links.push({ id: 'templates', label: t.nav.templates });
     links.push({ id: 'stores',    label: t.nav.stores });
   }
-  if (canManageUsers(profile.role)) {
+  if (canShowUsersNav(profile.role)) {
     links.push({ id: 'users', label: t.nav.users });
   }
   if (canReview(profile.role)) {

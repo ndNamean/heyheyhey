@@ -5,7 +5,7 @@ import { nowIso } from '../lib/utils';
 import { useLang } from '../i18n';
 import { BACK_PRIORITY, useNativeBack } from '../lib/nativeBack';
 import LanguageSelector from './LanguageSelector';
-import type { Profile } from '../types';
+import type { ApprovalStatus, Profile } from '../types';
 
 interface Props {
   children: (profile: Profile) => React.ReactNode;
@@ -223,13 +223,26 @@ function LoginScreen() {
 
 // ─── Pending approval ────────────────────────────────────────────────────────
 
-function PendingScreen({ email }: { email: string }) {
+function pendingBodyForStatus(t: ReturnType<typeof useLang>['t'], status: ApprovalStatus): string {
+  switch (status) {
+    case 'manager_review':
+      return t.auth.pendingManagerReviewBody;
+    case 'pre_approved':
+      return t.auth.pendingPreApprovedBody;
+    case 'needs_manager_recheck':
+      return t.auth.pendingNeedsRecheckBody;
+    default:
+      return t.auth.pendingBody;
+  }
+}
+
+function PendingScreen({ email, status }: { email: string; status: ApprovalStatus }) {
   const { t } = useLang();
   return (
     <TicketShell>
       <h2 className="ticket-section-title">{t.auth.pendingTitle}</h2>
       <p style={{ marginBottom: 8 }}><strong>{email}</strong></p>
-      <p className="small" style={{ marginBottom: 8 }}>{t.auth.pendingBody}</p>
+      <p className="small" style={{ marginBottom: 8 }}>{pendingBodyForStatus(t, status)}</p>
       <p className="small" style={{ marginBottom: 24 }}>{t.auth.pendingNote}</p>
       <div className="ticket-status-badge">
         <span className="ticket-status-dot" />
@@ -292,6 +305,13 @@ export default function AuthGate({ children }: Props) {
           approvalStatus: 'pending',
           approvedAt: '',
           approvedByEmail: '',
+          accessReviewStoreIdsJson: '[]',
+          accessReviewNote: '',
+          preApprovedByUserId: '',
+          preApprovedByEmail: '',
+          preApprovedAt: '',
+          accessReviewRequestedByEmail: '',
+          accessReviewRequestedAt: '',
           createdAt: nowIso(),
           updatedAt: nowIso(),
         })
@@ -329,7 +349,9 @@ export default function AuthGate({ children }: Props) {
 
   const profile = profileData.profiles[0] as Profile;
 
-  if (profile.approvalStatus === 'pending') return <PendingScreen email={profile.email} />;
+  if (profile.approvalStatus !== 'approved' && profile.approvalStatus !== 'rejected') {
+    return <PendingScreen email={profile.email} status={profile.approvalStatus} />;
+  }
   if (profile.approvalStatus === 'rejected') return <RejectedScreen email={profile.email} />;
 
   return <>{children(profile)}</>;

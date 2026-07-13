@@ -6,6 +6,11 @@ import {
   userCanAccessStore,
 } from './roles';
 import { nowIso } from './utils';
+import {
+  adminsForAccessNotify,
+  managersForStores,
+  parseAccessReviewStoreIds,
+} from './accessReview';
 import type { Notification, Profile, Report, ReportResponse, Role } from '../types';
 
 export function complianceFromResponses(responses: ReportResponse[]): number {
@@ -170,4 +175,156 @@ export function buildReportFinalizedNotifications(
 
 export function unreadNotifications(notifications: Notification[]): Notification[] {
   return notifications.filter((n) => !n.readAt);
+}
+
+type AccessNotifType =
+  | 'access_manager_requested'
+  | 'access_pre_approved'
+  | 'access_flagged'
+  | 'access_recheck'
+  | 'access_approved'
+  | 'access_rejected';
+
+function emptyAccessNotifFields() {
+  return {
+    reportId: '',
+    reportResponseId: '',
+    storeId: '',
+    itemTitle: '',
+    completionPercent: 0,
+    compliancePercent: 0,
+    actionStatus: '',
+  };
+}
+
+function buildAccessNotificationTx(
+  recipientUserId: string,
+  type: AccessNotifType,
+  title: string,
+  body: string,
+  actor: Profile,
+) {
+  return db.tx.notifications[id()].update({
+    recipientUserId,
+    type,
+    title,
+    body,
+    actorUserId: actor.userId,
+    actorRole: actor.role,
+    readAt: '',
+    createdAt: nowIso(),
+    ...emptyAccessNotifFields(),
+  });
+}
+
+export function buildAccessManagerRequestedNotifications(
+  target: Profile,
+  storeIds: string[],
+  note: string,
+  actor: Profile,
+  allProfiles: Profile[],
+) {
+  const managers = managersForStores(allProfiles, storeIds);
+  const storeLabel = storeIds.length ? `${storeIds.length} store(s)` : 'stores';
+  const body = [
+    `Access review requested by ${actor.role} (${actor.displayName || actor.email}).`,
+    `User: ${target.displayName || target.email} (${target.email})`,
+    `Designated stores: ${storeLabel}`,
+    note.trim() ? `Note: ${note.trim()}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return managers
+    .filter((m) => m.userId !== actor.userId)
+    .map((m) =>
+      buildAccessNotificationTx(
+        m.userId,
+        'access_manager_requested',
+        `Access review: ${target.email}`,
+        body,
+        actor,
+      ),
+    );
+}
+
+export function buildAccessRecheckNotifications(
+  target: Profile,
+  note: string,
+  actor: Profile,
+  allProfiles: Profile[],
+) {
+  const storeIds = parseAccessReviewStoreIds(target.accessReviewStoreIdsJson);
+  const managers = managersForStores(allProfiles, storeIds);
+  const body = [
+    `Recheck requested by ${actor.role} (${actor.displayName || actor.email}).`,
+    `User: ${target.displayName || target.email} (${target.email})`,
+    note.trim() ? `Note: ${note.trim()}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return managers
+    .filter((m) => m.userId !== actor.userId)
+    .map((m) =>
+      buildAccessNotificationTx(
+        m.userId,
+        'access_recheck',
+        `Recheck access: ${target.email}`,
+        body,
+        actor,
+      ),
+    );
+}
+
+export function buildAccessAdminNotifications(
+  target: Profile,
+  type: 'access_pre_approved' | 'access_flagged',
+  note: string,
+  actor: Profile,
+  allProfiles: Profile[],
+) {
+  const admins = adminsForAccessNotify(allProfiles);
+  const action = type === 'access_pre_approved' ? 'Pre-approved' : 'Flagged for review';
+  const body = [
+    `${action} by ${actor.role} (${actor.displayName || actor.email}).`,
+    `User: ${target.displayName || target.email} (${target.email})`,
+    note.trim() ? `Note: ${note.trim()}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return admins
+    .filter((a) => a.userId !== actor.userId)
+    .map((a) =>
+      buildAccessNotificationTx(
+        a.userId,
+        type,
+        `${action}: ${target.email}`,
+        body,
+        actor,
+      ),
+    );
+}
+
+export function buildAccessFinalizedNotification(
+  target: Profile,
+  status: 'approved' | 'rejected',
+  actor: Profile,
+) {
+  if (!target.userId || target.userId === actor.userId) return [];
+  const body = [
+    `Access ${status} by ${actor.role} (${actor.displayName || actor.email}).`,
+    `Account: ${target.displayName || target.email}`,
+  ].join('\n');
+
+  return [
+    buildAccessNotificationTx(
+      target.userId,
+      status === 'approved' ? 'access_approved' : 'access_rejected',
+      `Access ${status}`,
+      body,
+      actor,
+    ),
+  ];
 }

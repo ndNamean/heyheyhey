@@ -9,7 +9,13 @@ export type Role =
   | 'staff'
   | 'viewer';
 
-export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
+export type ApprovalStatus =
+  | 'pending'
+  | 'manager_review'
+  | 'pre_approved'
+  | 'needs_manager_recheck'
+  | 'approved'
+  | 'rejected';
 
 export type ReportStatus =
   | 'waiting_approval'
@@ -119,6 +125,13 @@ export interface Profile {
   approvalStatus: ApprovalStatus;
   approvedAt: string;
   approvedByEmail: string;
+  accessReviewStoreIdsJson?: string;
+  accessReviewNote?: string;
+  preApprovedByUserId?: string;
+  preApprovedByEmail?: string;
+  preApprovedAt?: string;
+  accessReviewRequestedByEmail?: string;
+  accessReviewRequestedAt?: string;
   createdAt: string;
   updatedAt: string;
   cameraOptionsJson?: string;

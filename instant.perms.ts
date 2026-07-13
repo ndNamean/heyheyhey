@@ -39,12 +39,13 @@ const rules = {
   // ── Profiles ─────────────────────────────────────────────────────────────
   // New users can create their own pending profile.
   // Approved users can view all profiles.
-  // Owners/areaManagers can update any profile; users can update only own displayName.
+  // Owners/areaManagers can update any profile; managers can pre-approve access;
+  // users can update only own displayName.
   profiles: {
     allow: {
       view: "auth.id != null && ('approved' in auth.ref('$user.profile.approvalStatus') || data.userId == auth.id)",
       create: "auth.id != null && data.userId == auth.id && data.approvalStatus == 'pending'",
-      update: "isAdmin || (isOwnProfile && onlyDisplayName)",
+      update: "isAdmin || managerAccessReview || (isOwnProfile && onlyDisplayName)",
       delete: 'false',
     },
     bind: {
@@ -52,8 +53,11 @@ const rules = {
       isApproved: "'approved' in auth.ref('$user.profile.approvalStatus')",
       isOwner: "'owner' in auth.ref('$user.profile.role')",
       isAreaManager: "'areaManager' in auth.ref('$user.profile.role')",
+      isManager: "'manager' in auth.ref('$user.profile.role')",
       isAdmin: 'isOwner || isAreaManager',
       onlyDisplayName: "request.modifiedFields.all(f, f in ['displayName', 'cameraOptionsJson', 'updatedAt'])",
+      managerAccessReview:
+        "isManager && request.modifiedFields.all(f, f in ['approvalStatus', 'accessReviewNote', 'preApprovedByUserId', 'preApprovedByEmail', 'preApprovedAt', 'updatedAt']) && (data.approvalStatus == 'pre_approved' || data.approvalStatus == 'pending')",
     },
   },
 

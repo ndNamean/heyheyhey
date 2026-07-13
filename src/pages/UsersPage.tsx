@@ -2,12 +2,88 @@ import { useRef, useState, useCallback } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import { statusLabel } from '../lib/i18nUtils';
-import { ROLES } from '../lib/roles';
-import { nowIso } from '../lib/utils';
+import {
+  accessStatusBadgeClass,
+  isAccessPending,
+  managerCanReviewAccess,
+  parseAccessReviewStoreIds,
+} from '../lib/accessReview';
+import {
+  buildAccessAdminNotifications,
+  buildAccessFinalizedNotification,
+  buildAccessManagerRequestedNotifications,
+  buildAccessRecheckNotifications,
+} from '../lib/notifications';
+import { canAccessUsersPage, canManageUsers, canPreApproveAccess, ROLES } from '../lib/roles';
+import { badgeClass, nowIso } from '../lib/utils';
 import type { ApprovalStatus, Profile, Role, Store } from '../types';
 
 interface Props {
   currentProfile: Profile;
+}
+
+function ModalShell({
+  title,
+  children,
+  onClose,
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+        zIndex: 300,
+      }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="card" style={{ width: '100%', maxWidth: 480, margin: 0 }}>
+        <h2 style={{ marginTop: 0 }}>{title}</h2>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function StorePicker({
+  stores,
+  selectedStoreIds,
+  onToggle,
+}: {
+  stores: Store[];
+  selectedStoreIds: string[];
+  onToggle: (storeId: string) => void;
+}) {
+  const { t } = useLang();
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+      {stores.map((s) => (
+        <label
+          key={s.id}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
+        >
+          <input
+            type="checkbox"
+            checked={selectedStoreIds.includes(s.id)}
+            onChange={() => onToggle(s.id)}
+          />
+          <span>
+            {s.code} — {s.name}
+          </span>
+        </label>
+      ))}
+      {!stores.length && <p className="small">{t.stores.noStores}</p>}
+    </div>
+  );
 }
 
 function InviteUserForm({ currentProfile }: { currentProfile: Profile }) {
@@ -254,7 +330,9 @@ function ApproveModal({
 }) {
   const { t } = useLang();
   const [role, setRole] = useState<Role>('staff');
-  const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>([]);
+  const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>(() =>
+    parseAccessReviewStoreIds(pending.accessReviewStoreIdsJson),
+  );
   const [saving, setSaving] = useState(false);
 
   const assignableRoles = ROLES.filter(
@@ -264,17 +342,19 @@ function ApproveModal({
   async function approve() {
     setSaving(true);
     try {
+      const now = nowIso();
       const tx = db.tx.profiles[pending.id].update({
         role,
         approvalStatus: 'approved',
-        approvedAt: nowIso(),
+        approvedAt: now,
         approvedByEmail: currentProfile.email,
-        updatedAt: nowIso(),
+        updatedAt: now,
       });
       const storeLinkTxs = selectedStoreIds.map((sid) =>
         db.tx.profiles[pending.id].link({ stores: sid }),
       );
-      await db.transact([tx, ...storeLinkTxs]);
+      const notifTxs = buildAccessFinalizedNotification(pending, 'approved', currentProfile);
+      await db.transact([tx, ...storeLinkTxs, ...notifTxs]);
       onClose();
     } catch (e) {
       alert(e instanceof Error ? e.message : t.users.approveFailed);
@@ -290,69 +370,318 @@ function ApproveModal({
   }
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 16,
-        zIndex: 300,
-      }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
-    >
-      <div className="card" style={{ width: '100%', maxWidth: 480, margin: 0 }}>
-        <h2 style={{ marginTop: 0 }}>{t.users.approveAccess}</h2>
-        <p>
-          <strong>{pending.displayName || pending.email}</strong>
-        </p>
-        <p className="small">{pending.email}</p>
+    <ModalShell title={t.users.approveAccess} onClose={onClose}>
+      <p>
+        <strong>{pending.displayName || pending.email}</strong>
+      </p>
+      <p className="small">{pending.email}</p>
 
-        <label style={{ marginTop: 12, display: 'block' }}>
-          {t.common.role}
-          <select
-            value={role}
-            onChange={(e) => setRole(e.target.value as Role)}
-            style={{ marginTop: 4 }}
-          >
-            {assignableRoles.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label style={{ marginTop: 12, display: 'block' }}>{t.users.assignStores}</label>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-          {stores.map((s) => (
-            <label
-              key={s.id}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
-            >
-              <input
-                type="checkbox"
-                checked={selectedStoreIds.includes(s.id)}
-                onChange={() => toggleStore(s.id)}
-              />
-              <span>
-                {s.code} — {s.name}
-              </span>
-            </label>
+      <label style={{ marginTop: 12, display: 'block' }}>
+        {t.common.role}
+        <select
+          value={role}
+          onChange={(e) => setRole(e.target.value as Role)}
+          style={{ marginTop: 4 }}
+        >
+          {assignableRoles.map((r) => (
+            <option key={r} value={r}>
+              {r}
+            </option>
           ))}
-          {!stores.length && <p className="small">{t.stores.noStores}</p>}
-        </div>
+        </select>
+      </label>
 
-        <div className="capture-actions" style={{ marginTop: 20 }}>
-          <button className="secondary" onClick={onClose} disabled={saving}>
-            {t.common.cancel}
-          </button>
-          <button className="success" onClick={approve} disabled={saving}>
-            {saving ? t.users.approving : t.common.approve}
-          </button>
+      <label style={{ marginTop: 12, display: 'block' }}>{t.users.assignStores}</label>
+      <StorePicker stores={stores} selectedStoreIds={selectedStoreIds} onToggle={toggleStore} />
+
+      <div className="capture-actions" style={{ marginTop: 20 }}>
+        <button className="secondary" onClick={onClose} disabled={saving}>
+          {t.common.cancel}
+        </button>
+        <button className="success" onClick={approve} disabled={saving}>
+          {saving ? t.users.approving : t.common.approve}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function RequestManagerModal({
+  target,
+  stores,
+  currentProfile,
+  allProfiles,
+  onClose,
+}: {
+  target: Profile;
+  stores: Store[];
+  currentProfile: Profile;
+  allProfiles: Profile[];
+  onClose: () => void;
+}) {
+  const { t } = useLang();
+  const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>(() =>
+    parseAccessReviewStoreIds(target.accessReviewStoreIdsJson),
+  );
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function submit() {
+    if (!selectedStoreIds.length) {
+      alert(t.users.selectStoreRequired);
+      return;
+    }
+    setSaving(true);
+    try {
+      const now = nowIso();
+      await db.transact([
+        db.tx.profiles[target.id].update({
+          approvalStatus: 'manager_review',
+          accessReviewStoreIdsJson: JSON.stringify(selectedStoreIds),
+          accessReviewNote: note.trim(),
+          accessReviewRequestedByEmail: currentProfile.email,
+          accessReviewRequestedAt: now,
+          updatedAt: now,
+        }),
+        ...buildAccessManagerRequestedNotifications(
+          target,
+          selectedStoreIds,
+          note,
+          currentProfile,
+          allProfiles,
+        ),
+      ]);
+      onClose();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.errors.saveFailed);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function toggleStore(storeId: string) {
+    setSelectedStoreIds((prev) =>
+      prev.includes(storeId) ? prev.filter((id) => id !== storeId) : [...prev, storeId],
+    );
+  }
+
+  return (
+    <ModalShell title={t.users.requestManagerTitle} onClose={onClose}>
+      <p className="small">{t.users.requestManagerHint}</p>
+      <p>
+        <strong>{target.displayName || target.email}</strong>
+      </p>
+      <p className="small">{target.email}</p>
+
+      <label style={{ marginTop: 12, display: 'block' }}>{t.users.designatedStores}</label>
+      <StorePicker stores={stores} selectedStoreIds={selectedStoreIds} onToggle={toggleStore} />
+
+      <label style={{ marginTop: 12, display: 'block' }}>
+        {t.users.reviewNote}
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          style={{ marginTop: 4, minHeight: 72 }}
+        />
+      </label>
+
+      <div className="capture-actions" style={{ marginTop: 20 }}>
+        <button className="secondary" onClick={onClose} disabled={saving}>
+          {t.common.cancel}
+        </button>
+        <button onClick={submit} disabled={saving}>
+          {saving ? t.common.saving : t.users.requestManager}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function NoteActionModal({
+  title,
+  hint,
+  confirmLabel,
+  noteRequired,
+  onConfirm,
+  onClose,
+}: {
+  title: string;
+  hint: string;
+  confirmLabel: string;
+  noteRequired?: boolean;
+  onConfirm: (note: string) => Promise<void>;
+  onClose: () => void;
+}) {
+  const { t } = useLang();
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function submit() {
+    if (noteRequired && !note.trim()) {
+      alert(t.users.flagNoteRequired);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onConfirm(note.trim());
+      onClose();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.errors.saveFailed);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ModalShell title={title} onClose={onClose}>
+      <p className="small">{hint}</p>
+      <label style={{ marginTop: 12, display: 'block' }}>
+        {t.users.reviewNote}
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          style={{ marginTop: 4, minHeight: 72 }}
+        />
+      </label>
+      <div className="capture-actions" style={{ marginTop: 20 }}>
+        <button className="secondary" onClick={onClose} disabled={saving}>
+          {t.common.cancel}
+        </button>
+        <button onClick={submit} disabled={saving}>
+          {saving ? t.common.saving : confirmLabel}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function AccessRequestMeta({
+  profile,
+  stores,
+}: {
+  profile: Profile;
+  stores: Store[];
+}) {
+  const { t } = useLang();
+  const designatedIds = parseAccessReviewStoreIds(profile.accessReviewStoreIdsJson);
+  const designatedCodes = stores
+    .filter((s) => designatedIds.includes(s.id))
+    .map((s) => s.code);
+
+  return (
+    <>
+      {designatedCodes.length > 0 && (
+        <p className="small">
+          {t.users.designatedStores}: {designatedCodes.join(', ')}
+        </p>
+      )}
+      {profile.preApprovedByEmail && (
+        <p className="small">
+          {t.users.preApprovedBy}: {profile.preApprovedByEmail}
+        </p>
+      )}
+      {profile.accessReviewNote?.trim() && (
+        <p className="small" style={{ whiteSpace: 'pre-wrap' }}>
+          {t.users.reviewNote}: {profile.accessReviewNote}
+        </p>
+      )}
+    </>
+  );
+}
+
+function AccessRequestCard({
+  profile,
+  stores,
+  isAdmin,
+  onApprove,
+  onRequestManager,
+  onCheckAgain,
+  onReject,
+  onPreApprove,
+  onFlag,
+}: {
+  profile: Profile;
+  stores: Store[];
+  isAdmin: boolean;
+  onApprove?: () => void;
+  onRequestManager?: () => void;
+  onCheckAgain?: () => void;
+  onReject?: () => void;
+  onPreApprove?: () => void;
+  onFlag?: () => void;
+}) {
+  const { t } = useLang();
+  const statusClass = accessStatusBadgeClass(profile.approvalStatus);
+
+  return (
+    <div className="card">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="avatar-circle">
+          {(profile.displayName || profile.email)[0]?.toUpperCase()}
         </div>
+        <div style={{ flex: 1 }}>
+          <strong>{profile.displayName || profile.email}</strong>
+          <div className="small">{profile.email}</div>
+          <div className="small">{t.users.requested} {profile.createdAt?.slice(0, 10)}</div>
+          <AccessRequestMeta profile={profile} stores={stores} />
+        </div>
+        <span className={`badge ${statusClass}`}>
+          {statusLabel(t, profile.approvalStatus)}
+        </span>
+      </div>
+
+      <div className="capture-actions" style={{ marginTop: 12 }}>
+        {isAdmin && profile.approvalStatus === 'pending' && (
+          <>
+            <button className="danger" onClick={onReject}>
+              {t.common.reject}
+            </button>
+            <button className="secondary" onClick={onRequestManager}>
+              {t.users.requestManager}
+            </button>
+            <button className="success" onClick={onApprove}>
+              {t.users.approveNow}
+            </button>
+          </>
+        )}
+
+        {isAdmin &&
+          (profile.approvalStatus === 'manager_review' ||
+            profile.approvalStatus === 'needs_manager_recheck') && (
+            <>
+              <button className="danger" onClick={onReject}>
+                {t.common.reject}
+              </button>
+              <button className="success" onClick={onApprove}>
+                {t.users.approveNow}
+              </button>
+            </>
+          )}
+
+        {isAdmin && profile.approvalStatus === 'pre_approved' && (
+          <>
+            <button className="danger" onClick={onReject}>
+              {t.common.reject}
+            </button>
+            <button className="secondary" onClick={onCheckAgain}>
+              {t.users.checkAgain}
+            </button>
+            <button className="success" onClick={onApprove}>
+              {t.users.finalApprove}
+            </button>
+          </>
+        )}
+
+        {!isAdmin && onPreApprove && onFlag && (
+          <>
+            <button className="secondary" onClick={onFlag}>
+              {t.users.flagRequest}
+            </button>
+            <button className="success" onClick={onPreApprove}>
+              {t.users.preApprove}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -362,6 +691,9 @@ export default function UsersPage({ currentProfile }: Props) {
   const { t } = useLang();
   const [tab, setTab] = useState<'pending' | 'all'>('pending');
   const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [requestManagerId, setRequestManagerId] = useState<string | null>(null);
+  const [checkAgainId, setCheckAgainId] = useState<string | null>(null);
+  const [flagId, setFlagId] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
 
   const { data } = db.useQuery({
@@ -372,15 +704,20 @@ export default function UsersPage({ currentProfile }: Props) {
   const profiles: Profile[] = (data?.profiles ?? []) as Profile[];
   const stores: Store[] = (data?.stores ?? []) as Store[];
 
-  const pendingProfiles = profiles.filter((p) => p.approvalStatus === 'pending');
-  const allProfiles = profiles.filter((p) => p.id !== currentProfile.id);
-
   const isOwner = currentProfile.role === 'owner';
-  const isAdmin = currentProfile.role === 'owner' || currentProfile.role === 'areaManager';
+  const isAdmin = canManageUsers(currentProfile.role);
+  const isManager = canPreApproveAccess(currentProfile.role);
 
-  if (!isAdmin) {
+  if (!canAccessUsersPage(currentProfile.role)) {
     return <div className="card">{t.users.noPermission}</div>;
   }
+
+  const accessQueueProfiles = profiles.filter((p) => isAccessPending(p.approvalStatus));
+  const allProfiles = profiles.filter((p) => p.id !== currentProfile.id);
+
+  const managerQueueProfiles = isManager
+    ? accessQueueProfiles.filter((p) => managerCanReviewAccess(currentProfile, p))
+    : [];
 
   async function updateRole(profile: Profile, role: Role) {
     if (!isOwner && ['owner', 'areaManager'].includes(role)) {
@@ -390,13 +727,103 @@ export default function UsersPage({ currentProfile }: Props) {
     await db.transact(db.tx.profiles[profile.id].update({ role, updatedAt: nowIso() }));
   }
 
-  async function updateStatus(profile: Profile, status: ApprovalStatus) {
-    await db.transact(
-      db.tx.profiles[profile.id].update({ approvalStatus: status, updatedAt: nowIso() }),
-    );
+  async function rejectAccess(profile: Profile) {
+    const now = nowIso();
+    await db.transact([
+      db.tx.profiles[profile.id].update({
+        approvalStatus: 'rejected',
+        updatedAt: now,
+      }),
+      ...buildAccessFinalizedNotification(profile, 'rejected', currentProfile),
+    ]);
+  }
+
+  async function preApproveAccess(profile: Profile) {
+    const now = nowIso();
+    await db.transact([
+      db.tx.profiles[profile.id].update({
+        approvalStatus: 'pre_approved',
+        preApprovedByUserId: currentProfile.userId,
+        preApprovedByEmail: currentProfile.email,
+        preApprovedAt: now,
+        accessReviewNote: '',
+        updatedAt: now,
+      }),
+      ...buildAccessAdminNotifications(profile, 'access_pre_approved', '', currentProfile, profiles),
+    ]);
+  }
+
+  async function flagAccess(profile: Profile, note: string) {
+    const now = nowIso();
+    await db.transact([
+      db.tx.profiles[profile.id].update({
+        approvalStatus: 'pending',
+        accessReviewNote: note,
+        updatedAt: now,
+      }),
+      ...buildAccessAdminNotifications(profile, 'access_flagged', note, currentProfile, profiles),
+    ]);
+  }
+
+  async function checkAgainAccess(profile: Profile, note: string) {
+    const now = nowIso();
+    await db.transact([
+      db.tx.profiles[profile.id].update({
+        approvalStatus: 'needs_manager_recheck',
+        accessReviewNote: note,
+        accessReviewRequestedByEmail: currentProfile.email,
+        accessReviewRequestedAt: now,
+        updatedAt: now,
+      }),
+      ...buildAccessRecheckNotifications(profile, note, currentProfile, profiles),
+    ]);
   }
 
   const approvingProfile = approvingId ? profiles.find((p) => p.id === approvingId) : null;
+  const requestManagerProfile = requestManagerId
+    ? profiles.find((p) => p.id === requestManagerId)
+    : null;
+  const checkAgainProfile = checkAgainId ? profiles.find((p) => p.id === checkAgainId) : null;
+  const flagProfile = flagId ? profiles.find((p) => p.id === flagId) : null;
+
+  if (isManager && !isAdmin) {
+    return (
+      <div>
+        <div className="card">
+          <h1 style={{ margin: 0 }}>{t.users.managerTitle}</h1>
+          <p className="small" style={{ marginTop: 8 }}>{t.users.managerSubtitle}</p>
+        </div>
+
+        {managerQueueProfiles.length === 0 ? (
+          <div className="card">
+            <p className="small">{t.users.noManagerRequests}</p>
+          </div>
+        ) : (
+          managerQueueProfiles.map((p) => (
+            <AccessRequestCard
+              key={p.id}
+              profile={p}
+              stores={stores}
+              isAdmin={false}
+              onPreApprove={() => preApproveAccess(p)}
+              onFlag={() => setFlagId(p.id)}
+            />
+          ))
+        )}
+
+        {flagProfile && (
+          <NoteActionModal
+            title={t.users.flagTitle}
+            hint={t.users.flagHint}
+            confirmLabel={t.users.flagRequest}
+            noteRequired
+            onClose={() => setFlagId(null)}
+            onConfirm={(note) => flagAccess(flagProfile, note)}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -409,11 +836,33 @@ export default function UsersPage({ currentProfile }: Props) {
         />
       )}
 
+      {requestManagerProfile && (
+        <RequestManagerModal
+          target={requestManagerProfile}
+          stores={stores}
+          currentProfile={currentProfile}
+          allProfiles={profiles}
+          onClose={() => setRequestManagerId(null)}
+        />
+      )}
+
+      {checkAgainProfile && (
+        <NoteActionModal
+          title={t.users.checkAgainTitle}
+          hint={t.users.checkAgainHint}
+          confirmLabel={t.users.checkAgain}
+          onClose={() => setCheckAgainId(null)}
+          onConfirm={(note) => checkAgainAccess(checkAgainProfile, note)}
+        />
+      )}
+
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
           <h1 style={{ margin: 0, flex: 1 }}>{t.users.title}</h1>
-          {pendingProfiles.length > 0 && (
-            <span className="badge warn">{pendingProfiles.length} {t.users.pending.toLowerCase()}</span>
+          {accessQueueProfiles.length > 0 && (
+            <span className="badge warn">
+              {accessQueueProfiles.length} {t.users.accessQueue.toLowerCase()}
+            </span>
           )}
           <button
             className={showInvite ? 'secondary' : 'btn-gold'}
@@ -436,7 +885,7 @@ export default function UsersPage({ currentProfile }: Props) {
             className={tab === 'pending' ? 'active' : ''}
             onClick={() => setTab('pending')}
           >
-            {t.users.pending} ({pendingProfiles.length})
+            {t.users.accessQueue} ({accessQueueProfiles.length})
           </button>
           <button
             className={tab === 'all' ? 'active' : ''}
@@ -449,38 +898,22 @@ export default function UsersPage({ currentProfile }: Props) {
 
       {tab === 'pending' && (
         <>
-          {pendingProfiles.length === 0 ? (
+          {accessQueueProfiles.length === 0 ? (
             <div className="card">
               <p className="small">{t.users.noPending}</p>
             </div>
           ) : (
-            pendingProfiles.map((p) => (
-              <div className="card" key={p.id}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div className="avatar-circle">
-                    {(p.displayName || p.email)[0]?.toUpperCase()}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <strong>{p.displayName || p.email}</strong>
-                    <div className="small">{p.email}</div>
-                    <div className="small">{t.users.requested} {p.createdAt?.slice(0, 10)}</div>
-                  </div>
-                  <span className="badge warn">{t.users.pending}</span>
-                </div>
-                <div className="capture-actions" style={{ marginTop: 12 }}>
-                  <button
-                    className="danger"
-                    onClick={() =>
-                      updateStatus(p, 'rejected')
-                    }
-                  >
-                    {t.common.reject}
-                  </button>
-                  <button className="success" onClick={() => setApprovingId(p.id)}>
-                    {t.common.approve}
-                  </button>
-                </div>
-              </div>
+            accessQueueProfiles.map((p) => (
+              <AccessRequestCard
+                key={p.id}
+                profile={p}
+                stores={stores}
+                isAdmin
+                onApprove={() => setApprovingId(p.id)}
+                onRequestManager={() => setRequestManagerId(p.id)}
+                onCheckAgain={() => setCheckAgainId(p.id)}
+                onReject={() => rejectAccess(p)}
+              />
             ))
           )}
         </>
@@ -534,15 +967,9 @@ export default function UsersPage({ currentProfile }: Props) {
                     </td>
 
                     <td>
-                      <select
-                        value={p.approvalStatus}
-                        onChange={(e) => updateStatus(p, e.target.value as ApprovalStatus)}
-                        className={`approval-select approval-select--${p.approvalStatus}`}
-                      >
-                        <option value="pending">{statusLabel(t, 'pending')}</option>
-                        <option value="approved">{statusLabel(t, 'approved')}</option>
-                        <option value="rejected">{statusLabel(t, 'rejected')}</option>
-                      </select>
+                      <span className={badgeClass(p.approvalStatus)}>
+                        {statusLabel(t, p.approvalStatus)}
+                      </span>
                     </td>
 
                     <td>
@@ -559,7 +986,7 @@ export default function UsersPage({ currentProfile }: Props) {
                           <button
                             className="danger"
                             style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
-                            onClick={() => updateStatus(p, 'rejected')}
+                            onClick={() => rejectAccess(p)}
                           >
                             {t.users.revoke}
                           </button>
@@ -568,7 +995,7 @@ export default function UsersPage({ currentProfile }: Props) {
                           <button
                             className="success"
                             style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
-                            onClick={() => updateStatus(p, 'approved')}
+                            onClick={() => setApprovingId(p.id)}
                           >
                             {t.common.approve}
                           </button>

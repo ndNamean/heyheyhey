@@ -41,6 +41,14 @@ export function canManageUsers(role: Role): boolean {
   return role === 'owner' || role === 'areaManager';
 }
 
+export function canPreApproveAccess(role: Role): boolean {
+  return role === 'manager';
+}
+
+export function canAccessUsersPage(role: Role): boolean {
+  return canManageUsers(role) || canPreApproveAccess(role);
+}
+
 export function canApproveItem(submittedByRole: Role, approverRole: Role, approverRoles: Role[]): boolean {
   if (approverRole === 'owner') return true;
   if (approverRoles.includes(approverRole)) return true;
