@@ -45,6 +45,9 @@ export const extraCommonEn = {
   copyLink: 'Copy link',
   sendSignInCode: 'Send sign-in code + get invite link →',
   permissionDenied: 'Permission denied',
+  selectAll: 'Select all',
+  clearAll: 'Clear all',
+  selectedCount: '{count} selected',
 };
 
 export const extraCommonVi = {
@@ -92,6 +95,9 @@ export const extraCommonVi = {
   copyLink: 'Sao chép liên kết',
   sendSignInCode: 'Gửi mã đăng nhập + lấy liên kết mời →',
   permissionDenied: 'Không có quyền',
+  selectAll: 'Chọn tất cả',
+  clearAll: 'Bỏ chọn tất cả',
+  selectedCount: 'Đã chọn {count}',
 };
 
 export const sectionsEn = {

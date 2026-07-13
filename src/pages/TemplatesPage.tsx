@@ -12,6 +12,7 @@ import {
 } from '../lib/templatePersistence';
 import TemplateImportModal from '../components/TemplateImportModal';
 import TemplateExportMenu from '../components/TemplateExportMenu';
+import StorePicker from '../components/StorePicker';
 import type { Profile, Store, Template, TemplateItem } from '../types';
 
 interface Props {
@@ -218,23 +219,10 @@ export default function TemplatesPage({ profile }: Props) {
           </label>
         </div>
 
-        <label style={{ marginTop: 12, display: 'block' }}>
-          {t.templates.assignStores}
-          <select
-            multiple
-            value={storeIds}
-            onChange={(e) =>
-              setStoreIds(Array.from(e.target.selectedOptions, (o) => o.value))
-            }
-            style={{ height: 100, marginTop: 4 }}
-          >
-            {stores.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.code} — {s.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div style={{ marginTop: 12 }}>
+          <label style={{ display: 'block', marginBottom: 4 }}>{t.templates.assignStores}</label>
+          <StorePicker stores={stores} selectedStoreIds={storeIds} onChange={setStoreIds} />
+        </div>
 
         <button style={{ marginTop: 12 }} onClick={addItem}>
           {t.templates.addChecklistItem}

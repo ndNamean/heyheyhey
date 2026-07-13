@@ -3,6 +3,7 @@ import { db } from '../db';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import RolesPermissionsPanel from '../components/RolesPermissionsPanel';
+import StorePicker from '../components/StorePicker';
 import { statusLabel } from '../lib/i18nUtils';
 import {
   accessStatusBadgeClass,
@@ -59,39 +60,6 @@ function ModalShell({
         <h2 style={{ marginTop: 0 }}>{title}</h2>
         {children}
       </div>
-    </div>
-  );
-}
-
-function StorePicker({
-  stores,
-  selectedStoreIds,
-  onToggle,
-}: {
-  stores: Store[];
-  selectedStoreIds: string[];
-  onToggle: (storeId: string) => void;
-}) {
-  const { t } = useLang();
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-      {stores.map((s) => (
-        <label
-          key={s.id}
-          style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
-        >
-          <input
-            type="checkbox"
-            checked={selectedStoreIds.includes(s.id)}
-            onChange={() => onToggle(s.id)}
-          />
-          <span>
-            {s.code} — {s.name}
-          </span>
-        </label>
-      ))}
-      {!stores.length && <p className="small">{t.stores.noStores}</p>}
     </div>
   );
 }
@@ -377,12 +345,6 @@ function ApproveModal({
     }
   }
 
-  function toggleStore(storeId: string) {
-    setSelectedStoreIds((prev) =>
-      prev.includes(storeId) ? prev.filter((id) => id !== storeId) : [...prev, storeId],
-    );
-  }
-
   return (
     <ModalShell title={t.users.approveAccess} onClose={onClose}>
       <p>
@@ -406,7 +368,7 @@ function ApproveModal({
       </label>
 
       <label style={{ marginTop: 12, display: 'block' }}>{t.users.assignStores}</label>
-      <StorePicker stores={stores} selectedStoreIds={selectedStoreIds} onToggle={toggleStore} />
+      <StorePicker stores={stores} selectedStoreIds={selectedStoreIds} onChange={setSelectedStoreIds} />
 
       <div className="capture-actions" style={{ marginTop: 20 }}>
         <button className="secondary" onClick={onClose} disabled={saving}>
@@ -473,12 +435,6 @@ function RequestManagerModal({
     }
   }
 
-  function toggleStore(storeId: string) {
-    setSelectedStoreIds((prev) =>
-      prev.includes(storeId) ? prev.filter((id) => id !== storeId) : [...prev, storeId],
-    );
-  }
-
   return (
     <ModalShell title={t.users.requestManagerTitle} onClose={onClose}>
       <p className="small">{t.users.requestManagerHint}</p>
@@ -488,7 +444,7 @@ function RequestManagerModal({
       <p className="small">{target.email}</p>
 
       <label style={{ marginTop: 12, display: 'block' }}>{t.users.designatedStores}</label>
-      <StorePicker stores={stores} selectedStoreIds={selectedStoreIds} onToggle={toggleStore} />
+      <StorePicker stores={stores} selectedStoreIds={selectedStoreIds} onChange={setSelectedStoreIds} />
 
       <label style={{ marginTop: 12, display: 'block' }}>
         {t.users.reviewNote}
