@@ -106,9 +106,6 @@ export function linkProfilesToRoleDefinitions(
     if (!def || def.id.startsWith('default-') || def.id.startsWith('fallback-')) continue;
 
     const linkedId = p.roleDefinition?.id;
-    if (linkedId && linkedId !== def.id) {
-      txs.push(db.tx.profiles[p.id].unlink({ roleDefinition: linkedId }));
-    }
     if (!linkedId || linkedId !== def.id) {
       txs.push(db.tx.profiles[p.id].link({ roleDefinition: def.id }));
     }
@@ -123,14 +120,10 @@ export function profileRoleAssignTx(
   profileId: string,
   role: Role,
   defs: RoleDefinition[],
-  linkedDefId?: string | null,
+  _linkedDefId?: string | null,
 ) {
   const def = defs.find((d) => d.key === role && d.active !== false);
   const txs = [db.tx.profiles[profileId].update({ role, updatedAt: nowIso() })];
-
-  if (linkedDefId) {
-    txs.push(db.tx.profiles[profileId].unlink({ roleDefinition: linkedDefId }));
-  }
 
   if (def && !def.id.startsWith('default-') && !def.id.startsWith('fallback-')) {
     txs.push(db.tx.profiles[profileId].link({ roleDefinition: def.id }));

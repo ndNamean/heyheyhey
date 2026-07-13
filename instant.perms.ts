@@ -48,13 +48,22 @@ const rules = {
   // New users can create their own pending profile.
   // Approved users can view all profiles.
   // Owners/areaManagers can update any profile; managers can pre-approve access;
-  // users can update only own displayName.
+  // users can update only own displayName. Link/unlink for stores + roleDefinition
+  // requires explicit rules (global $default denies unset actions).
   profiles: {
     allow: {
       view: "auth.id != null && ('approved' in auth.ref('$user.profile.approvalStatus') || data.userId == auth.id)",
       create: "auth.id != null && data.userId == auth.id && data.approvalStatus == 'pending'",
-      update: "isAdmin || managerAccessReview || (isOwnProfile && onlyDisplayName)",
+      update: 'adminProfileUpdate || managerAccessReview || (isOwnProfile && onlyDisplayName)',
       delete: 'false',
+      link: {
+        stores: 'isAdmin',
+        roleDefinition: 'isAdmin',
+      },
+      unlink: {
+        stores: 'isAdmin',
+        roleDefinition: 'isAdmin',
+      },
     },
     bind: {
       isOwnProfile: 'auth.id != null && data.userId == auth.id',
@@ -66,6 +75,9 @@ const rules = {
       roleCanManageUsers: "true == auth.ref('$user.profile.roleDefinition.canManageUsers')",
       isAdmin: 'legacyCanManageUsers || roleCanManageUsers',
       roleCanPreApproveAccess: "true == auth.ref('$user.profile.roleDefinition.canPreApproveAccess')",
+      adminProfileFields:
+        "request.modifiedFields.all(f, f in ['role', 'displayName', 'approvalStatus', 'approvedAt', 'approvedByEmail', 'accessReviewStoreIdsJson', 'accessReviewNote', 'preApprovedByUserId', 'preApprovedByEmail', 'preApprovedAt', 'accessReviewRequestedByEmail', 'accessReviewRequestedAt', 'cameraOptionsJson', 'updatedAt'])",
+      adminProfileUpdate: 'isAdmin && adminProfileFields',
       onlyDisplayName: "request.modifiedFields.all(f, f in ['displayName', 'cameraOptionsJson', 'updatedAt'])",
       managerAccessReview:
         "roleCanPreApproveAccess && request.modifiedFields.all(f, f in ['approvalStatus', 'accessReviewNote', 'preApprovedByUserId', 'preApprovedByEmail', 'preApprovedAt', 'updatedAt']) && (data.approvalStatus == 'pre_approved' || data.approvalStatus == 'pending')",
@@ -78,10 +90,20 @@ const rules = {
       create: 'isOwner',
       update: 'isOwner',
       delete: 'isOwner',
+      link: {
+        profiles: 'isAdmin',
+      },
+      unlink: {
+        profiles: 'isAdmin',
+      },
     },
     bind: {
       isApproved: "'approved' in auth.ref('$user.profile.approvalStatus')",
       isOwner: "'owner' in auth.ref('$user.profile.role')",
+      isAreaManager: "'areaManager' in auth.ref('$user.profile.role')",
+      legacyCanManageUsers: 'isOwner || isAreaManager',
+      roleCanManageUsers: "true == auth.ref('$user.profile.roleDefinition.canManageUsers')",
+      isAdmin: 'legacyCanManageUsers || roleCanManageUsers',
     },
   },
 
