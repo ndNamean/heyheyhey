@@ -281,8 +281,8 @@ export default function RolesPermissionsPanel({
                   ) : (
                     <button
                       type="button"
-                      className="linkish"
-                      style={{ background: 'none', border: 'none', padding: 0, cursor: canEditRole(def) ? 'pointer' : 'default' }}
+                      className="roles-label"
+                      aria-disabled={!canEditRole(def)}
                       onClick={() => {
                         if (!canEditRole(def)) return;
                         setEditingId(def.id);
@@ -334,6 +334,7 @@ export default function RolesPermissionsPanel({
                   <td key={`${def.id}-${key}`} style={{ textAlign: 'center' }}>
                     <input
                       type="checkbox"
+                      className="roles-check"
                       checked={!!def[key]}
                       disabled={!canEditRole(def) || isCapabilityLocked(def, key) || saving}
                       onChange={() => toggleCapability(def, key)}
@@ -373,6 +374,7 @@ export default function RolesPermissionsPanel({
                     <td key={`${submitter.key}-${approver.key}`} style={{ textAlign: 'center' }}>
                       <input
                         type="checkbox"
+                        className="roles-check"
                         checked={checked}
                         disabled={
                           isOwnerAlways ||

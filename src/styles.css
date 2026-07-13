@@ -544,6 +544,84 @@ tbody tr:hover td {
   padding: 12px 14px;
 }
 
+/* ── Roles & permissions ──────────────────────────────────────────────────── */
+.roles-label {
+  color: #FCC116;
+  font-weight: 600;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+}
+
+.roles-label:disabled,
+.roles-label[aria-disabled="true"] {
+  cursor: default;
+  opacity: 1;
+}
+
+.roles-label:not(:disabled):not([aria-disabled="true"]) {
+  cursor: pointer;
+}
+
+.roles-label:not(:disabled):not([aria-disabled="true"]):hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.roles-matrix-table th:first-child,
+.roles-matrix-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--card-bg);
+  min-width: 160px;
+}
+
+.roles-matrix-table thead th:first-child {
+  z-index: 2;
+  background: var(--input-bg);
+}
+
+.roles-check {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border: 1.5px solid var(--input-border);
+  border-radius: 5px;
+  background: var(--input-bg);
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.roles-check:checked {
+  border-color: #FCC116;
+  background: rgba(252, 193, 22, 0.12);
+}
+
+.roles-check:checked::after {
+  content: "✓";
+  color: #FCC116;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.roles-check:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.roles-check:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
 /* ── Badges ───────────────────────────────────────────────────────────────── */
 .badge {
   display: inline-block;
