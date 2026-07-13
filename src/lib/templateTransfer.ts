@@ -2,7 +2,7 @@ import type { Store, Template, TemplateItem } from '../types';
 
 export const TEMPLATE_SCHEMA = 'hey-pelo.checklist-template' as const;
 export const TEMPLATE_VERSION = 1 as const;
-export const MAX_IMPORT_FILE_BYTES = 1024 * 1024;
+export const MAX_IMPORT_FILE_BYTES = 2 * 1024 * 1024;
 
 export interface ChecklistTemplateExport {
   schema: typeof TEMPLATE_SCHEMA;

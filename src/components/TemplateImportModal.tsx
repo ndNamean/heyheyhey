@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLang } from '../i18n';
+import { ExcelParseError, parseExcelTemplateImport } from '../lib/templateExcelTransfer';
 import {
   MAX_IMPORT_FILE_BYTES,
   parseImportJsonText,
@@ -12,12 +13,36 @@ import {
   buildUpdateImportDrafts,
   validateImportFile,
   type UpdateDiff,
+  type ValidationIssue,
   type ValidationResult,
 } from '../lib/templateValidation';
 import { createTemplate, updateTemplate } from '../lib/templatePersistence';
 import type { Profile, Store, Template } from '../types';
 
 type ImportMode = 'create' | 'update';
+type ImportFileType = 'json' | 'excel' | null;
+
+function detectFileType(fileName: string): ImportFileType {
+  const lower = fileName.toLowerCase();
+  if (lower.endsWith('.json')) return 'json';
+  if (lower.endsWith('.xlsx')) return 'excel';
+  return null;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatValidationIssue(issue: ValidationIssue): string {
+  const location = issue.worksheet
+    ? issue.row
+      ? `${issue.worksheet} row ${issue.row}`
+      : issue.worksheet
+    : issue.path;
+  return `${location}: ${issue.message}`;
+}
 
 interface Props {
   open: boolean;
@@ -40,6 +65,9 @@ export default function TemplateImportModal({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [fileName, setFileName] = useState('');
+  const [fileSize, setFileSize] = useState(0);
+  const [fileType, setFileType] = useState<ImportFileType>(null);
+  const [parsing, setParsing] = useState(false);
   const [parsedRoot, setParsedRoot] = useState<ParsedImportRoot | null>(null);
   const [parseError, setParseError] = useState('');
   const [validation, setValidation] = useState<ValidationResult | null>(null);
@@ -54,6 +82,9 @@ export default function TemplateImportModal({
   useEffect(() => {
     if (!open) return;
     setFileName('');
+    setFileSize(0);
+    setFileType(null);
+    setParsing(false);
     setParsedRoot(null);
     setParseError('');
     setValidation(null);
@@ -109,33 +140,58 @@ export default function TemplateImportModal({
     setValidation(null);
     setSaveError('');
     setAckDuplicateName(false);
+    setParsing(false);
 
     if (!file) {
       setFileName('');
+      setFileSize(0);
+      setFileType(null);
       return;
     }
 
-    if (!file.name.toLowerCase().endsWith('.json')) {
+    const type = detectFileType(file.name);
+    if (!type) {
       setParseError(t.templates.importInvalidExtension);
       setFileName(file.name);
+      setFileSize(file.size);
+      setFileType(null);
       return;
     }
 
     if (file.size > MAX_IMPORT_FILE_BYTES) {
       setParseError(t.templates.importFileTooLarge);
       setFileName(file.name);
+      setFileSize(file.size);
+      setFileType(type);
       return;
     }
 
     setFileName(file.name);
+    setFileSize(file.size);
+    setFileType(type);
+    setParsing(true);
 
     try {
-      const text = await file.text();
-      const root = parseImportJsonText(text);
-      setParsedRoot(root);
-      setCreateName('');
+      if (type === 'json') {
+        const text = await file.text();
+        const root = parseImportJsonText(text);
+        setParsedRoot(root);
+        setCreateName('');
+      } else {
+        const buffer = await file.arrayBuffer();
+        const root = parseExcelTemplateImport(buffer);
+        setParsedRoot(root);
+        setCreateName('');
+      }
     } catch (err) {
-      setParseError(err instanceof Error ? err.message : t.templates.importParseFailed);
+      if (err instanceof ExcelParseError) {
+        const detail = err.errors.length ? `\n${err.errors.join('\n')}` : '';
+        setParseError(`${err.message}${detail}`);
+      } else {
+        setParseError(err instanceof Error ? err.message : t.templates.importParseFailed);
+      }
+    } finally {
+      setParsing(false);
     }
   }
 
@@ -235,12 +291,23 @@ export default function TemplateImportModal({
             <input
               ref={fileInputRef}
               type="file"
-              accept=".json,application/json"
+              accept=".xlsx,.json,application/json"
               onChange={handleFileChange}
-              disabled={saving}
+              disabled={saving || parsing}
             />
           </label>
-          {fileName ? <p className="small">{fileName}</p> : null}
+          {fileName ? (
+            <div className="template-import-file-meta">
+              <p className="small">{fileName}</p>
+              {fileType ? (
+                <span className={`template-import-type-badge template-import-type-${fileType}`}>
+                  {fileType === 'excel' ? t.templates.importFileTypeExcel : t.templates.importFileTypeJson}
+                </span>
+              ) : null}
+              {fileSize > 0 ? <span className="small">{formatFileSize(fileSize)}</span> : null}
+            </div>
+          ) : null}
+          {parsing ? <p className="small">{t.templates.importParsing}</p> : null}
           {parseError ? (
             <p className="export-status export-status-error" role="alert">
               {parseError}
@@ -302,7 +369,7 @@ export default function TemplateImportModal({
               <ul className="template-import-issues" role="alert">
                 {blockingErrors.map((issue, idx) => (
                   <li key={`err-${idx}`} className="template-import-issue-error">
-                    {issue.path}: {issue.message}
+                    {formatValidationIssue(issue)}
                   </li>
                 ))}
               </ul>
@@ -312,7 +379,7 @@ export default function TemplateImportModal({
               <ul className="template-import-issues">
                 {validation.warnings.map((issue, idx) => (
                   <li key={`warn-${idx}`} className="template-import-issue-warning">
-                    {issue.path}: {issue.message}
+                    {formatValidationIssue(issue)}
                   </li>
                 ))}
               </ul>

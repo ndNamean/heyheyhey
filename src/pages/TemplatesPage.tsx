@@ -9,8 +9,8 @@ import {
   updateTemplate,
   type TemplateItemDraft,
 } from '../lib/templatePersistence';
-import { exportTemplateToFile } from '../lib/templateTransfer';
 import TemplateImportModal from '../components/TemplateImportModal';
+import TemplateExportMenu from '../components/TemplateExportMenu';
 import type { Profile, Store, Template, TemplateItem } from '../types';
 
 interface Props {
@@ -87,14 +87,6 @@ export default function TemplatesPage({ profile }: Props) {
 
   function handleImportSuccess(templateId: string) {
     setPendingOpenTemplateId(templateId);
-  }
-
-  function handleExport(template: Template) {
-    try {
-      exportTemplateToFile(template);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : t.templates.exportFailed);
-    }
   }
 
   function addItem() {
@@ -375,13 +367,7 @@ export default function TemplatesPage({ profile }: Props) {
                     >
                       {t.templates.edit}
                     </button>
-                    <button
-                      className="secondary"
-                      style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
-                      onClick={() => handleExport(tmpl)}
-                    >
-                      {t.templates.downloadJson}
-                    </button>
+                    <TemplateExportMenu template={tmpl} allStores={stores} />
                     {tmpl.active ? (
                       <button
                         className="danger"

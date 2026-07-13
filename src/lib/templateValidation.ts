@@ -13,6 +13,8 @@ export type ValidationSeverity = 'error' | 'warning';
 export interface ValidationIssue {
   path: string;
   itemIndex?: number;
+  worksheet?: string;
+  row?: number;
   message: string;
   severity: ValidationSeverity;
 }
