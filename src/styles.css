@@ -2000,6 +2000,18 @@ body.wizard-active .page {
   background: rgba(255, 255, 255, 0.05);
 }
 
+.map-search-item.active,
+.map-search-item.active:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.address-autocomplete-loading {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 .lang-selector {
   display: flex;
   align-items: center;

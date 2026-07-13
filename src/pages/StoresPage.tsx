@@ -1,8 +1,10 @@
 import { Suspense, lazy, useState } from 'react';
 import { id } from '@instantdb/react';
+import AddressAutocomplete from '../components/AddressAutocomplete';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import { canEditMaster } from '../lib/roles';
+import type { NominatimResult } from '../lib/nominatim';
 import { nowIso } from '../lib/utils';
 import type { Profile, Store } from '../types';
 
@@ -27,6 +29,7 @@ export default function StoresPage({ profile }: Props) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [mapFlyTarget, setMapFlyTarget] = useState<{ lat: number; lng: number } | null>(null);
 
   const { data } = db.useQuery({ stores: {} });
   const stores: Store[] = (data?.stores ?? []) as Store[];
@@ -37,6 +40,7 @@ export default function StoresPage({ profile }: Props) {
 
   function startEdit(store: Store) {
     setEditingId(store.id);
+    setMapFlyTarget(null);
     setForm({
       code: store.code,
       name: store.name,
@@ -51,10 +55,33 @@ export default function StoresPage({ profile }: Props) {
   function cancelEdit() {
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setMapFlyTarget(null);
+  }
+
+  function applyLocation(lat: number, lng: number, address: string, fly = false) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    setForm((prev) => ({
+      ...prev,
+      lat: lat.toFixed(7),
+      lng: lng.toFixed(7),
+      address: address || prev.address,
+    }));
+    if (fly) setMapFlyTarget({ lat, lng });
+  }
+
+  function handleAddressSuggestion(result: NominatimResult) {
+    const lat = Number.parseFloat(result.lat);
+    const lng = Number.parseFloat(result.lon);
+    applyLocation(lat, lng, result.display_name, true);
   }
 
   async function saveStore() {
     if (!form.code.trim() || !form.name.trim()) return alert(t.stores.codeNameRequired);
+    const lat = parseFloat(form.lat);
+    const lng = parseFloat(form.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) {
+      return alert(t.stores.coordsRequired);
+    }
     setSaving(true);
     try {
       const payload = {
@@ -140,11 +167,11 @@ export default function StoresPage({ profile }: Props) {
 
         <label style={{ display: 'block', marginBottom: 12 }}>
           {t.common.address}
-          <input
+          <AddressAutocomplete
             value={form.address}
-            onChange={(e) => f('address', e.target.value)}
+            onChange={(v) => f('address', v)}
+            onSelect={handleAddressSuggestion}
             placeholder={t.stores.addressPlaceholder}
-            style={{ marginTop: 4 }}
           />
         </label>
 
@@ -154,15 +181,9 @@ export default function StoresPage({ profile }: Props) {
           <MapPicker
             lat={parseFloat(form.lat) || 0}
             lng={parseFloat(form.lng) || 0}
-            onSelect={(lat, lng, address) => {
-              setForm((prev) => ({
-                ...prev,
-                lat: lat.toFixed(7),
-                lng: lng.toFixed(7),
-              address: address || prev.address,
-            }));
-          }}
-        />
+            flyTarget={mapFlyTarget}
+            onSelect={(lat, lng, address) => applyLocation(lat, lng, address, false)}
+          />
           </Suspense>
         </div>
 

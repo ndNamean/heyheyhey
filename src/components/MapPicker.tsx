@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import { Icon } from 'leaflet';
 import { useLang } from '../i18n';
+import { searchNominatim, type NominatimResult } from '../lib/nominatim';
 import 'leaflet/dist/leaflet.css';
 
 const PIN = new Icon({
@@ -12,13 +13,6 @@ const PIN = new Icon({
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
 });
-
-interface NominatimResult {
-  place_id: number;
-  display_name: string;
-  lat: string;
-  lon: string;
-}
 
 function ClickHandler({ onSelect }: { onSelect: (lat: number, lng: number) => void }) {
   useMapEvents({
@@ -46,10 +40,11 @@ function FlyTo({ lat, lng }: { lat: number; lng: number }) {
 interface Props {
   lat: number;
   lng: number;
+  flyTarget?: { lat: number; lng: number } | null;
   onSelect: (lat: number, lng: number, address: string) => void;
 }
 
-export default function MapPicker({ lat, lng, onSelect }: Props) {
+export default function MapPicker({ lat, lng, flyTarget, onSelect }: Props) {
   const { t } = useLang();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<NominatimResult[]>([]);
@@ -59,16 +54,17 @@ export default function MapPicker({ lat, lng, onSelect }: Props) {
   const hasPin = Boolean(lat || lng);
   const centre: [number, number] = hasPin ? [lat, lng] : [10.7769, 106.7009];
 
+  useEffect(() => {
+    if (!flyTarget?.lat || !flyTarget?.lng) return;
+    setFlyTo(flyTarget);
+  }, [flyTarget]);
+
   async function search() {
     const q = query.trim();
     if (!q) return;
     setSearching(true);
     try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=6&addressdetails=1`,
-        { headers: { 'Accept-Language': 'en-US,en' } },
-      );
-      setResults(await res.json());
+      setResults(await searchNominatim(q));
     } catch {
       setResults([]);
     } finally {
