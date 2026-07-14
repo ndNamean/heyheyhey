@@ -8,7 +8,7 @@ import {
   DEFAULT_LOGOS,
   buildWeatherLine,
   cycleWatermarkStyle,
-  ensureUltimateConfig,
+  ensureWatermarkConfig,
   parseCameraOptions,
   resolveActiveLogoUrl,
   resolveWatermarkStyle,
@@ -28,6 +28,7 @@ import { needsVideoProof } from '../lib/roles';
 import { BACK_PRIORITY, useNativeBack } from '../lib/nativeBack';
 import ProofReviewOverlay from './ProofReviewOverlay';
 import UltimateWatermarkSettings from './UltimateWatermarkSettings';
+import TimecardWatermarkSettings from './TimecardWatermarkSettings';
 import type { CameraOptions, Profile, ProofWeather, Store, UploadedMedia } from '../types';
 
 interface Props {
@@ -141,6 +142,7 @@ export default function TimemarkCamera({
   const compositorRafRef = useRef<number | null>(null);
   const compositeStreamRef = useRef<MediaStream | null>(null);
   const recordingProofRef = useRef<ProofSnapshot | null>(null);
+  const livePhotoCodeRef = useRef<string | null>(null);
   const recordingLogoRef = useRef<HTMLImageElement | null>(null);
 
   const [gps,      setGps]      = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
@@ -243,6 +245,9 @@ export default function TimemarkCamera({
         weatherStatusMessages,
       );
       const { capturedAt, displayTime, proofTimezone } = buildProofTimeFields(at, gpsSnap);
+      if (!livePhotoCodeRef.current) {
+        livePhotoCodeRef.current = generatePhotoCode(store?.code ?? 'XX');
+      }
 
       return {
         capturedAt,
@@ -258,6 +263,7 @@ export default function TimemarkCamera({
         proofWeather: opts.weatherEnabled ? weather : null,
         proofLogoUrl: opts.logoEnabled ? logoUrl : '',
         cameraOptionsSnapshot: { ...opts },
+        photoCode: livePhotoCodeRef.current,
       };
     },
     [store, itemTitle, profile, gpsError, locationStatusMessages, weatherStatusMessages],
@@ -709,7 +715,7 @@ export default function TimemarkCamera({
     setUploading(true);
     try {
       const storedMime = normalizeStoredMime(mimeType);
-      const photoCode  = generatePhotoCode(store?.code ?? 'XX');
+      const photoCode = proof.photoCode?.trim() || generatePhotoCode(store?.code ?? 'XX');
       const capturedAt = proof.capturedAt;
       const path       = `stores/${store.id}/reports/${reportId}/${reportResponseId}/${Date.now()}_${fileName}`;
       const watermarked = mode === 'live_video' || storedMime.startsWith('image/');
@@ -1186,6 +1192,7 @@ export default function TimemarkCamera({
     setFrozenProof(null);
     setCaptureSize(null);
     setCapturedMimeType('image/jpeg');
+    livePhotoCodeRef.current = null;
     setLiveNow(new Date());
     setOptionsOpen(false);
     setCameraOn(true);
@@ -1298,7 +1305,7 @@ export default function TimemarkCamera({
                   className="cam-opt-toggle"
                   onClick={() =>
                     saveCameraOptions(
-                      ensureUltimateConfig({
+                      ensureWatermarkConfig({
                         ...cameraOptions,
                         watermarkStyle: cycleWatermarkStyle(cameraOptions.watermarkStyle),
                       }),
@@ -1311,6 +1318,7 @@ export default function TimemarkCamera({
                     logoDock: t.camera.watermarkLogoDock,
                     proofStrip: t.camera.watermarkProofStrip,
                     ultimate: t.camera.watermarkUltimate,
+                    timecard: t.camera.watermarkTimecard,
                   })}
                 </button>
               </div>
@@ -1334,6 +1342,36 @@ export default function TimemarkCamera({
                     itemTimestamp: t.camera.ultimateItemTimestamp,
                     itemAddress: t.camera.ultimateItemAddress,
                     itemWeather: t.camera.ultimateItemWeather,
+                    gradientLuxuryCeo: t.camera.gradientLuxuryCeo,
+                    gradientCyberpunk: t.camera.gradientCyberpunk,
+                    gradientRoyalMystique: t.camera.gradientRoyalMystique,
+                    gradientVolcanicEnergy: t.camera.gradientVolcanicEnergy,
+                    gradientMoodyMonochrome: t.camera.gradientMoodyMonochrome,
+                  }}
+                />
+              )}
+              {resolveWatermarkStyle(cameraOptions) === 'timecard_stamp' && (
+                <TimecardWatermarkSettings
+                  cameraOptions={cameraOptions}
+                  onSave={saveCameraOptions}
+                  labels={{
+                    cardItems: t.camera.timecardCardItems,
+                    backgroundMode: t.camera.timecardBackgroundMode,
+                    backgroundSolid: t.camera.timecardBackgroundSolid,
+                    backgroundGradientOn: t.camera.timecardBackgroundGradientOn,
+                    backgroundGradientOff: t.camera.timecardBackgroundGradientOff,
+                    resetDefault: t.camera.timecardResetDefault,
+                    itemTime: t.camera.timecardItemTime,
+                    itemDate: t.camera.timecardItemDate,
+                    itemDay: t.camera.timecardItemDay,
+                    itemUser: t.camera.timecardItemUser,
+                    itemStore: t.camera.timecardItemStore,
+                    itemTask: t.camera.timecardItemTask,
+                    itemTimestamp: t.camera.timecardItemTimestamp,
+                    itemAddress: t.camera.timecardItemAddress,
+                    itemWeather: t.camera.timecardItemWeather,
+                    itemPhotoCode: t.camera.timecardItemPhotoCode,
+                    itemGpsAccuracy: t.camera.timecardItemGpsAccuracy,
                     gradientLuxuryCeo: t.camera.gradientLuxuryCeo,
                     gradientCyberpunk: t.camera.gradientCyberpunk,
                     gradientRoyalMystique: t.camera.gradientRoyalMystique,

@@ -71,14 +71,24 @@ export default function ProofReviewOverlay({
   const isLogoDock = watermarkStyle === 'logoDock';
   const isProofStrip = watermarkStyle === 'blackBoxInline';
   const isUltimate = watermarkStyle === 'ultimate_custom';
-  const showFloatingLines = !isLogoDock && !isProofStrip && !isUltimate;
+  const isTimecard = watermarkStyle === 'timecard_stamp';
+  const showFloatingLines = !isLogoDock && !isProofStrip && !isUltimate && !isTimecard;
   const detailLines = layout.logoDock?.detailLines ?? [];
   const ultimate = layout.ultimate;
+  const timecard = layout.timecard;
   const rootStyle = {
     ...(layout.cssVars as CSSProperties),
     '--stamp-margin': `${layout.margin}px`,
   } as CSSProperties;
-  const hasContent = isUltimate
+  const hasContent = isTimecard
+    ? !!timecard &&
+      (timecard.logo.show ||
+        timecard.card.w > 0 ||
+        timecard.showTime ||
+        timecard.metaLines.length > 0 ||
+        timecard.detailLines.length > 0 ||
+        !!timecard.photoCodeLine)
+    : isUltimate
     ? !!ultimate &&
       (ultimate.boxEnabled ||
         ultimate.boxInline.length > 0 ||
@@ -96,6 +106,69 @@ export default function ProofReviewOverlay({
     ultimate?.gradientEnabled && ultimate.gradientCss
       ? ({ '--ultimate-gradient': ultimate.gradientCss } as CSSProperties)
       : undefined;
+
+  if (isTimecard && timecard) {
+    const cardClass =
+      timecard.backgroundMode === 'gradient'
+        ? 'proof-timecard-card proof-timecard-card--gradient'
+        : timecard.backgroundMode === 'solid'
+          ? 'proof-timecard-card proof-timecard-card--solid'
+          : 'proof-timecard-card proof-timecard-card--frosted';
+
+    return (
+      <div
+        className={`proof-overlay-root${className ? ` ${className}` : ''}`}
+        style={rootStyle}
+        aria-hidden="true"
+      >
+        <div className="proof-timecard">
+          {timecard.logo.show && showLogo && (
+            <img
+              className="proof-timecard-logo"
+              src={proof.proofLogoUrl}
+              alt=""
+              aria-hidden="true"
+            />
+          )}
+          {timecard.card.w > 0 && (
+            <div className={cardClass}>
+              {(timecard.showTime || timecard.showDate || timecard.showDay) && (
+                <div className="proof-timecard-primary">
+                  {timecard.showTime && (
+                    <span className="proof-timecard-time">{timecard.timeText}</span>
+                  )}
+                  {timecard.showAccent && <span className="proof-timecard-accent" />}
+                  {(timecard.showDate || timecard.showDay) && (
+                    <div className="proof-timecard-date-block">
+                      {timecard.showDate && (
+                        <span className="proof-timecard-date">{timecard.dateText}</span>
+                      )}
+                      {timecard.showDay && (
+                        <span className="proof-timecard-day">{timecard.dayText}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+              {timecard.metaLines.map((line, i) => (
+                <div key={`tc-meta-${i}`} className="proof-timecard-meta">
+                  {line}
+                </div>
+              ))}
+              {timecard.detailLines.map((line, i) => (
+                <div key={`tc-detail-${i}`} className="proof-timecard-detail">
+                  {line}
+                </div>
+              ))}
+              {timecard.photoCodeLine && (
+                <div className="proof-timecard-photo-code">{timecard.photoCodeLine}</div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (isUltimate && ultimate) {
     const floatSegments = renderSegments(ultimate.floatInline);

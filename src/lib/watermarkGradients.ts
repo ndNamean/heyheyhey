@@ -121,3 +121,73 @@ export function fillRoundedSolidRect(
   fillRoundedRectPath(ctx, x, y, w, h, radius);
   ctx.fill();
 }
+
+/** Soft left→right dissolve mask applied after painting a card face. */
+export function applyLeftToRightFadeMask(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-in';
+  const fade = ctx.createLinearGradient(x, y, x + w, y);
+  fade.addColorStop(0, 'rgba(0,0,0,1)');
+  fade.addColorStop(0.45, 'rgba(0,0,0,0.92)');
+  fade.addColorStop(0.75, 'rgba(0,0,0,0.45)');
+  fade.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = fade;
+  ctx.fillRect(x, y, w, h);
+  ctx.restore();
+}
+
+export function fillRoundedFrostedFadeRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  radius: number,
+) {
+  const grad = ctx.createLinearGradient(x, y, x + w, y);
+  grad.addColorStop(0, 'rgba(210, 212, 218, 0.78)');
+  grad.addColorStop(0.4, 'rgba(190, 193, 200, 0.48)');
+  grad.addColorStop(0.75, 'rgba(170, 174, 182, 0.18)');
+  grad.addColorStop(1, 'rgba(150, 154, 162, 0.02)');
+  ctx.fillStyle = grad;
+  fillRoundedRectPath(ctx, x, y, w, h, radius);
+  ctx.fill();
+}
+
+/**
+ * Draw a rounded card face into an offscreen buffer, then apply a left→right dissolve,
+ * then paint onto the destination with a soft shadow.
+ */
+export function drawFadingCardFace(
+  dest: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  radius: number,
+  paint: (ctx: CanvasRenderingContext2D) => void,
+) {
+  if (w <= 0 || h <= 0) return;
+  const buf = document.createElement('canvas');
+  buf.width = Math.ceil(w);
+  buf.height = Math.ceil(h);
+  const bctx = buf.getContext('2d');
+  if (!bctx) return;
+
+  paint(bctx);
+  applyLeftToRightFadeMask(bctx, 0, 0, w, h);
+
+  dest.save();
+  dest.shadowColor = 'rgba(0, 0, 0, 0.38)';
+  dest.shadowBlur = Math.max(8, Math.round(Math.min(w, h) * 0.08));
+  dest.shadowOffsetX = 0;
+  dest.shadowOffsetY = Math.max(2, Math.round(h * 0.04));
+  dest.drawImage(buf, x, y);
+  dest.restore();
+}

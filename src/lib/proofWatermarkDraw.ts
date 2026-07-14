@@ -3,7 +3,12 @@ import { CHARCOAL_STROKE, GOLD_FILL, PROOF_FONT } from './proofFonts';
 import { computeStampLayout, createMeasureContext } from './proofStampLayout';
 import type { StampLayoutResult, StampSegment, StampSegmentKind } from './proofStampLayout';
 import type { CameraOptions, ProofWeather, WatermarkStyle } from '../types';
-import { fillRoundedGradientRect, fillRoundedSolidRect } from './watermarkGradients';
+import {
+  drawFadingCardFace,
+  fillRoundedFrostedFadeRect,
+  fillRoundedGradientRect,
+  fillRoundedSolidRect,
+} from './watermarkGradients';
 
 export interface ProofSnapshot {
   capturedAt: string;
@@ -19,6 +24,7 @@ export interface ProofSnapshot {
   proofWeather: ProofWeather | null;
   proofLogoUrl: string;
   cameraOptionsSnapshot: CameraOptions;
+  photoCode?: string;
 }
 
 type TextDrawVariant = 'boxed' | 'floating';
@@ -396,6 +402,121 @@ function inlineRowHeight(fonts: StampLayoutResult['fonts']): number {
   return Math.round(Math.max(fonts.user, fonts.store, fonts.task, fonts.timestamp) * 1.1);
 }
 
+function drawTimecardText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  fontSize: number,
+  fillColor: string,
+  fontWeight = '600',
+) {
+  ctx.font = `${fontWeight} ${fontSize}px ${PROOF_FONT.timestamp}`;
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = Math.max(2, fontSize * 0.1);
+  ctx.strokeStyle = CHARCOAL_STROKE;
+  ctx.fillStyle = fillColor;
+  ctx.shadowColor = 'rgba(58, 58, 76, 0.75)';
+  ctx.shadowBlur = Math.max(3, fontSize * 0.28);
+  ctx.shadowOffsetX = 1;
+  ctx.shadowOffsetY = 2;
+  ctx.strokeText(text, x, y);
+  ctx.fillText(text, x, y);
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+}
+
+function drawTimecardOverlay(
+  ctx: CanvasRenderingContext2D,
+  logoImg: HTMLImageElement | null,
+  layout: StampLayoutResult,
+) {
+  const tc = layout.timecard;
+  if (!tc) return;
+
+  if (tc.logo.show && logoImg) {
+    ctx.shadowColor = 'rgba(58, 58, 76, 0.65)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 3;
+    ctx.drawImage(logoImg, tc.logo.x, tc.logo.y, tc.logo.w, tc.logo.h);
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+  }
+
+  if (tc.card.w <= 0 || tc.card.h <= 0) return;
+
+  const { card } = tc;
+  drawFadingCardFace(ctx, card.x, card.y, card.w, card.h, card.radius, (bctx) => {
+    if (tc.backgroundMode === 'gradient') {
+      fillRoundedGradientRect(bctx, 0, 0, card.w, card.h, card.radius, tc.gradientPreset);
+    } else if (tc.backgroundMode === 'solid') {
+      fillRoundedSolidRect(bctx, 0, 0, card.w, card.h, card.radius, 'rgba(10, 10, 12, 0.82)');
+    } else {
+      fillRoundedFrostedFadeRect(bctx, 0, 0, card.w, card.h, card.radius);
+    }
+  });
+
+  const contentX = card.x + layout.paddingH;
+  let cursorY = card.y + layout.paddingV;
+
+  if (tc.primaryRowH > 0) {
+    let cursorX = contentX;
+    const timeBaseline = cursorY + tc.fonts.time * 0.85;
+
+    if (tc.showTime) {
+      drawTimecardText(ctx, tc.timeText, cursorX, timeBaseline, tc.fonts.time, '#FFFFFF', '700');
+      cursorX += ctx.measureText(tc.timeText).width;
+    }
+
+    if (tc.showAccent) {
+      cursorX += tc.accentGap;
+      const accentH = Math.round(tc.fonts.time * 0.78);
+      const accentX = cursorX;
+      const accentTop = cursorY + Math.round(tc.fonts.time * 0.12);
+      ctx.fillStyle = 'rgba(253, 194, 22, 0.85)';
+      ctx.fillRect(accentX, accentTop, Math.max(2, Math.round(tc.fonts.time * 0.08)), accentH);
+      cursorX += Math.max(2, Math.round(tc.fonts.time * 0.08)) + tc.accentGap;
+    }
+
+    if (tc.showDate) {
+      const dateBaseline = cursorY + tc.fonts.date * 0.9;
+      drawTimecardText(ctx, tc.dateText, cursorX, dateBaseline, tc.fonts.date, '#FFFFFF', '600');
+      if (tc.showDay) {
+        const dayBaseline = dateBaseline + tc.fonts.day * 1.15;
+        drawTimecardText(ctx, tc.dayText, cursorX, dayBaseline, tc.fonts.day, GOLD_FILL, '500');
+      }
+    } else if (tc.showDay) {
+      const dayBaseline = cursorY + tc.fonts.day * 0.95;
+      drawTimecardText(ctx, tc.dayText, cursorX, dayBaseline, tc.fonts.day, GOLD_FILL, '500');
+    }
+
+    cursorY += tc.primaryRowH;
+  }
+
+  const drawLines = (lines: string[], size: number, color: string, opacity = 1) => {
+    if (!lines.length) return;
+    if (cursorY > card.y + layout.paddingV) cursorY += tc.sectionGap;
+    ctx.globalAlpha = opacity;
+    for (const line of lines) {
+      const baseline = cursorY + size * 0.85;
+      drawTimecardText(ctx, line, contentX, baseline, size, color, '500');
+      cursorY += Math.round(size * 1.28);
+    }
+    ctx.globalAlpha = 1;
+  };
+
+  drawLines(tc.metaLines, tc.fonts.meta, '#FFFFFF');
+  drawLines(tc.detailLines, tc.fonts.detail, GOLD_FILL);
+  if (tc.photoCodeLine) {
+    drawLines([tc.photoCodeLine], tc.fonts.photoCode, '#FFFFFF', 0.78);
+  }
+}
+
 export function drawProofOverlay(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
@@ -426,6 +547,11 @@ export function drawProofOverlay(
 
   if (watermarkStyle === 'ultimate_custom') {
     drawUltimateOverlay(ctx, logoImg, layout);
+    return;
+  }
+
+  if (watermarkStyle === 'timecard_stamp') {
+    drawTimecardOverlay(ctx, logoImg, layout);
     return;
   }
 

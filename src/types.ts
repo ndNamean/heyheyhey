@@ -80,7 +80,8 @@ export type WatermarkStyle =
   | 'transparentFloating'
   | 'logoDock'
   | 'blackBoxInline'
-  | 'ultimate_custom';
+  | 'ultimate_custom'
+  | 'timecard_stamp';
 
 export type UltimateLayoutMode = 'strip' | 'logo_dock';
 
@@ -90,6 +91,8 @@ export type UltimateGradientPreset =
   | 'royal_mystique'
   | 'volcanic_energy'
   | 'moody_monochrome';
+
+export type TimecardBackgroundMode = 'solid' | 'gradient' | 'frosted';
 
 export interface UltimateBoxItems {
   logo: boolean;
@@ -110,12 +113,37 @@ export interface UltimateWatermarkConfig {
   autoResize: boolean;
 }
 
+export interface TimecardItems {
+  time: boolean;
+  date: boolean;
+  day: boolean;
+  userName: boolean;
+  storeCode: boolean;
+  taskItem: boolean;
+  timestamp: boolean;
+  address: boolean;
+  weather: boolean;
+  photoCode: boolean;
+  gpsAccuracy: boolean;
+}
+
+export interface TimecardWatermarkConfig {
+  logoOutside: boolean;
+  backgroundMode: TimecardBackgroundMode;
+  gradientPreset: UltimateGradientPreset;
+  cardFadeDirection: 'left_to_right';
+  frostedGlassEnabled: boolean;
+  autoResize: boolean;
+  items: TimecardItems;
+}
+
 export interface CameraOptions {
   weatherEnabled: boolean;
   logoEnabled: boolean;
   flashlightLastUsed: boolean;
   watermarkStyle?: WatermarkStyle;
   watermarkConfig?: UltimateWatermarkConfig;
+  timecardConfig?: TimecardWatermarkConfig;
 }
 
 export interface ProofWeather {

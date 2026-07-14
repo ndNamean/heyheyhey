@@ -91,5 +91,6 @@ export function buildReviewProofSnapshot(
     proofWeather: meta.proofWeather ?? null,
     proofLogoUrl: meta.proofLogoUrl?.trim() ?? '',
     cameraOptionsSnapshot,
+    photoCode: media.photoCode?.trim() || undefined,
   };
 }

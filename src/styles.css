@@ -1060,6 +1060,127 @@ body.wizard-active .page {
 .proof-ultimate-float .proof-ts-detail {
   text-shadow: 0 1px 4px rgba(58, 58, 76, 0.9), 0 0 6px rgba(58, 58, 76, 0.45);
 }
+.proof-timecard {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: var(--stamp-inline-gap, 8px);
+  max-width: 100%;
+}
+.proof-timecard-logo {
+  max-height: var(--logo-max-h, 36px);
+  max-width: var(--logo-max-w, 56px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  flex-shrink: 0;
+  filter: drop-shadow(2px 3px 5px rgba(58, 58, 76, 0.7));
+}
+.proof-timecard-card {
+  width: var(--timecard-card-w, auto);
+  max-width: 100%;
+  border-radius: var(--timecard-radius, 12px);
+  padding: var(--stamp-pad-v, 8px) var(--stamp-pad-h, 10px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--stamp-inline-gap, 4px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 48%, rgba(0, 0, 0, 0.7) 72%, transparent 100%);
+  mask-image: linear-gradient(90deg, #000 0%, #000 48%, rgba(0, 0, 0, 0.7) 72%, transparent 100%);
+}
+.proof-timecard-card--solid {
+  background: rgba(10, 10, 12, 0.82);
+}
+.proof-timecard-card--gradient {
+  background: var(--timecard-gradient, linear-gradient(135deg, #0b0b0b, #00f2fe));
+}
+.proof-timecard-card--frosted {
+  background: linear-gradient(
+    90deg,
+    rgba(210, 212, 218, 0.78) 0%,
+    rgba(190, 193, 200, 0.45) 45%,
+    rgba(170, 174, 182, 0.16) 75%,
+    rgba(150, 154, 162, 0.02) 100%
+  );
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.proof-timecard-primary {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--timecard-accent-gap, 8px);
+}
+.proof-timecard-time {
+  font-family: Arial, sans-serif;
+  font-size: var(--timecard-time-size, 22px);
+  font-weight: 700;
+  color: #fff;
+  line-height: 1.05;
+  text-shadow: 0 1px 3px rgba(58, 58, 76, 0.75);
+  -webkit-text-stroke: 1px #3A3A4C;
+  white-space: nowrap;
+}
+.proof-timecard-accent {
+  width: 2px;
+  align-self: stretch;
+  min-height: calc(var(--timecard-date-size, 13px) * 1.8);
+  margin-top: 2px;
+  background: rgba(253, 194, 22, 0.85);
+  flex-shrink: 0;
+}
+.proof-timecard-date-block {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.proof-timecard-date {
+  font-family: Arial, sans-serif;
+  font-size: var(--timecard-date-size, 13px);
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.15;
+  text-shadow: 0 1px 3px rgba(58, 58, 76, 0.75);
+  -webkit-text-stroke: 0.6px #3A3A4C;
+  white-space: nowrap;
+}
+.proof-timecard-day {
+  font-family: Arial, sans-serif;
+  font-size: var(--timecard-day-size, 12px);
+  font-weight: 500;
+  color: #FDC216;
+  line-height: 1.15;
+  text-shadow: 0 1px 3px rgba(58, 58, 76, 0.75);
+  -webkit-text-stroke: 0.6px #3A3A4C;
+  white-space: nowrap;
+}
+.proof-timecard-meta,
+.proof-timecard-detail {
+  font-family: Arial, sans-serif;
+  font-size: var(--timecard-meta-size, 12px);
+  font-weight: 500;
+  line-height: 1.25;
+  text-shadow: 0 1px 3px rgba(58, 58, 76, 0.75);
+  -webkit-text-stroke: 0.5px #3A3A4C;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.proof-timecard-meta {
+  color: #fff;
+}
+.proof-timecard-detail {
+  color: #FDC216;
+  font-size: var(--font-detail, 12px);
+}
+.proof-timecard-photo-code {
+  font-family: Arial, sans-serif;
+  font-size: var(--timecard-photo-size, 11px);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.78);
+  line-height: 1.2;
+  text-shadow: 0 1px 3px rgba(58, 58, 76, 0.75);
+}
 .proof-stamp--transparent-floating .proof-font-user,
 .proof-stamp--transparent-floating .proof-font-store,
 .proof-stamp--transparent-floating .proof-font-task,

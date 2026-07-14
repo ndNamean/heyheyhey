@@ -42,6 +42,31 @@ export function formatProofTime(at: Date, timeZone: string): string {
   });
 }
 
+export function formatTimecardClockParts(
+  at: Date,
+  timeZone: string,
+): { time: string; date: string; day: string } {
+  const opts = { timeZone } as const;
+  return {
+    time: at.toLocaleTimeString(PROOF_TIME_LOCALE, {
+      ...opts,
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+    }),
+    date: at.toLocaleDateString(PROOF_TIME_LOCALE, {
+      ...opts,
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }),
+    day: at.toLocaleDateString(PROOF_TIME_LOCALE, {
+      ...opts,
+      weekday: 'short',
+    }),
+  };
+}
+
 export function formatIsoToLocalTime(
   iso?: string,
   timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',

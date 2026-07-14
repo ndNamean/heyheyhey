@@ -6,7 +6,17 @@ import {
   resolveEffectiveBoxItems,
   resolveUltimateConfig,
 } from './ultimateWatermarkConfig';
-import type { UltimateBoxItems, UltimateGradientPreset, UltimateLayoutMode } from '../types';
+import {
+  resolveEffectiveTimecardItems,
+  resolveTimecardConfig,
+} from './timecardWatermarkConfig';
+import { formatTimecardClockParts } from './proofTime';
+import type {
+  TimecardBackgroundMode,
+  UltimateBoxItems,
+  UltimateGradientPreset,
+  UltimateLayoutMode,
+} from '../types';
 import type { ProofSnapshot } from './proofWatermarkDraw';
 
 export interface StampLayoutInput {
@@ -22,6 +32,37 @@ export type StampSegmentKind = 'user' | 'store' | 'task' | 'timestamp' | 'sep';
 export interface StampSegment {
   kind: StampSegmentKind;
   text: string;
+}
+
+export interface TimecardLayoutData {
+  backgroundMode: TimecardBackgroundMode;
+  gradientPreset: UltimateGradientPreset;
+  gradientCss: string;
+  frostedGlassEnabled: boolean;
+  logoOutside: boolean;
+  logo: { x: number; y: number; w: number; h: number; show: boolean };
+  card: { x: number; y: number; w: number; h: number; radius: number };
+  timeText: string;
+  dateText: string;
+  dayText: string;
+  showTime: boolean;
+  showDate: boolean;
+  showDay: boolean;
+  showAccent: boolean;
+  metaLines: string[];
+  detailLines: string[];
+  photoCodeLine: string;
+  fonts: {
+    time: number;
+    date: number;
+    day: number;
+    meta: number;
+    detail: number;
+    photoCode: number;
+  };
+  primaryRowH: number;
+  accentGap: number;
+  sectionGap: number;
 }
 
 export interface StampLayoutResult {
@@ -60,6 +101,7 @@ export interface StampLayoutResult {
     floatTop: number;
     detailGap: number;
   } | null;
+  timecard: TimecardLayoutData | null;
   cssVars: Record<string, string>;
 }
 
@@ -343,6 +385,9 @@ export function computeStampLayout(input: StampLayoutInput): StampLayoutResult {
   if (style === 'ultimate_custom') {
     return computeUltimateLayout(input);
   }
+  if (style === 'timecard_stamp') {
+    return computeTimecardLayout(input);
+  }
   return computeStandardStampLayout(input);
 }
 
@@ -542,6 +587,7 @@ function computeUltimateLayout(input: StampLayoutInput): StampLayoutResult {
         floatTop,
         detailGap,
       },
+      timecard: null,
       cssVars,
     };
   }
@@ -638,6 +684,7 @@ function computeUltimateLayout(input: StampLayoutInput): StampLayoutResult {
       floatTop,
       detailGap,
     },
+    timecard: null,
     cssVars,
   };
 }
@@ -739,6 +786,7 @@ function computeProofStripLayout(input: StampLayoutInput): StampLayoutResult {
     floating: { maxWidth: fw - margin * 2, lines: [], top: margin },
     logoDock: null,
     ultimate: null,
+    timecard: null,
     cssVars,
   };
 }
@@ -866,6 +914,7 @@ function computeLogoDockLayout(input: StampLayoutInput): StampLayoutResult {
       detailGap,
     },
     ultimate: null,
+    timecard: null,
     cssVars,
   };
 }
@@ -982,6 +1031,276 @@ function computeStandardStampLayout(input: StampLayoutInput): StampLayoutResult 
     floating: { maxWidth: floatMaxWidth, lines: floatingLines, top: floatTop },
     logoDock: null,
     ultimate: null,
+    timecard: null,
+    cssVars,
+  };
+}
+
+function resolveTimecardClock(proof: ProofSnapshot): { time: string; date: string; day: string } {
+  const tz = proof.proofTimezone?.trim() || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const at = proof.capturedAt ? new Date(proof.capturedAt) : new Date();
+  if (!Number.isNaN(at.getTime())) {
+    return formatTimecardClockParts(at, tz);
+  }
+  return { time: '', date: '', day: '' };
+}
+
+function formatTimecardWeatherLine(proof: ProofSnapshot): string {
+  if (proof.proofWeather) {
+    const temp = Math.round(proof.proofWeather.temperature);
+    const condition = proof.proofWeather.condition?.trim() || '—';
+    return `Weather: ${condition} ${temp}°C`;
+  }
+  const line = proof.weatherLine.trim();
+  if (!line) return '';
+  return line.startsWith('Weather') ? line : `Weather: ${line}`;
+}
+
+function computeTimecardLayout(input: StampLayoutInput): StampLayoutResult {
+  const { frameWidth, frameHeight, proof, logoImg, measureCtx: ctx } = input;
+  const fw = Math.max(frameWidth, 240);
+  const fh = Math.max(frameHeight, 240);
+  const opts = proof.cameraOptionsSnapshot;
+  const config = resolveTimecardConfig(opts);
+  const items = resolveEffectiveTimecardItems(config, opts);
+
+  const margin = Math.round(fw * 0.035);
+  const paddingV = Math.round(fw * 0.02);
+  const paddingH = Math.round(fw * 0.022);
+  const baseFontSize = Math.max(14, Math.round(fw * 0.035));
+  const lineHeight = Math.round(baseFontSize * 1.28);
+  const logoGap = Math.max(8, Math.round(paddingH * 0.7));
+  const logoMaxW = Math.min(Math.round(fw * 0.11), 64);
+  const zoneGap = Math.max(8, Math.round(paddingH * 0.55));
+  const sectionGap = Math.max(4, Math.round(paddingH * 0.35));
+  const accentGap = Math.max(8, Math.round(paddingH * 0.55));
+  const maxW = fw - margin * 2;
+
+  const baseFonts: StampFonts = {
+    user: Math.round(baseFontSize * 1.05),
+    store: Math.round(baseFontSize * 1.0),
+    task: Math.round(baseFontSize * 0.95),
+    timestamp: Math.round(baseFontSize * 0.9),
+    detail: baseFontSize,
+  };
+
+  const showLogo =
+    config.logoOutside &&
+    opts.logoEnabled &&
+    proof.proofLogoUrl.trim().length > 0;
+  const { logoW, logoH } = computeLogoDimensions(showLogo, logoImg, logoMaxW);
+
+  const clock = resolveTimecardClock(proof);
+  const showTime = items.time && !!clock.time;
+  const showDate = items.date && !!clock.date;
+  const showDay = items.day && !!clock.day;
+  const showAccent = showTime && showDate;
+
+  const metaCandidates: string[] = [];
+  if (items.userName && proof.userName.trim()) metaCandidates.push(proof.userName.trim());
+  if (items.storeCode && proof.storeCode.trim()) metaCandidates.push(proof.storeCode.trim());
+  if (items.taskItem && proof.itemTitle.trim()) metaCandidates.push(proof.itemTitle.trim());
+  if (items.timestamp && proof.displayTime.trim()) metaCandidates.push(proof.displayTime.trim());
+
+  const detailCandidates: string[] = [];
+  if (items.address && proof.locationLine.trim()) detailCandidates.push(proof.locationLine.trim());
+  if (items.weather) {
+    const weather = formatTimecardWeatherLine(proof);
+    if (weather) detailCandidates.push(weather);
+  }
+  if (items.gpsAccuracy && proof.gps && Number.isFinite(proof.gps.accuracy)) {
+    detailCandidates.push(`GPS ±${Math.round(proof.gps.accuracy)}m`);
+  }
+
+  const photoCodeRaw = proof.photoCode?.trim() || '';
+  const photoCodeLine = items.photoCode ? `Photo Code: ${photoCodeRaw || '········'}` : '';
+
+  const cardBudgetW = Math.max(maxW - (showLogo && logoW > 0 ? logoW + logoGap : 0), 80);
+  const contentMaxW = Math.max(cardBudgetW - paddingH * 2, 40);
+
+  let timeSize = Math.round(baseFontSize * 1.85);
+  let dateSize = Math.round(baseFontSize * 1.05);
+  let daySize = Math.round(baseFontSize * 0.92);
+  let metaSize = Math.round(baseFontSize * 0.92);
+  let detailSize = baseFontSize;
+  let photoCodeSize = Math.round(baseFontSize * 0.82);
+
+  const measurePrimaryW = (tSize: number, dSize: number) => {
+    let w = 0;
+    if (showTime) w += measureTextW(ctx, clock.time, tSize, PROOF_FONT.timestamp);
+    if (showAccent) w += accentGap + Math.max(2, Math.round(tSize * 0.08)) + accentGap;
+    if (showDate) w += measureTextW(ctx, clock.date, dSize, PROOF_FONT.timestamp);
+    return w;
+  };
+
+  for (const scale of FONT_SCALES) {
+    timeSize = Math.round(baseFontSize * 1.85 * scale);
+    dateSize = Math.round(baseFontSize * 1.05 * scale);
+    daySize = Math.round(baseFontSize * 0.92 * scale);
+    metaSize = Math.round(baseFontSize * 0.92 * scale);
+    detailSize = Math.round(baseFontSize * scale);
+    photoCodeSize = Math.round(baseFontSize * 0.82 * scale);
+    if (measurePrimaryW(timeSize, dateSize) <= contentMaxW) break;
+  }
+
+  const primaryRowH = Math.max(
+    showTime ? Math.round(timeSize * 1.05) : 0,
+    showDate || showDay
+      ? Math.round(dateSize * 1.05) + (showDay ? Math.round(daySize * 1.15) : 0)
+      : 0,
+  );
+
+  const metaLines: string[] = [];
+  ctx.font = `${metaSize}px ${PROOF_FONT.detail}`;
+  for (const line of metaCandidates) {
+    metaLines.push(...capWrappedLines(wrapText(ctx, line, contentMaxW), 2));
+  }
+
+  ctx.font = `${detailSize}px ${PROOF_FONT.detail}`;
+  const detailLines: string[] = [];
+  for (const line of detailCandidates) {
+    detailLines.push(
+      ...capWrappedLines(wrapText(ctx, line, contentMaxW), line.startsWith('Weather') ? 2 : 3),
+    );
+  }
+
+  ctx.font = `${photoCodeSize}px ${PROOF_FONT.detail}`;
+  const photoLines = photoCodeLine
+    ? capWrappedLines(wrapText(ctx, photoCodeLine, contentMaxW), 1)
+    : [];
+
+  let contentW = 0;
+  if (showTime || showDate) contentW = Math.max(contentW, measurePrimaryW(timeSize, dateSize));
+  if (showDay) {
+    contentW = Math.max(contentW, measureTextW(ctx, clock.day, daySize, PROOF_FONT.timestamp));
+  }
+  ctx.font = `${metaSize}px ${PROOF_FONT.detail}`;
+  for (const line of metaLines) contentW = Math.max(contentW, ctx.measureText(line).width);
+  ctx.font = `${detailSize}px ${PROOF_FONT.detail}`;
+  for (const line of detailLines) contentW = Math.max(contentW, ctx.measureText(line).width);
+  ctx.font = `${photoCodeSize}px ${PROOF_FONT.detail}`;
+  for (const line of photoLines) contentW = Math.max(contentW, ctx.measureText(line).width);
+
+  const hasCardContent =
+    showTime ||
+    showDate ||
+    showDay ||
+    metaLines.length > 0 ||
+    detailLines.length > 0 ||
+    photoLines.length > 0;
+
+  let innerH = 0;
+  if (primaryRowH > 0) innerH += primaryRowH;
+  if (metaLines.length > 0) {
+    if (innerH > 0) innerH += sectionGap;
+    innerH += metaLines.length * Math.round(metaSize * 1.28);
+  }
+  if (detailLines.length > 0) {
+    if (innerH > 0) innerH += sectionGap;
+    innerH += detailLines.length * Math.round(detailSize * 1.28);
+  }
+  if (photoLines.length > 0) {
+    if (innerH > 0) innerH += sectionGap;
+    innerH += photoLines.length * Math.round(photoCodeSize * 1.2);
+  }
+
+  const cardW = hasCardContent
+    ? clamp(Math.ceil(contentW + paddingH * 2), Math.min(120, cardBudgetW), cardBudgetW)
+    : 0;
+  const cardH = hasCardContent ? Math.ceil(innerH + paddingV * 2) : 0;
+  const radius = Math.max(10, Math.round(baseFontSize * 0.55));
+
+  const clusterH = Math.max(showLogo ? logoH : 0, cardH);
+  const clusterY = fh - margin - clusterH;
+  const logoX = margin;
+  const logoY = clusterY + (clusterH - (showLogo ? logoH : 0)) / 2;
+  const cardX = margin + (showLogo && logoW > 0 ? logoW + logoGap : 0);
+  const cardY = clusterY + (clusterH - cardH) / 2;
+
+  const gradientCss =
+    config.backgroundMode === 'gradient' ? resolveGradientCss(config.gradientPreset) : '';
+
+  const cssVars: Record<string, string> = {
+    '--stamp-box-w': `${cardW}px`,
+    '--stamp-pad-v': `${paddingV}px`,
+    '--stamp-pad-h': `${paddingH}px`,
+    '--stamp-inline-gap': `${sectionGap}px`,
+    '--font-user': `${baseFonts.user}px`,
+    '--font-store': `${baseFonts.store}px`,
+    '--font-task': `${baseFonts.task}px`,
+    '--font-ts': `${baseFonts.timestamp}px`,
+    '--font-detail': `${detailSize}px`,
+    '--logo-max-w': `${logoW}px`,
+    '--logo-max-h': `${logoH}px`,
+    '--stamp-line-height': `${lineHeight}px`,
+    '--timecard-time-size': `${timeSize}px`,
+    '--timecard-date-size': `${dateSize}px`,
+    '--timecard-day-size': `${daySize}px`,
+    '--timecard-meta-size': `${metaSize}px`,
+    '--timecard-photo-size': `${photoCodeSize}px`,
+    '--timecard-radius': `${radius}px`,
+    '--timecard-card-w': `${cardW}px`,
+    '--timecard-gradient': gradientCss,
+    '--timecard-accent-gap': `${accentGap}px`,
+  };
+
+  const box = {
+    x: margin,
+    y: clusterY,
+    w: Math.min((showLogo && logoW > 0 ? logoW + logoGap : 0) + cardW, maxW),
+    h: clusterH,
+  };
+
+  return {
+    margin,
+    paddingV,
+    paddingH,
+    zoneGap,
+    lineHeight,
+    box,
+    fonts: { ...baseFonts, detail: detailSize, timestamp: dateSize },
+    logo: { w: logoW, h: logoH, show: showLogo && logoW > 0, gap: logoGap },
+    rowH: clusterH,
+    inlineRow: { segments: [], height: 0, fontScale: 1 },
+    floating: { maxWidth: maxW, lines: [], top: margin },
+    logoDock: null,
+    ultimate: null,
+    timecard: {
+      backgroundMode: config.backgroundMode,
+      gradientPreset: config.gradientPreset,
+      gradientCss,
+      frostedGlassEnabled: config.frostedGlassEnabled || config.backgroundMode === 'frosted',
+      logoOutside: true,
+      logo: {
+        x: logoX,
+        y: logoY,
+        w: logoW,
+        h: logoH,
+        show: showLogo && logoW > 0,
+      },
+      card: { x: cardX, y: cardY, w: cardW, h: cardH, radius },
+      timeText: clock.time,
+      dateText: clock.date,
+      dayText: clock.day,
+      showTime,
+      showDate,
+      showDay,
+      showAccent,
+      metaLines,
+      detailLines,
+      photoCodeLine: photoLines[0] ?? '',
+      fonts: {
+        time: timeSize,
+        date: dateSize,
+        day: daySize,
+        meta: metaSize,
+        detail: detailSize,
+        photoCode: photoCodeSize,
+      },
+      primaryRowH,
+      accentGap,
+      sectionGap,
+    },
     cssVars,
   };
 }

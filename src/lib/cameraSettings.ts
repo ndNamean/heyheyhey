@@ -4,6 +4,11 @@ import {
   normalizeUltimateConfig,
   resetUltimateConfig,
 } from './ultimateWatermarkConfig';
+import {
+  DEFAULT_TIMECARD_WATERMARK_CONFIG,
+  normalizeTimecardConfig,
+  resetTimecardConfig,
+} from './timecardWatermarkConfig';
 
 export const DEFAULT_LOGOS = [
   'https://www.heypelo.com/wp-content/uploads/2025/10/cropped-heypelonegatif.png',
@@ -23,6 +28,7 @@ const WATERMARK_STYLE_CYCLE: WatermarkStyle[] = [
   'logoDock',
   'blackBoxInline',
   'ultimate_custom',
+  'timecard_stamp',
 ];
 
 function normalizeWatermarkStyle(value: unknown): WatermarkStyle {
@@ -30,6 +36,7 @@ function normalizeWatermarkStyle(value: unknown): WatermarkStyle {
   if (value === 'logoDock' || value === 'logo_dock') return 'logoDock';
   if (value === 'blackBoxInline' || value === 'proof_strip') return 'blackBoxInline';
   if (value === 'ultimate_custom' || value === 'ultimate') return 'ultimate_custom';
+  if (value === 'timecard_stamp' || value === 'timecard') return 'timecard_stamp';
   if (value === 'blackBox' || value === 'black_box') return 'blackBox';
   return 'blackBox';
 }
@@ -42,6 +49,7 @@ export function watermarkStyleLabel(
     logoDock: string;
     proofStrip: string;
     ultimate: string;
+    timecard: string;
   },
 ): string {
   switch (style) {
@@ -53,6 +61,8 @@ export function watermarkStyleLabel(
       return labels.proofStrip;
     case 'ultimate_custom':
       return labels.ultimate;
+    case 'timecard_stamp':
+      return labels.timecard;
     default:
       return labels.blackBox;
   }
@@ -76,6 +86,18 @@ export function ensureUltimateConfig(opts: CameraOptions): CameraOptions {
   };
 }
 
+export function ensureTimecardConfig(opts: CameraOptions): CameraOptions {
+  if (resolveWatermarkStyle(opts) !== 'timecard_stamp') return opts;
+  return {
+    ...opts,
+    timecardConfig: normalizeTimecardConfig(opts.timecardConfig),
+  };
+}
+
+export function ensureWatermarkConfig(opts: CameraOptions): CameraOptions {
+  return ensureTimecardConfig(ensureUltimateConfig(opts));
+}
+
 export function parseCameraOptions(profile: Profile | null | undefined): CameraOptions {
   const raw = profile?.cameraOptionsJson?.trim();
   if (!raw) return { ...DEFAULT_CAMERA_OPTIONS };
@@ -90,6 +112,9 @@ export function parseCameraOptions(profile: Profile | null | undefined): CameraO
     if (opts.watermarkStyle === 'ultimate_custom') {
       opts.watermarkConfig = normalizeUltimateConfig(parsed.watermarkConfig);
     }
+    if (opts.watermarkStyle === 'timecard_stamp') {
+      opts.timecardConfig = normalizeTimecardConfig(parsed.timecardConfig);
+    }
     return opts;
   } catch {
     return { ...DEFAULT_CAMERA_OPTIONS };
@@ -100,7 +125,14 @@ export function serializeCameraOptions(opts: CameraOptions): string {
   return JSON.stringify(opts);
 }
 
-export { resetUltimateConfig, DEFAULT_ULTIMATE_WATERMARK_CONFIG, normalizeUltimateConfig };
+export {
+  resetUltimateConfig,
+  DEFAULT_ULTIMATE_WATERMARK_CONFIG,
+  normalizeUltimateConfig,
+  resetTimecardConfig,
+  DEFAULT_TIMECARD_WATERMARK_CONFIG,
+  normalizeTimecardConfig,
+};
 
 export function resolveActiveLogoUrl(store: Store | null | undefined): string {
   const saved = store?.proofLogoUrl?.trim();
