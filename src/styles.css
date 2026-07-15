@@ -3087,3 +3087,32 @@ body.wizard-active .page {
   text-align: left;
 }
 
+@media (max-width: 640px) {
+  .template-schedule-recurrence {
+    flex-direction: column;
+  }
+
+  .template-schedule-radio {
+    width: 100%;
+  }
+
+  .template-schedule-apply-all {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .template-schedule-apply-all input[type='time'],
+  .item-card input[type='time'] {
+    max-width: 100%;
+  }
+
+  .scheduled-task-template-filter {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .scheduled-task-table {
+    min-width: 960px;
+  }
+}
+
