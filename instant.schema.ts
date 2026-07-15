@@ -22,16 +22,16 @@ const _schema = i.schema({
       approvalStatus: i.string(),            // pending|manager_review|pre_approved|needs_manager_recheck|approved|rejected
       approvedAt: i.string(),
       approvedByEmail: i.string(),
-      accessReviewStoreIdsJson: i.string(),  // JSON: string[] store IDs for manager pre-approval
-      accessReviewNote: i.string(),
-      preApprovedByUserId: i.string(),
-      preApprovedByEmail: i.string(),
-      preApprovedAt: i.string(),
-      accessReviewRequestedByEmail: i.string(),
-      accessReviewRequestedAt: i.string(),
+      accessReviewStoreIdsJson: i.string().clientRequired(),  // JSON: string[] store IDs for manager pre-approval
+      accessReviewNote: i.string().clientRequired(),
+      preApprovedByUserId: i.string().clientRequired(),
+      preApprovedByEmail: i.string().clientRequired(),
+      preApprovedAt: i.string().clientRequired(),
+      accessReviewRequestedByEmail: i.string().clientRequired(),
+      accessReviewRequestedAt: i.string().clientRequired(),
       createdAt: i.string(),
       updatedAt: i.string(),
-      cameraOptionsJson: i.string(),       // JSON: { weatherEnabled, logoEnabled, flashlightLastUsed }
+      cameraOptionsJson: i.string().clientRequired(),       // JSON: { weatherEnabled, logoEnabled, flashlightLastUsed }
     }),
     stores: i.entity({
       code: i.string().unique(),
@@ -44,7 +44,7 @@ const _schema = i.schema({
       active: i.boolean(),
       createdAt: i.string(),
       updatedAt: i.string(),
-      proofLogoUrl: i.string(),            // '' = use app default logo
+      proofLogoUrl: i.string().clientRequired(),            // '' = use app default logo
     }),
     templates: i.entity({
       name: i.string(),
@@ -116,19 +116,19 @@ const _schema = i.schema({
       note: i.string(),
       status: i.string(),                  // not_started|waiting_approval|approved|rejected|need_correction
       rejectionReason: i.string(),
-      feedbackCode: i.string().indexed(),  // preset code or 'other'
-      feedbackNote: i.string(),            // free text for 'other' or optional extra note
+      feedbackCode: i.string().indexed().clientRequired(),  // preset code or 'other'
+      feedbackNote: i.string().clientRequired(),            // free text for 'other' or optional extra note
       submittedByUserId: i.string(),
       submittedByRole: i.string(),
       submittedAt: i.string(),
       approvedByUserId: i.string(),
       approvedAt: i.string(),
       updatedAt: i.string(),
-      // Additive schedule capture (Phase 2) — blank when unscheduled / not applicable
-      scheduleOccurrenceKey: i.string().indexed(),
-      scheduledDueAt: i.string(),
-      firstCompletedAt: i.string(),
-      scheduleVersionId: i.string(),
+      // Additive schedule capture (Phase 2) — optional so existing responses can stay null
+      scheduleOccurrenceKey: i.string().indexed().optional(),
+      scheduledDueAt: i.string().optional(),
+      firstCompletedAt: i.string().optional(),
+      scheduleVersionId: i.string().optional(),
     }),
 
     // ─── Media / photo records ───────────────────────────────────────────────
@@ -153,11 +153,11 @@ const _schema = i.schema({
       createdAt: i.string(),
       // ── Storage cleanup fields ───────────────────────────────────────────
       storagePath: i.string(),             // InstantDB $files path; used by cleanup job
-      fileUrl: i.string(),                 // denormalised CDN url for review UI
+      fileUrl: i.string().clientRequired(),                 // denormalised CDN url for review UI
       deletedAt: i.string(),               // '' while active; ISO date when storage file deleted
       storageDeleted: i.boolean(),         // true after cleanup job removes the file
       storageDeletedReason: i.string(),    // e.g. 'auto_cleanup_after_7_days_reviewed'
-      proofMetadataJson: i.string(),       // JSON: proofTimestamp, proofTimezone, proofLocation, proofWeather, proofLogoUrl, cameraOptionsSnapshot
+      proofMetadataJson: i.string().clientRequired(),       // JSON: proofTimestamp, proofTimezone, proofLocation, proofWeather, proofLogoUrl, cameraOptionsSnapshot
     }),
 
     // ─── Watermark templates ─────────────────────────────────────────────────
@@ -259,17 +259,17 @@ const _schema = i.schema({
       eventType: i.string().indexed(),
       // submitted|resubmitted|item_approved|item_rejected|item_correction|report_finalized
       itemTitle: i.string(),
-      templateItemId: i.string().indexed(),
-      sectionSnapshot: i.string(),
-      categorySnapshot: i.string(),
+      templateItemId: i.string().indexed().clientRequired(),
+      sectionSnapshot: i.string().clientRequired(),
+      categorySnapshot: i.string().clientRequired(),
       statusAfter: i.string(),
-      previousStatus: i.string(),
+      previousStatus: i.string().clientRequired(),
       actorUserId: i.string(),
       actorRole: i.string(),
-      actorDisplayNameSnapshot: i.string(),
+      actorDisplayNameSnapshot: i.string().clientRequired(),
       note: i.string(),
-      feedbackCode: i.string(),
-      feedbackNote: i.string(),
+      feedbackCode: i.string().clientRequired(),
+      feedbackNote: i.string().clientRequired(),
       createdAt: i.string().indexed(),
     }),
 
