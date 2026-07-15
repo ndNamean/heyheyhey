@@ -49,11 +49,21 @@ const _schema = i.schema({
     templates: i.entity({
       name: i.string(),
       reportType: i.string(),
-      scheduleJson: i.string(),             // JSON: { enabled, recurrence, days, dueTime, assignedRole }
+      scheduleJson: i.string(),             // JSON: TemplateSchedule v2 (or legacy { enabled, recurrence, days, dueTime, assignedRole })
       active: i.boolean(),
       createdByUserId: i.string(),
       createdAt: i.string(),
       updatedAt: i.string(),
+    }),
+
+    // Additive schedule history — templates.scheduleJson remains the active config
+    templateScheduleVersions: i.entity({
+      templateId: i.string().indexed(),
+      scheduleJson: i.string(),
+      effectiveFrom: i.string().indexed(),
+      effectiveTo: i.string(),             // '' = currently active version
+      createdAt: i.string(),
+      createdByUserId: i.string(),
     }),
 
     templateItems: i.entity({
@@ -365,6 +375,12 @@ const _schema = i.schema({
     templateItemTemplate: {
       forward: { on: 'templateItems', has: 'one', label: 'template' },
       reverse: { on: 'templates', has: 'many', label: 'items' },
+    },
+
+    // ─── TemplateScheduleVersions -> template (many:one) ─────────────────────
+    templateScheduleVersionTemplate: {
+      forward: { on: 'templateScheduleVersions', has: 'one', label: 'template' },
+      reverse: { on: 'templates', has: 'many', label: 'scheduleVersions' },
     },
 
     // ─── Reports -> store ────────────────────────────────────────────────────

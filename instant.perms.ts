@@ -134,6 +134,22 @@ const rules = {
     bind: { ...LEGACY_BIND },
   },
 
+  templateScheduleVersions: {
+    allow: {
+      view: 'isApproved',
+      create: 'canEditMaster',
+      update: 'canEditMaster',
+      delete: 'isOwner',
+      link: {
+        template: 'canEditMaster',
+      },
+      unlink: {
+        template: 'canEditMaster',
+      },
+    },
+    bind: { ...LEGACY_BIND },
+  },
+
   // ── Reports ──────────────────────────────────────────────────────────────
   reports: {
     allow: {

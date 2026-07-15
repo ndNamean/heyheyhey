@@ -252,9 +252,15 @@ export default function TemplateImportModal({
 
       await updateTemplate({
         templateId: targetTemplate.id,
+        profileUserId: profile.userId,
         name: normalized.name,
         reportType: normalized.reportType,
         scheduleJson: normalized.scheduleJson,
+        prevScheduleJson: targetTemplate.scheduleJson,
+        openScheduleVersionId:
+          ((targetTemplate.scheduleVersions ?? []) as { id: string; effectiveTo: string }[]).find(
+            (v) => !v.effectiveTo,
+          )?.id ?? null,
         active: normalized.active,
         storeIds: normalized.storeIds,
         prevStoreIds,

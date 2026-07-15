@@ -217,6 +217,7 @@ export interface Template {
   updatedAt: string;
   items?: TemplateItem[];
   stores?: Store[];
+  scheduleVersions?: TemplateScheduleVersion[];
 }
 
 export interface TemplateItem {
@@ -231,6 +232,17 @@ export interface TemplateItem {
   weight: number;
   failureCategory: string;
   sortOrder: number;
+}
+
+/** Historical schedule snapshot. templates.scheduleJson remains the active config. */
+export interface TemplateScheduleVersion {
+  id: string;
+  templateId: string;
+  scheduleJson: string;
+  effectiveFrom: string;
+  effectiveTo: string;
+  createdAt: string;
+  createdByUserId: string;
 }
 
 export interface Report {
