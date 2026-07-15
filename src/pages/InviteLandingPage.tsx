@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
-import LanguageSelector from './LanguageSelector';
-import InstallAppCard from './InstallAppCard';
+import LanguageSelector from '../components/LanguageSelector';
+import InstallAppCard from '../components/InstallAppCard';
 import {
   acceptInvitation,
   clearStashedInviteToken,
