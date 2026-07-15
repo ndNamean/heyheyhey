@@ -316,6 +316,8 @@ export default function AuthGate({ children }: Props) {
         preApprovedAt: '',
         accessReviewRequestedByEmail: '',
         accessReviewRequestedAt: '',
+        invitedStoreIdsJson: '[]',
+        cameraOptionsJson: '{"weatherEnabled":true,"logoEnabled":true}',
         createdAt: nowIso(),
         updatedAt: nowIso(),
       })

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { db } from '../db';
 import { useLang } from '../i18n';
@@ -29,7 +29,13 @@ import {
 } from '../lib/roles';
 import { ELEVATED_ASSIGN_ROLE_KEYS, OWNER_ROLE_KEY } from '../types';
 import { badgeClass, nowIso } from '../lib/utils';
-import type { Profile, Role, Store } from '../types';
+import type { InvitationAdminRow, Profile, Role, Store } from '../types';
+import {
+  createInvitation,
+  listInvitations,
+  resendInvitation,
+  revokeInvitation,
+} from '../lib/inviteClient';
 
 interface Props {
   currentProfile: Profile;
@@ -70,18 +76,24 @@ function ModalShell({
 
 function InviteUserForm({
   assignableRoles,
+  stores,
+  onCreated,
 }: {
   currentProfile: Profile;
   assignableRoles: Role[];
+  stores: Store[];
+  onCreated?: () => void;
 }) {
   const { t } = useLang();
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<Role>('staff');
+  const [storeIds, setStoreIds] = useState<string[]>([]);
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
   const [inviteLink, setInviteLink] = useState('');
+  const [emailSent, setEmailSent] = useState(false);
 
   const rolesForInvite = assignableRoles;
 
@@ -101,36 +113,16 @@ function InviteUserForm({
     setLoading(true);
     setError('');
     try {
-      const user = await db.getAuth();
-      const token = user?.refresh_token;
-      if (!token) throw new Error(t.users.couldNotSendCode);
-
-      const resp = await fetch('/api/invite-user', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: trimmed,
-          role,
-          origin: window.location.origin,
-        }),
+      const data = await createInvitation({
+        email: trimmed,
+        role,
+        storeIds,
+        origin: window.location.origin,
       });
-      const data = (await resp.json().catch(() => ({}))) as {
-        error?: string;
-        inviteLink?: string;
-      };
-      if (!resp.ok) {
-        throw new Error(data.error || t.users.couldNotSendCode);
-      }
-
-      setInviteLink(
-        data.inviteLink ||
-          `${window.location.origin}/?invite=${encodeURIComponent(trimmed)}` +
-            `&role=${encodeURIComponent(role)}`,
-      );
+      setInviteLink(String(data.inviteUrl || ''));
+      setEmailSent(!!data.emailSent);
       setSent(true);
+      onCreated?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : t.users.couldNotSendCode);
     } finally {
@@ -139,16 +131,14 @@ function InviteUserForm({
   }
 
   if (sent) {
-    const sentLink =
-      inviteLink ||
-      `${window.location.origin}/?invite=${encodeURIComponent(email.trim())}` +
-        `&role=${encodeURIComponent(role)}`;
+    const sentLink = inviteLink;
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <div className="alert-success">
           <p className="small">
-            {t.users.inviteSent} <strong>{email}</strong> as <strong>{role}</strong>.
+            {emailSent ? t.invite.emailSent : t.invite.emailNotSent}{' '}
+            <strong>{email}</strong> ({role}).
           </p>
         </div>
 
@@ -186,6 +176,7 @@ function InviteUserForm({
             setEmail('');
             setInviteLink('');
             setCopied(false);
+            setStoreIds([]);
           }}
         >
           {t.common.inviteAnother}
@@ -227,6 +218,13 @@ function InviteUserForm({
           </select>
         </label>
       </div>
+
+      <label style={{ display: 'block', marginBottom: 12 }}>
+        {t.invite.selectStoresOptional}
+        <div style={{ marginTop: 6 }}>
+          <StorePicker stores={stores} selectedStoreIds={storeIds} onChange={setStoreIds} />
+        </div>
+      </label>
 
       {error && <p className="small text-danger" style={{ marginBottom: 10 }}>{error}</p>}
 
@@ -358,10 +356,13 @@ function ApproveModal({
   onClose: () => void;
 }) {
   const { t } = useLang();
-  const [role, setRole] = useState<Role>('staff');
-  const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>(() =>
-    parseAccessReviewStoreIds(pending.accessReviewStoreIdsJson),
-  );
+  const initialRole = assignableRoles.includes(pending.role) ? pending.role : 'staff';
+  const [role, setRole] = useState<Role>(initialRole);
+  const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>(() => {
+    const fromInvite = parseAccessReviewStoreIds(pending.invitedStoreIdsJson);
+    if (fromInvite.length) return fromInvite;
+    return parseAccessReviewStoreIds(pending.accessReviewStoreIdsJson);
+  });
   const [saving, setSaving] = useState(false);
 
   async function approve() {
@@ -700,10 +701,128 @@ function AccessRequestCard({
   );
 }
 
+function InvitationsAdminPanel({ refreshKey }: { refreshKey: number }) {
+  const { t } = useLang();
+  const [rows, setRows] = useState<InvitationAdminRow[]>([]);
+  const [counts, setCounts] = useState({ sent: 0, pending: 0, opened: 0, accepted: 0, expired: 0, revoked: 0 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await listInvitations();
+      setRows((data.invitations as InvitationAdminRow[]) || []);
+      setCounts((data.counts as typeof counts) || counts);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t.errors.loadFailed);
+    } finally {
+      setLoading(false);
+    }
+  }, [t.errors.loadFailed]);
+
+  useEffect(() => {
+    void load();
+  }, [load, refreshKey]);
+
+  async function onResend(id: string) {
+    setBusyId(id);
+    try {
+      const data = await resendInvitation(id, window.location.origin);
+      const url = String(data.inviteUrl || '');
+      if (url) {
+        try { await navigator.clipboard.writeText(url); } catch { /* ignore */ }
+      }
+      await load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.errors.saveFailed);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function onRevoke(id: string) {
+    if (!window.confirm(t.invite.revokeInvite + '?')) return;
+    setBusyId(id);
+    try {
+      await revokeInvitation(id);
+      await load();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.errors.saveFailed);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (loading) return <div className="card"><p className="small">{t.common.loading}</p></div>;
+  if (error) return <div className="card"><p className="small text-danger">{error}</p></div>;
+
+  return (
+    <div className="card">
+      <p className="small" style={{ marginBottom: 14 }}>
+        {t.invite.adminCounts
+          .replace('{sent}', String(counts.sent))
+          .replace('{pending}', String(counts.pending))
+          .replace('{opened}', String(counts.opened))
+          .replace('{accepted}', String(counts.accepted))}
+      </p>
+      {rows.length === 0 ? (
+        <p className="small">{t.users.noOtherUsers}</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {rows.map((row) => (
+            <div key={row.id} className="panel-inset" style={{ padding: 12 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                <strong style={{ flex: 1 }}>{row.email}</strong>
+                <span className={`badge ${badgeClass(row.status)}`}>{row.status}</span>
+              </div>
+              <p className="small" style={{ margin: '6px 0' }}>
+                {row.role}
+                {row.storeNames?.length ? ` · ${row.storeNames.join(', ')}` : ''}
+                {row.invitedByEmail ? ` · ${row.invitedByEmail}` : ''}
+              </p>
+              <p className="small" style={{ margin: '0 0 8px', opacity: 0.7 }}>
+                {row.createdAt?.slice(0, 16)}
+                {row.firstOpenedAt ? ` · opened ${row.firstOpenedAt.slice(0, 16)}` : ''}
+                {row.acceptedAt ? ` · accepted ${row.acceptedAt.slice(0, 16)}` : ''}
+              </p>
+              {(row.status === 'pending' || row.status === 'opened' || row.status === 'expired') && (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    className="secondary"
+                    style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
+                    disabled={busyId === row.id}
+                    onClick={() => void onResend(row.id)}
+                  >
+                    {t.invite.resend}
+                  </button>
+                  {row.status !== 'expired' && (
+                    <button
+                      className="secondary"
+                      style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
+                      disabled={busyId === row.id}
+                      onClick={() => void onRevoke(row.id)}
+                    >
+                      {t.invite.revokeInvite}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function UsersPage({ currentProfile }: Props) {
   const { t } = useLang();
   const { defs } = useRoleDefinitions();
-  const [tab, setTab] = useState<'pending' | 'all' | 'roles'>('pending');
+  const [tab, setTab] = useState<'pending' | 'all' | 'invites' | 'roles'>('pending');
+  const [inviteRefreshKey, setInviteRefreshKey] = useState(0);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [requestManagerId, setRequestManagerId] = useState<string | null>(null);
   const [checkAgainId, setCheckAgainId] = useState<string | null>(null);
@@ -955,7 +1074,12 @@ export default function UsersPage({ currentProfile }: Props) {
         {showInvite && (
           <div className="panel-inset" style={{ marginBottom: 16 }}>
             <h3 style={{ margin: '0 0 4px', fontSize: 15 }}>{t.users.sendSignInCodeTitle}</h3>
-            <InviteUserForm currentProfile={currentProfile} assignableRoles={assignableRoles} />
+            <InviteUserForm
+              currentProfile={currentProfile}
+              assignableRoles={assignableRoles}
+              stores={stores}
+              onCreated={() => setInviteRefreshKey((k) => k + 1)}
+            />
           </div>
         )}
 
@@ -972,6 +1096,12 @@ export default function UsersPage({ currentProfile }: Props) {
           >
             {t.users.allUsers} ({allProfiles.length})
           </button>
+          <button
+            className={tab === 'invites' ? 'active' : ''}
+            onClick={() => setTab('invites')}
+          >
+            {t.invite.adminTab}
+          </button>
           {showRolesTab && (
             <button
               className={tab === 'roles' ? 'active' : ''}
@@ -982,6 +1112,10 @@ export default function UsersPage({ currentProfile }: Props) {
           )}
         </div>
       </div>
+
+      {tab === 'invites' && (
+        <InvitationsAdminPanel refreshKey={inviteRefreshKey} />
+      )}
 
       {tab === 'roles' && showRolesTab && (
         <RolesPermissionsPanel

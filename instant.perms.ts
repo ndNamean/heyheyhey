@@ -96,6 +96,16 @@ const rules = {
     },
   },
 
+  // Invitations: admin SDK only (token hashes must never be client-readable)
+  invitations: {
+    allow: {
+      view: 'false',
+      create: 'false',
+      update: 'false',
+      delete: 'false',
+    },
+  },
+
   // ── Stores ───────────────────────────────────────────────────────────────
   stores: {
     allow: {

@@ -191,12 +191,47 @@ export interface Profile {
   preApprovedAt?: string;
   accessReviewRequestedByEmail?: string;
   accessReviewRequestedAt?: string;
+  invitedStoreIdsJson?: string;
   createdAt: string;
   updatedAt: string;
   cameraOptionsJson?: string;
   roleDefinition?: RoleDefinition;
   // Optional linked data from useQuery:
   stores?: Store[];
+}
+
+export type InvitationStatus =
+  | 'pending'
+  | 'opened'
+  | 'accepted'
+  | 'expired'
+  | 'revoked';
+
+export interface InvitationPublic {
+  status: InvitationStatus;
+  emailMasked: string;
+  email: string;
+  role: string;
+  storeNames: string[];
+  invitedByEmail: string;
+  expiresAt: string;
+  acceptedAt?: string;
+}
+
+export interface InvitationAdminRow {
+  id: string;
+  email: string;
+  role: string;
+  storeIds: string[];
+  storeNames: string[];
+  invitedByEmail: string;
+  status: InvitationStatus;
+  createdAt: string;
+  expiresAt: string;
+  firstOpenedAt: string;
+  lastOpenedAt: string;
+  acceptedAt: string;
+  revokedAt: string;
 }
 
 export interface Store {

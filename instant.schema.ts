@@ -29,10 +29,31 @@ const _schema = i.schema({
       preApprovedAt: i.string().clientRequired(),
       accessReviewRequestedByEmail: i.string().clientRequired(),
       accessReviewRequestedAt: i.string().clientRequired(),
+      invitedStoreIdsJson: i.string().clientRequired(),     // JSON: string[] intended stores from invitation
       createdAt: i.string(),
       updatedAt: i.string(),
       cameraOptionsJson: i.string().clientRequired(),       // JSON: { weatherEnabled, logoEnabled, flashlightLastUsed }
     }),
+
+    // Opaque-token user invitations (managed via admin API)
+    invitations: i.entity({
+      tokenHash: i.string().unique().indexed(),
+      email: i.string().indexed(),
+      role: i.string(),
+      storeIdsJson: i.string(),                              // JSON: string[]
+      invitedByUserId: i.string().indexed(),
+      invitedByEmail: i.string(),
+      status: i.string().indexed(),                          // pending|opened|accepted|expired|revoked
+      createdAt: i.string(),
+      expiresAt: i.string().indexed(),
+      acceptedAt: i.string(),
+      revokedAt: i.string(),
+      firstOpenedAt: i.string(),
+      lastOpenedAt: i.string(),
+      acceptedUserId: i.string(),
+      intendedRedirect: i.string(),
+    }),
+
     stores: i.entity({
       code: i.string().unique(),
       name: i.string(),

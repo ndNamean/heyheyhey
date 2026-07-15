@@ -1,6 +1,6 @@
 /**
- * Upsert InstantDB Custom Magic Code Email so messages include a clickable
- * sign-in link (invite + code). Uses INSTANT_ADMIN_TOKEN.
+ * Upsert InstantDB Custom Magic Code Email (code-only branding).
+ * Invitation deep links are sent separately via Resend.
  *
  *   node scripts/setup-magic-code-email.mjs
  */
@@ -27,8 +27,7 @@ if (!ADMIN_TOKEN) {
   process.exit(1);
 }
 
-const appOrigin = getAppOrigin();
-const body = buildMagicCodeEmailBody(appOrigin);
+const body = buildMagicCodeEmailBody();
 
 const res = await fetch(`https://api.instantdb.com/dash/apps/${APP_ID}/email_templates`, {
   method: 'POST',
@@ -57,6 +56,6 @@ if (!res.ok) {
   process.exit(1);
 }
 
-console.log('Magic code email template saved.');
-console.log('App origin for sign-in links:', appOrigin);
+console.log('Magic code email template saved (code-only).');
+console.log('App origin (invites use /invite?token= via Resend):', getAppOrigin());
 console.log('Template id:', json?.id ?? '(ok)');
