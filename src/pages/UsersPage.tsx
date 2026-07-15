@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
@@ -28,7 +28,7 @@ import {
 } from '../lib/roles';
 import { AREA_MANAGER_ROLE_KEY, OWNER_ROLE_KEY } from '../types';
 import { badgeClass, nowIso } from '../lib/utils';
-import type { ApprovalStatus, Profile, Role, Store } from '../types';
+import type { Profile, Role, Store } from '../types';
 
 interface Props {
   currentProfile: Profile;
@@ -207,7 +207,7 @@ function InviteUserForm({
   );
 }
 
-function StoresDropdown({
+function StoresAssignControl({
   profile,
   allStores,
   canEdit,
@@ -218,29 +218,44 @@ function StoresDropdown({
 }) {
   const { t } = useLang();
   const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState<string | null>(null);
-  const ref = useRef<HTMLDivElement>(null);
-  const assignedIds = new Set((profile.stores ?? []).map((s) => s.id));
+  const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  const assignedIds = (profile.stores ?? []).map((s) => s.id);
   const assignedCodes = allStores
-    .filter((s) => assignedIds.has(s.id))
+    .filter((s) => assignedIds.includes(s.id))
     .map((s) => s.code);
 
-  async function toggle(store: Store) {
+  function openModal() {
     if (!canEdit) return;
-    setSaving(store.id);
+    setSelectedStoreIds([...assignedIds]);
+    setOpen(true);
+  }
+
+  async function save() {
+    setSaving(true);
     try {
-      if (assignedIds.has(store.id)) {
-        await db.transact(db.tx.profiles[profile.id].unlink({ stores: store.id }));
-      } else {
-        await db.transact(db.tx.profiles[profile.id].link({ stores: store.id }));
-      }
+      const prev = new Set(assignedIds);
+      const next = new Set(selectedStoreIds);
+      const txs = [
+        ...[...next]
+          .filter((id) => !prev.has(id))
+          .map((id) => db.tx.profiles[profile.id].link({ stores: id })),
+        ...[...prev]
+          .filter((id) => !next.has(id))
+          .map((id) => db.tx.profiles[profile.id].unlink({ stores: id })),
+      ];
+      if (txs.length) await db.transact(txs);
+      setOpen(false);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.errors.saveFailed);
     } finally {
-      setSaving(null);
+      setSaving(false);
     }
   }
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
+    <>
       <button
         className="secondary"
         style={{
@@ -252,51 +267,43 @@ function StoresDropdown({
           gap: 6,
           opacity: canEdit ? 1 : 0.6,
         }}
-        onClick={() => canEdit && setOpen((v) => !v)}
+        onClick={openModal}
         title={canEdit ? t.users.manageStoresTitle : t.users.noPermissionStores}
       >
         <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {assignedCodes.length ? assignedCodes.join(', ') : t.common.none}
         </span>
-        {canEdit && <span style={{ opacity: 0.5 }}>▾</span>}
+        {canEdit && <span style={{ opacity: 0.5 }}>✎</span>}
       </button>
 
       {open && (
-        <>
-          <div
-            style={{ position: 'fixed', inset: 0, zIndex: 99 }}
-            onClick={() => setOpen(false)}
+        <ModalShell
+          title={t.users.assignStores}
+          onClose={() => !saving && setOpen(false)}
+        >
+          <p className="small" style={{ marginTop: 0 }}>
+            <strong>{profile.displayName || profile.email}</strong>
+          </p>
+          <p className="small">{profile.email}</p>
+
+          <label style={{ marginTop: 12, display: 'block' }}>{t.users.assignStores}</label>
+          <StorePicker
+            stores={allStores}
+            selectedStoreIds={selectedStoreIds}
+            onChange={setSelectedStoreIds}
           />
-          <div
-            className="dropdown-panel dropdown-panel--below"
-            style={{ zIndex: 100 }}
-          >
-            {allStores.length === 0 && (
-              <p className="small" style={{ padding: '4px 8px', margin: 0 }}>
-                {t.stores.noStores}
-              </p>
-            )}
-            {allStores.map((store) => (
-              <label
-                key={store.id}
-                className={`dropdown-check-row${saving === store.id ? ' dropdown-check-row--saving' : ''}`}
-              >
-                <input
-                  type="checkbox"
-                  style={{ width: 16, height: 16 }}
-                  checked={assignedIds.has(store.id)}
-                  onChange={() => toggle(store)}
-                  disabled={saving === store.id}
-                />
-                <span style={{ fontSize: 13 }}>
-                  <strong>{store.code}</strong> — {store.name}
-                </span>
-              </label>
-            ))}
+
+          <div className="capture-actions" style={{ marginTop: 20 }}>
+            <button className="secondary" onClick={() => setOpen(false)} disabled={saving}>
+              {t.common.cancel}
+            </button>
+            <button onClick={save} disabled={saving}>
+              {saving ? t.common.saving : t.common.save}
+            </button>
           </div>
-        </>
+        </ModalShell>
       )}
-    </div>
+    </>
   );
 }
 
@@ -1068,7 +1075,7 @@ export default function UsersPage({ currentProfile }: Props) {
                     </td>
 
                     <td>
-                      <StoresDropdown
+                      <StoresAssignControl
                         profile={p}
                         allStores={stores}
                         canEdit={isAdmin}
