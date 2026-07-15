@@ -12,6 +12,7 @@ import {
   buildItemReviewEvent,
   buildReportFinalizedEvent,
 } from '../lib/reviewEvents';
+import { resolveActorDisplay } from '../lib/actorDisplay';
 import { badgeClass, nowIso } from '../lib/utils';
 import ProofPhoto from '../components/ProofPhoto';
 import ProofMediaDetails from '../components/ProofMediaDetails';
@@ -182,6 +183,11 @@ export default function ReviewPage({ profile }: Props) {
       {reports.map((report) => {
         const responses = (report.responses ?? []) as ReportResponse[];
         const pendingCount = responses.filter((r) => r.status === 'waiting_approval').length;
+        const reportSubmitterName = resolveActorDisplay(
+          report.submittedByUserId,
+          undefined,
+          allProfiles,
+        );
 
         return (
           <div className="card" key={report.id}>
@@ -191,7 +197,8 @@ export default function ReviewPage({ profile }: Props) {
                   {report.storeCode} — {report.templateName}
                 </h2>
                 <p className="small" style={{ margin: '4px 0 0' }}>
-                  {report.reportDate} · {t.review.submittedBy} {report.submittedByRole} ·{' '}
+                  {report.reportDate} · {t.review.submittedBy} {reportSubmitterName}
+                  {report.submittedByRole ? ` (${report.submittedByRole})` : ''} ·{' '}
                   <span className={badgeClass(report.status)}>{statusLabel(t, report.status)}</span> ·{' '}
                   {report.completionPercent ?? 0}% {t.review.percentComplete}
                 </p>
@@ -209,6 +216,11 @@ export default function ReviewPage({ profile }: Props) {
 
             {responses.map((resp) => {
               const media = (resp.media ?? []) as MediaRecord[];
+              const itemSubmitterName = resolveActorDisplay(
+                resp.submittedByUserId || report.submittedByUserId,
+                undefined,
+                allProfiles,
+              );
               return (
                 <div className="item-card" key={resp.id} style={{ marginTop: 12 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -216,7 +228,7 @@ export default function ReviewPage({ profile }: Props) {
                     <span className={badgeClass(resp.status)}>{statusLabel(t, resp.status)}</span>
                   </div>
                   <p className="small">
-                    By {resp.submittedByRole} · {resp.section} · {resp.proofType}
+                    By {itemSubmitterName} · {resp.section} · {resp.proofType}
                   </p>
                   {resp.note && (
                     <p>
