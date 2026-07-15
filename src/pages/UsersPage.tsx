@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
@@ -43,25 +44,27 @@ function ModalShell({
   children: React.ReactNode;
   onClose: () => void;
 }) {
-  return (
+  return createPortal(
     <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 16,
-        zIndex: 300,
-      }}
+      className="modal-overlay"
+      style={{ alignItems: 'center', zIndex: 300 }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="card" style={{ width: '100%', maxWidth: 480, margin: 0 }}>
+      <div
+        className="card"
+        style={{
+          width: '100%',
+          maxWidth: 480,
+          margin: 0,
+          maxHeight: '90vh',
+          overflowY: 'auto',
+        }}
+      >
         <h2 style={{ marginTop: 0 }}>{title}</h2>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
