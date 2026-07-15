@@ -372,6 +372,189 @@ export function effectiveFromYmd(isoOrYmd: string | undefined): string {
   return isoOrYmd.trim().slice(0, 10);
 }
 
+export function parseYmdParts(ymd: string): { y: number; m: number; d: number } {
+  const [y, m, d] = ymd.slice(0, 10).split('-').map(Number);
+  return { y, m, d };
+}
+
+/** Weekday of a calendar YMD using UTC noon so local TZ does not shift the day. */
+export function weekdayOfYmd(ymd: string): number {
+  const { y, m, d } = parseYmdParts(ymd);
+  return new Date(Date.UTC(y, m - 1, d, 12, 0, 0)).getUTCDay();
+}
+
+export function lastDayOfMonth(year: number, month1Based: number): number {
+  return new Date(Date.UTC(year, month1Based, 0)).getUTCDate();
+}
+
+/** ISO week token like `2026-W29` for weekly occurrence keys. */
+export function isoWeekPeriodToken(ymd: string): string {
+  const { y, m, d } = parseYmdParts(ymd);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const isoYear = date.getUTCFullYear();
+  const yearStart = new Date(Date.UTC(isoYear, 0, 1));
+  const weekNo = Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${isoYear}-W${String(weekNo).padStart(2, '0')}`;
+}
+
+export function buildScheduleOccurrenceKey(opts: {
+  templateId: string;
+  itemId: string;
+  storeId: string;
+  recurrence: ScheduleRecurrence;
+  dateYmd: string;
+}): string {
+  const day = opts.dateYmd.slice(0, 10);
+  let period: string;
+  if (opts.recurrence === 'daily') {
+    period = day;
+  } else if (opts.recurrence === 'weekly') {
+    period = isoWeekPeriodToken(day);
+  } else {
+    period = day.slice(0, 7);
+  }
+  return `${opts.templateId}:${opts.itemId}:${opts.storeId}:${period}`;
+}
+
+/**
+ * Scheduled due timestamp for an item on a calendar date.
+ * Asia/Ho_Chi_Minh is fixed UTC+7 (no DST).
+ */
+export function getScheduledDueAt(opts: {
+  dateYmd: string;
+  dueTimeHhmm: string;
+  timezone?: string;
+}): string {
+  const day = opts.dateYmd.slice(0, 10);
+  const time = opts.dueTimeHhmm.trim();
+  if (!isValidDueTime(time)) {
+    throw new Error(`Invalid due time: ${opts.dueTimeHhmm}`);
+  }
+  const [hh, mm] = time.split(':');
+  const offset =
+    !opts.timezone || opts.timezone === DEFAULT_SCHEDULE_TIMEZONE ? '+07:00' : '+07:00';
+  return `${day}T${hh.padStart(2, '0')}:${mm.padStart(2, '0')}:00${offset}`;
+}
+
+/** Whether `dateYmd` is an expected occurrence date for the given schedule. */
+export function isScheduledDateForSchedule(
+  schedule: TemplateSchedule,
+  dateYmd: string,
+): boolean {
+  if (!schedule.enabled || !schedule.recurrence) return false;
+
+  const day = dateYmd.slice(0, 10);
+  if (schedule.effectiveFrom) {
+    const from = schedule.effectiveFrom.slice(0, 10);
+    if (day < from) return false;
+  }
+
+  const dow = weekdayOfYmd(day);
+
+  if (schedule.recurrence === 'daily') {
+    return (schedule.daily?.daysOfWeek ?? []).includes(dow);
+  }
+
+  if (schedule.recurrence === 'weekly') {
+    return schedule.weekly?.dayOfWeek === dow;
+  }
+
+  const { y, m, d } = parseYmdParts(day);
+  const target = schedule.monthly?.dayOfMonth ?? 1;
+  if (target === 'last') return d === lastDayOfMonth(y, m);
+  return d === target;
+}
+
+export type ScheduleVersionRow = {
+  id: string;
+  scheduleJson: string;
+  effectiveFrom: string;
+  effectiveTo: string;
+};
+
+/**
+ * Resolve the schedule version active on `dateYmd`.
+ * `effectiveTo` is treated as exclusive (version applies while date < effectiveTo).
+ */
+export function resolveActiveScheduleVersion(
+  versions: ScheduleVersionRow[],
+  dateYmd: string,
+): { id: string; schedule: TemplateSchedule } | null {
+  const day = dateYmd.slice(0, 10);
+  const candidates = versions
+    .filter((v) => {
+      const from = (v.effectiveFrom || '').slice(0, 10);
+      const to = (v.effectiveTo || '').trim().slice(0, 10);
+      if (from && day < from) return false;
+      if (to && day >= to) return false;
+      return true;
+    })
+    .sort((a, b) => (b.effectiveFrom || '').localeCompare(a.effectiveFrom || ''));
+
+  for (const v of candidates) {
+    const schedule = parseTemplateSchedule(v.scheduleJson);
+    if (schedule.enabled) return { id: v.id, schedule };
+  }
+  return null;
+}
+
+export type ScheduleCaptureFields = {
+  scheduleOccurrenceKey: string;
+  scheduledDueAt: string;
+  firstCompletedAt: string;
+  scheduleVersionId: string;
+};
+
+/**
+ * Build additive schedule capture fields for a completed checklist item.
+ * Returns null when scheduling does not apply (disabled, wrong day, missing time, etc.).
+ */
+export function buildScheduleCaptureForItem(opts: {
+  templateId: string;
+  itemId: string;
+  storeId: string;
+  reportDateYmd: string;
+  completedAtIso: string;
+  schedule: TemplateSchedule;
+  scheduleVersionId: string;
+}): ScheduleCaptureFields | null {
+  const { schedule } = opts;
+  if (!schedule.enabled || !schedule.recurrence) return null;
+  if (!isScheduledDateForSchedule(schedule, opts.reportDateYmd)) return null;
+
+  const dueTime = schedule.itemDueTimes?.[opts.itemId]?.trim();
+  if (!dueTime || !isValidDueTime(dueTime)) return null;
+
+  return {
+    scheduleOccurrenceKey: buildScheduleOccurrenceKey({
+      templateId: opts.templateId,
+      itemId: opts.itemId,
+      storeId: opts.storeId,
+      recurrence: schedule.recurrence,
+      dateYmd: opts.reportDateYmd,
+    }),
+    scheduledDueAt: getScheduledDueAt({
+      dateYmd: opts.reportDateYmd,
+      dueTimeHhmm: dueTime,
+      timezone: schedule.timezone,
+    }),
+    firstCompletedAt: opts.completedAtIso,
+    scheduleVersionId: opts.scheduleVersionId,
+  };
+}
+
+export function findDuplicateOccurrenceKeys(
+  existingKeys: Iterable<string>,
+  candidateKeys: string[],
+): string[] {
+  const set = new Set(
+    [...existingKeys].map((k) => k.trim()).filter(Boolean),
+  );
+  return [...new Set(candidateKeys.filter((k) => k && set.has(k)))];
+}
+
 // ─── Spreadsheet (Excel) helpers — preserved for import/export ───────────────
 
 export interface SpreadsheetScheduleFields {

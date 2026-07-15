@@ -208,6 +208,8 @@ export const sectionsEn = {
     submissionFailed: 'Submission failed',
     selectStoreTemplateFirst: 'Select a store and template first',
     wizardNav: 'Checklist steps',
+    duplicateScheduleOccurrence:
+      'This scheduled task was already submitted for this period. Duplicate submissions are not counted again.',
   },
   profile: {
     title: 'Profile',
@@ -941,6 +943,8 @@ export const sectionsVi = {
     submissionFailed: 'Nộp báo cáo thất bại',
     selectStoreTemplateFirst: 'Chọn cửa hàng và mẫu trước',
     wizardNav: 'Các bước checklist',
+    duplicateScheduleOccurrence:
+      'Nhiệm vụ theo lịch này đã được nộp trong kỳ này. Các lần nộp trùng sẽ không được tính thêm.',
   },
   profile: {
     title: 'Hồ sơ',

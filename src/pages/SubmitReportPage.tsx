@@ -9,6 +9,12 @@ import {
   buildItemResubmittedEvents,
   buildReportSubmittedEvents,
 } from '../lib/reviewEvents';
+import {
+  buildScheduleCaptureForItem,
+  findDuplicateOccurrenceKeys,
+  parseTemplateSchedule,
+  resolveActiveScheduleVersion,
+} from '../lib/templateSchedule';
 import { BACK_PRIORITY, useNativeBack } from '../lib/nativeBack';
 import TimemarkCamera from '../components/TimemarkCamera';
 import type {
@@ -20,6 +26,7 @@ import type {
   Store,
   Template,
   TemplateItem,
+  TemplateScheduleVersion,
   UploadedMedia,
 } from '../types';
 
@@ -63,7 +70,7 @@ export default function SubmitReportPage({
 
   const { data } = db.useQuery({
     stores: {},
-    templates: { items: {}, stores: {} },
+    templates: { items: {}, stores: {}, scheduleVersions: {} },
     ...(correctionReportId
       ? {
           reports: {
@@ -71,7 +78,14 @@ export default function SubmitReportPage({
             responses: { media: { file: {} } },
           },
         }
-      : {}),
+      : storeId && templateId
+        ? {
+            reports: {
+              $: { where: { storeId, templateId } },
+              responses: {},
+            },
+          }
+        : {}),
   });
 
   const correctionReport: Report | undefined = correctionReportId
@@ -277,9 +291,38 @@ export default function SubmitReportPage({
     try {
       const now = nowIso();
 
+      const versions = (selectedTemplate.scheduleVersions ?? []) as TemplateScheduleVersion[];
+      const versionResolved = resolveActiveScheduleVersion(
+        versions.map((v) => ({
+          id: v.id,
+          scheduleJson: v.scheduleJson,
+          effectiveFrom: v.effectiveFrom,
+          effectiveTo: v.effectiveTo,
+        })),
+        reportDate,
+      );
+      const fallbackSchedule = parseTemplateSchedule(selectedTemplate.scheduleJson);
+      const activeSchedule =
+        versionResolved?.schedule ??
+        (fallbackSchedule.enabled &&
+        (!fallbackSchedule.effectiveFrom ||
+          reportDate >= fallbackSchedule.effectiveFrom.slice(0, 10))
+          ? fallbackSchedule
+          : null);
+      const scheduleVersionId = versionResolved?.id ?? '';
+
+      const existingOccurrenceKeys = new Set<string>();
+      for (const report of (data?.reports ?? []) as Report[]) {
+        for (const resp of (report.responses ?? []) as ReportResponse[]) {
+          if (resp.scheduleOccurrenceKey?.trim()) {
+            existingOccurrenceKeys.add(resp.scheduleOccurrenceKey.trim());
+          }
+        }
+      }
+
       const responseItems = visibleItems.map((item) => {
         const r = responses[item.id] ?? EMPTY_RESPONSE;
-        return {
+        const base = {
           id: id(),
           templateItemId: item.id,
           section: item.section,
@@ -293,7 +336,7 @@ export default function SubmitReportPage({
           ticked: r.ticked,
           numberValue: r.numberValue,
           note: r.note,
-          status: r.ticked ? 'waiting_approval' : 'not_started',
+          status: r.ticked ? ('waiting_approval' as const) : ('not_started' as const),
           rejectionReason: '',
           feedbackCode: '',
           feedbackNote: '',
@@ -304,8 +347,41 @@ export default function SubmitReportPage({
           approvedAt: '',
           updatedAt: now,
           mediaItems: r.mediaItems,
+          scheduleOccurrenceKey: '',
+          scheduledDueAt: '',
+          firstCompletedAt: '',
+          scheduleVersionId: '',
         };
+
+        if (r.ticked && activeSchedule) {
+          const capture = buildScheduleCaptureForItem({
+            templateId: selectedTemplate.id,
+            itemId: item.id,
+            storeId: selectedStore.id,
+            reportDateYmd: reportDate,
+            completedAtIso: now,
+            schedule: activeSchedule,
+            scheduleVersionId,
+          });
+          if (capture) {
+            base.scheduleOccurrenceKey = capture.scheduleOccurrenceKey;
+            base.scheduledDueAt = capture.scheduledDueAt;
+            base.firstCompletedAt = capture.firstCompletedAt;
+            base.scheduleVersionId = capture.scheduleVersionId;
+          }
+        }
+
+        return base;
       });
+
+      const candidateKeys = responseItems
+        .map((r) => r.scheduleOccurrenceKey)
+        .filter(Boolean);
+      const duplicates = findDuplicateOccurrenceKeys(existingOccurrenceKeys, candidateKeys);
+      if (duplicates.length) {
+        alert(t.submit.duplicateScheduleOccurrence);
+        return;
+      }
 
       const completionPercent = calcCompletion(
         responseItems.map((r) => ({ ticked: r.ticked, required: r.required })),
@@ -359,6 +435,10 @@ export default function SubmitReportPage({
             approvedByUserId: '',
             approvedAt: '',
             updatedAt: now,
+            scheduleOccurrenceKey: resp.scheduleOccurrenceKey,
+            scheduledDueAt: resp.scheduledDueAt,
+            firstCompletedAt: resp.firstCompletedAt,
+            scheduleVersionId: resp.scheduleVersionId,
           })
           .link({ report: activeReportId }),
       );

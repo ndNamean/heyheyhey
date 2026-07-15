@@ -293,6 +293,11 @@ export interface ReportResponse {
   approvedByUserId: string;
   approvedAt: string;
   updatedAt: string;
+  /** Additive schedule fields — blank when unscheduled */
+  scheduleOccurrenceKey?: string;
+  scheduledDueAt?: string;
+  firstCompletedAt?: string;
+  scheduleVersionId?: string;
   media?: MediaRecord[];
 }
 

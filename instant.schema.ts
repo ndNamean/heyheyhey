@@ -124,6 +124,11 @@ const _schema = i.schema({
       approvedByUserId: i.string(),
       approvedAt: i.string(),
       updatedAt: i.string(),
+      // Additive schedule capture (Phase 2) — blank when unscheduled / not applicable
+      scheduleOccurrenceKey: i.string().indexed(),
+      scheduledDueAt: i.string(),
+      firstCompletedAt: i.string(),
+      scheduleVersionId: i.string(),
     }),
 
     // ─── Media / photo records ───────────────────────────────────────────────
