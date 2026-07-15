@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import { FAILURE_CATEGORIES, PROOF_TYPES, ROLES } from './roles';
 import {
   booleanToSpreadsheet,
+  isValidDueTime,
   normalizeSpreadsheetBoolean,
   scheduleJsonFromSpreadsheet,
   spreadsheetScheduleFromJson,
@@ -26,7 +27,7 @@ const SHEET_STORES = 'Stores';
 const SHEET_ALLOWED = 'Allowed Values';
 const SHEET_METADATA = '_Metadata';
 
-const ITEM_HEADERS = [
+const ITEM_HEADERS_BASE = [
   'Item Key',
   'Source Item ID',
   'Section',
@@ -40,6 +41,10 @@ const ITEM_HEADERS = [
   'Failure Category',
   'Sort Order',
 ] as const;
+
+const ITEM_HEADER_COMPLETION_TIME = 'Completion Time';
+
+const ITEM_HEADERS = [...ITEM_HEADERS_BASE, ITEM_HEADER_COMPLETION_TIME] as const;
 
 const STORE_HEADERS = ['Store Code', 'Store Name', 'Included'] as const;
 
@@ -118,20 +123,66 @@ function buildReadmeRows(payload: ChecklistTemplateExport): string[][] {
 
 function buildTemplateRows(payload: ChecklistTemplateExport): string[][] {
   const schedule = spreadsheetScheduleFromJson(payload.template.scheduleJson);
+  const enabled = schedule.scheduleEnabled;
   return [
     ['Field', 'Value', 'Editable', 'Notes'],
     ['Template Name', payload.template.name, 'Yes', 'Required'],
     ['Report Type', payload.template.reportType, 'Yes', 'Use allowed values'],
     ['Active', booleanToSpreadsheet(payload.template.active), 'Yes', 'TRUE or FALSE'],
-    ['Schedule Enabled', booleanToSpreadsheet(schedule.scheduleEnabled), 'Yes', 'TRUE or FALSE'],
-    ['Schedule Type', schedule.scheduleType, 'Yes', 'Optional recurrence'],
-    ['Schedule Time', schedule.scheduleTime, 'Yes', 'HH:mm'],
-    ['Schedule Days', schedule.scheduleDays, 'Yes', 'Comma-separated days'],
+    ['Schedule Enabled', booleanToSpreadsheet(enabled), 'Yes', 'TRUE or FALSE'],
+    [
+      'Schedule Type',
+      enabled ? schedule.scheduleType : '',
+      'Yes',
+      'Daily, Weekly, or Monthly',
+    ],
+    [
+      'Schedule Time',
+      enabled ? schedule.scheduleTime : '',
+      'Yes',
+      'Legacy HH:mm fallback (prefer Completion Time on Items)',
+    ],
+    [
+      'Schedule Days',
+      enabled ? schedule.scheduleDays : '',
+      'Yes',
+      'Legacy days column (prefer Daily/Weekly/Monthly Day fields)',
+    ],
     [
       'Schedule Assigned Role',
-      schedule.scheduleAssignedRole,
+      enabled ? schedule.scheduleAssignedRole : '',
       'Yes',
-      'Optional assigned role',
+      'Optional legacy field',
+    ],
+    [
+      'Daily Days',
+      enabled && schedule.scheduleType.toLowerCase() === 'daily' ? schedule.dailyDays : '',
+      'Yes',
+      'Comma-separated: Mon,Tue,...',
+    ],
+    [
+      'Weekly Day',
+      enabled && schedule.scheduleType.toLowerCase() === 'weekly' ? schedule.weeklyDay : '',
+      'Yes',
+      'e.g. Monday',
+    ],
+    [
+      'Monthly Day',
+      enabled && schedule.scheduleType.toLowerCase() === 'monthly' ? schedule.monthlyDay : '',
+      'Yes',
+      '1–28 or Last',
+    ],
+    [
+      'Schedule Timezone',
+      enabled ? schedule.scheduleTimezone || 'Asia/Ho_Chi_Minh' : '',
+      'Yes',
+      'Default Asia/Ho_Chi_Minh',
+    ],
+    [
+      'Schedule Effective From',
+      enabled ? schedule.scheduleEffectiveFrom : '',
+      'Yes',
+      'YYYY-MM-DD',
     ],
   ];
 }
@@ -152,6 +203,7 @@ function buildItemsRows(items: ExportedChecklistItem[]): string[][] {
       String(item.weight),
       item.failureCategory,
       String(item.sortOrder),
+      item.completionTime ?? '',
     ]);
   }
   return rows;
@@ -178,6 +230,9 @@ function buildAllowedValuesRows(reportTypes: string[]): string[][] {
   rows.push(['Boolean', 'FALSE']);
   for (const rt of reportTypes) rows.push(['Report Type', rt]);
   for (const fc of FAILURE_CATEGORIES) rows.push(['Failure Category', fc]);
+  rows.push(['Schedule Type', 'Daily']);
+  rows.push(['Schedule Type', 'Weekly']);
+  rows.push(['Schedule Type', 'Monthly']);
   rows.push(['Day', 'Monday']);
   rows.push(['Day', 'Tuesday']);
   rows.push(['Day', 'Wednesday']);
@@ -185,6 +240,7 @@ function buildAllowedValuesRows(reportTypes: string[]): string[][] {
   rows.push(['Day', 'Friday']);
   rows.push(['Day', 'Saturday']);
   rows.push(['Day', 'Sunday']);
+  rows.push(['Monthly Day', 'Last']);
   return rows;
 }
 
@@ -222,7 +278,7 @@ export function exportTemplateAsExcel(template: Template, allStores: Store[]): {
   XLSX.utils.book_append_sheet(wb, templateWs, SHEET_TEMPLATE);
 
   const itemsWs = sheetFromRows(buildItemsRows(payload.items));
-  setColWidths(itemsWs, [10, 28, 14, 24, 40, 14, 10, 14, 24, 8, 16, 10]);
+  setColWidths(itemsWs, [10, 28, 14, 24, 40, 14, 10, 14, 24, 8, 16, 10, 12]);
   freezeTopRow(itemsWs);
   XLSX.utils.book_append_sheet(wb, itemsWs, SHEET_ITEMS);
 
@@ -325,7 +381,7 @@ export function parseExcelTemplateImport(buffer: ArrayBuffer): ParsedImportRoot 
 
   let wb: XLSX.WorkBook;
   try {
-    wb = XLSX.read(buffer, { type: 'array', cellDates: false });
+    wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: false });
   } catch {
     throw new ExcelParseError('Could not read the Excel workbook.');
   }
@@ -378,6 +434,11 @@ export function parseExcelTemplateImport(buffer: ArrayBuffer): ParsedImportRoot 
     scheduleTime: templateMap.get('Schedule Time') ?? '',
     scheduleDays: templateMap.get('Schedule Days') ?? '',
     scheduleAssignedRole: templateMap.get('Schedule Assigned Role') ?? '',
+    scheduleTimezone: templateMap.get('Schedule Timezone') ?? '',
+    scheduleEffectiveFrom: templateMap.get('Schedule Effective From') ?? '',
+    dailyDays: templateMap.get('Daily Days') ?? '',
+    weeklyDay: templateMap.get('Weekly Day') ?? '',
+    monthlyDay: templateMap.get('Monthly Day') ?? '',
   };
 
   for (const schedErr of validateSpreadsheetSchedule(scheduleFields)) {
@@ -388,11 +449,19 @@ export function parseExcelTemplateImport(buffer: ArrayBuffer): ParsedImportRoot 
   if (!itemsRows.length) {
     errors.push(`${SHEET_ITEMS}: worksheet is empty.`);
   } else {
-    assertHeaders(itemsRows[0], ITEM_HEADERS, SHEET_ITEMS, errors);
+    assertHeaders(itemsRows[0], ITEM_HEADERS_BASE, SHEET_ITEMS, errors);
+    const extraHeader = (itemsRows[0][12] ?? '').trim();
+    if (extraHeader && extraHeader !== ITEM_HEADER_COMPLETION_TIME) {
+      errors.push(
+        `${SHEET_ITEMS}: unexpected column 13 "${extraHeader}". Expected "${ITEM_HEADER_COMPLETION_TIME}" or omit for older workbooks.`,
+      );
+    }
   }
 
   const parsedItems: ExportedChecklistItem[] = [];
   const seenItemKeys = new Set<string>();
+  const hasCompletionTimeColumn =
+    ((itemsRows[0]?.[12] ?? '').trim() === ITEM_HEADER_COMPLETION_TIME);
 
   for (let r = 1; r < itemsRows.length; r++) {
     const row = itemsRows[r];
@@ -428,6 +497,20 @@ export function parseExcelTemplateImport(buffer: ArrayBuffer): ParsedImportRoot 
 
     const sourceItemId = (row[1] ?? '').trim() || undefined;
 
+    let completionTime: string | undefined;
+    if (hasCompletionTimeColumn) {
+      const rawTime = (row[12] ?? '').trim();
+      if (rawTime) {
+        if (!isValidDueTime(rawTime)) {
+          errors.push(
+            `${SHEET_ITEMS} row ${rowNum}: Completion Time must use HH:mm format.`,
+          );
+        } else {
+          completionTime = rawTime;
+        }
+      }
+    }
+
     if (section.trim() && title.trim() && requirement.trim() && requiredResult.ok && weight !== null && sortOrder !== null) {
       parsedItems.push({
         sourceItemId,
@@ -441,12 +524,30 @@ export function parseExcelTemplateImport(buffer: ArrayBuffer): ParsedImportRoot 
         weight,
         failureCategory: row[10] ?? '',
         sortOrder,
+        ...(completionTime ? { completionTime } : {}),
       });
     }
   }
 
   if (!parsedItems.length) {
     errors.push(`${SHEET_ITEMS}: at least one checklist item is required.`);
+  }
+
+  // When schedule enabled, required items need a completion time (row or legacy Schedule Time).
+  if (scheduleFields.scheduleEnabled) {
+    const legacyTime = scheduleFields.scheduleTime.trim();
+    const legacyOk = legacyTime && isValidDueTime(legacyTime);
+    for (const item of parsedItems) {
+      if (!item.required) continue;
+      if (item.completionTime) continue;
+      if (legacyOk) {
+        item.completionTime = legacyTime;
+        continue;
+      }
+      errors.push(
+        `${SHEET_ITEMS}: required item "${item.title}" needs a Completion Time when schedule is enabled.`,
+      );
+    }
   }
 
   const storesRows = readSheetRows(wb, SHEET_STORES);
@@ -487,6 +588,14 @@ export function parseExcelTemplateImport(buffer: ArrayBuffer): ParsedImportRoot 
   parsedItems.sort((a, b) => a.sortOrder - b.sortOrder);
   const items = parsedItems.map((item, index) => ({ ...item, sortOrder: index }));
 
+  // Provisional scheduleJson — item due times keyed by sourceItemId where present.
+  const provisionalTimes: Record<string, string> = {};
+  for (const item of items) {
+    if (item.completionTime && item.sourceItemId) {
+      provisionalTimes[item.sourceItemId] = item.completionTime;
+    }
+  }
+
   const payload: ChecklistTemplateExport = {
     schema: TEMPLATE_SCHEMA,
     version: TEMPLATE_VERSION,
@@ -497,7 +606,7 @@ export function parseExcelTemplateImport(buffer: ArrayBuffer): ParsedImportRoot 
     template: {
       name: name.trim(),
       reportType: reportType.trim(),
-      scheduleJson: scheduleJsonFromSpreadsheet(scheduleFields),
+      scheduleJson: scheduleJsonFromSpreadsheet(scheduleFields, provisionalTimes),
       active: activeResult.ok ? activeResult.value : false,
     },
     storeCodes,

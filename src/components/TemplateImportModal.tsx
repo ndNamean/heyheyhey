@@ -17,6 +17,7 @@ import {
   type ValidationResult,
 } from '../lib/templateValidation';
 import { createTemplate, updateTemplate } from '../lib/templatePersistence';
+import { attachDraftItemDueTimes, spreadsheetScheduleFromJson } from '../lib/templateSchedule';
 import type { Profile, Store, Template } from '../types';
 
 type ImportMode = 'create' | 'update';
@@ -227,11 +228,18 @@ export default function TemplateImportModal({
     try {
       if (mode === 'create') {
         const items = buildCreateImportDrafts(normalized.items);
+        const legacyTime = spreadsheetScheduleFromJson(normalized.scheduleJson).scheduleTime;
+        const scheduleJson = attachDraftItemDueTimes(
+          normalized.scheduleJson,
+          normalized.items,
+          items,
+          legacyTime,
+        );
         const templateId = await createTemplate({
           profileUserId: profile.userId,
           name: createName.trim() || normalized.name,
           reportType: normalized.reportType,
-          scheduleJson: normalized.scheduleJson,
+          scheduleJson,
           active: normalized.active,
           storeIds: normalized.storeIds,
           items,
@@ -249,13 +257,20 @@ export default function TemplateImportModal({
       );
       const prevStoreIds = (targetTemplate.stores ?? []).map((s: Store) => s.id);
       const items = buildUpdateImportDrafts(normalized.items, targetItemIds);
+      const legacyTime = spreadsheetScheduleFromJson(normalized.scheduleJson).scheduleTime;
+      const scheduleJson = attachDraftItemDueTimes(
+        normalized.scheduleJson,
+        normalized.items,
+        items,
+        legacyTime,
+      );
 
       await updateTemplate({
         templateId: targetTemplate.id,
         profileUserId: profile.userId,
         name: normalized.name,
         reportType: normalized.reportType,
-        scheduleJson: normalized.scheduleJson,
+        scheduleJson,
         prevScheduleJson: targetTemplate.scheduleJson,
         openScheduleVersionId:
           ((targetTemplate.scheduleVersions ?? []) as { id: string; effectiveTo: string }[]).find(

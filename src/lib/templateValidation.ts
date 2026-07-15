@@ -7,6 +7,7 @@ import {
   type ParsedImportRoot,
 } from './templateTransfer';
 import type { TemplateItemDraft } from './templatePersistence';
+import { isValidDueTime } from './templateSchedule';
 
 export type ValidationSeverity = 'error' | 'warning';
 
@@ -31,6 +32,7 @@ export interface NormalizedImportItem {
   weight: number;
   failureCategory: string;
   sortOrder: number;
+  completionTime?: string;
 }
 
 export interface NormalizedImport {
@@ -315,6 +317,21 @@ function validateItem(
 
   if (!section || !title || !requirement || !proofType || !assignedRole) return null;
 
+  let completionTime: string | undefined;
+  if ('completionTime' in raw && raw.completionTime != null && raw.completionTime !== '') {
+    if (typeof raw.completionTime !== 'string' || !isValidDueTime(raw.completionTime)) {
+      pushIssue(
+        errors,
+        `items[${index}].completionTime`,
+        'completionTime must use HH:mm format.',
+        'error',
+        index,
+      );
+      return null;
+    }
+    completionTime = raw.completionTime.trim();
+  }
+
   return {
     sourceItemId,
     section: section.trim(),
@@ -327,6 +344,7 @@ function validateItem(
     weight,
     failureCategory,
     sortOrder,
+    ...(completionTime ? { completionTime } : {}),
   };
 }
 

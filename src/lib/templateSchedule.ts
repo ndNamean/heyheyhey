@@ -559,37 +559,115 @@ export function findDuplicateOccurrenceKeys(
 
 export interface SpreadsheetScheduleFields {
   scheduleEnabled: boolean;
+  /** Daily | Weekly | Monthly (or legacy free text) */
   scheduleType: string;
+  /** Legacy template-level HH:mm fallback when item times are absent */
   scheduleTime: string;
+  /** Legacy days column (kept for old workbooks) */
   scheduleDays: string;
   scheduleAssignedRole: string;
+  scheduleTimezone: string;
+  /** YYYY-MM-DD */
+  scheduleEffectiveFrom: string;
+  /** Comma-separated weekday names/shorts for Daily */
+  dailyDays: string;
+  /** Single weekday for Weekly */
+  weeklyDay: string;
+  /** 1–28 or Last for Monthly */
+  monthlyDay: string;
 }
 
-export function spreadsheetScheduleFromJson(scheduleJson: string): SpreadsheetScheduleFields {
-  const defaults: SpreadsheetScheduleFields = {
+const WEEKDAY_NAME_TO_NUM: Record<string, number> = {
+  sunday: 0,
+  sun: 0,
+  monday: 1,
+  mon: 1,
+  tuesday: 2,
+  tue: 2,
+  wednesday: 3,
+  wed: 3,
+  thursday: 4,
+  thu: 4,
+  friday: 5,
+  fri: 5,
+  saturday: 6,
+  sat: 6,
+};
+
+export function parseWeekdayToken(raw: string): number | null {
+  const trimmed = raw.trim().toLowerCase();
+  if (!trimmed) return null;
+  if (/^\d+$/.test(trimmed)) {
+    const n = Number(trimmed);
+    return isValidWeekday(n) ? n : null;
+  }
+  return WEEKDAY_NAME_TO_NUM[trimmed] ?? WEEKDAY_NAME_TO_NUM[trimmed.slice(0, 3)] ?? null;
+}
+
+export function parseWeekdayList(raw: string): number[] {
+  if (!raw.trim()) return [];
+  const days = raw
+    .split(',')
+    .map((part) => parseWeekdayToken(part))
+    .filter((d): d is number => d !== null);
+  return [...new Set(days)];
+}
+
+export function normalizeScheduleTypeToken(raw: string): ScheduleRecurrence | null {
+  const t = raw.trim().toLowerCase();
+  if (t === 'daily' || t === 'weekly' || t === 'monthly') return t;
+  return null;
+}
+
+function emptySpreadsheetSchedule(): SpreadsheetScheduleFields {
+  return {
     scheduleEnabled: false,
     scheduleType: '',
     scheduleTime: '',
     scheduleDays: '',
     scheduleAssignedRole: '',
+    scheduleTimezone: '',
+    scheduleEffectiveFrom: '',
+    dailyDays: '',
+    weeklyDay: '',
+    monthlyDay: '',
   };
+}
 
+export function spreadsheetScheduleFromJson(scheduleJson: string): SpreadsheetScheduleFields {
+  const defaults = emptySpreadsheetSchedule();
   if (!scheduleJson?.trim()) return defaults;
 
   try {
     const parsed = JSON.parse(scheduleJson) as Record<string, unknown>;
     const schedule = parseTemplateSchedule(scheduleJson);
 
+    if (!schedule.enabled) {
+      return {
+        ...defaults,
+        scheduleEnabled: false,
+        scheduleTimezone: '',
+        scheduleEffectiveFrom: '',
+      };
+    }
+
+    let dailyDays = '';
+    let weeklyDay = '';
+    let monthlyDay = '';
     let scheduleDays = '';
+
     if (schedule.recurrence === 'daily' && schedule.daily) {
-      scheduleDays = schedule.daily.daysOfWeek
+      dailyDays = schedule.daily.daysOfWeek
         .map((d) => WEEKDAY_LABELS[d]?.short ?? String(d))
         .join(',');
+      scheduleDays = dailyDays;
     } else if (schedule.recurrence === 'weekly' && schedule.weekly) {
+      weeklyDay = WEEKDAY_LABELS[schedule.weekly.dayOfWeek]?.en ?? '';
       scheduleDays = WEEKDAY_LABELS[schedule.weekly.dayOfWeek]?.short ?? '';
     } else if (schedule.recurrence === 'monthly' && schedule.monthly) {
-      scheduleDays =
+      monthlyDay =
         schedule.monthly.dayOfMonth === 'last' ? 'Last' : String(schedule.monthly.dayOfMonth);
+      scheduleDays = monthlyDay;
     } else if (Array.isArray(parsed.days)) {
       scheduleDays = parsed.days.filter((d): d is string => typeof d === 'string').join(',');
     } else if (typeof parsed.days === 'string') {
@@ -605,7 +683,7 @@ export function spreadsheetScheduleFromJson(scheduleJson: string): SpreadsheetSc
           : '';
 
     return {
-      scheduleEnabled: schedule.enabled,
+      scheduleEnabled: true,
       scheduleType: schedule.recurrence
         ? schedule.recurrence.charAt(0).toUpperCase() + schedule.recurrence.slice(1)
         : typeof parsed.recurrence === 'string'
@@ -615,28 +693,128 @@ export function spreadsheetScheduleFromJson(scheduleJson: string): SpreadsheetSc
       scheduleDays,
       scheduleAssignedRole:
         typeof parsed.assignedRole === 'string' ? parsed.assignedRole : '',
+      scheduleTimezone: schedule.timezone ?? DEFAULT_SCHEDULE_TIMEZONE,
+      scheduleEffectiveFrom: effectiveFromYmd(schedule.effectiveFrom),
+      dailyDays,
+      weeklyDay,
+      monthlyDay,
     };
   } catch {
     return defaults;
   }
 }
 
-export function scheduleJsonFromSpreadsheet(fields: SpreadsheetScheduleFields): string {
-  const obj: Record<string, unknown> = {
-    enabled: fields.scheduleEnabled,
+/**
+ * Build scheduleJson from spreadsheet template fields.
+ * Pass `itemDueTimes` keyed by template item id when available.
+ */
+export function scheduleJsonFromSpreadsheet(
+  fields: SpreadsheetScheduleFields,
+  itemDueTimes?: Record<string, string>,
+): string {
+  if (!fields.scheduleEnabled) {
+    return serializeTemplateSchedule(DISABLED_SCHEDULE);
+  }
+
+  const recurrence =
+    normalizeScheduleTypeToken(fields.scheduleType) ??
+    // Legacy: Schedule Type may already be lowercase from older exports
+    normalizeScheduleTypeToken(fields.scheduleType.trim());
+
+  const schedule: TemplateSchedule = {
+    version: 2,
+    enabled: true,
+    timezone: fields.scheduleTimezone.trim() || DEFAULT_SCHEDULE_TIMEZONE,
   };
-  if (fields.scheduleType.trim()) obj.recurrence = fields.scheduleType.trim();
-  if (fields.scheduleTime.trim()) obj.dueTime = fields.scheduleTime.trim();
-  if (fields.scheduleDays.trim()) {
-    obj.days = fields.scheduleDays
-      .split(',')
-      .map((d) => d.trim())
-      .filter(Boolean);
+
+  if (recurrence) schedule.recurrence = recurrence;
+
+  if (recurrence === 'daily') {
+    const fromDaily = parseWeekdayList(fields.dailyDays);
+    const fromLegacy = parseWeekdayList(fields.scheduleDays);
+    const days = fromDaily.length ? fromDaily : fromLegacy.length ? fromLegacy : [...ALL_DAYS_OF_WEEK];
+    schedule.daily = { daysOfWeek: days };
+  } else if (recurrence === 'weekly') {
+    const day =
+      parseWeekdayToken(fields.weeklyDay) ??
+      parseWeekdayToken(fields.scheduleDays.split(',')[0] ?? '') ??
+      1;
+    schedule.weekly = { dayOfWeek: day };
+  } else if (recurrence === 'monthly') {
+    const raw = (fields.monthlyDay || fields.scheduleDays).trim();
+    if (/^last$/i.test(raw)) {
+      schedule.monthly = { dayOfMonth: 'last' };
+    } else {
+      const n = Number(raw);
+      schedule.monthly = { dayOfMonth: isValidMonthDay(n) ? n : 1 };
+    }
   }
-  if (fields.scheduleAssignedRole.trim()) {
-    obj.assignedRole = fields.scheduleAssignedRole.trim();
+
+  const times: Record<string, string> = {};
+  if (itemDueTimes) {
+    for (const [id, time] of Object.entries(itemDueTimes)) {
+      if (isValidDueTime(time)) times[id] = time.trim();
+    }
   }
-  return JSON.stringify(obj);
+  // Legacy single Schedule Time → applied only when no item times provided
+  if (!Object.keys(times).length && fields.scheduleTime.trim() && isValidDueTime(fields.scheduleTime)) {
+    // Left empty here; callers may broadcast to items. Keep dueTime only via itemDueTimes.
+  }
+  if (Object.keys(times).length) schedule.itemDueTimes = times;
+
+  if (fields.scheduleEffectiveFrom.trim()) {
+    const ymd = fields.scheduleEffectiveFrom.trim().slice(0, 10);
+    schedule.effectiveFrom = effectiveFromIso(ymd);
+  }
+
+  return serializeTemplateSchedule(schedule);
+}
+
+/**
+ * Merge per-item completion times onto a schedule JSON string using draft item ids.
+ * `items` and `drafts` must be parallel arrays (same order).
+ */
+export function attachDraftItemDueTimes(
+  scheduleJson: string,
+  items: { completionTime?: string; sourceItemId?: string }[],
+  drafts: { id: string }[],
+  legacyFallbackTime?: string,
+): string {
+  const schedule = parseTemplateSchedule(scheduleJson);
+  if (!schedule.enabled) return serializeTemplateSchedule(DISABLED_SCHEDULE);
+
+  const itemDueTimes: Record<string, string> = { ...(schedule.itemDueTimes ?? {}) };
+
+  items.forEach((item, index) => {
+    const draftId = drafts[index]?.id;
+    if (!draftId) return;
+    const fromRow = item.completionTime?.trim();
+    if (fromRow && isValidDueTime(fromRow)) {
+      itemDueTimes[draftId] = fromRow;
+      return;
+    }
+    if (item.sourceItemId && itemDueTimes[item.sourceItemId]) {
+      itemDueTimes[draftId] = itemDueTimes[item.sourceItemId];
+      if (item.sourceItemId !== draftId) delete itemDueTimes[item.sourceItemId];
+    }
+  });
+
+  if (!Object.keys(itemDueTimes).length && legacyFallbackTime?.trim() && isValidDueTime(legacyFallbackTime)) {
+    for (const draft of drafts) {
+      itemDueTimes[draft.id] = legacyFallbackTime.trim();
+    }
+  }
+
+  schedule.itemDueTimes = Object.keys(itemDueTimes).length ? itemDueTimes : undefined;
+  return serializeTemplateSchedule(schedule);
+}
+
+export function completionTimeForItem(
+  scheduleJson: string,
+  itemId: string,
+): string {
+  const schedule = parseTemplateSchedule(scheduleJson);
+  return schedule.itemDueTimes?.[itemId]?.trim() ?? '';
 }
 
 export interface ScheduleParseError {
@@ -653,6 +831,59 @@ export function validateSpreadsheetSchedule(
     errors.push({
       field: 'Schedule Time',
       message: 'Schedule Time must use HH:mm format.',
+    });
+  }
+
+  if (!fields.scheduleEnabled) return errors;
+
+  const recurrence = normalizeScheduleTypeToken(fields.scheduleType);
+  if (!recurrence) {
+    errors.push({
+      field: 'Schedule Type',
+      message: 'Schedule Type must be Daily, Weekly, or Monthly when schedule is enabled.',
+    });
+  }
+
+  if (recurrence === 'daily') {
+    const days = parseWeekdayList(fields.dailyDays || fields.scheduleDays);
+    if (!days.length) {
+      errors.push({
+        field: 'Daily Days',
+        message: 'Daily Days must contain valid weekday values (e.g. Mon,Tue,Wed).',
+      });
+    }
+  }
+
+  if (recurrence === 'weekly') {
+    const day = parseWeekdayToken(fields.weeklyDay || fields.scheduleDays.split(',')[0] || '');
+    if (day == null) {
+      errors.push({
+        field: 'Weekly Day',
+        message: 'Weekly Day must be a valid weekday (e.g. Monday).',
+      });
+    }
+  }
+
+  if (recurrence === 'monthly') {
+    const raw = (fields.monthlyDay || fields.scheduleDays).trim();
+    const ok =
+      /^last$/i.test(raw) ||
+      (Number.isInteger(Number(raw)) && isValidMonthDay(Number(raw)));
+    if (!ok) {
+      errors.push({
+        field: 'Monthly Day',
+        message: 'Monthly Day must be 1–28 or Last.',
+      });
+    }
+  }
+
+  if (
+    fields.scheduleEffectiveFrom.trim() &&
+    !/^\d{4}-\d{2}-\d{2}/.test(fields.scheduleEffectiveFrom.trim())
+  ) {
+    errors.push({
+      field: 'Schedule Effective From',
+      message: 'Schedule Effective From must be a YYYY-MM-DD date.',
     });
   }
 

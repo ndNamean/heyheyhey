@@ -1,4 +1,5 @@
 import type { Store, Template, TemplateItem } from '../types';
+import { completionTimeForItem } from './templateSchedule';
 
 export const TEMPLATE_SCHEMA = 'hey-pelo.checklist-template' as const;
 export const TEMPLATE_VERSION = 1 as const;
@@ -31,6 +32,8 @@ export interface ExportedChecklistItem {
   weight: number;
   failureCategory: string;
   sortOrder: number;
+  /** HH:mm completion deadline when template schedule is enabled */
+  completionTime?: string;
 }
 
 const DEFAULT_APPROVER_ROLES = ['leader', 'subleader', 'manager'];
@@ -80,19 +83,23 @@ export function buildExportPayload(template: Template): ChecklistTemplateExport 
       active: template.active,
     },
     storeCodes,
-    items: templateItems.map((item) => ({
-      sourceItemId: item.id,
-      section: item.section,
-      title: item.title,
-      requirement: item.requirement,
-      proofType: item.proofType,
-      required: item.required,
-      assignedRole: item.assignedRole,
-      approverRoles: parseApproverRolesArray(item.approverRolesJson),
-      weight: item.weight,
-      failureCategory: item.failureCategory,
-      sortOrder: item.sortOrder ?? 0,
-    })),
+    items: templateItems.map((item) => {
+      const completionTime = completionTimeForItem(template.scheduleJson, item.id);
+      return {
+        sourceItemId: item.id,
+        section: item.section,
+        title: item.title,
+        requirement: item.requirement,
+        proofType: item.proofType,
+        required: item.required,
+        assignedRole: item.assignedRole,
+        approverRoles: parseApproverRolesArray(item.approverRolesJson),
+        weight: item.weight,
+        failureCategory: item.failureCategory,
+        sortOrder: item.sortOrder ?? 0,
+        ...(completionTime ? { completionTime } : {}),
+      };
+    }),
   };
 }
 

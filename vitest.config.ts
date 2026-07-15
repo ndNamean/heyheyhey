@@ -5,4 +5,7 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
   },
+  define: {
+    'import.meta.env.VITE_INSTANT_APP_ID': JSON.stringify('vitest-test-app-id'),
+  },
 });
