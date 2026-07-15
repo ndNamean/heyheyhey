@@ -4,7 +4,8 @@
   "env": {
     "VITE_INSTANT_APP_ID": "f7ac027e-2079-41eb-8f34-aa0e4543ca71",
     "INSTANT_APP_ID": "f7ac027e-2079-41eb-8f34-aa0e4543ca71",
-    "INSTANT_ADMIN_TOKEN": "58ea1b1e-0565-487a-89d8-4a1f506c947a"
+    "INSTANT_ADMIN_TOKEN": "58ea1b1e-0565-487a-89d8-4a1f506c947a",
+    "APP_ORIGIN": "https://restaurant-ops-instant.vercel.app"
   },
   "crons": [
     {

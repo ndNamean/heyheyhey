@@ -8,6 +8,7 @@
     "build": "node scripts/bundle-export-api.mjs && vite build",
     "preview": "vite preview",
     "seed-owner": "tsx scripts/seed-owner.ts",
+    "setup:magic-email": "node scripts/setup-magic-code-email.mjs",
     "bundle:export-api": "node scripts/bundle-export-api.mjs",
     "test": "vitest run",
     "test:watch": "vitest"

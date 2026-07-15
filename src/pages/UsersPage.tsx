@@ -69,7 +69,6 @@ function ModalShell({
 }
 
 function InviteUserForm({
-  currentProfile,
   assignableRoles,
 }: {
   currentProfile: Profile;
@@ -82,8 +81,7 @@ function InviteUserForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
-
-  const isOwner = currentProfile.role === OWNER_ROLE_KEY;
+  const [inviteLink, setInviteLink] = useState('');
 
   const rolesForInvite = assignableRoles;
 
@@ -103,7 +101,35 @@ function InviteUserForm({
     setLoading(true);
     setError('');
     try {
-      await db.auth.sendMagicCode({ email: trimmed });
+      const user = await db.getAuth();
+      const token = user?.refresh_token;
+      if (!token) throw new Error(t.users.couldNotSendCode);
+
+      const resp = await fetch('/api/invite-user', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: trimmed,
+          role,
+          origin: window.location.origin,
+        }),
+      });
+      const data = (await resp.json().catch(() => ({}))) as {
+        error?: string;
+        inviteLink?: string;
+      };
+      if (!resp.ok) {
+        throw new Error(data.error || t.users.couldNotSendCode);
+      }
+
+      setInviteLink(
+        data.inviteLink ||
+          `${window.location.origin}/?invite=${encodeURIComponent(trimmed)}` +
+            `&role=${encodeURIComponent(role)}`,
+      );
       setSent(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : t.users.couldNotSendCode);
@@ -114,8 +140,9 @@ function InviteUserForm({
 
   if (sent) {
     const sentLink =
+      inviteLink ||
       `${window.location.origin}/?invite=${encodeURIComponent(email.trim())}` +
-      `&role=${encodeURIComponent(role)}`;
+        `&role=${encodeURIComponent(role)}`;
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -154,7 +181,12 @@ function InviteUserForm({
         <button
           className="secondary"
           style={{ alignSelf: 'flex-start', fontSize: 13, padding: '8px 14px', minHeight: 36 }}
-          onClick={() => { setSent(false); setEmail(''); setCopied(false); }}
+          onClick={() => {
+            setSent(false);
+            setEmail('');
+            setInviteLink('');
+            setCopied(false);
+          }}
         >
           {t.common.inviteAnother}
         </button>
