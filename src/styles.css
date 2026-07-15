@@ -3046,3 +3046,44 @@ body.wizard-active .page {
   max-width: 140px;
 }
 
+/* ── Scheduled task completion dashboard ─────────────────────────────────── */
+.scheduled-task-completion-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.scheduled-task-template-filter {
+  min-width: 180px;
+}
+
+.scheduled-task-table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.scheduled-task-table {
+  min-width: 1100px;
+}
+
+.scheduled-task-group-row {
+  cursor: pointer;
+  background: rgba(17, 22, 29, 0.55);
+}
+
+.scheduled-task-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  color: inherit;
+  padding: 4px 0;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+

@@ -3,7 +3,8 @@ import { db } from '../db';
 import FeedbackInbox from '../components/FeedbackInbox';
 import ExportModal from '../components/ExportModal';
 import FailureCorrectionHistory from '../components/FailureCorrectionHistory';
-import ReportTimeline, { ReportTimelineLeadCell } from '../components/ReportTimeline';
+import ScheduledTaskCompletion from '../components/ScheduledTaskCompletion';
+import { ReportTimelineLeadCell } from '../components/ReportTimeline';
 import { useLang } from '../i18n';
 import { statusLabel } from '../lib/i18nUtils';
 import { aggregateFeedbackFrequency } from '../lib/feedbackReasons';
@@ -11,7 +12,7 @@ import { isFailureHistoryEnabled } from '../lib/failureHistoryFlag';
 import { badgeClass, todayYmd } from '../lib/utils';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import { canAccessAllStores } from '../lib/roles';
-import type { ExportFormat, Profile, Report, ReportResponse, ReviewEvent } from '../types';
+import type { ExportFormat, Profile, Report, ReportResponse, ReviewEvent, Template } from '../types';
 
 interface Props {
   profile: Profile;
@@ -40,12 +41,14 @@ export default function DashboardPage({ profile }: Props) {
     stores: {},
     profiles: {},
     reviewEvents: {},
+    templates: { items: {}, stores: {}, scheduleVersions: {} },
   });
 
   const allReports: Report[] = (data?.reports ?? []) as Report[];
   const stores = data?.stores ?? [];
   const profiles = data?.profiles ?? [];
   const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];
+  const allTemplates: Template[] = (data?.templates ?? []) as Template[];
 
   const reports = useMemo(() => {
     let filtered = allReports.filter((r) => r.reportDate >= from && r.reportDate <= to);
@@ -389,6 +392,15 @@ export default function DashboardPage({ profile }: Props) {
           </tbody>
         </table>
       </div>
+
+      <ScheduledTaskCompletion
+        templates={allTemplates}
+        reports={reports}
+        events={allEvents}
+        from={from}
+        to={to}
+        storeIds={historyStoreIds}
+      />
 
       <div className="card table-wrap">
         <h2>{t.dashboard.recentReports}</h2>
