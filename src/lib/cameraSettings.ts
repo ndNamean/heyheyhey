@@ -177,5 +177,5 @@ export function buildWeatherLine(
 }
 
 export function canEditStoreLogo(role: string | undefined): boolean {
-  return role === 'owner' || role === 'areaManager';
+  return role === 'owner' || role === 'admin' || role === 'areaManager';
 }

@@ -629,7 +629,7 @@ export default function TemplatesPage({ profile }: Props) {
                   value={item.assignedRole}
                   onChange={(e) => updateItem(item.id, { assignedRole: e.target.value })}
                 >
-                  {['staff', 'leader', 'subleader', 'manager', 'areaManager', 'owner'].map(
+                  {['staff', 'leader', 'subleader', 'manager', 'areaManager', 'admin', 'owner'].map(
                     (r) => (
                       <option key={r} value={r}>
                         {r}

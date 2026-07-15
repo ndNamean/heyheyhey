@@ -3,7 +3,15 @@
 export type Role = string;
 
 export const OWNER_ROLE_KEY = 'owner';
+export const ADMIN_ROLE_KEY = 'admin';
 export const AREA_MANAGER_ROLE_KEY = 'areaManager';
+
+/** Roles only Owner may assign (Area-manager tier and above). */
+export const ELEVATED_ASSIGN_ROLE_KEYS = [
+  OWNER_ROLE_KEY,
+  ADMIN_ROLE_KEY,
+  AREA_MANAGER_ROLE_KEY,
+] as const;
 
 export interface RoleDefinitionSeed {
   key: string;

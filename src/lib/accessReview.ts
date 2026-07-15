@@ -48,7 +48,8 @@ export function managersForStores(profiles: Profile[], storeIds: string[]): Prof
 export function adminsForAccessNotify(profiles: Profile[]): Profile[] {
   return profiles.filter(
     (p) =>
-      (p.role === 'owner' || p.role === 'areaManager') && p.approvalStatus === 'approved',
+      (p.role === 'owner' || p.role === 'admin' || p.role === 'areaManager') &&
+      p.approvalStatus === 'approved',
   );
 }
 

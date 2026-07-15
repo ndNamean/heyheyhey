@@ -79,7 +79,8 @@ export function usesDashboardHome(role: Role, defs: RoleDefinition[]): boolean {
 export function canViewRolesPermissions(role: Role, defs: RoleDefinition[]): boolean {
   return (
     capability(role, defs, 'canManageUsers') ||
-    role === 'areaManager'
+    role === 'areaManager' ||
+    role === 'admin'
   );
 }
 
@@ -93,6 +94,72 @@ export function buildSeedTransactions() {
       updatedAt: now,
     });
   });
+}
+
+/** Create missing system roles; upgrade custom `admin`; sync system ranks. */
+export function buildEnsureSystemRoleTransactions(defs: RoleDefinition[]) {
+  const now = nowIso();
+  const txs: ReturnType<typeof db.tx.roleDefinitions[string]['update']>[] = [];
+
+  for (const seed of DEFAULT_ROLE_DEFINITIONS) {
+    const existing = defs.find((d) => d.key === seed.key);
+    if (!existing) {
+      const defId = id();
+      txs.push(
+        db.tx.roleDefinitions[defId].update({
+          ...seed,
+          createdAt: now,
+          updatedAt: now,
+        }),
+      );
+      continue;
+    }
+
+    if (seed.key === 'admin') {
+      const needsUpgrade =
+        existing.isSystem !== seed.isSystem ||
+        existing.rank !== seed.rank ||
+        existing.label !== seed.label ||
+        existing.active !== seed.active ||
+        existing.canEditMaster !== seed.canEditMaster ||
+        existing.canManageUsers !== seed.canManageUsers ||
+        existing.canReview !== seed.canReview ||
+        existing.canPreApproveAccess !== seed.canPreApproveAccess ||
+        existing.canAccessAllStores !== seed.canAccessAllStores ||
+        existing.seesAllTemplateItems !== seed.seesAllTemplateItems ||
+        existing.canExportDashboard !== seed.canExportDashboard ||
+        existing.canExportReviewStatus !== seed.canExportReviewStatus ||
+        existing.canScheduleShifts !== seed.canScheduleShifts ||
+        existing.canDeleteShifts !== seed.canDeleteShifts ||
+        existing.canUseOpsTools !== seed.canUseOpsTools ||
+        existing.canClockIn !== seed.canClockIn ||
+        existing.approvesSubmitterRolesJson !== seed.approvesSubmitterRolesJson;
+
+      if (needsUpgrade) {
+        txs.push(
+          db.tx.roleDefinitions[existing.id].update({
+            ...seed,
+            updatedAt: now,
+          }),
+        );
+      }
+      continue;
+    }
+
+    const rankPatch: Record<string, unknown> = {};
+    if (existing.rank !== seed.rank) rankPatch.rank = seed.rank;
+    if (!existing.isSystem) rankPatch.isSystem = true;
+    if (Object.keys(rankPatch).length) {
+      txs.push(
+        db.tx.roleDefinitions[existing.id].update({
+          ...rankPatch,
+          updatedAt: now,
+        }),
+      );
+    }
+  }
+
+  return txs;
 }
 
 export function linkProfilesToRoleDefinitions(
@@ -154,6 +221,7 @@ export function useRoleDefinitionsQuery() {
 
 export function useSeedRoleDefinitions(isOwner: boolean, defs: RoleDefinition[], isEmpty: boolean) {
   const seedingRef = useRef(false);
+  const ensureRef = useRef(false);
 
   useEffect(() => {
     if (!isOwner || !isEmpty || seedingRef.current) return;
@@ -164,6 +232,19 @@ export function useSeedRoleDefinitions(isOwner: boolean, defs: RoleDefinition[],
         seedingRef.current = false;
       });
   }, [isOwner, isEmpty]);
+
+  useEffect(() => {
+    if (!isOwner || isEmpty || !defs.length || ensureRef.current) return;
+    const txs = buildEnsureSystemRoleTransactions(defs);
+    if (!txs.length) {
+      ensureRef.current = true;
+      return;
+    }
+    ensureRef.current = true;
+    db.transact(txs).catch(() => {
+      ensureRef.current = false;
+    });
+  }, [isOwner, isEmpty, defs]);
 }
 
 export function typicalApproverRank(submitterRole: Role, defs: RoleDefinition[]): number {

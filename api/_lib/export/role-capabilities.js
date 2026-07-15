@@ -4,6 +4,7 @@
 
 const DEFAULT_CAPS = {
   owner: { canExportDashboard: true, canExportReviewStatus: false },
+  admin: { canExportDashboard: true, canExportReviewStatus: false },
   areaManager: { canExportDashboard: true, canExportReviewStatus: false },
   manager: { canExportDashboard: false, canExportReviewStatus: true },
   leader: { canExportDashboard: false, canExportReviewStatus: true },

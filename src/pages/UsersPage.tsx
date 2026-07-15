@@ -27,7 +27,7 @@ import {
   canViewRolesPermissions,
   getOrderedRoles,
 } from '../lib/roles';
-import { AREA_MANAGER_ROLE_KEY, OWNER_ROLE_KEY } from '../types';
+import { ELEVATED_ASSIGN_ROLE_KEYS, OWNER_ROLE_KEY } from '../types';
 import { badgeClass, nowIso } from '../lib/utils';
 import type { Profile, Role, Store } from '../types';
 
@@ -698,7 +698,7 @@ export default function UsersPage({ currentProfile }: Props) {
 
   const allRoleKeys = getOrderedRoles(defs);
   const assignableRoles = allRoleKeys.filter(
-    (r) => isOwner || ![OWNER_ROLE_KEY, AREA_MANAGER_ROLE_KEY].includes(r),
+    (r) => isOwner || !ELEVATED_ASSIGN_ROLE_KEYS.includes(r as (typeof ELEVATED_ASSIGN_ROLE_KEYS)[number]),
   );
 
   if (!canAccessUsersPage(currentProfile.role, defs)) {
@@ -713,7 +713,7 @@ export default function UsersPage({ currentProfile }: Props) {
     : [];
 
   async function updateRole(profile: Profile, role: Role) {
-    if (!isOwner && [OWNER_ROLE_KEY, AREA_MANAGER_ROLE_KEY].includes(role)) {
+    if (!isOwner && ELEVATED_ASSIGN_ROLE_KEYS.includes(role as (typeof ELEVATED_ASSIGN_ROLE_KEYS)[number])) {
       alert(t.users.ownerRoleOnly);
       return;
     }
@@ -997,7 +997,10 @@ export default function UsersPage({ currentProfile }: Props) {
             <tbody>
               {allProfiles.map((p) => {
                 const canEditRole =
-                  isOwner || ![OWNER_ROLE_KEY, AREA_MANAGER_ROLE_KEY].includes(p.role);
+                  isOwner ||
+                  !ELEVATED_ASSIGN_ROLE_KEYS.includes(
+                    p.role as (typeof ELEVATED_ASSIGN_ROLE_KEYS)[number],
+                  );
                 const linkStatus = getRoleLinkStatus(p, defs);
                 const roleDef = getRoleDef(p.role, defs);
                 const linkedKey = p.roleDefinition?.key;
@@ -1027,7 +1030,11 @@ export default function UsersPage({ currentProfile }: Props) {
                         style={{ minWidth: 120, fontSize: 13 }}
                       >
                         {allRoleKeys.filter(
-                          (r) => isOwner || ![OWNER_ROLE_KEY, AREA_MANAGER_ROLE_KEY].includes(r),
+                          (r) =>
+                            isOwner ||
+                            !ELEVATED_ASSIGN_ROLE_KEYS.includes(
+                              r as (typeof ELEVATED_ASSIGN_ROLE_KEYS)[number],
+                            ),
                         ).map((r) => (
                           <option key={r} value={r}>
                             {r}

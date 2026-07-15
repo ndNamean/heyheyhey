@@ -3,7 +3,7 @@ import type { InstantRules } from '@instantdb/react';
 // Server-side capability checks use legacy profile.role strings so permissions
 // work before every profile has a linked roleDefinition. The app UI still reads
 // capabilities from roleDefinitions on the client.
-// Custom `admin` is treated like areaManager for master-data / review / users
+// System `admin` is treated like areaManager for master-data / review / users
 // (templates, stores, report review writes, profile admin actions).
 const LEGACY_BIND = {
   isSignedIn: 'auth.id != null',

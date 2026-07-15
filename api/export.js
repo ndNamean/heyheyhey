@@ -106,6 +106,7 @@ async function authenticateExportRequest(req) {
 // api/_lib/export/role-capabilities.js
 var DEFAULT_CAPS = {
   owner: { canExportDashboard: true, canExportReviewStatus: false },
+  admin: { canExportDashboard: true, canExportReviewStatus: false },
   areaManager: { canExportDashboard: true, canExportReviewStatus: false },
   manager: { canExportDashboard: false, canExportReviewStatus: true },
   leader: { canExportDashboard: false, canExportReviewStatus: true },
@@ -153,7 +154,7 @@ function assertExportJobAccess(role, exportType, roleDefinition) {
 }
 
 // api/_lib/export/scope.js
-var MASTER_ROLES = /* @__PURE__ */ new Set(["owner", "areaManager"]);
+var MASTER_ROLES = /* @__PURE__ */ new Set(["owner", "admin", "areaManager"]);
 function resolveDashboardScope(profileCtx, params) {
   const { role, storeIds: assignedStoreIds } = profileCtx;
   const scope = params.scope === "full_history" ? "full_history" : "filtered";

@@ -98,7 +98,9 @@ export default function RolesPermissionsPanel({
     if (def.key === 'owner') {
       return key === 'canManageUsers' || key === 'canEditMaster';
     }
-    if (def.isSystem && key === 'canManageUsers') return def.key === 'areaManager';
+    if (def.isSystem && key === 'canManageUsers') {
+      return def.key === 'areaManager' || def.key === 'admin';
+    }
     return false;
   }
 

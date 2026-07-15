@@ -26,6 +26,15 @@ export function isAreaManager(role: Role): boolean {
   return role === 'areaManager';
 }
 
+export function isAdmin(role: Role): boolean {
+  return role === 'admin';
+}
+
+/** Area-manager tier: areaManager or admin. */
+export function isAreaManagerTier(role: Role): boolean {
+  return role === 'areaManager' || role === 'admin';
+}
+
 export function canEditMaster(role: Role, defs?: RoleDefinition[]): boolean {
   return capability(role, defsOrDefault(defs), 'canEditMaster');
 }

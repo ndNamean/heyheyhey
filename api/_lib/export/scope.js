@@ -2,7 +2,7 @@
  * Server-side store scoping for exports.
  */
 
-const MASTER_ROLES = new Set(['owner', 'areaManager']);
+const MASTER_ROLES = new Set(['owner', 'admin', 'areaManager']);
 
 export function resolveDashboardScope(profileCtx, params) {
   const { role, storeIds: assignedStoreIds } = profileCtx;
