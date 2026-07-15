@@ -40,8 +40,8 @@ export default function StaffHome({ profile, onStartReport, onFixReport }: Props
 
   return (
     <div>
-      <FeedbackInbox userId={profile.userId} />
       <MyReportsPanel profile={profile} onFixReport={onFixReport} />
+      <FeedbackInbox userId={profile.userId} />
 
       {canReview(profile.role, defs) && !canEditMaster(profile.role, defs) && (
         <ReportReviewStatusPanel profile={profile} />
