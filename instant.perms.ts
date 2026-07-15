@@ -3,18 +3,22 @@ import type { InstantRules } from '@instantdb/react';
 // Server-side capability checks use legacy profile.role strings so permissions
 // work before every profile has a linked roleDefinition. The app UI still reads
 // capabilities from roleDefinitions on the client.
+// Custom `admin` is treated like areaManager for master-data / review / users
+// (templates, stores, report review writes, profile admin actions).
 const LEGACY_BIND = {
   isSignedIn: 'auth.id != null',
   isApproved: "'approved' in auth.ref('$user.profile.approvalStatus')",
   isOwner: "'owner' in auth.ref('$user.profile.role')",
   isAreaManager: "'areaManager' in auth.ref('$user.profile.role')",
+  isAdminRole: "'admin' in auth.ref('$user.profile.role')",
+  isAreaManagerTier: 'isAreaManager || isAdminRole',
   isManager: "'manager' in auth.ref('$user.profile.role')",
   isLeader: "'leader' in auth.ref('$user.profile.role') || 'subleader' in auth.ref('$user.profile.role')",
-  canEditMaster: 'isOwner || isAreaManager',
-  canManageUsers: 'isOwner || isAreaManager',
-  canReview: "isApproved && (isOwner || isAreaManager || isManager || isLeader)",
+  canEditMaster: 'isOwner || isAreaManagerTier',
+  canManageUsers: 'isOwner || isAreaManagerTier',
+  canReview: "isApproved && (isOwner || isAreaManagerTier || isManager || isLeader)",
   canPreApproveAccess: 'isManager',
-  canScheduleShifts: 'isOwner || isAreaManager || isManager',
+  canScheduleShifts: 'isOwner || isAreaManagerTier || isManager',
 };
 
 const rules = {
@@ -61,8 +65,9 @@ const rules = {
       isOwnProfile: 'auth.id != null && data.userId == auth.id',
       isOwner: "'owner' in auth.ref('$user.profile.role')",
       isAreaManager: "'areaManager' in auth.ref('$user.profile.role')",
+      isAdminRole: "'admin' in auth.ref('$user.profile.role')",
       isManager: "'manager' in auth.ref('$user.profile.role')",
-      isAdmin: 'isOwner || isAreaManager',
+      isAdmin: 'isOwner || isAreaManager || isAdminRole',
       onlyDisplayName: "request.modifiedFields.all(f, f in ['displayName', 'cameraOptionsJson', 'updatedAt'])",
       managerAccessReview:
         "isManager && request.modifiedFields.all(f, f in ['approvalStatus', 'accessReviewNote', 'preApprovedByUserId', 'preApprovedByEmail', 'preApprovedAt', 'updatedAt']) && (data.approvalStatus == 'pre_approved' || data.approvalStatus == 'pending')",
@@ -86,7 +91,8 @@ const rules = {
       isApproved: "'approved' in auth.ref('$user.profile.approvalStatus')",
       isOwner: "'owner' in auth.ref('$user.profile.role')",
       isAreaManager: "'areaManager' in auth.ref('$user.profile.role')",
-      isAdmin: 'isOwner || isAreaManager',
+      isAdminRole: "'admin' in auth.ref('$user.profile.role')",
+      isAdmin: 'isOwner || isAreaManager || isAdminRole',
     },
   },
 
