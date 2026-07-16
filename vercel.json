@@ -26,15 +26,7 @@
       "maxDuration": 30,
       "memory": 512
     },
-    "api/upload-avatar.js": {
-      "maxDuration": 30,
-      "memory": 512
-    },
-    "api/remove-avatar.js": {
-      "maxDuration": 15,
-      "memory": 256
-    },
-    "api/remove-background.js": {
+    "api/avatar.js": {
       "maxDuration": 30,
       "memory": 512
     },

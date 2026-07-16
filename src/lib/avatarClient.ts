@@ -47,10 +47,10 @@ export async function blobToBase64(blob: Blob): Promise<string> {
 export async function uploadAvatar(blob: Blob, mimeType: string): Promise<{ url: string }> {
   const headers = await authHeaders();
   const fileBase64 = await blobToBase64(blob);
-  const resp = await fetch('/api/upload-avatar', {
+  const resp = await fetch('/api/avatar?action=upload', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ fileBase64, mimeType }),
+    body: JSON.stringify({ action: 'upload', fileBase64, mimeType }),
   });
   const data = await parseJson(resp);
   return { url: String(data.url ?? '') };
@@ -58,10 +58,10 @@ export async function uploadAvatar(blob: Blob, mimeType: string): Promise<{ url:
 
 export async function removeAvatar(): Promise<void> {
   const headers = await authHeaders();
-  const resp = await fetch('/api/remove-avatar', {
+  const resp = await fetch('/api/avatar?action=remove', {
     method: 'POST',
     headers,
-    body: JSON.stringify({}),
+    body: JSON.stringify({ action: 'remove' }),
   });
   await parseJson(resp);
 }
@@ -72,10 +72,10 @@ export async function removeBackground(
 ): Promise<{ blob: Blob; mimeType: string }> {
   const headers = await authHeaders();
   const fileBase64 = await blobToBase64(blob);
-  const resp = await fetch('/api/remove-background', {
+  const resp = await fetch('/api/avatar?action=remove-background', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ fileBase64, mimeType }),
+    body: JSON.stringify({ action: 'remove-background', fileBase64, mimeType }),
   });
   const data = await parseJson(resp);
   const outMime = String(data.mimeType || 'image/png');
