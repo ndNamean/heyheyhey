@@ -94,6 +94,7 @@ function InviteUserForm({
   const [copied, setCopied] = useState(false);
   const [inviteLink, setInviteLink] = useState('');
   const [emailSent, setEmailSent] = useState(false);
+  const [emailReason, setEmailReason] = useState('');
 
   const rolesForInvite = assignableRoles;
 
@@ -121,6 +122,7 @@ function InviteUserForm({
       });
       setInviteLink(String(data.inviteUrl || ''));
       setEmailSent(!!data.emailSent);
+      setEmailReason(data.emailSent ? '' : String(data.emailReason || ''));
       setSent(true);
       onCreated?.();
     } catch (e) {
@@ -135,11 +137,16 @@ function InviteUserForm({
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div className="alert-success">
+        <div className={emailSent ? 'alert-success' : 'alert-info'}>
           <p className="small">
             {emailSent ? t.invite.emailSent : t.invite.emailNotSent}{' '}
             <strong>{email}</strong> ({role}).
           </p>
+          {!emailSent && emailReason ? (
+            <p className="small text-danger" style={{ margin: '8px 0 0' }}>
+              {emailReason}
+            </p>
+          ) : null}
         </div>
 
         <div className="alert-info">
@@ -177,6 +184,7 @@ function InviteUserForm({
             setInviteLink('');
             setCopied(false);
             setStoreIds([]);
+            setEmailReason('');
           }}
         >
           {t.common.inviteAnother}
@@ -734,6 +742,12 @@ function InvitationsAdminPanel({ refreshKey }: { refreshKey: number }) {
       const url = String(data.inviteUrl || '');
       if (url) {
         try { await navigator.clipboard.writeText(url); } catch { /* ignore */ }
+      }
+      if (!data.emailSent) {
+        alert(
+          `${t.invite.emailNotSent}${data.emailReason ? `\n\n${String(data.emailReason)}` : ''}` +
+            (url ? `\n\n${t.common.copyLink}: ${url}` : ''),
+        );
       }
       await load();
     } catch (e) {

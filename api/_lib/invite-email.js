@@ -1,5 +1,6 @@
 /**
- * Branded invitation email (Resend). Falls back to no-op when RESEND_API_KEY is unset.
+ * Branded invitation email.
+ * Priority: Google Apps Script mailer → Resend → no-op.
  */
 
 import { getAppOrigin } from './magic-code-email.js';
@@ -62,10 +63,57 @@ export function buildInviteEmailHtml({
 `.trim();
 }
 
-export async function sendInviteEmail(payload) {
+async function sendViaGoogleAppsScript(payload) {
+  const url = String(process.env.GOOGLE_APPS_SCRIPT_URL || '').trim();
+  const secret = String(process.env.INVITE_EMAIL_SECRET || '').trim();
+  if (!url || !secret) {
+    return { attempted: false };
+  }
+
+  const resp = await fetch(url, {
+    method: 'POST',
+    redirect: 'follow',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      secret,
+      email: payload.email,
+      to: payload.email,
+      inviteUrl: payload.inviteUrl,
+      role: payload.role,
+      storeNames: payload.storeNames || [],
+      invitedByEmail: payload.invitedByEmail || '',
+      expiresAt: payload.expiresAt || '',
+      appName: payload.appName || 'Hey Pelo Ops',
+    }),
+  });
+
+  const text = await resp.text();
+  let data = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error(
+      `Google Apps Script returned non-JSON (${resp.status}): ${text.slice(0, 160)}`,
+    );
+  }
+
+  if (!resp.ok || data.ok === false) {
+    throw new Error(data.error || `Google Apps Script failed (${resp.status})`);
+  }
+
+  return {
+    attempted: true,
+    sent: true,
+    id: data.id || 'gas',
+    provider: 'google_apps_script',
+    appOrigin: getAppOrigin(),
+  };
+}
+
+async function sendViaResend(payload) {
   const apiKey = process.env.RESEND_API_KEY || '';
   if (!apiKey) {
-    return { sent: false, reason: 'RESEND_API_KEY not configured' };
+    return { attempted: false };
   }
 
   const from =
@@ -101,5 +149,33 @@ export async function sendInviteEmail(payload) {
     throw new Error(data?.message || `Resend failed (${resp.status})`);
   }
 
-  return { sent: true, id: data.id, appOrigin: getAppOrigin() };
+  return {
+    attempted: true,
+    sent: true,
+    id: data.id,
+    provider: 'resend',
+    appOrigin: getAppOrigin(),
+  };
+}
+
+export async function sendInviteEmail(payload) {
+  const gas = await sendViaGoogleAppsScript(payload);
+  if (gas.attempted) {
+    return { sent: true, id: gas.id, provider: gas.provider, appOrigin: gas.appOrigin };
+  }
+
+  const resend = await sendViaResend(payload);
+  if (resend.attempted) {
+    return {
+      sent: true,
+      id: resend.id,
+      provider: resend.provider,
+      appOrigin: resend.appOrigin,
+    };
+  }
+
+  return {
+    sent: false,
+    reason: 'No email provider configured (set GOOGLE_APPS_SCRIPT_URL + INVITE_EMAIL_SECRET)',
+  };
 }
