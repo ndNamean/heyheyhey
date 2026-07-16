@@ -318,6 +318,7 @@ export default function AuthGate({ children }: Props) {
         accessReviewRequestedAt: '',
         invitedStoreIdsJson: '[]',
         cameraOptionsJson: '{"weatherEnabled":true,"logoEnabled":true}',
+        avatarUrl: '',
         createdAt: nowIso(),
         updatedAt: nowIso(),
       })

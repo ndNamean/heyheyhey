@@ -55,6 +55,7 @@ function emptyProfileFields(now) {
     accessReviewRequestedAt: '',
     invitedStoreIdsJson: '[]',
     cameraOptionsJson: '{"weatherEnabled":true,"logoEnabled":true}',
+    avatarUrl: '',
     createdAt: now,
     updatedAt: now,
   };

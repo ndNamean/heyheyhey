@@ -195,6 +195,8 @@ export interface Profile {
   createdAt: string;
   updatedAt: string;
   cameraOptionsJson?: string;
+  /** Custom profile photo URL; empty/missing = initials avatar. */
+  avatarUrl?: string;
   roleDefinition?: RoleDefinition;
   // Optional linked data from useQuery:
   stores?: Store[];

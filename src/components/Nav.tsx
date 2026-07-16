@@ -9,6 +9,7 @@ import {
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import LanguageSelector from './LanguageSelector';
+import ProfileAvatar from './profileAvatar/ProfileAvatar';
 import { useUnreadNotificationCount } from './FeedbackInbox';
 import type { Profile } from '../types';
 
@@ -67,6 +68,15 @@ export function DesktopNav({ page, setPage, profile }: NavProps) {
 
       <div style={{ flex: 1 }} />
 
+      <button
+        type="button"
+        className={`nav-profile-btn${page === 'profile' ? ' active' : ''}`}
+        onClick={() => setPage('profile')}
+        aria-label={t.nav.profile}
+      >
+        <ProfileAvatar profile={profile} size={32} />
+      </button>
+
       <LanguageSelector />
 
       <button className="secondary" onClick={() => db.auth.signOut()}>
@@ -100,7 +110,14 @@ export function MobileNav({ page, setPage, profile }: NavProps) {
           onClick={() => setPage(tab.id)}
         >
           <span className="nav-tab-label">
-            {tab.label}
+            {tab.id === 'profile' ? (
+              <span className="nav-tab-avatar">
+                <ProfileAvatar profile={profile} size={22} />
+                <span>{tab.label}</span>
+              </span>
+            ) : (
+              tab.label
+            )}
             {tab.id === 'home' && unreadCount > 0 && (
               <span className="nav-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>
             )}

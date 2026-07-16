@@ -5,6 +5,7 @@ import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import RolesPermissionsPanel from '../components/RolesPermissionsPanel';
 import StorePicker from '../components/StorePicker';
+import ProfileAvatar from '../components/profileAvatar/ProfileAvatar';
 import { statusLabel } from '../lib/i18nUtils';
 import {
   accessStatusBadgeClass,
@@ -638,9 +639,7 @@ function AccessRequestCard({
   return (
     <div className="card">
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div className="avatar-circle">
-          {(profile.displayName || profile.email)[0]?.toUpperCase()}
-        </div>
+        <ProfileAvatar profile={profile} size={40} />
         <div style={{ flex: 1 }}>
           <strong>{profile.displayName || profile.email}</strong>
           <div className="small">{profile.email}</div>
@@ -1188,9 +1187,7 @@ export default function UsersPage({ currentProfile }: Props) {
                   <tr key={p.id}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div className="avatar-circle" style={{ width: 34, height: 34, fontSize: 14 }}>
-                          {(p.displayName || p.email)[0]?.toUpperCase()}
-                        </div>
+                        <ProfileAvatar profile={p} size={34} />
                         <div>
                           <strong style={{ fontSize: 14 }}>{p.displayName || '—'}</strong>
                           <div className="small">{p.email}</div>

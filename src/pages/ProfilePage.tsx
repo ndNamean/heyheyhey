@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import LanguageSelector from '../components/LanguageSelector';
+import ProfileAvatarEditor from '../components/profileAvatar/ProfileAvatarEditor';
 import { nowIso } from '../lib/utils';
 import type { Profile } from '../types';
 
@@ -37,6 +38,8 @@ export default function ProfilePage({ profile }: Props) {
 
   return (
     <div>
+      <ProfileAvatarEditor profile={profile} />
+
       <div className="card">
         <h1>{t.profile.title}</h1>
 

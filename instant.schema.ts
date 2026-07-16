@@ -33,6 +33,7 @@ const _schema = i.schema({
       createdAt: i.string(),
       updatedAt: i.string(),
       cameraOptionsJson: i.string().clientRequired(),       // JSON: { weatherEnabled, logoEnabled, flashlightLastUsed }
+      avatarUrl: i.string().clientRequired(),               // '' = initials fallback; set via /api/upload-avatar
     }),
 
     // Opaque-token user invitations (managed via admin API)

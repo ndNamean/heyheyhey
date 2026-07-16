@@ -26,6 +26,7 @@ const profiles: Profile[] = [
     createdAt: '',
     updatedAt: '',
     cameraOptionsJson: '',
+    avatarUrl: '',
   },
   {
     id: 'p2',
@@ -46,6 +47,7 @@ const profiles: Profile[] = [
     createdAt: '',
     updatedAt: '',
     cameraOptionsJson: '',
+    avatarUrl: '',
   },
 ];
 
