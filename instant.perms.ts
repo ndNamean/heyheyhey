@@ -50,7 +50,7 @@ const rules = {
       view: "auth.id != null && ('approved' in auth.ref('$user.profile.approvalStatus') || data.userId == auth.id)",
       create: "auth.id != null && data.userId == auth.id && data.approvalStatus == 'pending'",
       update: 'isAdmin || managerAccessReview || (isOwnProfile && onlyDisplayName)',
-      delete: 'false',
+      delete: 'isOwner',
       link: {
         '$user': "auth.id != null && data.userId == auth.id",
         stores: 'isAdmin',

@@ -595,6 +595,10 @@ export const sectionsEn = {
     sendCode: 'Send code',
     couldNotSendCode: 'Could not send code. Try again.',
     revoke: 'Revoke',
+    deleteUser: 'Delete',
+    confirmDeleteUser:
+      'Permanently delete {name} ({email})? This cannot be undone. Their sign-in account may still exist.',
+    deleteUserFailed: 'Failed to delete user.',
     emailAddress: 'Email address',
     requested: 'Requested',
     noOtherUsers: 'No other users yet. Use "Invite user" above to get started.',
@@ -1446,6 +1450,10 @@ export const sectionsVi = {
     sendCode: 'Gửi mã',
     couldNotSendCode: 'Không thể gửi mã. Thử lại.',
     revoke: 'Thu hồi',
+    deleteUser: 'Xóa',
+    confirmDeleteUser:
+      'Xóa vĩnh viễn {name} ({email})? Không thể hoàn tác. Tài khoản đăng nhập có thể vẫn còn.',
+    deleteUserFailed: 'Xóa người dùng thất bại.',
     emailAddress: 'Địa chỉ email',
     requested: 'Yêu cầu',
     noOtherUsers: 'Chưa có người dùng khác. Dùng "Mời người dùng" ở trên để bắt đầu.',

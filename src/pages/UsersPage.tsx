@@ -921,6 +921,22 @@ export default function UsersPage({ currentProfile }: Props) {
     ]);
   }
 
+  async function hardDeleteUser(profile: Profile) {
+    if (!isOwner || profile.role === OWNER_ROLE_KEY || profile.id === currentProfile.id) {
+      return;
+    }
+    const name = profile.displayName || profile.email || '—';
+    const confirmed = window.confirm(
+      t.users.confirmDeleteUser.replace('{name}', name).replace('{email}', profile.email || ''),
+    );
+    if (!confirmed) return;
+    try {
+      await db.transact(db.tx.profiles[profile.id].delete());
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.users.deleteUserFailed);
+    }
+  }
+
   async function preApproveAccess(profile: Profile) {
     const now = nowIso();
     await db.transact([
@@ -1304,6 +1320,15 @@ export default function UsersPage({ currentProfile }: Props) {
                         >
                           {t.users.sendCode}
                         </button>
+                        {isOwner && p.role !== OWNER_ROLE_KEY && (
+                          <button
+                            className="danger"
+                            style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
+                            onClick={() => void hardDeleteUser(p)}
+                          >
+                            {t.users.deleteUser}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
