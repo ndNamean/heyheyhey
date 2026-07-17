@@ -996,6 +996,13 @@ body.wizard-active .page {
   -webkit-text-stroke: 1px #3A3A4C;
   paint-order: stroke fill;
   text-shadow: 0 1px 3px rgba(58, 58, 76, 0.75);
+  max-width: var(--float-max-w, 100%);
+  overflow: hidden;
+}
+.proof-floating-lines .proof-ts-detail {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .proof-ts-ident {
   font-size: 12px;
