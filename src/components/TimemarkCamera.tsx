@@ -18,12 +18,26 @@ import {
 import { generatePhotoCode, nowIso } from '../lib/utils';
 import { isVideoMedia, normalizeStoredMime, videoProxyUrl } from '../lib/mediaMime';
 import { ensureProofFontsLoaded } from '../lib/proofFonts';
-import { computeLetterboxLayout, type LetterboxLayout } from '../lib/proofOverlayLetterbox';
+import { type LetterboxLayout } from '../lib/proofOverlayLetterbox';
 import {
-  drawProofOverlay,
   loadImageForCanvas,
   type ProofSnapshot,
 } from '../lib/proofWatermarkDraw';
+import {
+  MIRROR_CAPTURE,
+  buildMediaTransformSnapshot,
+  composeOrientedFrameBlob,
+  composeWatermarkedFromRawBlob,
+  composeWatermarkedOrientedPhoto,
+  containedToLetterboxLayout,
+  computeContainedMediaRect,
+  drawRecordingCompositorFrame,
+  getEffectiveDimensions,
+  nextManualRotation,
+  type ManualMediaRotation,
+  type MediaTransformSnapshot,
+} from '../lib/cameraMediaTransform';
+import { useLayoutOrientation } from '../hooks/useLayoutOrientation';
 import { needsVideoProof } from '../lib/roles';
 import { BACK_PRIORITY, useNativeBack } from '../lib/nativeBack';
 import ProofReviewOverlay from './ProofReviewOverlay';
@@ -144,6 +158,11 @@ export default function TimemarkCamera({
   const recordingProofRef = useRef<ProofSnapshot | null>(null);
   const livePhotoCodeRef = useRef<string | null>(null);
   const recordingLogoRef = useRef<HTMLImageElement | null>(null);
+  const capturingRef = useRef(false);
+  const rawCaptureRef = useRef<{ blob: Blob; sourceW: number; sourceH: number } | null>(null);
+  const captureTransformSnapshotRef = useRef<MediaTransformSnapshot | null>(null);
+  const recordingTransformSnapshotRef = useRef<MediaTransformSnapshot | null>(null);
+  const rotateAnnounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [gps,      setGps]      = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
@@ -182,10 +201,16 @@ export default function TimemarkCamera({
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [previewFrameSize, setPreviewFrameSize] = useState<{ w: number; h: number } | null>(null);
   const [letterboxLayout, setLetterboxLayout] = useState<LetterboxLayout | null>(null);
+  const [sourceFrameSize, setSourceFrameSize] = useState<{ w: number; h: number } | null>(null);
+  const [manualMediaRotation, setManualMediaRotation] = useState<ManualMediaRotation>(0);
+  const [rotateAnnounce, setRotateAnnounce] = useState('');
+  const [rotateBlockedMsg, setRotateBlockedMsg] = useState('');
+  const [capturing, setCapturing] = useState(false);
   const [overlayLogoImg, setOverlayLogoImg] = useState<HTMLImageElement | null>(null);
   const [overlayLayoutKey, setOverlayLayoutKey] = useState(0);
 
   const isAdminLogo = roleCanEditStoreLogo(profile?.role ?? '', defs);
+  const layoutOrientation = useLayoutOrientation(cameraOn || !!capturedBlob);
   const activeLogoUrl = storeLogoUrl.trim() || resolveActiveLogoUrl(store);
   const weatherCoords = getWeatherCoords(gps);
   const weatherKey =
@@ -413,40 +438,53 @@ export default function TimemarkCamera({
     const video = videoRef.current;
     const viewfinder = viewfinderRef.current;
     if (video && video.videoWidth > 0 && video.videoHeight > 0) {
-      setPreviewFrameSize({ w: video.videoWidth, h: video.videoHeight });
+      const sw = video.videoWidth;
+      const sh = video.videoHeight;
+      setSourceFrameSize({ w: sw, h: sh });
+      const effective = getEffectiveDimensions(sw, sh, manualMediaRotation);
+      setPreviewFrameSize({ w: effective.w, h: effective.h });
       if (viewfinder && viewfinder.clientWidth > 0 && viewfinder.clientHeight > 0) {
-        setLetterboxLayout(
-          computeLetterboxLayout(
-            viewfinder.clientWidth,
-            viewfinder.clientHeight,
-            video.videoWidth,
-            video.videoHeight,
-          ),
+        const contained = computeContainedMediaRect(
+          viewfinder.clientWidth,
+          viewfinder.clientHeight,
+          sw,
+          sh,
+          manualMediaRotation,
         );
+        setLetterboxLayout(contained ? containedToLetterboxLayout(contained) : null);
       }
       return;
     }
     if (viewfinder && viewfinder.clientWidth > 0 && viewfinder.clientHeight > 0) {
       setPreviewFrameSize({ w: viewfinder.clientWidth, h: viewfinder.clientHeight });
+      setSourceFrameSize(null);
       setLetterboxLayout(null);
     }
-  }, []);
+  }, [manualMediaRotation]);
 
   useEffect(() => {
     if (camState !== 'ready') return;
-    syncPreviewFrameSize();
+    let raf = 0;
+    const schedule = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => syncPreviewFrameSize());
+    };
+    schedule();
     const video = videoRef.current;
     const viewfinder = viewfinderRef.current;
-    video?.addEventListener('loadedmetadata', syncPreviewFrameSize);
-    window.addEventListener('resize', syncPreviewFrameSize);
-    const ro = viewfinder ? new ResizeObserver(syncPreviewFrameSize) : null;
+    video?.addEventListener('loadedmetadata', schedule);
+    window.addEventListener('resize', schedule);
+    window.visualViewport?.addEventListener('resize', schedule);
+    const ro = viewfinder ? new ResizeObserver(schedule) : null;
     if (viewfinder && ro) ro.observe(viewfinder);
     return () => {
-      video?.removeEventListener('loadedmetadata', syncPreviewFrameSize);
-      window.removeEventListener('resize', syncPreviewFrameSize);
+      cancelAnimationFrame(raf);
+      video?.removeEventListener('loadedmetadata', schedule);
+      window.removeEventListener('resize', schedule);
+      window.visualViewport?.removeEventListener('resize', schedule);
       ro?.disconnect();
     };
-  }, [camState, syncPreviewFrameSize]);
+  }, [camState, syncPreviewFrameSize, layoutOrientation, manualMediaRotation]);
 
   useEffect(() => {
     if (camState !== 'ready' || !previewFrameSize) return;
@@ -675,26 +713,74 @@ export default function TimemarkCamera({
 
   useEffect(() => () => { streamRef.current?.getTracks().forEach((t) => t.stop()); }, []);
 
-  async function watermarkBlob(blob: Blob, proof: ProofSnapshot): Promise<Blob> {
-    const bitmap = await createImageBitmap(blob);
-    const canvas = document.createElement('canvas');
-    const ctx    = canvas.getContext('2d')!;
-    canvas.width  = bitmap.width;
-    canvas.height = bitmap.height;
-    ctx.drawImage(bitmap, 0, 0);
+  function announceRotation(deg: ManualMediaRotation) {
+    const msg =
+      deg === 90
+        ? t.camera.rotateAnnounce90
+        : deg === 180
+          ? t.camera.rotateAnnounce180
+          : deg === 270
+            ? t.camera.rotateAnnounce270
+            : t.camera.rotateAnnounce0;
+    setRotateAnnounce(msg);
+    if (rotateAnnounceTimerRef.current) clearTimeout(rotateAnnounceTimerRef.current);
+    rotateAnnounceTimerRef.current = setTimeout(() => setRotateAnnounce(''), 1600);
+  }
 
-    const hasLogo =
-      proof.cameraOptionsSnapshot.logoEnabled && proof.proofLogoUrl.trim().length > 0;
-    let logoImg: HTMLImageElement | null = null;
-    if (hasLogo) {
-      logoImg = await loadImageForCanvas(proof.proofLogoUrl);
+  function handleRotateLive() {
+    if (isRecording) {
+      setRotateBlockedMsg(t.camera.rotateBlockedRecording);
+      if (rotateAnnounceTimerRef.current) clearTimeout(rotateAnnounceTimerRef.current);
+      rotateAnnounceTimerRef.current = setTimeout(() => setRotateBlockedMsg(''), 2200);
+      return;
     }
+    if (camState !== 'ready' || capturing) return;
+    const next = nextManualRotation(manualMediaRotation);
+    setManualMediaRotation(next);
+    announceRotation(next);
+  }
 
-    const fontSize = Math.max(14, Math.round(bitmap.width * 0.035));
-    await ensureProofFontsLoaded(fontSize);
-    drawProofOverlay(ctx, canvas, proof, logoImg);
-
-    return new Promise<Blob>((resolve) => canvas.toBlob((b) => resolve(b!), 'image/jpeg', 0.85));
+  async function handleRotateReview() {
+    const mime = resolveCaptureMime(capturedBlob, capturedMimeType);
+    if (uploading || isVideoMime(mime) || !frozenProof || !rawCaptureRef.current) return;
+    const next = nextManualRotation(manualMediaRotation);
+    setManualMediaRotation(next);
+    announceRotation(next);
+    if (captureTransformSnapshotRef.current) {
+      captureTransformSnapshotRef.current = {
+        ...captureTransformSnapshotRef.current,
+        manualMediaRotation: next,
+        contained:
+          computeContainedMediaRect(
+            captureTransformSnapshotRef.current.viewfinderW,
+            captureTransformSnapshotRef.current.viewfinderH,
+            captureTransformSnapshotRef.current.sourceVideoW,
+            captureTransformSnapshotRef.current.sourceVideoH,
+            next,
+          ) ?? captureTransformSnapshotRef.current.contained,
+      };
+    }
+    try {
+      const raw = rawCaptureRef.current;
+      const { blob, outW, outH } = await composeWatermarkedFromRawBlob({
+        rawBlob: raw.blob,
+        sourceW: raw.sourceW,
+        sourceH: raw.sourceH,
+        rotationDeg: next,
+        mirrorCapture: MIRROR_CAPTURE,
+        proof: frozenProof,
+        logoImg: overlayLogoImg,
+        quality: 0.85,
+      });
+      const prevUrl = capturedUrlRef.current;
+      if (prevUrl) URL.revokeObjectURL(prevUrl);
+      setCapturedBlob(blob);
+      setCapturedUrl(URL.createObjectURL(blob));
+      setCaptureSize({ w: outW, h: outH });
+      setCapturedMimeType('image/jpeg');
+    } catch {
+      setConfirmError(t.camera.cameraError);
+    }
   }
 
   async function blobToBase64(blob: Blob): Promise<string> {
@@ -855,6 +941,14 @@ export default function TimemarkCamera({
     setCapturedBlob(null);
     setFrozenProof(null);
     setCaptureSize(null);
+    rawCaptureRef.current = null;
+    captureTransformSnapshotRef.current = null;
+    recordingTransformSnapshotRef.current = null;
+    setManualMediaRotation(0);
+    setRotateAnnounce('');
+    setRotateBlockedMsg('');
+    setCapturing(false);
+    capturingRef.current = false;
     setLiveNow(new Date());
     setOptionsOpen(false);
     fetchedWeatherKeyRef.current = '';
@@ -876,6 +970,14 @@ export default function TimemarkCamera({
     setCameraOn(false);
     setCamState('idle');
     setCamError('');
+    setManualMediaRotation(0);
+    setRotateAnnounce('');
+    setRotateBlockedMsg('');
+    setCapturing(false);
+    capturingRef.current = false;
+    rawCaptureRef.current = null;
+    captureTransformSnapshotRef.current = null;
+    recordingTransformSnapshotRef.current = null;
   }
 
   function handleDiscardCapture() {
@@ -890,6 +992,14 @@ export default function TimemarkCamera({
     setOptionsOpen(false);
     setCameraOn(false);
     setCamState('idle');
+    setManualMediaRotation(0);
+    setRotateAnnounce('');
+    setRotateBlockedMsg('');
+    setCapturing(false);
+    capturingRef.current = false;
+    rawCaptureRef.current = null;
+    captureTransformSnapshotRef.current = null;
+    recordingTransformSnapshotRef.current = null;
   }
 
   useNativeBack(
@@ -984,7 +1094,18 @@ export default function TimemarkCamera({
 
     const blob = new Blob(chunks, { type: mimeType });
     setCapturedMimeType(normalizeStoredMime(mimeType));
-    setCaptureSize(null);
+    const snap = recordingTransformSnapshotRef.current;
+    if (snap) {
+      const { w, h } = getEffectiveDimensions(
+        snap.sourceVideoW,
+        snap.sourceVideoH,
+        snap.manualMediaRotation,
+      );
+      setCaptureSize({ w, h });
+    } else {
+      setCaptureSize(null);
+    }
+    recordingTransformSnapshotRef.current = null;
 
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
@@ -1021,6 +1142,24 @@ export default function TimemarkCamera({
     );
     recordingProofRef.current = frozenProof;
 
+    const viewfinder = viewfinderRef.current;
+    const transformSnap = buildMediaTransformSnapshot({
+      sourceVideoW: video.videoWidth,
+      sourceVideoH: video.videoHeight,
+      layoutOrientation,
+      manualMediaRotation,
+      facingMode,
+      viewfinderW: viewfinder?.clientWidth ?? video.videoWidth,
+      viewfinderH: viewfinder?.clientHeight ?? video.videoHeight,
+      mirrorCapture: MIRROR_CAPTURE,
+    });
+    if (!transformSnap) {
+      setCamError(t.camera.cameraError);
+      recordingProofRef.current = null;
+      return;
+    }
+    recordingTransformSnapshotRef.current = transformSnap;
+
     let logoImg: HTMLImageElement | null = null;
     if (
       frozenProof.cameraOptionsSnapshot.logoEnabled &&
@@ -1030,17 +1169,23 @@ export default function TimemarkCamera({
     }
     recordingLogoRef.current = logoImg;
 
-    const fontSize = Math.max(14, Math.round(video.videoWidth * 0.035));
+    const { w: outW, h: outH } = getEffectiveDimensions(
+      video.videoWidth,
+      video.videoHeight,
+      transformSnap.manualMediaRotation,
+    );
+    const fontSize = Math.max(14, Math.round(outW * 0.035));
     await ensureProofFontsLoaded(fontSize);
 
     const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    canvas.width = outW;
+    canvas.height = outH;
     compositorCanvasRef.current = canvas;
     const ctx = canvas.getContext('2d');
     if (!ctx) {
       setCamError(t.camera.cameraError);
       recordingProofRef.current = null;
+      recordingTransformSnapshotRef.current = null;
       return;
     }
 
@@ -1048,11 +1193,11 @@ export default function TimemarkCamera({
       const v = videoRef.current;
       const c = compositorCanvasRef.current;
       const proof = recordingProofRef.current;
-      if (!v || !c || !proof || v.videoWidth === 0) return;
+      const snap = recordingTransformSnapshotRef.current;
+      if (!v || !c || !proof || !snap || v.videoWidth === 0) return;
       const frameCtx = c.getContext('2d');
       if (!frameCtx) return;
-      frameCtx.drawImage(v, 0, 0, c.width, c.height);
-      drawProofOverlay(frameCtx, c, proof, recordingLogoRef.current);
+      drawRecordingCompositorFrame(frameCtx, c, v, snap, proof, recordingLogoRef.current);
       compositorRafRef.current = requestAnimationFrame(drawFrame);
     };
     drawFrame();
@@ -1114,46 +1259,91 @@ export default function TimemarkCamera({
       return;
     }
     const video = videoRef.current;
-    if (!video || camState !== 'ready') return;
+    if (!video || camState !== 'ready' || capturingRef.current) return;
     const videoW = video.videoWidth;
     const videoH = video.videoHeight;
     if (videoW === 0 || videoH === 0 || video.readyState < 2) return;
     const tracks = streamRef.current?.getVideoTracks() ?? [];
     if (!tracks.length || tracks[0].readyState === 'ended') return;
 
-    await setTorchOff();
+    capturingRef.current = true;
+    setCapturing(true);
 
-    const captureMoment = new Date();
-    const proof = buildProofSnapshot(
-      captureMoment,
-      gps,
-      resolvedAddress,
-      liveWeather,
-      weatherStatus,
-      activeLogoUrl,
-      cameraOptions,
-    );
-    setFrozenProof(proof);
+    try {
+      await setTorchOff();
 
-    const canvas = document.createElement('canvas');
-    canvas.width  = videoW;
-    canvas.height = videoH;
-    canvas.getContext('2d')!.drawImage(video, 0, 0);
-    const raw = await new Promise<Blob>((r) => canvas.toBlob((b) => r(b!), 'image/jpeg', 0.92));
-    const watermarked = await watermarkBlob(raw, proof);
+      const viewfinder = viewfinderRef.current;
+      const transformSnap = buildMediaTransformSnapshot({
+        sourceVideoW: videoW,
+        sourceVideoH: videoH,
+        layoutOrientation,
+        manualMediaRotation,
+        facingMode,
+        viewfinderW: viewfinder?.clientWidth ?? videoW,
+        viewfinderH: viewfinder?.clientHeight ?? videoH,
+        mirrorCapture: MIRROR_CAPTURE,
+      });
+      if (!transformSnap) {
+        capturingRef.current = false;
+        setCapturing(false);
+        return;
+      }
+      captureTransformSnapshotRef.current = transformSnap;
 
-    setCaptureSize({ w: videoW, h: videoH });
+      const captureMoment = new Date();
+      const proof = buildProofSnapshot(
+        captureMoment,
+        gps,
+        resolvedAddress,
+        liveWeather,
+        weatherStatus,
+        activeLogoUrl,
+        cameraOptions,
+      );
+      setFrozenProof(proof);
 
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    setCameraOn(false);
-    setCamState('idle');
-    setOptionsOpen(false);
+      // Source-space raw frame for later review regeneration (never rotate this blob).
+      const { blob: rawBlob } = await composeOrientedFrameBlob(
+        video,
+        videoW,
+        videoH,
+        0,
+        MIRROR_CAPTURE,
+        0.92,
+      );
+      rawCaptureRef.current = { blob: rawBlob, sourceW: videoW, sourceH: videoH };
 
-    const url = URL.createObjectURL(watermarked);
-    setCapturedMimeType('image/jpeg');
-    setCapturedBlob(watermarked);
-    setCapturedUrl(url);
+      const { blob: watermarked, outW, outH } = await composeWatermarkedOrientedPhoto({
+        source: video,
+        sourceW: videoW,
+        sourceH: videoH,
+        rotationDeg: transformSnap.manualMediaRotation,
+        mirrorCapture: MIRROR_CAPTURE,
+        proof,
+        logoImg: overlayLogoImg,
+        quality: 0.85,
+      });
+
+      setCaptureSize({ w: outW, h: outH });
+
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      setCameraOn(false);
+      setCamState('idle');
+      setOptionsOpen(false);
+
+      const url = URL.createObjectURL(watermarked);
+      setCapturedMimeType('image/jpeg');
+      setCapturedBlob(watermarked);
+      setCapturedUrl(url);
+    } catch {
+      setCamError(t.camera.cameraError);
+      captureTransformSnapshotRef.current = null;
+      rawCaptureRef.current = null;
+    } finally {
+      capturingRef.current = false;
+      setCapturing(false);
+    }
   }
 
   async function handleConfirmPhoto() {
@@ -1178,6 +1368,10 @@ export default function TimemarkCamera({
       setFrozenProof(null);
       setCaptureSize(null);
       setCapturedMimeType('image/jpeg');
+      rawCaptureRef.current = null;
+      captureTransformSnapshotRef.current = null;
+      setManualMediaRotation(0);
+      setRotateAnnounce('');
     } catch (e) {
       setConfirmError(e instanceof Error ? e.message : t.camera.uploadFailed);
     }
@@ -1192,6 +1386,12 @@ export default function TimemarkCamera({
     setFrozenProof(null);
     setCaptureSize(null);
     setCapturedMimeType('image/jpeg');
+    rawCaptureRef.current = null;
+    captureTransformSnapshotRef.current = null;
+    recordingTransformSnapshotRef.current = null;
+    setManualMediaRotation(0);
+    setRotateAnnounce('');
+    setRotateBlockedMsg('');
     livePhotoCodeRef.current = null;
     setLiveNow(new Date());
     setOptionsOpen(false);
@@ -1204,6 +1404,15 @@ export default function TimemarkCamera({
   const showLiveOverlay = camState === 'ready' && !frozenProof && !(videoMode && isRecording);
   const reviewMime = resolveCaptureMime(capturedBlob, capturedMimeType);
   const reviewIsVideo = isVideoMime(reviewMime);
+  const orientationClass =
+    layoutOrientation === 'landscape'
+      ? 'camera-fullscreen--landscape'
+      : 'camera-fullscreen--portrait';
+  const stageScale = letterboxLayout?.scale ?? 1;
+  const stageDisplayW = letterboxLayout ? letterboxLayout.videoW * stageScale : 0;
+  const stageDisplayH = letterboxLayout ? letterboxLayout.videoH * stageScale : 0;
+  const sourceDisplayW = sourceFrameSize ? sourceFrameSize.w * stageScale : stageDisplayW;
+  const sourceDisplayH = sourceFrameSize ? sourceFrameSize.h * stageScale : stageDisplayH;
 
   return (
     <div>
@@ -1216,7 +1425,7 @@ export default function TimemarkCamera({
       )}
 
       {cameraOn && createPortal(
-        <div className="camera-fullscreen">
+        <div className={`camera-fullscreen ${orientationClass}`}>
           <div className="camera-topbar">
             <button
               className="cam-icon-btn"
@@ -1226,7 +1435,10 @@ export default function TimemarkCamera({
             >
               ✕
             </button>
-            <span className="camera-topbar-title">
+            <span
+              className="camera-topbar-title"
+              title={videoMode ? t.camera.captureVideoTitle : t.camera.captureTitle}
+            >
               {videoMode ? t.camera.captureVideoTitle : t.camera.captureTitle}
             </span>
             <div className="camera-topbar-actions">
@@ -1235,7 +1447,7 @@ export default function TimemarkCamera({
                   <button
                     className={`cam-icon-btn cam-flash-btn${torchOn ? ' active' : ''}`}
                     onClick={() => applyTorch(!torchOn)}
-                    aria-label={torchOn ? t.camera.flashlight : t.camera.flashlight}
+                    aria-label={t.camera.flashlight}
                     title={torchOn ? t.camera.on : t.camera.off}
                   >
                     ⚡
@@ -1252,6 +1464,16 @@ export default function TimemarkCamera({
                 )
               )}
               <button
+                className="cam-icon-btn"
+                onClick={handleRotateLive}
+                disabled={camState !== 'ready' || capturing || isRecording}
+                aria-label={t.camera.rotateAria}
+                title={t.camera.rotateTitle}
+              >
+                ↻
+                <span className="cam-icon-btn-label">{t.camera.rotate}</span>
+              </button>
+              <button
                 className={`cam-icon-btn${optionsOpen ? ' active' : ''}`}
                 onClick={() => setOptionsOpen((o) => !o)}
                 aria-label={t.camera.options}
@@ -1260,10 +1482,15 @@ export default function TimemarkCamera({
                 ⚙
               </button>
             </div>
-            <div className={`gps-badge ${gpsStatus}`}>
-              <span className={`gps-dot${gps ? ' gps-dot-pulse' : ''}`} />
-              {gpsLabel}
-            </div>
+            {layoutOrientation === 'portrait' && (
+              <div className={`gps-badge ${gpsStatus}`}>
+                <span className={`gps-dot${gps ? ' gps-dot-pulse' : ''}`} />
+                {gpsLabel}
+              </div>
+            )}
+          </div>
+          <div className="sr-only" aria-live="polite" aria-atomic="true">
+            {rotateAnnounce || rotateBlockedMsg}
           </div>
 
           {optionsOpen && (
@@ -1433,40 +1660,85 @@ export default function TimemarkCamera({
           )}
 
           <div className="camera-viewfinder" ref={viewfinderRef}>
-            <video ref={videoRef} playsInline muted autoPlay />
+            <div
+              className="camera-media-stage"
+              style={
+                letterboxLayout && stageDisplayW > 0 && stageDisplayH > 0
+                  ? {
+                      left: letterboxLayout.offsetX,
+                      top: letterboxLayout.offsetY,
+                      width: stageDisplayW,
+                      height: stageDisplayH,
+                    }
+                  : { inset: 0, width: '100%', height: '100%' }
+              }
+            >
+              <div
+                className="camera-media-rotate"
+                style={
+                  letterboxLayout && sourceDisplayW > 0 && sourceDisplayH > 0
+                    ? {
+                        left: '50%',
+                        top: '50%',
+                        width: sourceDisplayW,
+                        height: sourceDisplayH,
+                        transform: `translate(-50%, -50%) rotate(${manualMediaRotation}deg)`,
+                      }
+                    : {
+                        left: 0,
+                        top: 0,
+                        width: '100%',
+                        height: '100%',
+                        transform: 'none',
+                      }
+                }
+              >
+                <video ref={videoRef} playsInline muted autoPlay />
+              </div>
+              {showLiveOverlay && letterboxLayout && (
+                <div
+                  className="proof-overlay-letterbox proof-overlay-letterbox--staged"
+                  style={
+                    {
+                      left: 0,
+                      bottom: 0,
+                      width: letterboxLayout.videoW,
+                      height: letterboxLayout.videoH,
+                      transform: `scale(${letterboxLayout.scale})`,
+                    } as CSSProperties
+                  }
+                >
+                  <ProofReviewOverlay
+                    proof={liveProof}
+                    frameWidth={previewFrameSize?.w}
+                    frameHeight={previewFrameSize?.h}
+                    logoImg={overlayLogoImg}
+                    layoutKey={overlayLayoutKey}
+                  />
+                </div>
+              )}
+            </div>
 
             {micUnavailableMsg && (
               <div className="cam-mic-banner">{micUnavailableMsg}</div>
             )}
 
-            {showLiveOverlay && (
-              <div
-                className="proof-overlay-letterbox"
-                style={
-                  letterboxLayout
-                    ? ({
-                        left: letterboxLayout.offsetX,
-                        bottom: letterboxLayout.offsetY,
-                        width: letterboxLayout.videoW,
-                        height: letterboxLayout.videoH,
-                        transform: `scale(${letterboxLayout.scale})`,
-                      } as CSSProperties)
-                    : undefined
-                }
-              >
-                <ProofReviewOverlay
-                  proof={liveProof}
-                  frameWidth={previewFrameSize?.w}
-                  frameHeight={previewFrameSize?.h}
-                  logoImg={overlayLogoImg}
-                  layoutKey={overlayLayoutKey}
-                />
+            {layoutOrientation === 'landscape' && (
+              <div className={`gps-badge cam-gps-viewfinder-badge ${gpsStatus}`}>
+                <span className={`gps-dot${gps ? ' gps-dot-pulse' : ''}`} />
+                {gpsLabel}
               </div>
             )}
 
             {isRecording && (
               <div className="cam-recording-badge">
                 ● {t.camera.recording} {recordSeconds}s
+              </div>
+            )}
+
+            {rotateBlockedMsg && (
+              <div className="cam-rotate-blocked-banner" role="status">
+                {rotateBlockedMsg}
               </div>
             )}
 
@@ -1505,6 +1777,9 @@ export default function TimemarkCamera({
           </div>
 
           <div className="camera-controls">
+            <span className="cam-mode-chip" aria-hidden="false">
+              {videoMode ? t.camera.modeVideo : t.camera.modePhoto}
+            </span>
             <button
               className="cam-icon-btn"
               onClick={handleSwitchCamera}
@@ -1516,9 +1791,9 @@ export default function TimemarkCamera({
             </button>
 
             <button
-              className={`shutter${camState !== 'ready' ? ' disabled' : ''}${isRecording ? ' shutter--recording' : ''}${videoMode ? ' shutter--video' : ''}`}
+              className={`shutter${camState !== 'ready' || capturing ? ' disabled' : ''}${isRecording ? ' shutter--recording' : ''}${videoMode ? ' shutter--video' : ''}`}
               onClick={handleCapture}
-              disabled={camState !== 'ready'}
+              disabled={camState !== 'ready' || capturing}
               aria-label={videoMode ? (isRecording ? t.camera.stopRecording : t.camera.startRecording) : t.camera.capturePhoto}
             >
               <div className="shutter-inner" />
@@ -1538,9 +1813,12 @@ export default function TimemarkCamera({
       )}
 
       {capturedBlob && frozenProof && createPortal(
-        <div className="postcapture-sheet">
+        <div className={`postcapture-sheet postcapture-sheet--${layoutOrientation}`}>
           <div style={{ color: '#fff', fontWeight: 700, fontSize: 17 }}>
             {reviewIsVideo ? t.camera.reviewVideo : t.camera.reviewPhoto}
+          </div>
+          <div className="sr-only" aria-live="polite" aria-atomic="true">
+            {rotateAnnounce}
           </div>
 
           <div
@@ -1570,6 +1848,19 @@ export default function TimemarkCamera({
             }}>
               {confirmError}
             </div>
+          )}
+
+          {!reviewIsVideo && (
+            <button
+              type="button"
+              className="cam-review-rotate-btn"
+              onClick={() => void handleRotateReview()}
+              disabled={uploading || !rawCaptureRef.current}
+              aria-label={t.camera.rotateAria}
+              title={t.camera.rotateTitle}
+            >
+              ↻ {t.camera.rotateTitle}
+            </button>
           )}
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
