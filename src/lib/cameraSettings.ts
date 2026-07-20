@@ -1,4 +1,11 @@
-import type { CameraOptions, Profile, ProofWeather, Store, WatermarkStyle } from '../types';
+import type {
+  CameraOptions,
+  Profile,
+  ProofWeather,
+  Store,
+  WatermarkDirection,
+  WatermarkStyle,
+} from '../types';
 import {
   DEFAULT_ULTIMATE_WATERMARK_CONFIG,
   normalizeUltimateConfig,
@@ -20,7 +27,14 @@ export const DEFAULT_CAMERA_OPTIONS: CameraOptions = {
   logoEnabled: true,
   flashlightLastUsed: false,
   watermarkStyle: 'blackBoxInline',
+  watermarkDirection: 0,
 };
+
+export function normalizeWatermarkDirection(value: unknown): WatermarkDirection {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (n === 90 || n === 180 || n === 270) return n;
+  return 0;
+}
 
 const WATERMARK_STYLE_CYCLE: WatermarkStyle[] = [
   'blackBox',
@@ -108,6 +122,7 @@ export function parseCameraOptions(profile: Profile | null | undefined): CameraO
       logoEnabled: parsed.logoEnabled ?? true,
       flashlightLastUsed: parsed.flashlightLastUsed ?? false,
       watermarkStyle: normalizeWatermarkStyle(parsed.watermarkStyle),
+      watermarkDirection: normalizeWatermarkDirection(parsed.watermarkDirection),
     };
     if (opts.watermarkStyle === 'ultimate_custom') {
       opts.watermarkConfig = normalizeUltimateConfig(parsed.watermarkConfig);

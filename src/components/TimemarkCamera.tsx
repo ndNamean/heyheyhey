@@ -9,6 +9,7 @@ import {
   buildWeatherLine,
   cycleWatermarkStyle,
   ensureWatermarkConfig,
+  normalizeWatermarkDirection,
   parseCameraOptions,
   resolveActiveLogoUrl,
   resolveWatermarkStyle,
@@ -27,17 +28,15 @@ import {
   MIRROR_CAPTURE,
   buildMediaTransformSnapshot,
   composeOrientedFrameBlob,
-  composeWatermarkedFromRawBlob,
   composeWatermarkedOrientedPhoto,
   containedToLetterboxLayout,
   computeContainedMediaRect,
   drawRecordingCompositorFrame,
   getEffectiveDimensions,
-  nextManualRotation,
-  type ManualMediaRotation,
   type MediaTransformSnapshot,
+  type WatermarkDirection,
 } from '../lib/cameraMediaTransform';
-import { useLayoutOrientation } from '../hooks/useLayoutOrientation';
+import { useDeviceLayoutOrientation } from '../hooks/useDeviceLayoutOrientation';
 import { needsVideoProof } from '../lib/roles';
 import { BACK_PRIORITY, useNativeBack } from '../lib/nativeBack';
 import ProofReviewOverlay from './ProofReviewOverlay';
@@ -162,7 +161,8 @@ export default function TimemarkCamera({
   const rawCaptureRef = useRef<{ blob: Blob; sourceW: number; sourceH: number } | null>(null);
   const captureTransformSnapshotRef = useRef<MediaTransformSnapshot | null>(null);
   const recordingTransformSnapshotRef = useRef<MediaTransformSnapshot | null>(null);
-  const rotateAnnounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const directionBlockedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tiltHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [gps,      setGps]      = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
@@ -202,15 +202,21 @@ export default function TimemarkCamera({
   const [previewFrameSize, setPreviewFrameSize] = useState<{ w: number; h: number } | null>(null);
   const [letterboxLayout, setLetterboxLayout] = useState<LetterboxLayout | null>(null);
   const [sourceFrameSize, setSourceFrameSize] = useState<{ w: number; h: number } | null>(null);
-  const [manualMediaRotation, setManualMediaRotation] = useState<ManualMediaRotation>(0);
-  const [rotateAnnounce, setRotateAnnounce] = useState('');
-  const [rotateBlockedMsg, setRotateBlockedMsg] = useState('');
+  const [directionBlockedMsg, setDirectionBlockedMsg] = useState('');
+  const [tiltHintVisible, setTiltHintVisible] = useState(false);
+  const [tiltHintDismissed, setTiltHintDismissed] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [overlayLogoImg, setOverlayLogoImg] = useState<HTMLImageElement | null>(null);
   const [overlayLayoutKey, setOverlayLayoutKey] = useState(0);
 
   const isAdminLogo = roleCanEditStoreLogo(profile?.role ?? '', defs);
-  const layoutOrientation = useLayoutOrientation(cameraOn || !!capturedBlob);
+  const {
+    layoutOrientation,
+    tiltSource,
+    sensorAvailable,
+    compactLandscape,
+  } = useDeviceLayoutOrientation(cameraOn || !!capturedBlob);
+  const watermarkDirection = normalizeWatermarkDirection(cameraOptions.watermarkDirection);
   const activeLogoUrl = storeLogoUrl.trim() || resolveActiveLogoUrl(store);
   const weatherCoords = getWeatherCoords(gps);
   const weatherKey =
@@ -441,7 +447,7 @@ export default function TimemarkCamera({
       const sw = video.videoWidth;
       const sh = video.videoHeight;
       setSourceFrameSize({ w: sw, h: sh });
-      const effective = getEffectiveDimensions(sw, sh, manualMediaRotation);
+      const effective = getEffectiveDimensions(sw, sh, watermarkDirection);
       setPreviewFrameSize({ w: effective.w, h: effective.h });
       if (viewfinder && viewfinder.clientWidth > 0 && viewfinder.clientHeight > 0) {
         const contained = computeContainedMediaRect(
@@ -449,7 +455,7 @@ export default function TimemarkCamera({
           viewfinder.clientHeight,
           sw,
           sh,
-          manualMediaRotation,
+          watermarkDirection,
         );
         setLetterboxLayout(contained ? containedToLetterboxLayout(contained) : null);
       }
@@ -460,7 +466,7 @@ export default function TimemarkCamera({
       setSourceFrameSize(null);
       setLetterboxLayout(null);
     }
-  }, [manualMediaRotation]);
+  }, [watermarkDirection]);
 
   useEffect(() => {
     if (camState !== 'ready') return;
@@ -484,7 +490,35 @@ export default function TimemarkCamera({
       window.visualViewport?.removeEventListener('resize', schedule);
       ro?.disconnect();
     };
-  }, [camState, syncPreviewFrameSize, layoutOrientation, manualMediaRotation]);
+  }, [camState, syncPreviewFrameSize, layoutOrientation, watermarkDirection]);
+
+  // Reflow watermark layout when phone tilt changes UI orientation (not watermarkDirection).
+  useEffect(() => {
+    if (camState !== 'ready') return;
+    setOverlayLayoutKey((k) => k + 1);
+    syncPreviewFrameSize();
+  }, [layoutOrientation, camState, syncPreviewFrameSize]);
+
+  // Auto-rotate hint when stuck in portrait without useful sensor after a few seconds.
+  useEffect(() => {
+    if (!cameraOn || camState !== 'ready' || tiltHintDismissed) {
+      setTiltHintVisible(false);
+      if (tiltHintTimerRef.current) clearTimeout(tiltHintTimerRef.current);
+      return;
+    }
+    if (layoutOrientation === 'landscape') {
+      setTiltHintVisible(false);
+      return;
+    }
+    tiltHintTimerRef.current = setTimeout(() => {
+      if (!sensorAvailable && layoutOrientation === 'portrait') {
+        setTiltHintVisible(true);
+      }
+    }, 3000);
+    return () => {
+      if (tiltHintTimerRef.current) clearTimeout(tiltHintTimerRef.current);
+    };
+  }, [cameraOn, camState, layoutOrientation, sensorAvailable, tiltHintDismissed]);
 
   useEffect(() => {
     if (camState !== 'ready' || !previewFrameSize) return;
@@ -713,74 +747,18 @@ export default function TimemarkCamera({
 
   useEffect(() => () => { streamRef.current?.getTracks().forEach((t) => t.stop()); }, []);
 
-  function announceRotation(deg: ManualMediaRotation) {
-    const msg =
-      deg === 90
-        ? t.camera.rotateAnnounce90
-        : deg === 180
-          ? t.camera.rotateAnnounce180
-          : deg === 270
-            ? t.camera.rotateAnnounce270
-            : t.camera.rotateAnnounce0;
-    setRotateAnnounce(msg);
-    if (rotateAnnounceTimerRef.current) clearTimeout(rotateAnnounceTimerRef.current);
-    rotateAnnounceTimerRef.current = setTimeout(() => setRotateAnnounce(''), 1600);
+  function showDirectionBlocked() {
+    setDirectionBlockedMsg(t.camera.watermarkDirectionBlockedRecording);
+    if (directionBlockedTimerRef.current) clearTimeout(directionBlockedTimerRef.current);
+    directionBlockedTimerRef.current = setTimeout(() => setDirectionBlockedMsg(''), 2200);
   }
 
-  function handleRotateLive() {
+  function handleWatermarkDirectionChange(next: WatermarkDirection) {
     if (isRecording) {
-      setRotateBlockedMsg(t.camera.rotateBlockedRecording);
-      if (rotateAnnounceTimerRef.current) clearTimeout(rotateAnnounceTimerRef.current);
-      rotateAnnounceTimerRef.current = setTimeout(() => setRotateBlockedMsg(''), 2200);
+      showDirectionBlocked();
       return;
     }
-    if (camState !== 'ready' || capturing) return;
-    const next = nextManualRotation(manualMediaRotation);
-    setManualMediaRotation(next);
-    announceRotation(next);
-  }
-
-  async function handleRotateReview() {
-    const mime = resolveCaptureMime(capturedBlob, capturedMimeType);
-    if (uploading || isVideoMime(mime) || !frozenProof || !rawCaptureRef.current) return;
-    const next = nextManualRotation(manualMediaRotation);
-    setManualMediaRotation(next);
-    announceRotation(next);
-    if (captureTransformSnapshotRef.current) {
-      captureTransformSnapshotRef.current = {
-        ...captureTransformSnapshotRef.current,
-        manualMediaRotation: next,
-        contained:
-          computeContainedMediaRect(
-            captureTransformSnapshotRef.current.viewfinderW,
-            captureTransformSnapshotRef.current.viewfinderH,
-            captureTransformSnapshotRef.current.sourceVideoW,
-            captureTransformSnapshotRef.current.sourceVideoH,
-            next,
-          ) ?? captureTransformSnapshotRef.current.contained,
-      };
-    }
-    try {
-      const raw = rawCaptureRef.current;
-      const { blob, outW, outH } = await composeWatermarkedFromRawBlob({
-        rawBlob: raw.blob,
-        sourceW: raw.sourceW,
-        sourceH: raw.sourceH,
-        rotationDeg: next,
-        mirrorCapture: MIRROR_CAPTURE,
-        proof: frozenProof,
-        logoImg: overlayLogoImg,
-        quality: 0.85,
-      });
-      const prevUrl = capturedUrlRef.current;
-      if (prevUrl) URL.revokeObjectURL(prevUrl);
-      setCapturedBlob(blob);
-      setCapturedUrl(URL.createObjectURL(blob));
-      setCaptureSize({ w: outW, h: outH });
-      setCapturedMimeType('image/jpeg');
-    } catch {
-      setConfirmError(t.camera.cameraError);
-    }
+    void saveCameraOptions({ ...cameraOptions, watermarkDirection: next });
   }
 
   async function blobToBase64(blob: Blob): Promise<string> {
@@ -944,9 +922,9 @@ export default function TimemarkCamera({
     rawCaptureRef.current = null;
     captureTransformSnapshotRef.current = null;
     recordingTransformSnapshotRef.current = null;
-    setManualMediaRotation(0);
-    setRotateAnnounce('');
-    setRotateBlockedMsg('');
+    setDirectionBlockedMsg('');
+    setTiltHintVisible(false);
+    setTiltHintDismissed(false);
     setCapturing(false);
     capturingRef.current = false;
     setLiveNow(new Date());
@@ -970,9 +948,8 @@ export default function TimemarkCamera({
     setCameraOn(false);
     setCamState('idle');
     setCamError('');
-    setManualMediaRotation(0);
-    setRotateAnnounce('');
-    setRotateBlockedMsg('');
+    setDirectionBlockedMsg('');
+    setTiltHintVisible(false);
     setCapturing(false);
     capturingRef.current = false;
     rawCaptureRef.current = null;
@@ -992,9 +969,7 @@ export default function TimemarkCamera({
     setOptionsOpen(false);
     setCameraOn(false);
     setCamState('idle');
-    setManualMediaRotation(0);
-    setRotateAnnounce('');
-    setRotateBlockedMsg('');
+    setDirectionBlockedMsg('');
     setCapturing(false);
     capturingRef.current = false;
     rawCaptureRef.current = null;
@@ -1099,7 +1074,7 @@ export default function TimemarkCamera({
       const { w, h } = getEffectiveDimensions(
         snap.sourceVideoW,
         snap.sourceVideoH,
-        snap.manualMediaRotation,
+        snap.watermarkDirection,
       );
       setCaptureSize({ w, h });
     } else {
@@ -1147,7 +1122,7 @@ export default function TimemarkCamera({
       sourceVideoW: video.videoWidth,
       sourceVideoH: video.videoHeight,
       layoutOrientation,
-      manualMediaRotation,
+      watermarkDirection,
       facingMode,
       viewfinderW: viewfinder?.clientWidth ?? video.videoWidth,
       viewfinderH: viewfinder?.clientHeight ?? video.videoHeight,
@@ -1172,7 +1147,7 @@ export default function TimemarkCamera({
     const { w: outW, h: outH } = getEffectiveDimensions(
       video.videoWidth,
       video.videoHeight,
-      transformSnap.manualMediaRotation,
+      transformSnap.watermarkDirection,
     );
     const fontSize = Math.max(14, Math.round(outW * 0.035));
     await ensureProofFontsLoaded(fontSize);
@@ -1277,7 +1252,7 @@ export default function TimemarkCamera({
         sourceVideoW: videoW,
         sourceVideoH: videoH,
         layoutOrientation,
-        manualMediaRotation,
+        watermarkDirection,
         facingMode,
         viewfinderW: viewfinder?.clientWidth ?? videoW,
         viewfinderH: viewfinder?.clientHeight ?? videoH,
@@ -1317,7 +1292,7 @@ export default function TimemarkCamera({
         source: video,
         sourceW: videoW,
         sourceH: videoH,
-        rotationDeg: transformSnap.manualMediaRotation,
+        rotationDeg: transformSnap.watermarkDirection,
         mirrorCapture: MIRROR_CAPTURE,
         proof,
         logoImg: overlayLogoImg,
@@ -1370,8 +1345,6 @@ export default function TimemarkCamera({
       setCapturedMimeType('image/jpeg');
       rawCaptureRef.current = null;
       captureTransformSnapshotRef.current = null;
-      setManualMediaRotation(0);
-      setRotateAnnounce('');
     } catch (e) {
       setConfirmError(e instanceof Error ? e.message : t.camera.uploadFailed);
     }
@@ -1389,9 +1362,6 @@ export default function TimemarkCamera({
     rawCaptureRef.current = null;
     captureTransformSnapshotRef.current = null;
     recordingTransformSnapshotRef.current = null;
-    setManualMediaRotation(0);
-    setRotateAnnounce('');
-    setRotateBlockedMsg('');
     livePhotoCodeRef.current = null;
     setLiveNow(new Date());
     setOptionsOpen(false);
@@ -1406,7 +1376,7 @@ export default function TimemarkCamera({
   const reviewIsVideo = isVideoMime(reviewMime);
   const orientationClass =
     layoutOrientation === 'landscape'
-      ? 'camera-fullscreen--landscape'
+      ? `camera-fullscreen--landscape${compactLandscape || tiltSource === 'sensor' ? ' camera-fullscreen--landscape-compact' : ''}`
       : 'camera-fullscreen--portrait';
   const stageScale = letterboxLayout?.scale ?? 1;
   const stageDisplayW = letterboxLayout ? letterboxLayout.videoW * stageScale : 0;
@@ -1464,16 +1434,6 @@ export default function TimemarkCamera({
                 )
               )}
               <button
-                className="cam-icon-btn"
-                onClick={handleRotateLive}
-                disabled={camState !== 'ready' || capturing || isRecording}
-                aria-label={t.camera.rotateAria}
-                title={t.camera.rotateTitle}
-              >
-                ↻
-                <span className="cam-icon-btn-label">{t.camera.rotate}</span>
-              </button>
-              <button
                 className={`cam-icon-btn${optionsOpen ? ' active' : ''}`}
                 onClick={() => setOptionsOpen((o) => !o)}
                 aria-label={t.camera.options}
@@ -1490,7 +1450,7 @@ export default function TimemarkCamera({
             )}
           </div>
           <div className="sr-only" aria-live="polite" aria-atomic="true">
-            {rotateAnnounce || rotateBlockedMsg}
+            {directionBlockedMsg}
           </div>
 
           {optionsOpen && (
@@ -1548,6 +1508,34 @@ export default function TimemarkCamera({
                     timecard: t.camera.watermarkTimecard,
                   })}
                 </button>
+              </div>
+              <div className="camera-options-row camera-options-row--direction">
+                <div className="camera-options-direction-label">
+                  <span>{t.camera.watermarkDirection}</span>
+                  <span className="cam-opt-muted">{t.camera.watermarkDirectionHint}</span>
+                </div>
+                <div className="cam-direction-segment" role="group" aria-label={t.camera.watermarkDirection}>
+                  {([0, 90, 180, 270] as WatermarkDirection[]).map((deg) => (
+                    <button
+                      key={deg}
+                      type="button"
+                      className={`cam-direction-btn${watermarkDirection === deg ? ' active' : ''}`}
+                      disabled={isRecording}
+                      onClick={() => handleWatermarkDirectionChange(deg)}
+                      aria-label={
+                        deg === 0
+                          ? t.camera.watermarkDirection0
+                          : deg === 90
+                            ? t.camera.watermarkDirection90
+                            : deg === 180
+                              ? t.camera.watermarkDirection180
+                              : t.camera.watermarkDirection270
+                      }
+                    >
+                      {deg}°
+                    </button>
+                  ))}
+                </div>
               </div>
               {resolveWatermarkStyle(cameraOptions) === 'ultimate_custom' && (
                 <UltimateWatermarkSettings
@@ -1682,7 +1670,7 @@ export default function TimemarkCamera({
                         top: '50%',
                         width: sourceDisplayW,
                         height: sourceDisplayH,
-                        transform: `translate(-50%, -50%) rotate(${manualMediaRotation}deg)`,
+                        transform: `translate(-50%, -50%) rotate(${watermarkDirection}deg)`,
                       }
                     : {
                         left: 0,
@@ -1736,9 +1724,26 @@ export default function TimemarkCamera({
               </div>
             )}
 
-            {rotateBlockedMsg && (
+            {directionBlockedMsg && (
               <div className="cam-rotate-blocked-banner" role="status">
-                {rotateBlockedMsg}
+                {directionBlockedMsg}
+              </div>
+            )}
+
+            {tiltHintVisible && (
+              <div className="cam-tilt-hint-banner" role="status">
+                <span>{t.camera.tiltHint}</span>
+                <button
+                  type="button"
+                  className="cam-tilt-hint-dismiss"
+                  onClick={() => {
+                    setTiltHintDismissed(true);
+                    setTiltHintVisible(false);
+                  }}
+                  aria-label={t.common.cancel}
+                >
+                  ✕
+                </button>
               </div>
             )}
 
@@ -1817,9 +1822,6 @@ export default function TimemarkCamera({
           <div style={{ color: '#fff', fontWeight: 700, fontSize: 17 }}>
             {reviewIsVideo ? t.camera.reviewVideo : t.camera.reviewPhoto}
           </div>
-          <div className="sr-only" aria-live="polite" aria-atomic="true">
-            {rotateAnnounce}
-          </div>
 
           <div
             className="postcapture-thumb"
@@ -1848,19 +1850,6 @@ export default function TimemarkCamera({
             }}>
               {confirmError}
             </div>
-          )}
-
-          {!reviewIsVideo && (
-            <button
-              type="button"
-              className="cam-review-rotate-btn"
-              onClick={() => void handleRotateReview()}
-              disabled={uploading || !rawCaptureRef.current}
-              aria-label={t.camera.rotateAria}
-              title={t.camera.rotateTitle}
-            >
-              ↻ {t.camera.rotateTitle}
-            </button>
           )}
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>

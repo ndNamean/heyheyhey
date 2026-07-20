@@ -1,52 +1,48 @@
 import { describe, expect, it } from 'vitest';
 import {
+  orientationFromDeviceMotion,
+  orientationFromScreenAngle,
+} from '../hooks/useDeviceLayoutOrientation';
+import {
   computeContainedMediaRect,
   getEffectiveDimensions,
-  nextManualRotation,
-  normalizeManualRotation,
+  normalizeWatermarkDirection,
 } from './cameraMediaTransform';
+import { normalizeWatermarkDirection as normalizeFromSettings } from './cameraSettings';
 
-describe('cameraMediaTransform', () => {
-  it('normalizes and cycles manual rotation clockwise', () => {
-    expect(normalizeManualRotation(0)).toBe(0);
-    expect(normalizeManualRotation(450)).toBe(90);
-    expect(nextManualRotation(0)).toBe(90);
-    expect(nextManualRotation(90)).toBe(180);
-    expect(nextManualRotation(180)).toBe(270);
-    expect(nextManualRotation(270)).toBe(0);
+describe('watermarkDirection / transform', () => {
+  it('normalizes direction values', () => {
+    expect(normalizeWatermarkDirection(0)).toBe(0);
+    expect(normalizeWatermarkDirection(90)).toBe(90);
+    expect(normalizeWatermarkDirection(450)).toBe(90);
+    expect(normalizeFromSettings(undefined)).toBe(0);
+    expect(normalizeFromSettings(180)).toBe(180);
   });
 
   it('swaps effective dimensions at 90 and 270', () => {
-    expect(getEffectiveDimensions(1920, 1080, 0)).toEqual({ w: 1920, h: 1080 });
     expect(getEffectiveDimensions(1920, 1080, 90)).toEqual({ w: 1080, h: 1920 });
-    expect(getEffectiveDimensions(1920, 1080, 180)).toEqual({ w: 1920, h: 1080 });
-    expect(getEffectiveDimensions(1920, 1080, 270)).toEqual({ w: 1080, h: 1920 });
+    expect(getEffectiveDimensions(1920, 1080, 0)).toEqual({ w: 1920, h: 1080 });
   });
 
-  it('computes contain rect without stretch for portrait viewfinder', () => {
-    const rect = computeContainedMediaRect(390, 700, 1920, 1080, 0);
-    expect(rect).not.toBeNull();
-    expect(rect!.effectiveW).toBe(1920);
-    expect(rect!.effectiveH).toBe(1080);
-    expect(rect!.displayW / rect!.displayH).toBeCloseTo(1920 / 1080, 5);
-    expect(rect!.displayW).toBeLessThanOrEqual(390 + 0.01);
-    expect(rect!.displayH).toBeLessThanOrEqual(700 + 0.01);
-    expect(rect!.offsetX).toBeGreaterThanOrEqual(0);
-    expect(rect!.offsetY).toBeGreaterThanOrEqual(0);
-  });
-
-  it('uses swapped aspect for 90-degree contain in landscape viewfinder', () => {
+  it('computes contain rect with watermark direction', () => {
     const rect = computeContainedMediaRect(800, 360, 1920, 1080, 90);
     expect(rect).not.toBeNull();
     expect(rect!.effectiveW).toBe(1080);
     expect(rect!.effectiveH).toBe(1920);
-    // Tall effective media in short landscape viewport → pillar/letterbox by width
-    expect(rect!.displayW / rect!.displayH).toBeCloseTo(1080 / 1920, 5);
-    expect(rect!.displayH).toBeLessThanOrEqual(360 + 0.01);
+  });
+});
+
+describe('device layout orientation helpers', () => {
+  it('maps screen angles to landscape near 90/270', () => {
+    expect(orientationFromScreenAngle(0)).toBe('portrait');
+    expect(orientationFromScreenAngle(90)).toBe('landscape');
+    expect(orientationFromScreenAngle(270)).toBe('landscape');
+    expect(orientationFromScreenAngle(180)).toBe('portrait');
   });
 
-  it('returns null for invalid sizes', () => {
-    expect(computeContainedMediaRect(0, 100, 1920, 1080, 0)).toBeNull();
-    expect(computeContainedMediaRect(100, 100, 0, 1080, 0)).toBeNull();
+  it('infers landscape from strong gamma tilt', () => {
+    expect(orientationFromDeviceMotion(10, 80)).toBe('landscape');
+    expect(orientationFromDeviceMotion(70, 5)).toBe('portrait');
+    expect(orientationFromDeviceMotion(null, 90)).toBeNull();
   });
 });

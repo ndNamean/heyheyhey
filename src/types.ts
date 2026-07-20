@@ -145,6 +145,9 @@ export interface TimecardWatermarkConfig {
   items: TimecardItems;
 }
 
+/** Clockwise watermark / capture frame direction (TimeMark-style). */
+export type WatermarkDirection = 0 | 90 | 180 | 270;
+
 export interface CameraOptions {
   weatherEnabled: boolean;
   logoEnabled: boolean;
@@ -152,6 +155,8 @@ export interface CameraOptions {
   watermarkStyle?: WatermarkStyle;
   watermarkConfig?: UltimateWatermarkConfig;
   timecardConfig?: TimecardWatermarkConfig;
+  /** Manual watermark direction; independent of phone/UI orientation. Default 0. */
+  watermarkDirection?: WatermarkDirection;
 }
 
 export interface ProofWeather {

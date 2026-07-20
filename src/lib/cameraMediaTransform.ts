@@ -7,7 +7,9 @@ import {
 import { ensureProofFontsLoaded } from './proofFonts';
 
 export type LayoutOrientation = 'portrait' | 'landscape';
+/** @deprecated Use WatermarkDirection — same 0|90|180|270 values. */
 export type ManualMediaRotation = 0 | 90 | 180 | 270;
+export type WatermarkDirection = 0 | 90 | 180 | 270;
 
 /** Current product policy: never mirror front-camera preview or saved media. */
 export const MIRROR_CAPTURE = false;
@@ -26,14 +28,16 @@ export interface ContainedMediaRect {
   effectiveH: number;
   sourceW: number;
   sourceH: number;
-  rotationDeg: ManualMediaRotation;
+  rotationDeg: WatermarkDirection;
 }
 
 export interface MediaTransformSnapshot {
   sourceVideoW: number;
   sourceVideoH: number;
   layoutOrientation: LayoutOrientation;
-  manualMediaRotation: ManualMediaRotation;
+  watermarkDirection: WatermarkDirection;
+  /** @deprecated Alias of watermarkDirection */
+  manualMediaRotation: WatermarkDirection;
   facingMode: 'environment' | 'user';
   mirrorCapture: boolean;
   viewfinderW: number;
@@ -41,20 +45,22 @@ export interface MediaTransformSnapshot {
   contained: ContainedMediaRect;
 }
 
-export function normalizeManualRotation(deg: number): ManualMediaRotation {
+export function normalizeManualRotation(deg: number): WatermarkDirection {
   const n = ((Math.round(deg) % 360) + 360) % 360;
   if (n === 90 || n === 180 || n === 270) return n;
   return 0;
 }
 
-export function nextManualRotation(current: ManualMediaRotation): ManualMediaRotation {
+export const normalizeWatermarkDirection = normalizeManualRotation;
+
+export function nextManualRotation(current: WatermarkDirection): WatermarkDirection {
   return normalizeManualRotation(current + 90);
 }
 
 export function getEffectiveDimensions(
   sourceW: number,
   sourceH: number,
-  rotationDeg: ManualMediaRotation,
+  rotationDeg: WatermarkDirection,
 ): { w: number; h: number } {
   if (rotationDeg === 90 || rotationDeg === 270) {
     return { w: sourceH, h: sourceW };
@@ -67,7 +73,7 @@ export function computeContainedMediaRect(
   viewfinderH: number,
   sourceW: number,
   sourceH: number,
-  rotationDeg: ManualMediaRotation = 0,
+  rotationDeg: WatermarkDirection = 0,
 ): ContainedMediaRect | null {
   if (viewfinderW <= 0 || viewfinderH <= 0 || sourceW <= 0 || sourceH <= 0) return null;
   const { w: effectiveW, h: effectiveH } = getEffectiveDimensions(sourceW, sourceH, rotationDeg);
@@ -147,25 +153,31 @@ export function buildMediaTransformSnapshot(opts: {
   sourceVideoW: number;
   sourceVideoH: number;
   layoutOrientation: LayoutOrientation;
-  manualMediaRotation: ManualMediaRotation;
+  watermarkDirection?: WatermarkDirection;
+  /** @deprecated Prefer watermarkDirection */
+  manualMediaRotation?: WatermarkDirection;
   facingMode: 'environment' | 'user';
   viewfinderW: number;
   viewfinderH: number;
   mirrorCapture?: boolean;
 }): MediaTransformSnapshot | null {
+  const direction = normalizeWatermarkDirection(
+    opts.watermarkDirection ?? opts.manualMediaRotation ?? 0,
+  );
   const contained = computeContainedMediaRect(
     opts.viewfinderW,
     opts.viewfinderH,
     opts.sourceVideoW,
     opts.sourceVideoH,
-    opts.manualMediaRotation,
+    direction,
   );
   if (!contained) return null;
   return {
     sourceVideoW: opts.sourceVideoW,
     sourceVideoH: opts.sourceVideoH,
     layoutOrientation: opts.layoutOrientation,
-    manualMediaRotation: opts.manualMediaRotation,
+    watermarkDirection: direction,
+    manualMediaRotation: direction,
     facingMode: opts.facingMode,
     mirrorCapture: opts.mirrorCapture ?? MIRROR_CAPTURE,
     viewfinderW: opts.viewfinderW,
@@ -270,9 +282,9 @@ export function drawRecordingCompositorFrame(
   proof: ProofSnapshot,
   logoImg: HTMLImageElement | null,
 ): void {
-  const { sourceVideoW: sw, sourceVideoH: sh, manualMediaRotation, mirrorCapture } = snapshot;
+  const { sourceVideoW: sw, sourceVideoH: sh, watermarkDirection, mirrorCapture } = snapshot;
   // Canvas dimensions are frozen at recording start — do not resize mid-stream.
   void canvas;
-  drawOrientedFrame(ctx, video, sw, sh, manualMediaRotation, mirrorCapture);
+  drawOrientedFrame(ctx, video, sw, sh, watermarkDirection, mirrorCapture);
   drawProofOverlay(ctx, canvas, proof, logoImg);
 }
