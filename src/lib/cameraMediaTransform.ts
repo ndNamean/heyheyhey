@@ -35,6 +35,7 @@ export interface MediaTransformSnapshot {
   sourceVideoW: number;
   sourceVideoH: number;
   layoutOrientation: LayoutOrientation;
+  /** Stamp tilt only (0 when upright / OS landscape). Does not rotate video. */
   watermarkDirection: WatermarkDirection;
   /** @deprecated Alias of watermarkDirection */
   manualMediaRotation: WatermarkDirection;
@@ -164,12 +165,13 @@ export function buildMediaTransformSnapshot(opts: {
   const direction = normalizeWatermarkDirection(
     opts.watermarkDirection ?? opts.manualMediaRotation ?? 0,
   );
+  // Contain uses unrotated video; watermarkDirection is stamp tilt only.
   const contained = computeContainedMediaRect(
     opts.viewfinderW,
     opts.viewfinderH,
     opts.sourceVideoW,
     opts.sourceVideoH,
-    direction,
+    0,
   );
   if (!contained) return null;
   return {
@@ -211,21 +213,26 @@ export async function composeWatermarkedOrientedPhoto(opts: {
   source: CanvasImageSource;
   sourceW: number;
   sourceH: number;
-  rotationDeg: ManualMediaRotation;
+  /** Media/frame rotation (keep 0 for watermark-only tilt product). */
+  rotationDeg?: WatermarkDirection;
+  /** Rotate stamp only around bottom-left (matches live CSS). */
+  watermarkTiltRotation?: WatermarkDirection;
   mirrorCapture?: boolean;
   proof: ProofSnapshot;
   logoImg?: HTMLImageElement | null;
   quality?: number;
 }): Promise<{ blob: Blob; outW: number; outH: number }> {
   const mirror = opts.mirrorCapture ?? MIRROR_CAPTURE;
-  const { w: outW, h: outH } = getEffectiveDimensions(opts.sourceW, opts.sourceH, opts.rotationDeg);
+  const mediaRot = opts.rotationDeg ?? 0;
+  const stampTilt = opts.watermarkTiltRotation ?? 0;
+  const { w: outW, h: outH } = getEffectiveDimensions(opts.sourceW, opts.sourceH, mediaRot);
   const canvas = document.createElement('canvas');
   canvas.width = outW;
   canvas.height = outH;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas unavailable');
 
-  drawOrientedFrame(ctx, opts.source, opts.sourceW, opts.sourceH, opts.rotationDeg, mirror);
+  drawOrientedFrame(ctx, opts.source, opts.sourceW, opts.sourceH, mediaRot, mirror);
 
   let logoImg = opts.logoImg ?? null;
   const hasLogo =
@@ -236,7 +243,7 @@ export async function composeWatermarkedOrientedPhoto(opts: {
 
   const fontSize = Math.max(14, Math.round(outW * 0.035));
   await ensureProofFontsLoaded(fontSize);
-  drawProofOverlay(ctx, canvas, opts.proof, logoImg);
+  drawProofOverlayWithTilt(ctx, canvas, opts.proof, logoImg, stampTilt);
 
   const quality = opts.quality ?? 0.85;
   const blob = await new Promise<Blob>((resolve, reject) => {
@@ -245,11 +252,47 @@ export async function composeWatermarkedOrientedPhoto(opts: {
   return { blob, outW, outH };
 }
 
+/** Draw watermark upright in frame, optionally tilted around bottom-left. */
+export function drawProofOverlayWithTilt(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  proof: ProofSnapshot,
+  logoImg: HTMLImageElement | null,
+  watermarkTiltRotation: WatermarkDirection = 0,
+): void {
+  if (!watermarkTiltRotation) {
+    drawProofOverlay(ctx, canvas, proof, logoImg);
+    return;
+  }
+
+  const off = document.createElement('canvas');
+  off.width = canvas.width;
+  off.height = canvas.height;
+  const octx = off.getContext('2d');
+  if (!octx) {
+    drawProofOverlay(ctx, canvas, proof, logoImg);
+    return;
+  }
+  drawProofOverlay(octx, off, proof, logoImg);
+
+  const rad = (watermarkTiltRotation * Math.PI) / 180;
+  // Match CSS transform-origin: bottom left of the frame/overlay.
+  const ox = 0;
+  const oy = canvas.height;
+  ctx.save();
+  ctx.translate(ox, oy);
+  ctx.rotate(rad);
+  ctx.translate(-ox, -oy);
+  ctx.drawImage(off, 0, 0);
+  ctx.restore();
+}
+
 export async function composeWatermarkedFromRawBlob(opts: {
   rawBlob: Blob;
   sourceW: number;
   sourceH: number;
-  rotationDeg: ManualMediaRotation;
+  rotationDeg?: ManualMediaRotation;
+  watermarkTiltRotation?: WatermarkDirection;
   mirrorCapture?: boolean;
   proof: ProofSnapshot;
   logoImg?: HTMLImageElement | null;
@@ -262,7 +305,8 @@ export async function composeWatermarkedFromRawBlob(opts: {
       source: bitmap,
       sourceW: opts.sourceW,
       sourceH: opts.sourceH,
-      rotationDeg: opts.rotationDeg,
+      rotationDeg: opts.rotationDeg ?? 0,
+      watermarkTiltRotation: opts.watermarkTiltRotation,
       mirrorCapture: opts.mirrorCapture,
       proof: opts.proof,
       logoImg: opts.logoImg,
@@ -273,7 +317,7 @@ export async function composeWatermarkedFromRawBlob(opts: {
   }
 }
 
-/** Draw one oriented+watermarked video frame into a fixed-size compositor canvas. */
+/** Draw one frame: unrotated video + optionally tilted watermark (no video spin). */
 export function drawRecordingCompositorFrame(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
@@ -283,8 +327,8 @@ export function drawRecordingCompositorFrame(
   logoImg: HTMLImageElement | null,
 ): void {
   const { sourceVideoW: sw, sourceVideoH: sh, watermarkDirection, mirrorCapture } = snapshot;
-  // Canvas dimensions are frozen at recording start — do not resize mid-stream.
   void canvas;
-  drawOrientedFrame(ctx, video, sw, sh, watermarkDirection, mirrorCapture);
-  drawProofOverlay(ctx, canvas, proof, logoImg);
+  // Video stays sensor-native; watermarkDirection is stamp tilt only.
+  drawOrientedFrame(ctx, video, sw, sh, 0, mirrorCapture);
+  drawProofOverlayWithTilt(ctx, canvas, proof, logoImg, watermarkDirection);
 }

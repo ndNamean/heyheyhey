@@ -31,7 +31,6 @@ import {
   containedToLetterboxLayout,
   computeContainedMediaRect,
   drawRecordingCompositorFrame,
-  getEffectiveDimensions,
   type MediaTransformSnapshot,
 } from '../lib/cameraMediaTransform';
 import { useDeviceLayoutOrientation } from '../hooks/useDeviceLayoutOrientation';
@@ -208,17 +207,13 @@ export default function TimemarkCamera({
   const isAdminLogo = roleCanEditStoreLogo(profile?.role ?? '', defs);
   const {
     layoutOrientation,
-    tiltSource,
     sensorAvailable,
-    compactLandscape,
-    gravityRotation,
+    watermarkTiltRotation,
   } = useDeviceLayoutOrientation(cameraOn || !!capturedBlob);
-  /** Capture/preview media rotation comes from device tilt only (auto), not Settings. */
-  const mediaRotation = gravityRotation;
-  const previewMediaRotation =
+  const previewWatermarkTilt =
     isRecording && recordingTransformSnapshotRef.current
       ? recordingTransformSnapshotRef.current.watermarkDirection
-      : mediaRotation;
+      : watermarkTiltRotation;
   const activeLogoUrl = storeLogoUrl.trim() || resolveActiveLogoUrl(store);
   const weatherCoords = getWeatherCoords(gps);
   const weatherKey =
@@ -445,23 +440,19 @@ export default function TimemarkCamera({
   const syncPreviewFrameSize = useCallback(() => {
     const video = videoRef.current;
     const viewfinder = viewfinderRef.current;
-    const rotationForPreview =
-      isRecording && recordingTransformSnapshotRef.current
-        ? recordingTransformSnapshotRef.current.watermarkDirection
-        : mediaRotation;
+    // Video never spins — letterbox uses native sensor aspect only.
     if (video && video.videoWidth > 0 && video.videoHeight > 0) {
       const sw = video.videoWidth;
       const sh = video.videoHeight;
       setSourceFrameSize({ w: sw, h: sh });
-      const effective = getEffectiveDimensions(sw, sh, rotationForPreview);
-      setPreviewFrameSize({ w: effective.w, h: effective.h });
+      setPreviewFrameSize({ w: sw, h: sh });
       if (viewfinder && viewfinder.clientWidth > 0 && viewfinder.clientHeight > 0) {
         const contained = computeContainedMediaRect(
           viewfinder.clientWidth,
           viewfinder.clientHeight,
           sw,
           sh,
-          rotationForPreview,
+          0,
         );
         setLetterboxLayout(contained ? containedToLetterboxLayout(contained) : null);
       }
@@ -472,7 +463,7 @@ export default function TimemarkCamera({
       setSourceFrameSize(null);
       setLetterboxLayout(null);
     }
-  }, [mediaRotation, isRecording]);
+  }, []);
 
   useEffect(() => {
     if (camState !== 'ready') return;
@@ -496,14 +487,14 @@ export default function TimemarkCamera({
       window.visualViewport?.removeEventListener('resize', schedule);
       ro?.disconnect();
     };
-  }, [camState, syncPreviewFrameSize, layoutOrientation, mediaRotation]);
+  }, [camState, syncPreviewFrameSize, layoutOrientation]);
 
-  // Reflow watermark when phone tilt changes (UI + gravity rotation).
+  // Reflow stamp when viewport chrome changes; tilt only spins the overlay CSS.
   useEffect(() => {
     if (camState !== 'ready') return;
     setOverlayLayoutKey((k) => k + 1);
     syncPreviewFrameSize();
-  }, [layoutOrientation, mediaRotation, camState, syncPreviewFrameSize]);
+  }, [layoutOrientation, watermarkTiltRotation, camState, syncPreviewFrameSize]);
 
   // Auto-rotate hint when stuck in portrait without useful sensor after a few seconds.
   useEffect(() => {
@@ -1060,12 +1051,7 @@ export default function TimemarkCamera({
     setCapturedMimeType(normalizeStoredMime(mimeType));
     const snap = recordingTransformSnapshotRef.current;
     if (snap) {
-      const { w, h } = getEffectiveDimensions(
-        snap.sourceVideoW,
-        snap.sourceVideoH,
-        snap.watermarkDirection,
-      );
-      setCaptureSize({ w, h });
+      setCaptureSize({ w: snap.sourceVideoW, h: snap.sourceVideoH });
     } else {
       setCaptureSize(null);
     }
@@ -1111,7 +1097,7 @@ export default function TimemarkCamera({
       sourceVideoW: video.videoWidth,
       sourceVideoH: video.videoHeight,
       layoutOrientation,
-      watermarkDirection: mediaRotation,
+      watermarkDirection: watermarkTiltRotation,
       facingMode,
       viewfinderW: viewfinder?.clientWidth ?? video.videoWidth,
       viewfinderH: viewfinder?.clientHeight ?? video.videoHeight,
@@ -1133,11 +1119,9 @@ export default function TimemarkCamera({
     }
     recordingLogoRef.current = logoImg;
 
-    const { w: outW, h: outH } = getEffectiveDimensions(
-      video.videoWidth,
-      video.videoHeight,
-      transformSnap.watermarkDirection,
-    );
+    // Video canvas stays sensor-native size; tilt only spins the stamp.
+    const outW = video.videoWidth;
+    const outH = video.videoHeight;
     const fontSize = Math.max(14, Math.round(outW * 0.035));
     await ensureProofFontsLoaded(fontSize);
 
@@ -1241,7 +1225,7 @@ export default function TimemarkCamera({
         sourceVideoW: videoW,
         sourceVideoH: videoH,
         layoutOrientation,
-        watermarkDirection: mediaRotation,
+        watermarkDirection: watermarkTiltRotation,
         facingMode,
         viewfinderW: viewfinder?.clientWidth ?? videoW,
         viewfinderH: viewfinder?.clientHeight ?? videoH,
@@ -1281,7 +1265,8 @@ export default function TimemarkCamera({
         source: video,
         sourceW: videoW,
         sourceH: videoH,
-        rotationDeg: transformSnap.watermarkDirection,
+        rotationDeg: 0,
+        watermarkTiltRotation: transformSnap.watermarkDirection,
         mirrorCapture: MIRROR_CAPTURE,
         proof,
         logoImg: overlayLogoImg,
@@ -1365,7 +1350,7 @@ export default function TimemarkCamera({
   const reviewIsVideo = isVideoMime(reviewMime);
   const orientationClass =
     layoutOrientation === 'landscape'
-      ? `camera-fullscreen--landscape${compactLandscape || tiltSource === 'sensor' ? ' camera-fullscreen--landscape-compact' : ''}`
+      ? 'camera-fullscreen--landscape'
       : 'camera-fullscreen--portrait';
   const stageScale = letterboxLayout?.scale ?? 1;
   const stageDisplayW = letterboxLayout ? letterboxLayout.videoW * stageScale : 0;
@@ -1628,8 +1613,8 @@ export default function TimemarkCamera({
                         top: '50%',
                         width: sourceDisplayW,
                         height: sourceDisplayH,
-                        // Gravity rotation only (tilt). Video + watermark rotate together.
-                        transform: `translate(-50%, -50%) rotate(${previewMediaRotation}deg)`,
+                        // Video never spins for tilt — only the watermark below does.
+                        transform: 'translate(-50%, -50%)',
                       }
                     : {
                         left: 0,
@@ -1650,7 +1635,7 @@ export default function TimemarkCamera({
                         bottom: 0,
                         width: sourceFrameSize.w,
                         height: sourceFrameSize.h,
-                        transform: `scale(${letterboxLayout.scale})`,
+                        transform: `scale(${letterboxLayout.scale}) rotate(${previewWatermarkTilt}deg)`,
                       } as CSSProperties
                     }
                   >

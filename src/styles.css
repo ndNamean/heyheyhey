@@ -1025,7 +1025,7 @@ body.wizard-active .page {
 .camera-media-stage {
   position: absolute;
   z-index: 1;
-  overflow: hidden;
+  overflow: visible;
   pointer-events: none;
 }
 .camera-media-rotate {
@@ -1034,7 +1034,7 @@ body.wizard-active .page {
   top: 50%;
   transform-origin: center center;
   pointer-events: none;
-  overflow: hidden;
+  overflow: visible;
 }
 .camera-media-rotate video {
   width: 100%;
