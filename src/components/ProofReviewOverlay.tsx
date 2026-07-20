@@ -277,14 +277,16 @@ export default function ProofReviewOverlay({
       style={rootStyle}
       aria-hidden="true"
     >
-      {showFloatingLines && (
-        <div className="proof-floating-lines">
-          {proof.locationLine && (
-            <div className="proof-ts-location proof-ts-detail">{proof.locationLine}</div>
-          )}
-          {proof.cameraOptionsSnapshot.weatherEnabled && proof.weatherLine && (
-            <div className="proof-ts-weather proof-ts-detail">{proof.weatherLine}</div>
-          )}
+      {showFloatingLines && layout.floating.lines.length > 0 && (
+        <div
+          className="proof-floating-lines"
+          style={{ maxWidth: layout.floating.maxWidth } as CSSProperties}
+        >
+          {layout.floating.lines.map((line, i) => (
+            <div key={`float-${i}`} className="proof-ts-detail">
+              {line}
+            </div>
+          ))}
         </div>
       )}
       {hasContent &&

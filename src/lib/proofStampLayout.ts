@@ -11,6 +11,13 @@ import {
   resolveTimecardConfig,
 } from './timecardWatermarkConfig';
 import { formatTimecardClockParts } from './proofTime';
+import {
+  buildTaggedDetailLines,
+  fitTaggedDetailLines,
+  stampHeightBudget,
+  taggedTexts,
+  type TaggedDetailLine,
+} from './proofStampFit';
 import type {
   TimecardBackgroundMode,
   UltimateBoxItems,
@@ -273,20 +280,30 @@ function buildInlineParts(
   return parts;
 }
 
+function buildTaggedDetailsFromProof(
+  ctx: CanvasRenderingContext2D,
+  proof: ProofSnapshot,
+  items: Pick<UltimateBoxItems, 'address' | 'weather'>,
+  maxWidth: number,
+): TaggedDetailLine[] {
+  const addressLines: string[] = [];
+  const weatherLines: string[] = [];
+  if (items.address && proof.locationLine.trim()) {
+    addressLines.push(...wrapText(ctx, proof.locationLine, maxWidth));
+  }
+  if (items.weather && proof.weatherLine.trim()) {
+    weatherLines.push(...wrapText(ctx, proof.weatherLine, maxWidth));
+  }
+  return buildTaggedDetailLines(addressLines, weatherLines);
+}
+
 function buildDetailLinesForItems(
   ctx: CanvasRenderingContext2D,
   proof: ProofSnapshot,
   items: Pick<UltimateBoxItems, 'address' | 'weather'>,
   maxWidth: number,
 ): string[] {
-  const lines: string[] = [];
-  if (items.address && proof.locationLine.trim()) {
-    lines.push(...capWrappedLines(wrapText(ctx, proof.locationLine, maxWidth), 4));
-  }
-  if (items.weather && proof.weatherLine.trim()) {
-    lines.push(...wrapText(ctx, proof.weatherLine, maxWidth));
-  }
-  return lines;
+  return taggedTexts(buildTaggedDetailsFromProof(ctx, proof, items, maxWidth));
 }
 
 function fitPartsToWidth(
@@ -491,9 +508,17 @@ function computeUltimateLayout(input: StampLayoutInput): StampLayoutResult {
     }
 
     const logoBoxDetailMaxW = Math.max(logoBoxW - paddingH * 2, 0);
-    const boxDetailLines = buildDetailLinesForItems(ctx, proof, boxItems, logoBoxDetailMaxW);
-
+    const heightBudget = stampHeightBudget(fh, margin);
     const boxInlineRowH = Math.max(showLogo ? logoH : 0, boxInline.height);
+    const boxDetailTagged = fitTaggedDetailLines(
+      buildTaggedDetailsFromProof(ctx, proof, boxItems, logoBoxDetailMaxW),
+      lineHeight,
+      detailGap,
+      boxInlineRowH + paddingV * 2,
+      heightBudget,
+    );
+    const boxDetailLines = taggedTexts(boxDetailTagged);
+
     const logoBoxInnerH =
       boxInlineRowH +
       (boxDetailLines.length > 0 ? detailGap + boxDetailLines.length * lineHeight : 0);
@@ -502,8 +527,16 @@ function computeUltimateLayout(input: StampLayoutInput): StampLayoutResult {
     const textColumnX = margin + (logoBoxW > 0 ? logoBoxW + logoGap : 0);
     const textColumnMaxW = Math.max(fw - margin - textColumnX, 0);
 
-    let floatInline = layoutInlineRowFromParts(ctx, floatInlineParts, textColumnMaxW, baseFonts);
-    const floatDetailAtMax = buildDetailLinesForItems(ctx, proof, floatItems, textColumnMaxW);
+    const floatInline = layoutInlineRowFromParts(ctx, floatInlineParts, textColumnMaxW, baseFonts);
+    const floatDetailAtMax = taggedTexts(
+      fitTaggedDetailLines(
+        buildTaggedDetailsFromProof(ctx, proof, floatItems, textColumnMaxW),
+        lineHeight,
+        detailGap,
+        Math.max(logoBoxH, floatInline.height),
+        heightBudget,
+      ),
+    );
     const textBlockH =
       floatInline.height +
       (floatDetailAtMax.length > 0 ? detailGap + floatDetailAtMax.length * lineHeight : 0);
@@ -593,8 +626,8 @@ function computeUltimateLayout(input: StampLayoutInput): StampLayoutResult {
   }
 
   // strip mode (or logo_dock with box disabled falls through to floating-only strip)
+  const heightBudget = stampHeightBudget(fh, margin);
   let boxDetailLines: string[] = [];
-  const floatDetailLines = buildDetailLinesForItems(ctx, proof, floatItems, maxW);
 
   const boxTextMaxW = Math.max(maxW - paddingH * 2 - (showLogo && config.boxEnabled ? logoW + logoGap : 0), 0);
   let boxInline = config.boxEnabled
@@ -617,7 +650,16 @@ function computeUltimateLayout(input: StampLayoutInput): StampLayoutResult {
       (showLogo ? logoW + logoGap : 0) + boxInline.width + paddingH * 2;
     boxW = clamp(Math.max(refinedNeedW, showLogo ? logoW + paddingH * 2 : 48), 0, maxW);
     const boxDetailMaxW = Math.max(boxW - paddingH * 2, 0);
-    boxDetailLines = buildDetailLinesForItems(ctx, proof, boxItems, boxDetailMaxW);
+    const boxRowH0 = Math.max(showLogo ? logoH : 0, boxInline.height);
+    boxDetailLines = taggedTexts(
+      fitTaggedDetailLines(
+        buildTaggedDetailsFromProof(ctx, proof, boxItems, boxDetailMaxW),
+        lineHeight,
+        detailGap,
+        paddingV * 2 + boxRowH0,
+        heightBudget,
+      ),
+    );
   }
 
   const boxRowH = Math.max(showLogo && config.boxEnabled ? logoH : 0, boxInline.height);
@@ -629,6 +671,16 @@ function computeUltimateLayout(input: StampLayoutInput): StampLayoutResult {
 
   const boxX = margin;
   const boxY = boxH > 0 ? fh - margin - boxH : fh - margin;
+
+  const floatDetailLines = taggedTexts(
+    fitTaggedDetailLines(
+      buildTaggedDetailsFromProof(ctx, proof, floatItems, maxW),
+      lineHeight,
+      zoneGap,
+      boxH > 0 ? boxH : floatInline.height,
+      heightBudget,
+    ),
+  );
 
   const floatBlockH =
     floatDetailLines.length * lineHeight +
@@ -652,6 +704,7 @@ function computeUltimateLayout(input: StampLayoutInput): StampLayoutResult {
     '--logo-max-h': `${logoH}px`,
     '--stamp-line-height': `${lineHeight}px`,
     '--ultimate-gradient': gradientCss,
+    '--float-max-w': `${maxW}px`,
   };
 
   return {
@@ -841,13 +894,24 @@ function computeLogoDockLayout(input: StampLayoutInput): StampLayoutResult {
   const fonts = inline.fonts;
 
   ctx.font = `${baseFonts.detail}px ${PROOF_FONT.detail}`;
-  const detailLines: string[] = [];
-  if (proof.locationLine.trim()) {
-    detailLines.push(...capWrappedLines(wrapText(ctx, proof.locationLine, textColumnMaxW), 4));
-  }
-  if (proof.cameraOptionsSnapshot.weatherEnabled && proof.weatherLine.trim()) {
-    detailLines.push(...wrapText(ctx, proof.weatherLine, textColumnMaxW));
-  }
+  const heightBudget = stampHeightBudget(fh, margin);
+  const primaryColH = Math.max(logoBoxH, inline.height);
+  const taggedDetails = fitTaggedDetailLines(
+    buildTaggedDetailsFromProof(
+      ctx,
+      proof,
+      {
+        address: true,
+        weather: !!proof.cameraOptionsSnapshot.weatherEnabled,
+      },
+      textColumnMaxW,
+    ),
+    lineHeight,
+    detailGap,
+    primaryColH,
+    heightBudget,
+  );
+  const detailLines = taggedTexts(taggedDetails);
 
   const textBlockH =
     inline.height +
@@ -986,13 +1050,23 @@ function computeStandardStampLayout(input: StampLayoutInput): StampLayoutResult 
 
   ctx.font = `${baseFonts.detail}px ${PROOF_FONT.detail}`;
   const floatMaxWidth = fw - margin * 2;
-  const floatingLines: string[] = [];
-  if (proof.locationLine.trim()) {
-    floatingLines.push(...capWrappedLines(wrapText(ctx, proof.locationLine, floatMaxWidth), 4));
-  }
-  if (proof.cameraOptionsSnapshot.weatherEnabled && proof.weatherLine.trim()) {
-    floatingLines.push(...wrapText(ctx, proof.weatherLine, floatMaxWidth));
-  }
+  const heightBudget = stampHeightBudget(fh, margin);
+  const taggedFloat = fitTaggedDetailLines(
+    buildTaggedDetailsFromProof(
+      ctx,
+      proof,
+      {
+        address: true,
+        weather: !!proof.cameraOptionsSnapshot.weatherEnabled,
+      },
+      floatMaxWidth,
+    ),
+    lineHeight,
+    zoneGap,
+    boxH,
+    heightBudget,
+  );
+  const floatingLines = taggedTexts(taggedFloat);
   const floatBlockH = floatingLines.length * lineHeight;
   let floatTop = boxY - zoneGap - floatBlockH;
   if (floatTop < margin) floatTop = margin;
@@ -1011,6 +1085,7 @@ function computeStandardStampLayout(input: StampLayoutInput): StampLayoutResult 
     '--logo-max-w': `${logoW}px`,
     '--logo-max-h': `${logoH}px`,
     '--stamp-line-height': `${lineHeight}px`,
+    '--float-max-w': `${floatMaxWidth}px`,
   };
 
   return {

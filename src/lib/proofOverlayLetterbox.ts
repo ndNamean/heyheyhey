@@ -6,6 +6,11 @@ export interface LetterboxLayout {
   videoH: number;
 }
 
+/**
+ * Contain-fit of a media rectangle inside a viewfinder (object-fit: contain).
+ * videoW/videoH should already be the effective (post-rotation) dimensions
+ * when used with manual media rotation.
+ */
 export function computeLetterboxLayout(
   viewfinderW: number,
   viewfinderH: number,
