@@ -1034,6 +1034,7 @@ body.wizard-active .page {
   top: 50%;
   transform-origin: center center;
   pointer-events: none;
+  overflow: hidden;
 }
 .camera-media-rotate video {
   width: 100%;
@@ -1047,6 +1048,7 @@ body.wizard-active .page {
   position: absolute;
   transform-origin: bottom left;
   z-index: 3;
+  pointer-events: none;
 }
 .cam-mode-chip {
   display: inline-flex;

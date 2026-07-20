@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { LayoutOrientation } from '../lib/cameraMediaTransform';
+import type { LayoutOrientation, WatermarkDirection } from '../lib/cameraMediaTransform';
 
 export type TiltSource = 'viewport' | 'sensor' | 'portrait-default';
 
@@ -11,6 +11,11 @@ export interface DeviceLayoutOrientation {
   sensorDriven: boolean;
   /** Narrow viewport while layout is landscape (portrait-locked OS). */
   compactLandscape: boolean;
+  /**
+   * CSS/capture rotation applied to video+watermark together so content stays
+   * gravity-upright. 0 when the OS already rotated the viewport.
+   */
+  gravityRotation: WatermarkDirection;
 }
 
 const LANDSCAPE_ANGLE_TOLERANCE = 25;
@@ -31,7 +36,7 @@ function readViewportOrientation(): LayoutOrientation {
   return window.innerWidth > window.innerHeight ? 'landscape' : 'portrait';
 }
 
-/** Map screen.orientation.angle or beta/gamma-derived angle to layout. */
+/** Map screen.orientation.angle to layout. */
 export function orientationFromScreenAngle(angle: number): LayoutOrientation | null {
   const a = ((Math.round(angle) % 360) + 360) % 360;
   if (a <= LANDSCAPE_ANGLE_TOLERANCE || a >= 360 - LANDSCAPE_ANGLE_TOLERANCE) return 'portrait';
@@ -44,7 +49,7 @@ export function orientationFromScreenAngle(angle: number): LayoutOrientation | n
 
 /**
  * Infer hold orientation from DeviceOrientationEvent.
- * Uses beta (front-back) and gamma (left-right) when absolute/screen angle unavailable.
+ * Uses beta (front-back) and gamma (left-right).
  */
 export function orientationFromDeviceMotion(
   beta: number | null | undefined,
@@ -55,11 +60,29 @@ export function orientationFromDeviceMotion(
   }
   const absG = Math.abs(gamma);
   const absB = Math.abs(beta);
-  // Phone on side: gamma near ±90
   if (absG > 45 && absG > absB - 10) return 'landscape';
-  // Phone upright / flat-ish portrait
   if (absB > 35 && absG < 40) return 'portrait';
   return null;
+}
+
+/** Gravity-correcting rotation when viewport stays portrait but phone is on its side. */
+export function gravityRotationFromSensor(
+  gamma: number | null | undefined,
+  screenAngle: number | null,
+): WatermarkDirection {
+  if (screenAngle != null) {
+    const a = ((Math.round(screenAngle) % 360) + 360) % 360;
+    if (Math.abs(a - 90) <= LANDSCAPE_ANGLE_TOLERANCE) return 90;
+    if (Math.abs(a - 270) <= LANDSCAPE_ANGLE_TOLERANCE) return 270;
+    // Some Android report -90 as 270 already handled; 180 stays portrait.
+  }
+  if (gamma != null && Number.isFinite(gamma)) {
+    // Phone tilted left (gamma negative) → rotate content 90° CW to stay upright.
+    if (gamma < -45) return 90;
+    // Phone tilted right (gamma positive) → rotate content 270° CW (−90°).
+    if (gamma > 45) return 270;
+  }
+  return 90;
 }
 
 function readScreenAngle(): number | null {
@@ -92,8 +115,8 @@ async function ensureOrientationPermission(): Promise<DeviceOrientationPermissio
 }
 
 /**
- * Hybrid tilt: viewport first; DeviceOrientation / screen angle when viewport stays portrait
- * (e.g. system auto-rotate OFF). Does not call screen.orientation.lock().
+ * Hybrid tilt: viewport first; DeviceOrientation when auto-rotate is OFF.
+ * Exposes gravityRotation so video+watermark stay upright together.
  */
 export function useDeviceLayoutOrientation(enabled = true): DeviceLayoutOrientation {
   const [layoutOrientation, setLayoutOrientation] = useState<LayoutOrientation>(() =>
@@ -101,11 +124,13 @@ export function useDeviceLayoutOrientation(enabled = true): DeviceLayoutOrientat
   );
   const [tiltSource, setTiltSource] = useState<TiltSource>('viewport');
   const [sensorAvailable, setSensorAvailable] = useState(false);
+  const [gravityRotation, setGravityRotation] = useState<WatermarkDirection>(0);
   const pendingRef = useRef<{ next: LayoutOrientation; source: TiltSource; at: number } | null>(
     null,
   );
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentRef = useRef(layoutOrientation);
+  const lastGammaRef = useRef<number | null>(null);
 
   useEffect(() => {
     currentRef.current = layoutOrientation;
@@ -116,12 +141,14 @@ export function useDeviceLayoutOrientation(enabled = true): DeviceLayoutOrientat
       setLayoutOrientation('portrait');
       setTiltSource('portrait-default');
       setSensorAvailable(false);
+      setGravityRotation(0);
       return;
     }
 
-    const commit = (next: LayoutOrientation, source: TiltSource) => {
-      if (next === currentRef.current && source === tiltSource) return;
-      // Hysteresis when switching via sensor
+    const commit = (next: LayoutOrientation, source: TiltSource, gravity: WatermarkDirection) => {
+      const gravityChanged = gravity !== gravityRotation;
+      if (next === currentRef.current && source === tiltSource && !gravityChanged) return;
+
       if (source === 'sensor' && next !== currentRef.current) {
         const now = Date.now();
         const pending = pendingRef.current;
@@ -133,6 +160,7 @@ export function useDeviceLayoutOrientation(enabled = true): DeviceLayoutOrientat
             if (p && p.next === next) {
               setLayoutOrientation(next);
               setTiltSource(source);
+              setGravityRotation(gravity);
               pendingRef.current = null;
             }
           }, HYSTERESIS_MS);
@@ -147,23 +175,27 @@ export function useDeviceLayoutOrientation(enabled = true): DeviceLayoutOrientat
       }
       setLayoutOrientation(next);
       setTiltSource(source);
+      setGravityRotation(gravity);
     };
 
     const recompute = (sensorHint: LayoutOrientation | null = null) => {
       const viewport = readViewportOrientation();
+      const screenAngle = readScreenAngle();
+
       if (viewport === 'landscape') {
-        commit('landscape', 'viewport');
+        // OS already rotated the page — content is gravity-upright without CSS rotate.
+        commit('landscape', 'viewport', 0);
         return;
       }
-      // Viewport portrait — allow sensor / screen angle to promote landscape
-      const screenAngle = readScreenAngle();
+
       const fromAngle = screenAngle != null ? orientationFromScreenAngle(screenAngle) : null;
       const sensorOrAngle = sensorHint ?? fromAngle;
       if (sensorOrAngle === 'landscape') {
-        commit('landscape', 'sensor');
+        const gravity = gravityRotationFromSensor(lastGammaRef.current, screenAngle);
+        commit('landscape', 'sensor', gravity);
         return;
       }
-      commit('portrait', viewport === 'portrait' ? 'viewport' : 'portrait-default');
+      commit('portrait', viewport === 'portrait' ? 'viewport' : 'portrait-default', 0);
     };
 
     recompute();
@@ -190,11 +222,14 @@ export function useDeviceLayoutOrientation(enabled = true): DeviceLayoutOrientat
       const permission = await ensureOrientationPermission();
       if (cancelled) return;
       if (permission === 'denied' || permission === 'unsupported') {
-        setSensorAvailable(permission === 'unsupported' ? false : false);
+        setSensorAvailable(false);
         return;
       }
       setSensorAvailable(true);
       orientationHandler = (e: DeviceOrientationEvent) => {
+        if (e.gamma != null && Number.isFinite(e.gamma)) {
+          lastGammaRef.current = e.gamma;
+        }
         const hint = orientationFromDeviceMotion(e.beta, e.gamma);
         recompute(hint);
       };
@@ -218,7 +253,6 @@ export function useDeviceLayoutOrientation(enabled = true): DeviceLayoutOrientat
         window.removeEventListener('deviceorientation', orientationHandler);
       }
     };
-    // tiltSource intentionally omitted from deps — only used for equality inside commit
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled]);
 
@@ -234,5 +268,6 @@ export function useDeviceLayoutOrientation(enabled = true): DeviceLayoutOrientat
     sensorAvailable,
     sensorDriven,
     compactLandscape,
+    gravityRotation,
   };
 }
