@@ -96,58 +96,133 @@ export function resolveCaptureFrameRotation(opts: {
   return 0;
 }
 
+export interface LiveCaptureMatchedOverlay {
+  /** Viewfinder-absolute CSS position (px). */
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+  transform: string;
+  transformOrigin: string;
+  /** Logical landscape frame for ProofReviewOverlay (matches capture canvas). */
+  frameWidth: number;
+  frameHeight: number;
+  scale: number;
+}
+
 /**
- * Live watermark when phone is tilted (viewport still portrait).
- * Uses a compact strip on the viewfinder gravity-bottom edge (left/right),
- * sized so CW 90° around bottom-left keeps the stamp inside the viewfinder.
+ * Live stamp that previews capture: upright on the gravity-bottom edge of the
+ * letterboxed stage (same landscape frame as the saved JPEG).
  */
+export function liveCaptureMatchedOverlayStyle(opts: {
+  tilt: WatermarkDirection;
+  frameRotation: WatermarkDirection;
+  sourceW: number;
+  sourceH: number;
+  stageOffsetX: number;
+  stageOffsetY: number;
+  stageW: number;
+  stageH: number;
+  insetPx?: number;
+}): LiveCaptureMatchedOverlay | null {
+  const {
+    tilt,
+    frameRotation,
+    sourceW,
+    sourceH,
+    stageOffsetX,
+    stageOffsetY,
+    stageW,
+    stageH,
+    insetPx = 10,
+  } = opts;
+  if (tilt !== 90 && tilt !== 270) return null;
+  if (sourceW <= 0 || sourceH <= 0 || stageW <= 0 || stageH <= 0) return null;
+
+  const { w: outW, h: outH } = getEffectiveDimensions(sourceW, sourceH, frameRotation);
+  if (outW <= 0 || outH <= 0) return null;
+
+  const maxAlong = Math.max(80, stageH - insetPx * 2);
+  const maxInto = Math.max(64, stageW * 0.42);
+  const scale = Math.min(maxAlong / outW, maxInto / outH);
+  if (!(scale > 0) || !Number.isFinite(scale)) return null;
+
+  const into = outH * scale;
+  // Layout box is capture-sized; CSS scale+rotate maps it onto the stage edge.
+  const top = stageOffsetY + stageH - insetPx - outH;
+  const transform = `scale(${scale}) rotate(90deg)`;
+  const transformOrigin = 'bottom left';
+
+  if (tilt === 90) {
+    // Gravity-bottom = stage left. Pivot inset by `into` so CW 90 keeps stamp on-stage.
+    return {
+      left: stageOffsetX + insetPx + into,
+      top,
+      width: outW,
+      height: outH,
+      transform,
+      transformOrigin,
+      frameWidth: outW,
+      frameHeight: outH,
+      scale,
+    };
+  }
+
+  // Gravity-bottom = stage right.
+  return {
+    left: stageOffsetX + stageW - insetPx,
+    top,
+    width: outW,
+    height: outH,
+    transform,
+    transformOrigin,
+    frameWidth: outW,
+    frameHeight: outH,
+    scale,
+  };
+}
+
+/** Axis-aligned bounds of the live tilt stamp after scale+CW90 around bottom-left. */
+export function liveCaptureMatchedOverlayBounds(overlay: LiveCaptureMatchedOverlay): {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+} {
+  const along = overlay.frameWidth * overlay.scale;
+  const into = overlay.frameHeight * overlay.scale;
+  const pivotX = overlay.left;
+  const pivotY = overlay.top + overlay.height;
+  // CW 90 from bottom-left: +x → up, +y-up (into box) → left.
+  return {
+    left: pivotX - into,
+    top: pivotY - along,
+    right: pivotX,
+    bottom: pivotY,
+  };
+}
+
+/** @deprecated Use liveCaptureMatchedOverlayStyle for tilt; letterbox scale for upright. */
 export function liveTiltViewfinderOverlayStyle(
   tilt: WatermarkDirection,
   viewfinderW: number,
   viewfinderH: number,
   insetPx = 10,
-): {
-  left: number;
-  right: 'auto';
-  bottom: number;
-  width: number;
-  height: number;
-  transform: string;
-  transformOrigin: string;
-} | null {
-  if (viewfinderW <= 0 || viewfinderH <= 0) return null;
-  if (tilt !== 90 && tilt !== 270) return null;
-
-  // After rotate(90deg): width runs along the side; height runs into the preview.
-  const edgeLen = Math.max(160, viewfinderH - insetPx * 2);
-  const depth = Math.max(96, Math.round(viewfinderW * 0.4));
-
-  if (tilt === 90) {
-    // Pivot inset by `depth` so the stamp stack (swings left) lands on-screen.
-    return {
-      left: insetPx + depth,
-      right: 'auto',
-      bottom: insetPx,
-      width: edgeLen,
-      height: depth,
-      transformOrigin: 'bottom left',
-      transform: 'rotate(90deg)',
-    };
-  }
-
-  // Right edge: pivot on the right; stamp swings up the side and into the frame.
-  return {
-    left: viewfinderW - insetPx,
-    right: 'auto',
-    bottom: insetPx,
-    width: edgeLen,
-    height: depth,
-    transformOrigin: 'bottom left',
-    transform: 'rotate(90deg)',
-  };
+): LiveCaptureMatchedOverlay | null {
+  return liveCaptureMatchedOverlayStyle({
+    tilt,
+    frameRotation: tilt === 90 ? 270 : tilt === 270 ? 90 : 0,
+    sourceW: Math.max(1, viewfinderH),
+    sourceH: Math.max(1, viewfinderW),
+    stageOffsetX: 0,
+    stageOffsetY: 0,
+    stageW: viewfinderW,
+    stageH: viewfinderH,
+    insetPx,
+  });
 }
 
-/** @deprecated Prefer letterbox scale for tilt 0; use liveTiltViewfinderOverlayStyle when tilted. */
+/** @deprecated Prefer letterbox scale for tilt 0; use liveCaptureMatchedOverlayStyle when tilted. */
 export function liveWatermarkOverlayStyle(
   scale: number,
   tilt: WatermarkDirection,
@@ -159,13 +234,12 @@ export function liveWatermarkOverlayStyle(
   transformOrigin: string;
 } {
   if (tilt === 90 || tilt === 270) {
-    // Kept for tests/compat — TimemarkCamera uses liveTiltViewfinderOverlayStyle instead.
     return {
       left: 0,
       right: 'auto',
       bottom: 0,
       transformOrigin: 'bottom left',
-      transform: `scale(${scale}) rotate(${tilt === 90 ? 90 : -90}deg)`,
+      transform: `scale(${scale}) rotate(90deg)`,
     };
   }
   return {

@@ -7,10 +7,11 @@ import {
 import {
   computeContainedMediaRect,
   getEffectiveDimensions,
+  liveCaptureMatchedOverlayBounds,
+  liveCaptureMatchedOverlayStyle,
+  liveWatermarkOverlayStyle,
   normalizeWatermarkDirection,
   resolveCaptureFrameRotation,
-  liveTiltViewfinderOverlayStyle,
-  liveWatermarkOverlayStyle,
 } from './cameraMediaTransform';
 
 describe('gravity / transform helpers', () => {
@@ -76,20 +77,43 @@ describe('gravity / transform helpers', () => {
     ).toBe(0);
   });
 
-  it('anchors live tilt stamp as a compact strip inside the viewfinder', () => {
-    const left = liveTiltViewfinderOverlayStyle(90, 360, 640);
-    expect(left).not.toBeNull();
-    expect(left!.transform).toBe('rotate(90deg)');
-    expect(left!.transformOrigin).toBe('bottom left');
-    expect(left!.height).toBeLessThan(360);
-    expect(left!.width).toBeGreaterThan(left!.height);
-    // Pivot inset by depth so stamp stack stays on-screen after CW 90.
-    expect(left!.left).toBeGreaterThan(10);
+  it('keeps capture-matched live tilt stamp inside the letterboxed stage', () => {
+    const stage = {
+      stageOffsetX: 20,
+      stageOffsetY: 40,
+      stageW: 360,
+      stageH: 480,
+    };
+    const sourceW = 1080;
+    const sourceH = 1920;
+    const inset = 10;
 
-    const right = liveTiltViewfinderOverlayStyle(270, 360, 640);
-    expect(right).not.toBeNull();
-    expect(right!.left).toBe(350);
-    expect(right!.transform).toBe('rotate(90deg)');
+    for (const tilt of [90, 270] as const) {
+      const frameRotation = resolveCaptureFrameRotation({
+        layoutOrientation: 'portrait',
+        watermarkTilt: tilt,
+        sourceW,
+        sourceH,
+      });
+      const overlay = liveCaptureMatchedOverlayStyle({
+        tilt,
+        frameRotation,
+        sourceW,
+        sourceH,
+        ...stage,
+        insetPx: inset,
+      });
+      expect(overlay).not.toBeNull();
+      const { w: outW, h: outH } = getEffectiveDimensions(sourceW, sourceH, frameRotation);
+      expect(overlay!.frameWidth).toBe(outW);
+      expect(overlay!.frameHeight).toBe(outH);
+
+      const b = liveCaptureMatchedOverlayBounds(overlay!);
+      expect(b.left).toBeGreaterThanOrEqual(stage.stageOffsetX + inset - 0.5);
+      expect(b.right).toBeLessThanOrEqual(stage.stageOffsetX + stage.stageW - inset + 0.5);
+      expect(b.top).toBeGreaterThanOrEqual(stage.stageOffsetY + inset - 0.5);
+      expect(b.bottom).toBeLessThanOrEqual(stage.stageOffsetY + stage.stageH - inset + 0.5);
+    }
 
     expect(liveWatermarkOverlayStyle(0.5, 0).transform).toBe('scale(0.5)');
   });

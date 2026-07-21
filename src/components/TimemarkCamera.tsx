@@ -32,7 +32,8 @@ import {
   computeContainedMediaRect,
   drawRecordingCompositorFrame,
   getEffectiveDimensions,
-  liveTiltViewfinderOverlayStyle,
+  liveCaptureMatchedOverlayStyle,
+  resolveCaptureFrameRotation,
   type MediaTransformSnapshot,
   type WatermarkDirection,
 } from '../lib/cameraMediaTransform';
@@ -202,7 +203,6 @@ export default function TimemarkCamera({
   const [previewFrameSize, setPreviewFrameSize] = useState<{ w: number; h: number } | null>(null);
   const [letterboxLayout, setLetterboxLayout] = useState<LetterboxLayout | null>(null);
   const [sourceFrameSize, setSourceFrameSize] = useState<{ w: number; h: number } | null>(null);
-  const [viewfinderSize, setViewfinderSize] = useState<{ w: number; h: number } | null>(null);
   const [tiltHintVisible, setTiltHintVisible] = useState(false);
   const [tiltHintDismissed, setTiltHintDismissed] = useState(false);
   const [capturing, setCapturing] = useState(false);
@@ -446,9 +446,6 @@ export default function TimemarkCamera({
   const syncPreviewFrameSize = useCallback(() => {
     const video = videoRef.current;
     const viewfinder = viewfinderRef.current;
-    if (viewfinder && viewfinder.clientWidth > 0 && viewfinder.clientHeight > 0) {
-      setViewfinderSize({ w: viewfinder.clientWidth, h: viewfinder.clientHeight });
-    }
     // Video never spins — letterbox uses native sensor aspect only.
     if (video && video.videoWidth > 0 && video.videoHeight > 0) {
       const sw = video.videoWidth;
@@ -1393,13 +1390,32 @@ export default function TimemarkCamera({
   const stageDisplayH = letterboxLayout ? letterboxLayout.videoH * stageScale : 0;
   const sourceDisplayW = sourceFrameSize ? sourceFrameSize.w * stageScale : stageDisplayW;
   const sourceDisplayH = sourceFrameSize ? sourceFrameSize.h * stageScale : stageDisplayH;
+  const liveFrameRotation =
+    sourceFrameSize && (previewWatermarkTilt === 90 || previewWatermarkTilt === 270)
+      ? resolveCaptureFrameRotation({
+          layoutOrientation,
+          watermarkTilt: previewWatermarkTilt,
+          sourceW: sourceFrameSize.w,
+          sourceH: sourceFrameSize.h,
+          screenAngle,
+        })
+      : 0;
   const liveTiltOverlayStyle =
-    (previewWatermarkTilt === 90 || previewWatermarkTilt === 270) && viewfinderSize
-      ? liveTiltViewfinderOverlayStyle(
-          previewWatermarkTilt,
-          viewfinderSize.w,
-          viewfinderSize.h,
-        )
+    (previewWatermarkTilt === 90 || previewWatermarkTilt === 270) &&
+    sourceFrameSize &&
+    letterboxLayout &&
+    stageDisplayW > 0 &&
+    stageDisplayH > 0
+      ? liveCaptureMatchedOverlayStyle({
+          tilt: previewWatermarkTilt,
+          frameRotation: liveFrameRotation,
+          sourceW: sourceFrameSize.w,
+          sourceH: sourceFrameSize.h,
+          stageOffsetX: letterboxLayout.offsetX,
+          stageOffsetY: letterboxLayout.offsetY,
+          stageW: stageDisplayW,
+          stageH: stageDisplayH,
+        })
       : null;
 
   return (
@@ -1702,12 +1718,21 @@ export default function TimemarkCamera({
             {showLiveOverlay && liveTiltOverlayStyle && (
               <div
                 className="proof-overlay-letterbox proof-overlay-live-tilt"
-                style={liveTiltOverlayStyle as CSSProperties}
+                style={
+                  {
+                    left: liveTiltOverlayStyle.left,
+                    top: liveTiltOverlayStyle.top,
+                    width: liveTiltOverlayStyle.width,
+                    height: liveTiltOverlayStyle.height,
+                    transform: liveTiltOverlayStyle.transform,
+                    transformOrigin: liveTiltOverlayStyle.transformOrigin,
+                  } as CSSProperties
+                }
               >
                 <ProofReviewOverlay
                   proof={liveProof}
-                  frameWidth={liveTiltOverlayStyle.width}
-                  frameHeight={liveTiltOverlayStyle.height}
+                  frameWidth={liveTiltOverlayStyle.frameWidth}
+                  frameHeight={liveTiltOverlayStyle.frameHeight}
                   logoImg={overlayLogoImg}
                   layoutKey={overlayLayoutKey}
                 />
