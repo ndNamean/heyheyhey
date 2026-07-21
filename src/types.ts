@@ -307,6 +307,8 @@ export type ChecklistItemProposalEventType =
   | 'changes_requested'
   | 'proposal_resubmitted'
   | 'final_approval_granted'
+  | 'elevated_approval_granted'
+  | 'approval_check_requested'
   | 'proposal_rejected'
   | 'proposal_published'
   | 'proposal_cancelled'

@@ -10,9 +10,11 @@ import {
   findSimilarChecklistItemsAndProposals,
   normalizeComparableText,
   resolveChecklistItemProposalApprovers,
+  canActorElevatedFullApprove,
   canActorFinalApprove,
   canActorFirstApprove,
   canActorPublish,
+  canActorRequestApprovalCheck,
 } from './checklistItemProposals';
 import type { ChecklistItemProposal, Profile, TemplateItem } from '../types';
 
@@ -198,6 +200,26 @@ describe('approval actor guards', () => {
   it('allows assigned manager first approval', () => {
     const actor = profile({ userId: 'u-mgr', role: 'manager' });
     expect(canActorFirstApprove(actor, base)).toBe(true);
+  });
+
+  it('allows owner/admin first approval even when not assigned', () => {
+    const owner = profile({ userId: 'u-owner', role: 'owner', stores: [] });
+    const admin = profile({ userId: 'u-admin', role: 'admin', stores: [] });
+    expect(canActorFirstApprove(owner, base)).toBe(true);
+    expect(canActorFirstApprove(admin, base)).toBe(true);
+    expect(canActorElevatedFullApprove(owner, base)).toBe(true);
+    expect(canActorRequestApprovalCheck(admin, base)).toBe(true);
+  });
+
+  it('allows owner/admin final approval even when not assigned', () => {
+    const pendingFinal = {
+      ...base,
+      status: 'pending_final_approval',
+      firstApproverUserId: 'u-mgr',
+    } as ChecklistItemProposal;
+    const owner = profile({ userId: 'u-owner', role: 'owner', stores: [] });
+    expect(canActorFinalApprove(owner, pendingFinal)).toBe(true);
+    expect(canActorElevatedFullApprove(owner, pendingFinal)).toBe(true);
   });
 
   it('blocks same person from final after first', () => {

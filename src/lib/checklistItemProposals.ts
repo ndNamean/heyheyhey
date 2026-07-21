@@ -253,6 +253,7 @@ export function canActorFirstApprove(
 ): boolean {
   if (actor.userId === proposal.requestedByUserId) return false;
   if (proposal.status !== 'pending_first_approval') return false;
+  if (isElevatedProposalOverride(actor.role)) return true;
   if (!canFirstApproveTemplateItemProposal(actor.role, defs)) return false;
   const assigned = parseUserIdsJson(proposal.firstApproverUserIdsJson);
   return assigned.includes(actor.userId);
@@ -265,12 +266,42 @@ export function canActorFinalApprove(
 ): boolean {
   if (actor.userId === proposal.requestedByUserId) return false;
   if (proposal.status !== 'pending_final_approval') return false;
-  if (!canFinalApproveTemplateItemProposal(actor.role, defs)) return false;
   if (proposal.firstApproverUserId && proposal.firstApproverUserId === actor.userId) {
-    return false;
+    // Elevated override may still finalize via elevatedApprove / final approve.
+    if (!isElevatedProposalOverride(actor.role)) return false;
   }
+  if (isElevatedProposalOverride(actor.role)) return true;
+  if (!canFinalApproveTemplateItemProposal(actor.role, defs)) return false;
   const assigned = parseUserIdsJson(proposal.finalApproverUserIdsJson);
   return assigned.includes(actor.userId);
+}
+
+/** Owner/Admin may fully approve and skip remaining lower-role steps. */
+export function isElevatedProposalOverride(role: Role): boolean {
+  return role === 'owner' || role === 'admin';
+}
+
+export function canActorElevatedFullApprove(
+  actor: Profile,
+  proposal: ChecklistItemProposal,
+): boolean {
+  if (!isElevatedProposalOverride(actor.role)) return false;
+  if (actor.userId === proposal.requestedByUserId) return false;
+  return (
+    proposal.status === 'pending_first_approval' ||
+    proposal.status === 'pending_final_approval'
+  );
+}
+
+export function canActorRequestApprovalCheck(
+  actor: Profile,
+  proposal: ChecklistItemProposal,
+): boolean {
+  if (!isElevatedProposalOverride(actor.role)) return false;
+  return (
+    proposal.status === 'pending_first_approval' ||
+    proposal.status === 'pending_final_approval'
+  );
 }
 
 export function canActorPublish(
@@ -727,6 +758,111 @@ export async function finalApproveChecklistItemProposal(params: {
         actorUserId: actor.userId,
         actorRole: actor.role,
         actionStatus: toStatus,
+        proposalId: proposal.id,
+      }),
+    ),
+  ]);
+}
+
+/**
+ * Owner/Admin full approval: skips remaining lower-role approval steps.
+ * pending_first_approval | pending_final_approval → approved
+ */
+export async function elevatedApproveChecklistItemProposal(params: {
+  proposal: ChecklistItemProposal;
+  actor: Profile;
+  comment?: string;
+}): Promise<void> {
+  const { proposal, actor, comment } = params;
+  if (!canActorElevatedFullApprove(actor, proposal)) {
+    throw new Error('Only Owner or Admin can fully approve and skip remaining steps.');
+  }
+  const now = nowIso();
+  const fromStatus = proposal.status;
+  const toStatus: ChecklistItemProposalStatus = 'approved';
+  const patch: Record<string, unknown> = {
+    status: toStatus,
+    finalApproverUserId: actor.userId,
+    finalApproverRole: actor.role,
+    finalApprovedAt: now,
+    finalApprovalComment: comment?.trim() || '',
+    updatedAt: now,
+  };
+  if (!proposal.firstApproverUserId) {
+    patch.firstApproverUserId = actor.userId;
+    patch.firstApproverRole = actor.role;
+    patch.firstApprovedAt = now;
+    patch.firstApprovalComment = comment?.trim() || '';
+  }
+
+  await transactAll([
+    db.tx.checklistItemProposals[proposal.id].update(patch),
+    eventTx(proposal.id, 'elevated_approval_granted', actor.userId, fromStatus, toStatus, {
+      skippedRemaining: true,
+    }),
+    ...notifyUsers([proposal.requestedByUserId], (uid) =>
+      notificationTx({
+        recipientUserId: uid,
+        type: 'checklist_item_proposal_approved',
+        title: 'Proposal approved by Owner/Admin',
+        body: `"${proposal.title}" was fully approved by ${actor.role}. Remaining lower-role approvals were skipped.`,
+        storeId: proposal.sourceStoreId,
+        itemTitle: proposal.title,
+        actorUserId: actor.userId,
+        actorRole: actor.role,
+        actionStatus: toStatus,
+        proposalId: proposal.id,
+      }),
+    ),
+  ]);
+}
+
+/** Owner/Admin nudge assigned approvers when a proposal has been pending. */
+export async function requestApprovalCheckChecklistItemProposal(params: {
+  proposal: ChecklistItemProposal;
+  actor: Profile;
+  note?: string;
+}): Promise<void> {
+  const { proposal, actor, note } = params;
+  if (!canActorRequestApprovalCheck(actor, proposal)) {
+    throw new Error('Only Owner or Admin can request an approval check.');
+  }
+
+  const recipients =
+    proposal.status === 'pending_first_approval'
+      ? parseUserIdsJson(proposal.firstApproverUserIdsJson)
+      : parseUserIdsJson(proposal.finalApproverUserIdsJson);
+
+  if (!recipients.length) {
+    throw new Error('No assigned approvers found to notify.');
+  }
+
+  const levelLabel =
+    proposal.status === 'pending_first_approval' ? 'first approval' : 'final approval';
+  const bodyNote = note?.trim()
+    ? note.trim()
+    : `${actor.displayName || actor.email} (${actor.role}) requested a review — this proposal is still waiting for ${levelLabel}.`;
+
+  await transactAll([
+    eventTx(
+      proposal.id,
+      'approval_check_requested',
+      actor.userId,
+      proposal.status,
+      proposal.status,
+      { recipients },
+    ),
+    ...notifyUsers(recipients, (uid) =>
+      notificationTx({
+        recipientUserId: uid,
+        type: 'checklist_item_proposal_first_approval_required',
+        title: `Approval check requested (${levelLabel})`,
+        body: `"${proposal.title}" — ${bodyNote}`,
+        storeId: proposal.sourceStoreId,
+        itemTitle: proposal.title,
+        actorUserId: actor.userId,
+        actorRole: actor.role,
+        actionStatus: proposal.status,
         proposalId: proposal.id,
       }),
     ),

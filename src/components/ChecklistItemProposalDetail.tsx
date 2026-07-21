@@ -3,14 +3,18 @@ import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import {
   canActorEditProposal,
+  canActorElevatedFullApprove,
   canActorFinalApprove,
   canActorFirstApprove,
   canActorPublish,
+  canActorRequestApprovalCheck,
   cancelChecklistItemProposal,
+  elevatedApproveChecklistItemProposal,
   finalApproveChecklistItemProposal,
   firstApproveChecklistItemProposal,
   publishApprovedChecklistItemProposal,
   rejectChecklistItemProposal,
+  requestApprovalCheckChecklistItemProposal,
   requestChangesChecklistItemProposal,
   submitChecklistItemProposal,
 } from '../lib/checklistItemProposals';
@@ -135,6 +139,8 @@ export default function ChecklistItemProposalDetail({
 
       {(canActorFirstApprove(profile, proposal, defs) ||
         canActorFinalApprove(profile, proposal, defs) ||
+        canActorElevatedFullApprove(profile, proposal) ||
+        canActorRequestApprovalCheck(profile, proposal) ||
         canActorPublish(profile, proposal, defs) ||
         canActorEditProposal(profile, proposal, defs) ||
         (proposal.requestedByUserId === profile.userId &&
@@ -145,10 +151,46 @@ export default function ChecklistItemProposalDetail({
             <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} />
           </label>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+            {canActorElevatedFullApprove(profile, proposal) && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() =>
+                  run(() =>
+                    elevatedApproveChecklistItemProposal({
+                      proposal,
+                      actor: profile,
+                      comment,
+                    }),
+                  )
+                }
+              >
+                {cp.approveFully}
+              </button>
+            )}
+            {canActorRequestApprovalCheck(profile, proposal) && (
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy}
+                onClick={() =>
+                  run(() =>
+                    requestApprovalCheckChecklistItemProposal({
+                      proposal,
+                      actor: profile,
+                      note: comment,
+                    }),
+                  )
+                }
+              >
+                {cp.requestApprovalCheck}
+              </button>
+            )}
             {canActorFirstApprove(profile, proposal, defs) && (
               <>
                 <button
                   type="button"
+                  className={canActorElevatedFullApprove(profile, proposal) ? 'secondary' : ''}
                   disabled={busy}
                   onClick={() =>
                     run(() =>
@@ -201,7 +243,8 @@ export default function ChecklistItemProposalDetail({
                 </button>
               </>
             )}
-            {canActorFinalApprove(profile, proposal, defs) && (
+            {canActorFinalApprove(profile, proposal, defs) &&
+              !canActorElevatedFullApprove(profile, proposal) && (
               <>
                 <button
                   type="button"
@@ -219,6 +262,47 @@ export default function ChecklistItemProposalDetail({
                 >
                   {cp.approveFinal}
                 </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busy}
+                  onClick={() =>
+                    run(() =>
+                      requestChangesChecklistItemProposal({
+                        proposal,
+                        actor: profile,
+                        defs,
+                        comment,
+                        level: 'final',
+                      }),
+                    )
+                  }
+                >
+                  {cp.requestChanges}
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={busy}
+                  onClick={() =>
+                    run(() =>
+                      rejectChecklistItemProposal({
+                        proposal,
+                        actor: profile,
+                        defs,
+                        reason: comment,
+                        level: 'final',
+                      }),
+                    )
+                  }
+                >
+                  {cp.reject}
+                </button>
+              </>
+            )}
+            {canActorFinalApprove(profile, proposal, defs) &&
+              canActorElevatedFullApprove(profile, proposal) && (
+              <>
                 <button
                   type="button"
                   className="secondary"
