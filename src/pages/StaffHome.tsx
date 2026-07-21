@@ -4,17 +4,31 @@ import MyReportsPanel from '../components/MyReportsPanel';
 import ReportReviewStatusPanel from '../components/ReportReviewStatusPanel';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
-import { canEditMaster, canReview } from '../lib/roles';
+import {
+  canAccessChecklistItemProposals,
+  canEditMaster,
+  canProposeTemplateItem,
+  canReview,
+} from '../lib/roles';
+import type { Page } from '../components/Nav';
 import type { Profile } from '../types';
 
 interface Props {
   profile: Profile;
-  setPage: (p: string) => void;
+  setPage: (p: Page) => void;
   onStartReport: () => void;
   onFixReport: (reportId: string) => void;
+  onProposeChecklistItem: () => void;
+  onOpenProposals: () => void;
 }
 
-export default function StaffHome({ profile, onStartReport, onFixReport }: Props) {
+export default function StaffHome({
+  profile,
+  onStartReport,
+  onFixReport,
+  onProposeChecklistItem,
+  onOpenProposals,
+}: Props) {
   const { t } = useLang();
   const { defs } = useRoleDefinitions();
   const today = new Date().toISOString().slice(0, 10);
@@ -48,11 +62,33 @@ export default function StaffHome({ profile, onStartReport, onFixReport }: Props
       )}
 
       <div className="card">
-        <h1>{t.common.hello}, {profile.displayName || profile.email.split('@')[0]}</h1>
+        <h1>
+          {t.common.hello}, {profile.displayName || profile.email.split('@')[0]}
+        </h1>
         <p className="small">
           {t.staffHome.role}: <span className="badge">{profile.role}</span>
         </p>
       </div>
+
+      {(canProposeTemplateItem(profile.role, defs) ||
+        canAccessChecklistItemProposals(profile.role, defs)) && (
+        <div className="card">
+          <h2>{t.checklistProposals.title}</h2>
+          <p className="small">{t.checklistProposals.subtitle}</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+            {canProposeTemplateItem(profile.role, defs) && (
+              <button type="button" onClick={onProposeChecklistItem}>
+                {t.staffHome.proposeChecklistItem}
+              </button>
+            )}
+            {canAccessChecklistItemProposals(profile.role, defs) && (
+              <button type="button" className="secondary" onClick={onOpenProposals}>
+                {t.checklistProposals.viewAll}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {pendingSlots.length > 0 ? (
         <div className="card">
@@ -62,7 +98,9 @@ export default function StaffHome({ profile, onStartReport, onFixReport }: Props
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <h3 style={{ margin: 0, flex: 1 }}>{slot.templateName}</h3>
                 <span className={slot.status === 'missed' ? 'badge bad' : 'badge warn'}>
-                  {slot.status === 'missed' ? t.staffHome.missed : `${t.staffHome.due}: ${slot.dueTime}`}
+                  {slot.status === 'missed'
+                    ? t.staffHome.missed
+                    : `${t.staffHome.due}: ${slot.dueTime}`}
                 </span>
               </div>
               <button style={{ marginTop: 6 }} onClick={onStartReport}>

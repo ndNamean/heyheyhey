@@ -13,6 +13,10 @@ import PhotoSheetPage from './pages/PhotoSheetPage';
 import VerifyPhotoPage from './pages/VerifyPhotoPage';
 import ShiftsPage from './pages/ShiftsPage';
 import LogbookPage from './pages/LogbookPage';
+import ChecklistItemProposalsPage from './pages/ChecklistItemProposalsPage';
+import ChecklistItemProposalFormPage, {
+  type ProposalFormPrefill,
+} from './pages/ChecklistItemProposalFormPage';
 import { useRoleDefinitions } from './contexts/RoleDefinitionsContext';
 import { usesDashboardHome } from './lib/roles';
 import { BACK_PRIORITY, useNativeBack } from './lib/nativeBack';
@@ -26,15 +30,28 @@ export default function AppShell({ profile }: Props) {
   const { defs } = useRoleDefinitions();
   const [page, setPage] = useState<Page>('home');
   const [correctionReportId, setCorrectionReportId] = useState<string | null>(null);
+  const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
+  const [proposalPrefill, setProposalPrefill] = useState<ProposalFormPrefill | null>(null);
 
   useNativeBack(
     () => {
+      if (page === 'proposalForm') {
+        setProposalPrefill(null);
+        setPage('proposals');
+        return true;
+      }
+      if (page === 'proposals' && selectedProposalId) {
+        setSelectedProposalId(null);
+        return true;
+      }
       if (page === 'home') return false;
       setCorrectionReportId(null);
+      setSelectedProposalId(null);
+      setProposalPrefill(null);
       setPage('home');
       return true;
     },
-    page !== 'home',
+    page !== 'home' || !!selectedProposalId,
     BACK_PRIORITY.PAGE,
   );
 
@@ -48,17 +65,29 @@ export default function AppShell({ profile }: Props) {
     setPage('submit');
   }
 
+  function openProposalForm(prefill?: ProposalFormPrefill) {
+    setProposalPrefill(prefill ?? null);
+    setPage('proposalForm');
+  }
+
+  function goProposals(proposalId?: string | null) {
+    setSelectedProposalId(proposalId ?? null);
+    setPage('proposals');
+  }
+
   function renderPage() {
     switch (page) {
       case 'home':
         return usesDashboardHome(profile.role, defs) ? (
-          <DashboardPage profile={profile} />
+          <DashboardPage profile={profile} onOpenProposals={() => goProposals()} />
         ) : (
           <StaffHome
             profile={profile}
             setPage={setPage}
             onStartReport={startNewReport}
             onFixReport={startCorrection}
+            onProposeChecklistItem={() => openProposalForm()}
+            onOpenProposals={() => goProposals()}
           />
         );
       case 'submit':
@@ -70,6 +99,7 @@ export default function AppShell({ profile }: Props) {
               setCorrectionReportId(null);
               setPage('home');
             }}
+            onProposeForTemplate={(prefill) => openProposalForm(prefill)}
           />
         );
       case 'review':
@@ -82,6 +112,30 @@ export default function AppShell({ profile }: Props) {
         return <UsersPage currentProfile={profile} />;
       case 'templates':
         return <TemplatesPage profile={profile} />;
+      case 'proposals':
+        return (
+          <ChecklistItemProposalsPage
+            profile={profile}
+            onNewProposal={() => openProposalForm()}
+            selectedProposalId={selectedProposalId}
+            onSelectProposal={setSelectedProposalId}
+          />
+        );
+      case 'proposalForm':
+        return (
+          <ChecklistItemProposalFormPage
+            profile={profile}
+            prefill={proposalPrefill}
+            onCancel={() => {
+              setProposalPrefill(null);
+              setPage('proposals');
+            }}
+            onDone={(proposalId) => {
+              setProposalPrefill(null);
+              goProposals(proposalId ?? null);
+            }}
+          />
+        );
       case 'corrective':
         return <CorrectiveActionsPage profile={profile} />;
       case 'photos':
@@ -99,6 +153,8 @@ export default function AppShell({ profile }: Props) {
             setPage={setPage}
             onStartReport={startNewReport}
             onFixReport={startCorrection}
+            onProposeChecklistItem={() => openProposalForm()}
+            onOpenProposals={() => goProposals()}
           />
         );
     }

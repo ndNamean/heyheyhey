@@ -67,6 +67,10 @@ export function capability(
     | 'canDeleteShifts'
     | 'canUseOpsTools'
     | 'canClockIn'
+    | 'canProposeTemplateItem'
+    | 'canFirstApproveTemplateItemProposal'
+    | 'canFinalApproveTemplateItemProposal'
+    | 'canPublishTemplateItemProposal'
   >,
 ): boolean {
   return getRoleDef(role, defs)?.[flag] ?? false;
@@ -133,6 +137,10 @@ export function buildEnsureSystemRoleTransactions(defs: RoleDefinition[]) {
         existing.canDeleteShifts !== seed.canDeleteShifts ||
         existing.canUseOpsTools !== seed.canUseOpsTools ||
         existing.canClockIn !== seed.canClockIn ||
+        existing.canProposeTemplateItem !== seed.canProposeTemplateItem ||
+        existing.canFirstApproveTemplateItemProposal !== seed.canFirstApproveTemplateItemProposal ||
+        existing.canFinalApproveTemplateItemProposal !== seed.canFinalApproveTemplateItemProposal ||
+        existing.canPublishTemplateItemProposal !== seed.canPublishTemplateItemProposal ||
         existing.approvesSubmitterRolesJson !== seed.approvesSubmitterRolesJson;
 
       if (needsUpgrade) {
@@ -149,6 +157,18 @@ export function buildEnsureSystemRoleTransactions(defs: RoleDefinition[]) {
     const rankPatch: Record<string, unknown> = {};
     if (existing.rank !== seed.rank) rankPatch.rank = seed.rank;
     if (!existing.isSystem) rankPatch.isSystem = true;
+    if (existing.canProposeTemplateItem !== seed.canProposeTemplateItem) {
+      rankPatch.canProposeTemplateItem = seed.canProposeTemplateItem;
+    }
+    if (existing.canFirstApproveTemplateItemProposal !== seed.canFirstApproveTemplateItemProposal) {
+      rankPatch.canFirstApproveTemplateItemProposal = seed.canFirstApproveTemplateItemProposal;
+    }
+    if (existing.canFinalApproveTemplateItemProposal !== seed.canFinalApproveTemplateItemProposal) {
+      rankPatch.canFinalApproveTemplateItemProposal = seed.canFinalApproveTemplateItemProposal;
+    }
+    if (existing.canPublishTemplateItemProposal !== seed.canPublishTemplateItemProposal) {
+      rankPatch.canPublishTemplateItemProposal = seed.canPublishTemplateItemProposal;
+    }
     if (Object.keys(rankPatch).length) {
       txs.push(
         db.tx.roleDefinitions[existing.id].update({

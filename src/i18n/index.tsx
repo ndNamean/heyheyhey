@@ -37,7 +37,7 @@ export const LANGUAGES: LangMeta[] = [
 export type T = {
   nav: {
     dashboard: string; submit: string; review: string; profile: string;
-    stores: string; users: string; templates: string; corrective: string;
+    stores: string; users: string; templates: string; proposals: string; corrective: string;
     photos: string; verify: string; shifts: string; logbook: string; signOut: string;
   };
   auth: {
@@ -61,7 +61,7 @@ export type T = {
   } & typeof extraCommonEn;
   pages: {
     dashboard: string; submit: string; review: string; stores: string; users: string;
-    templates: string; corrective: string; photos: string; verify: string;
+    templates: string; proposals: string; corrective: string; photos: string; verify: string;
     shifts: string; logbook: string; profile: string;
   };
   lang: { label: string; others: string; };
@@ -73,7 +73,7 @@ const translations: Record<LangCode, T> = {
   en: {
     nav: {
       dashboard: 'Dashboard', submit: 'Submit', review: 'Review', profile: 'Profile',
-      stores: 'Stores', users: 'Users', templates: 'Templates', corrective: 'Corrective',
+      stores: 'Stores', users: 'Users', templates: 'Templates', proposals: 'Proposals', corrective: 'Corrective',
       photos: 'Photo Sheet', verify: 'Verify Photo', shifts: 'Shifts', logbook: 'Logbook',
       signOut: 'Sign out',
     },
@@ -107,6 +107,7 @@ const translations: Record<LangCode, T> = {
     pages: {
       dashboard: 'Operation Dashboard', submit: 'Submit Report', review: 'Review Reports',
       stores: 'Stores', users: 'Users & Access', templates: 'Templates',
+      proposals: 'Checklist proposals',
       corrective: 'Corrective Actions', photos: 'Photo Sheet', verify: 'Photo Verification',
       shifts: 'Shifts', logbook: 'Logbook', profile: 'Profile',
     },
@@ -117,6 +118,7 @@ const translations: Record<LangCode, T> = {
     nav: {
       dashboard: 'Bảng điều khiển', submit: 'Nộp báo cáo', review: 'Xem xét',
       profile: 'Hồ sơ', stores: 'Cửa hàng', users: 'Người dùng', templates: 'Mẫu báo cáo',
+      proposals: 'Đề xuất hạng mục',
       corrective: 'Khắc phục', photos: 'Bảng ảnh', verify: 'Xác minh ảnh',
       shifts: 'Ca làm việc', logbook: 'Nhật ký', signOut: 'Đăng xuất',
     },
@@ -151,6 +153,7 @@ const translations: Record<LangCode, T> = {
     pages: {
       dashboard: 'Bảng điều khiển vận hành', submit: 'Nộp báo cáo', review: 'Xem xét báo cáo',
       stores: 'Cửa hàng', users: 'Người dùng & Quyền truy cập', templates: 'Mẫu báo cáo',
+      proposals: 'Đề xuất hạng mục',
       corrective: 'Hành động khắc phục', photos: 'Bảng ảnh', verify: 'Xác minh ảnh',
       shifts: 'Ca làm việc', logbook: 'Nhật ký ca', profile: 'Hồ sơ cá nhân',
     },
@@ -160,7 +163,7 @@ const translations: Record<LangCode, T> = {
   fr: {
     nav: {
       dashboard: 'Tableau de bord', submit: 'Soumettre', review: 'Réviser', profile: 'Profil',
-      stores: 'Magasins', users: 'Utilisateurs', templates: 'Modèles', corrective: 'Correctif',
+      stores: 'Magasins', users: 'Utilisateurs', templates: 'Modèles', proposals: 'Propositions', corrective: 'Correctif',
       photos: 'Galerie photos', verify: 'Vérifier photo', shifts: 'Quarts', logbook: 'Journal',
       signOut: 'Déconnexion',
     },
@@ -194,6 +197,7 @@ const translations: Record<LangCode, T> = {
     pages: {
       dashboard: 'Tableau de bord', submit: 'Soumettre rapport', review: 'Réviser rapports',
       stores: 'Magasins', users: 'Utilisateurs & Accès', templates: 'Modèles',
+      proposals: 'Checklist proposals',
       corrective: 'Actions correctives', photos: 'Galerie photos', verify: 'Vérification photo',
       shifts: 'Quarts de travail', logbook: 'Journal de bord', profile: 'Profil',
     },
@@ -203,7 +207,7 @@ const translations: Record<LangCode, T> = {
   zh: {
     nav: {
       dashboard: '仪表板', submit: '提交', review: '审核', profile: '个人资料',
-      stores: '门店', users: '用户', templates: '模板', corrective: '纠正措施',
+      stores: '门店', users: '用户', templates: '模板', proposals: '提案', corrective: '纠正措施',
       photos: '照片表', verify: '验证照片', shifts: '班次', logbook: '日志', signOut: '退出',
     },
     auth: {
@@ -235,6 +239,7 @@ const translations: Record<LangCode, T> = {
     pages: {
       dashboard: '运营仪表板', submit: '提交报告', review: '审核报告',
       stores: '门店管理', users: '用户与权限', templates: '报告模板',
+      proposals: 'Checklist proposals',
       corrective: '纠正措施', photos: '照片表', verify: '照片验证',
       shifts: '班次管理', logbook: '值班日志', profile: '个人资料',
     },
@@ -244,7 +249,7 @@ const translations: Record<LangCode, T> = {
   es: {
     nav: {
       dashboard: 'Panel', submit: 'Enviar', review: 'Revisar', profile: 'Perfil',
-      stores: 'Tiendas', users: 'Usuarios', templates: 'Plantillas', corrective: 'Correctivo',
+      stores: 'Tiendas', users: 'Usuarios', templates: 'Plantillas', proposals: 'Propuestas', corrective: 'Correctivo',
       photos: 'Fotos', verify: 'Verificar foto', shifts: 'Turnos', logbook: 'Bitácora',
       signOut: 'Cerrar sesión',
     },
@@ -280,6 +285,7 @@ const translations: Record<LangCode, T> = {
     pages: {
       dashboard: 'Panel de operaciones', submit: 'Enviar informe', review: 'Revisar informes',
       stores: 'Tiendas', users: 'Usuarios y acceso', templates: 'Plantillas',
+      proposals: 'Checklist proposals',
       corrective: 'Acciones correctivas', photos: 'Hoja de fotos', verify: 'Verificar foto',
       shifts: 'Turnos', logbook: 'Bitácora', profile: 'Perfil',
     },
@@ -289,7 +295,7 @@ const translations: Record<LangCode, T> = {
   ar: {
     nav: {
       dashboard: 'لوحة التحكم', submit: 'إرسال', review: 'مراجعة', profile: 'الملف الشخصي',
-      stores: 'المتاجر', users: 'المستخدمون', templates: 'القوالب', corrective: 'الإجراءات التصحيحية',
+      stores: 'المتاجر', users: 'المستخدمون', templates: 'القوالب', proposals: 'اقتراحات', corrective: 'الإجراءات التصحيحية',
       photos: 'صفحة الصور', verify: 'التحقق من الصورة', shifts: 'الورديات', logbook: 'السجل',
       signOut: 'تسجيل الخروج',
     },
@@ -324,6 +330,7 @@ const translations: Record<LangCode, T> = {
     pages: {
       dashboard: 'لوحة العمليات', submit: 'إرسال تقرير', review: 'مراجعة التقارير',
       stores: 'المتاجر', users: 'المستخدمون والوصول', templates: 'القوالب',
+      proposals: 'Checklist proposals',
       corrective: 'الإجراءات التصحيحية', photos: 'صفحة الصور', verify: 'التحقق من الصور',
       shifts: 'الورديات', logbook: 'سجل الورديات', profile: 'الملف الشخصي',
     },
@@ -333,7 +340,7 @@ const translations: Record<LangCode, T> = {
   pt: {
     nav: {
       dashboard: 'Painel', submit: 'Enviar', review: 'Revisar', profile: 'Perfil',
-      stores: 'Lojas', users: 'Usuários', templates: 'Modelos', corrective: 'Corretivo',
+      stores: 'Lojas', users: 'Usuários', templates: 'Modelos', proposals: 'Propostas', corrective: 'Corretivo',
       photos: 'Fotos', verify: 'Verificar foto', shifts: 'Turnos', logbook: 'Diário',
       signOut: 'Sair',
     },
@@ -368,6 +375,7 @@ const translations: Record<LangCode, T> = {
     pages: {
       dashboard: 'Painel de operações', submit: 'Enviar relatório', review: 'Revisar relatórios',
       stores: 'Lojas', users: 'Usuários e acesso', templates: 'Modelos',
+      proposals: 'Checklist proposals',
       corrective: 'Ações corretivas', photos: 'Folha de fotos', verify: 'Verificar foto',
       shifts: 'Turnos', logbook: 'Diário de turnos', profile: 'Perfil',
     },
@@ -377,7 +385,7 @@ const translations: Record<LangCode, T> = {
   ru: {
     nav: {
       dashboard: 'Панель', submit: 'Отправить', review: 'Проверить', profile: 'Профиль',
-      stores: 'Магазины', users: 'Пользователи', templates: 'Шаблоны', corrective: 'Коррективы',
+      stores: 'Магазины', users: 'Пользователи', templates: 'Шаблоны', proposals: 'Предложения', corrective: 'Коррективы',
       photos: 'Фото', verify: 'Проверить фото', shifts: 'Смены', logbook: 'Журнал',
       signOut: 'Выйти',
     },
@@ -412,6 +420,7 @@ const translations: Record<LangCode, T> = {
     pages: {
       dashboard: 'Панель операций', submit: 'Отправить отчёт', review: 'Проверить отчёты',
       stores: 'Магазины', users: 'Пользователи и доступ', templates: 'Шаблоны',
+      proposals: 'Checklist proposals',
       corrective: 'Корректирующие действия', photos: 'Фотогалерея', verify: 'Проверка фото',
       shifts: 'Смены', logbook: 'Журнал смен', profile: 'Профиль',
     },
@@ -421,7 +430,7 @@ const translations: Record<LangCode, T> = {
   ja: {
     nav: {
       dashboard: 'ダッシュボード', submit: '提出', review: 'レビュー', profile: 'プロフィール',
-      stores: '店舗', users: 'ユーザー', templates: 'テンプレート', corrective: '是正措置',
+      stores: '店舗', users: 'ユーザー', templates: 'テンプレート', proposals: '提案', corrective: '是正措置',
       photos: '写真シート', verify: '写真確認', shifts: 'シフト', logbook: 'ログ帳',
       signOut: 'サインアウト',
     },
@@ -455,6 +464,7 @@ const translations: Record<LangCode, T> = {
     pages: {
       dashboard: '運営ダッシュボード', submit: 'レポート提出', review: 'レポートレビュー',
       stores: '店舗管理', users: 'ユーザーとアクセス', templates: 'テンプレート',
+      proposals: 'Checklist proposals',
       corrective: '是正措置', photos: '写真シート', verify: '写真確認',
       shifts: 'シフト管理', logbook: 'シフトログ', profile: 'プロフィール',
     },
@@ -464,7 +474,7 @@ const translations: Record<LangCode, T> = {
   de: {
     nav: {
       dashboard: 'Dashboard', submit: 'Einreichen', review: 'Überprüfen', profile: 'Profil',
-      stores: 'Filialen', users: 'Benutzer', templates: 'Vorlagen', corrective: 'Korrektur',
+      stores: 'Filialen', users: 'Benutzer', templates: 'Vorlagen', proposals: 'Vorschläge', corrective: 'Korrektur',
       photos: 'Fotoblatt', verify: 'Foto prüfen', shifts: 'Schichten', logbook: 'Logbuch',
       signOut: 'Abmelden',
     },
@@ -499,6 +509,7 @@ const translations: Record<LangCode, T> = {
     pages: {
       dashboard: 'Betriebsdashboard', submit: 'Bericht einreichen', review: 'Berichte prüfen',
       stores: 'Filialen', users: 'Benutzer & Zugang', templates: 'Vorlagen',
+      proposals: 'Checklist proposals',
       corrective: 'Korrekturmaßnahmen', photos: 'Fotoblatt', verify: 'Foto prüfen',
       shifts: 'Schichtplan', logbook: 'Schichtlogbuch', profile: 'Profil',
     },
@@ -508,7 +519,7 @@ const translations: Record<LangCode, T> = {
   hi: {
     nav: {
       dashboard: 'डैशबोर्ड', submit: 'सबमिट करें', review: 'समीक्षा', profile: 'प्रोफ़ाइल',
-      stores: 'स्टोर', users: 'उपयोगकर्ता', templates: 'टेम्पलेट', corrective: 'सुधारात्मक',
+      stores: 'स्टोर', users: 'उपयोगकर्ता', templates: 'टेम्पलेट', proposals: 'प्रस्ताव', corrective: 'सुधारात्मक',
       photos: 'फ़ोटो शीट', verify: 'फ़ोटो सत्यापन', shifts: 'शिफ्ट', logbook: 'लॉगबुक',
       signOut: 'साइन आउट',
     },
@@ -542,6 +553,7 @@ const translations: Record<LangCode, T> = {
     pages: {
       dashboard: 'संचालन डैशबोर्ड', submit: 'रिपोर्ट सबमिट करें', review: 'रिपोर्ट समीक्षा',
       stores: 'स्टोर', users: 'उपयोगकर्ता और पहुँच', templates: 'टेम्पलेट',
+      proposals: 'Checklist proposals',
       corrective: 'सुधारात्मक कार्रवाई', photos: 'फ़ोटो शीट', verify: 'फ़ोटो सत्यापन',
       shifts: 'शिफ्ट', logbook: 'शिफ्ट लॉगबुक', profile: 'प्रोफ़ाइल',
     },
@@ -551,7 +563,7 @@ const translations: Record<LangCode, T> = {
   id: {
     nav: {
       dashboard: 'Dasbor', submit: 'Kirim', review: 'Tinjau', profile: 'Profil',
-      stores: 'Toko', users: 'Pengguna', templates: 'Template', corrective: 'Korektif',
+      stores: 'Toko', users: 'Pengguna', templates: 'Template', proposals: 'Usulan', corrective: 'Korektif',
       photos: 'Lembar Foto', verify: 'Verifikasi Foto', shifts: 'Shift', logbook: 'Buku Catatan',
       signOut: 'Keluar',
     },
@@ -585,6 +597,7 @@ const translations: Record<LangCode, T> = {
     pages: {
       dashboard: 'Dasbor Operasi', submit: 'Kirim Laporan', review: 'Tinjau Laporan',
       stores: 'Toko', users: 'Pengguna & Akses', templates: 'Template',
+      proposals: 'Checklist proposals',
       corrective: 'Tindakan Korektif', photos: 'Lembar Foto', verify: 'Verifikasi Foto',
       shifts: 'Jadwal Shift', logbook: 'Buku Catatan Shift', profile: 'Profil',
     },

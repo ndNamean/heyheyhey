@@ -310,6 +310,16 @@ describe('Phase 5 — permissions contracts', () => {
     expect(block).toContain("create: 'canEditMaster'");
     expect(block).toContain("update: 'canEditMaster'");
   });
+
+  it('keeps templateItems create on canEditMaster and adds proposal entities', () => {
+    expect(perms).toContain('checklistItemProposals:');
+    expect(perms).toContain('canProposeTemplateItem');
+    const itemsBlock = perms.slice(
+      perms.indexOf('templateItems:'),
+      perms.indexOf('templateScheduleVersions:'),
+    );
+    expect(itemsBlock).toContain("create: 'canEditMaster'");
+  });
 });
 
 describe('Phase 5 — acceptance criteria map', () => {

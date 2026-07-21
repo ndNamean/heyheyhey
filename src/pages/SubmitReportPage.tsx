@@ -3,7 +3,14 @@ import { id } from '@instantdb/react';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
-import { needsMedia, needsNote, needsNumber, seesAllTemplateItems, userCanAccessStore } from '../lib/roles';
+import {
+  canProposeTemplateItem,
+  needsMedia,
+  needsNote,
+  needsNumber,
+  seesAllTemplateItems,
+  userCanAccessStore,
+} from '../lib/roles';
 import { calcCompletion, nowIso, todayYmd } from '../lib/utils';
 import {
   buildItemResubmittedEvents,
@@ -34,6 +41,11 @@ interface Props {
   profile: Profile;
   correctionReportId?: string | null;
   onCorrectionComplete?: () => void;
+  onProposeForTemplate?: (prefill: {
+    templateId?: string;
+    storeId?: string;
+    sourceReportId?: string;
+  }) => void;
 }
 
 const EMPTY_RESPONSE: LocalResponse = {
@@ -47,6 +59,7 @@ export default function SubmitReportPage({
   profile,
   correctionReportId = null,
   onCorrectionComplete,
+  onProposeForTemplate,
 }: Props) {
   const { t } = useLang();
   const { defs } = useRoleDefinitions();
@@ -65,6 +78,8 @@ export default function SubmitReportPage({
   const [submitted, setSubmitted] = useState(false);
   const [cameraReviewPending, setCameraReviewPending] = useState(false);
   const correctionInitRef = useRef(false);
+  /** Item ids frozen when the wizard session starts for a template (avoids mid-flight inserts). */
+  const [pinnedItemIds, setPinnedItemIds] = useState<string[] | null>(null);
 
   const activeReportId = correctionReportId ?? newReportId;
 
@@ -122,9 +137,36 @@ export default function SubmitReportPage({
       return sorted.filter((i) => flaggedItemIds.has(i.id));
     }
 
-    if (seesAllTemplateItems(profile.role, defs)) return sorted;
-    return sorted.filter((i) => i.assignedRole === profile.role);
-  }, [selectedTemplate, profile.role, correctionMode, flaggedResponses, defs]);
+    const roleFiltered = seesAllTemplateItems(profile.role, defs)
+      ? sorted
+      : sorted.filter((i) => i.assignedRole === profile.role);
+
+    if (!pinnedItemIds) return roleFiltered;
+    const pinned = new Set(pinnedItemIds);
+    return roleFiltered.filter((i) => pinned.has(i.id));
+  }, [selectedTemplate, profile.role, correctionMode, flaggedResponses, defs, pinnedItemIds]);
+
+  useEffect(() => {
+    if (correctionMode) {
+      setPinnedItemIds(null);
+      return;
+    }
+    if (!templateId) {
+      setPinnedItemIds(null);
+      return;
+    }
+    if (!selectedTemplate?.items) return;
+    // Pin once per template selection for this session.
+    setPinnedItemIds((prev) => {
+      if (prev !== null) return prev;
+      const items = selectedTemplate.items as TemplateItem[];
+      const sorted = [...items].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+      const roleFiltered = seesAllTemplateItems(profile.role, defs)
+        ? sorted
+        : sorted.filter((i) => i.assignedRole === profile.role);
+      return roleFiltered.map((i) => i.id);
+    });
+  }, [templateId, selectedTemplate, correctionMode, profile.role, defs]);
 
   useEffect(() => {
     if (!correctionMode || !correctionReport || correctionInitRef.current) return;
@@ -628,6 +670,7 @@ export default function SubmitReportPage({
                 onChange={(e) => {
                   setStoreId(e.target.value);
                   setTemplateId('');
+                  setPinnedItemIds(null);
                 }}
               >
                 <option value="">{t.common.selectStore}</option>
@@ -642,7 +685,10 @@ export default function SubmitReportPage({
               {t.submit.checklistTemplate}
               <select
                 value={templateId}
-                onChange={(e) => setTemplateId(e.target.value)}
+                onChange={(e) => {
+                  setTemplateId(e.target.value);
+                  setPinnedItemIds(null);
+                }}
                 disabled={!storeId}
               >
                 <option value="">{t.common.selectTemplate}</option>
@@ -654,6 +700,22 @@ export default function SubmitReportPage({
               </select>
             </label>
           </div>
+          {canProposeTemplateItem(profile.role, defs) && templateId && storeId && onProposeForTemplate && (
+            <button
+              type="button"
+              className="secondary"
+              style={{ marginTop: 12 }}
+              onClick={() =>
+                onProposeForTemplate({
+                  templateId,
+                  storeId,
+                  sourceReportId: correctionReportId ?? undefined,
+                })
+              }
+            >
+              {t.checklistProposals.proposeForTemplate}
+            </button>
+          )}
         </div>
       </div>
     );

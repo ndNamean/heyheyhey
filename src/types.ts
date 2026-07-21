@@ -31,6 +31,10 @@ export interface RoleDefinitionSeed {
   canDeleteShifts: boolean;
   canUseOpsTools: boolean;
   canClockIn: boolean;
+  canProposeTemplateItem: boolean;
+  canFirstApproveTemplateItemProposal: boolean;
+  canFinalApproveTemplateItemProposal: boolean;
+  canPublishTemplateItemProposal: boolean;
   approvesSubmitterRolesJson: string;
 }
 
@@ -286,6 +290,100 @@ export interface TemplateItem {
   sortOrder: number;
 }
 
+export type ChecklistItemProposalStatus =
+  | 'draft'
+  | 'pending_first_approval'
+  | 'changes_requested'
+  | 'pending_final_approval'
+  | 'rejected'
+  | 'approved'
+  | 'published'
+  | 'cancelled';
+
+export type ChecklistItemProposalEventType =
+  | 'proposal_created'
+  | 'proposal_submitted'
+  | 'first_approval_granted'
+  | 'changes_requested'
+  | 'proposal_resubmitted'
+  | 'final_approval_granted'
+  | 'proposal_rejected'
+  | 'proposal_published'
+  | 'proposal_cancelled'
+  | 'approvers_assigned';
+
+export interface ChecklistItemProposal {
+  id: string;
+  templateId: string;
+  templateNameSnapshot: string;
+  templateVersionSnapshot: string;
+  sourceStoreId: string;
+  affectedStoreIdsJson: string;
+  requestedByUserId: string;
+  requesterNameSnapshot: string;
+  requesterRoleSnapshot: string;
+  requesterStoreId: string;
+  section: string;
+  title: string;
+  requirement: string;
+  reason: string;
+  proofType: ProofType | string;
+  assignedRole: Role | string;
+  failureCategory: string;
+  required: boolean;
+  completionTime: string;
+  sourceReportId: string;
+  supportingEvidenceJson: string;
+  proposedItemJson: string;
+  status: ChecklistItemProposalStatus | string;
+  firstApproverUserIdsJson: string;
+  firstApproverRole: string;
+  firstApproverUserId: string;
+  firstApprovedAt: string;
+  firstApprovalComment: string;
+  finalApproverUserIdsJson: string;
+  finalApproverRole: string;
+  finalApproverUserId: string;
+  finalApprovedAt: string;
+  finalApprovalComment: string;
+  rejectedByUserId: string;
+  rejectedAt: string;
+  rejectionReason: string;
+  publishedAt: string;
+  publishedByUserId: string;
+  resultingTemplateItemId: string;
+  similarityWarningJson: string;
+  duplicateOverrideReason: string;
+  createdAt: string;
+  updatedAt: string;
+  template?: Template;
+  requester?: Profile;
+  sourceStore?: Store;
+  comments?: ChecklistItemProposalComment[];
+  events?: ChecklistItemProposalEvent[];
+}
+
+export interface ChecklistItemProposalComment {
+  id: string;
+  proposalId: string;
+  userId: string;
+  userNameSnapshot: string;
+  userRoleSnapshot: string;
+  message: string;
+  createdAt: string;
+}
+
+export interface ChecklistItemProposalEvent {
+  id: string;
+  proposalId: string;
+  eventType: ChecklistItemProposalEventType | string;
+  actorUserId: string;
+  fromStatus: string;
+  toStatus: string;
+  metadataJson: string;
+  createdAt: string;
+}
+
 /** Historical schedule snapshot. templates.scheduleJson remains the active config. */
 export interface TemplateScheduleVersion {
   id: string;
@@ -486,12 +584,20 @@ export type NotificationType =
   | 'item_approved'
   | 'item_rejected'
   | 'item_correction'
-  | 'report_finalized';
+  | 'report_finalized'
+  | 'checklist_item_proposal_submitted'
+  | 'checklist_item_proposal_first_approval_required'
+  | 'checklist_item_proposal_first_approved'
+  | 'checklist_item_proposal_final_approval_required'
+  | 'checklist_item_proposal_changes_requested'
+  | 'checklist_item_proposal_rejected'
+  | 'checklist_item_proposal_approved'
+  | 'checklist_item_proposal_published';
 
 export interface Notification {
   id: string;
   recipientUserId: string;
-  type: NotificationType;
+  type: NotificationType | string;
   reportId: string;
   reportResponseId: string;
   storeId: string;

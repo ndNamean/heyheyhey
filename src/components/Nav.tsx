@@ -1,5 +1,6 @@
 import { db } from '../db';
 import {
+  canAccessChecklistItemProposals,
   canAccessUsersPage,
   canEditMaster,
   canReview,
@@ -13,9 +14,10 @@ import ProfileAvatar from './profileAvatar/ProfileAvatar';
 import { useUnreadNotificationCount } from './FeedbackInbox';
 import type { Profile } from '../types';
 
-type Page =
+export type Page =
   | 'home' | 'submit' | 'review' | 'profile'
-  | 'stores' | 'users' | 'templates' | 'corrective'
+  | 'stores' | 'users' | 'templates' | 'proposals' | 'proposalForm'
+  | 'corrective'
   | 'photos' | 'verify' | 'shifts' | 'logbook';
 
 interface NavProps {
@@ -41,6 +43,9 @@ export function DesktopNav({ page, setPage, profile }: NavProps) {
     links.push({ id: 'templates', label: t.nav.templates });
     links.push({ id: 'stores',    label: t.nav.stores });
   }
+  if (canAccessChecklistItemProposals(profile.role, defs)) {
+    links.push({ id: 'proposals', label: t.nav.proposals });
+  }
   if (canAccessUsersPage(profile.role, defs)) {
     links.push({ id: 'users', label: t.nav.users });
   }
@@ -59,7 +64,7 @@ export function DesktopNav({ page, setPage, profile }: NavProps) {
       {links.map((l) => (
         <button
           key={l.id}
-          className={page === l.id ? 'active' : ''}
+          className={page === l.id || (l.id === 'proposals' && page === 'proposalForm') ? 'active' : ''}
           onClick={() => setPage(l.id)}
         >
           {l.label}
@@ -128,5 +133,3 @@ export function MobileNav({ page, setPage, profile }: NavProps) {
     </>
   );
 }
-
-export type { Page };

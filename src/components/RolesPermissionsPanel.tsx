@@ -26,6 +26,10 @@ type CapabilityKey = keyof Pick<
   | 'canDeleteShifts'
   | 'canUseOpsTools'
   | 'canClockIn'
+  | 'canProposeTemplateItem'
+  | 'canFirstApproveTemplateItemProposal'
+  | 'canFinalApproveTemplateItemProposal'
+  | 'canPublishTemplateItemProposal'
 >;
 
 const CAPABILITY_KEYS: CapabilityKey[] = [
@@ -41,6 +45,10 @@ const CAPABILITY_KEYS: CapabilityKey[] = [
   'canDeleteShifts',
   'canUseOpsTools',
   'canClockIn',
+  'canProposeTemplateItem',
+  'canFirstApproveTemplateItemProposal',
+  'canFinalApproveTemplateItemProposal',
+  'canPublishTemplateItemProposal',
 ];
 
 interface Props {

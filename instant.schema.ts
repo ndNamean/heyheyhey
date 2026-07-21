@@ -333,7 +333,7 @@ const _schema = i.schema({
     // ─── Review feedback notifications ───────────────────────────────────────
     notifications: i.entity({
       recipientUserId: i.string().indexed(),
-      type: i.string(),                   // item_approved|item_rejected|item_correction|report_finalized
+      type: i.string(),                   // item_approved|item_rejected|item_correction|report_finalized|checklist_item_proposal_*
       reportId: i.string().indexed(),
       reportResponseId: i.string(),
       storeId: i.string().indexed(),
@@ -346,6 +346,71 @@ const _schema = i.schema({
       actorUserId: i.string(),
       actorRole: i.string(),
       readAt: i.string(),                   // '' = unread
+      createdAt: i.string(),
+    }),
+
+    // ─── Checklist item proposals (new-item requests; not templateItems) ─────
+    checklistItemProposals: i.entity({
+      templateId: i.string().indexed(),
+      templateNameSnapshot: i.string(),
+      templateVersionSnapshot: i.string(),
+      sourceStoreId: i.string().indexed(),
+      affectedStoreIdsJson: i.string(),
+      requestedByUserId: i.string().indexed(),
+      requesterNameSnapshot: i.string(),
+      requesterRoleSnapshot: i.string(),
+      requesterStoreId: i.string().indexed(),
+      section: i.string(),
+      title: i.string(),
+      requirement: i.string(),
+      reason: i.string(),
+      proofType: i.string(),
+      assignedRole: i.string(),
+      failureCategory: i.string(),
+      required: i.boolean(),
+      completionTime: i.string(),
+      sourceReportId: i.string(),
+      supportingEvidenceJson: i.string(),
+      proposedItemJson: i.string(),
+      status: i.string().indexed(),
+      firstApproverUserIdsJson: i.string(),
+      firstApproverRole: i.string(),
+      firstApproverUserId: i.string(),
+      firstApprovedAt: i.string(),
+      firstApprovalComment: i.string(),
+      finalApproverUserIdsJson: i.string(),
+      finalApproverRole: i.string(),
+      finalApproverUserId: i.string(),
+      finalApprovedAt: i.string(),
+      finalApprovalComment: i.string(),
+      rejectedByUserId: i.string(),
+      rejectedAt: i.string(),
+      rejectionReason: i.string(),
+      publishedAt: i.string(),
+      publishedByUserId: i.string(),
+      resultingTemplateItemId: i.string(),
+      similarityWarningJson: i.string(),
+      duplicateOverrideReason: i.string(),
+      createdAt: i.string(),
+      updatedAt: i.string(),
+    }),
+
+    checklistItemProposalComments: i.entity({
+      proposalId: i.string().indexed(),
+      userId: i.string().indexed(),
+      userNameSnapshot: i.string(),
+      userRoleSnapshot: i.string(),
+      message: i.string(),
+      createdAt: i.string(),
+    }),
+
+    checklistItemProposalEvents: i.entity({
+      proposalId: i.string().indexed(),
+      eventType: i.string(),
+      actorUserId: i.string(),
+      fromStatus: i.string(),
+      toStatus: i.string(),
+      metadataJson: i.string(),
       createdAt: i.string(),
     }),
 
@@ -367,6 +432,10 @@ const _schema = i.schema({
       canDeleteShifts: i.boolean(),
       canUseOpsTools: i.boolean(),
       canClockIn: i.boolean(),
+      canProposeTemplateItem: i.boolean(),
+      canFirstApproveTemplateItemProposal: i.boolean(),
+      canFinalApproveTemplateItemProposal: i.boolean(),
+      canPublishTemplateItemProposal: i.boolean(),
       approvesSubmitterRolesJson: i.string(),
       createdAt: i.string(),
       updatedAt: i.string(),
@@ -522,6 +591,32 @@ const _schema = i.schema({
     logbookEntryPhoto: {
       forward: { on: 'logbookEntries', has: 'one', label: 'photo' },
       reverse: { on: '$files', has: 'many', label: 'logbookEntries' },
+    },
+
+    // ─── Checklist item proposals ────────────────────────────────────────────
+    checklistItemProposalTemplate: {
+      forward: { on: 'checklistItemProposals', has: 'one', label: 'template' },
+      reverse: { on: 'templates', has: 'many', label: 'checklistItemProposals' },
+    },
+    checklistItemProposalRequester: {
+      forward: { on: 'checklistItemProposals', has: 'one', label: 'requester' },
+      reverse: { on: 'profiles', has: 'many', label: 'checklistItemProposals' },
+    },
+    checklistItemProposalSourceStore: {
+      forward: { on: 'checklistItemProposals', has: 'one', label: 'sourceStore' },
+      reverse: { on: 'stores', has: 'many', label: 'checklistItemProposals' },
+    },
+    checklistItemProposalSourceReport: {
+      forward: { on: 'checklistItemProposals', has: 'one', label: 'sourceReport' },
+      reverse: { on: 'reports', has: 'many', label: 'checklistItemProposals' },
+    },
+    checklistItemProposalCommentProposal: {
+      forward: { on: 'checklistItemProposalComments', has: 'one', label: 'proposal' },
+      reverse: { on: 'checklistItemProposals', has: 'many', label: 'comments' },
+    },
+    checklistItemProposalEventProposal: {
+      forward: { on: 'checklistItemProposalEvents', has: 'one', label: 'proposal' },
+      reverse: { on: 'checklistItemProposals', has: 'many', label: 'events' },
     },
   },
 });

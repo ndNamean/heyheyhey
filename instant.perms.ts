@@ -19,6 +19,10 @@ const LEGACY_BIND = {
   canReview: "isApproved && (isOwner || isAreaManagerTier || isManager || isLeader)",
   canPreApproveAccess: 'isManager',
   canScheduleShifts: 'isOwner || isAreaManagerTier || isManager',
+  canProposeTemplateItem: 'isApproved && (isManager || isLeader)',
+  canFirstApproveTemplateItemProposal: 'isApproved && (isManager || isAreaManagerTier || isOwner)',
+  canFinalApproveTemplateItemProposal: 'isApproved && (isAreaManagerTier || isOwner)',
+  canPublishTemplateItemProposal: 'isOwner || isAreaManagerTier',
 };
 
 const rules = {
@@ -408,6 +412,71 @@ const rules = {
       ...LEGACY_BIND,
       onlyReadAt: "request.modifiedFields.all(f, f in ['readAt'])",
     },
+  },
+
+  // ── Checklist item proposals ──────────────────────────────────────────────
+  checklistItemProposals: {
+    allow: {
+      view: 'isApproved',
+      create:
+        "canProposeTemplateItem && data.requestedByUserId == auth.id && (data.status == 'draft' || data.status == 'pending_first_approval')",
+      update: 'canUpdateOwnProposal || canApproveProposal || canPublishProposal || canAssignApprovers',
+      delete: 'false',
+      link: {
+        template: 'canProposeTemplateItem',
+        requester: 'canProposeTemplateItem',
+        sourceStore: 'canProposeTemplateItem',
+        sourceReport: 'canProposeTemplateItem',
+      },
+      unlink: {
+        template: 'false',
+        requester: 'false',
+        sourceStore: 'false',
+        sourceReport: 'false',
+      },
+    },
+    bind: {
+      ...LEGACY_BIND,
+      isRequester: 'auth.id != null && data.requestedByUserId == auth.id',
+      canUpdateOwnProposal:
+        "isRequester && (data.status == 'draft' || data.status == 'changes_requested' || data.status == 'pending_first_approval' || data.status == 'cancelled')",
+      canApproveProposal:
+        'canFirstApproveTemplateItemProposal || canFinalApproveTemplateItemProposal',
+      canPublishProposal: 'canPublishTemplateItemProposal',
+      canAssignApprovers: 'isOwner || isAdminRole',
+    },
+  },
+
+  checklistItemProposalComments: {
+    allow: {
+      view: 'isApproved',
+      create: 'isApproved',
+      update: 'false',
+      delete: 'false',
+      link: {
+        proposal: 'isApproved',
+      },
+      unlink: {
+        proposal: 'false',
+      },
+    },
+    bind: { ...LEGACY_BIND },
+  },
+
+  checklistItemProposalEvents: {
+    allow: {
+      view: 'isApproved',
+      create: 'isApproved',
+      update: 'false',
+      delete: 'false',
+      link: {
+        proposal: 'isApproved',
+      },
+      unlink: {
+        proposal: 'false',
+      },
+    },
+    bind: { ...LEGACY_BIND },
   },
 } satisfies InstantRules;
 

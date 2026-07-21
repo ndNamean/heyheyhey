@@ -11,11 +11,24 @@ import { aggregateFeedbackFrequency } from '../lib/feedbackReasons';
 import { isFailureHistoryEnabled } from '../lib/failureHistoryFlag';
 import { badgeClass, todayYmd } from '../lib/utils';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
-import { canAccessAllStores } from '../lib/roles';
-import type { ExportFormat, Profile, Report, ReportResponse, ReviewEvent, Template } from '../types';
+import { canAccessAllStores, canAccessChecklistItemProposals } from '../lib/roles';
+import {
+  computeChecklistItemProposalMetrics,
+  filterProposalsForViewer,
+} from '../lib/checklistItemProposals';
+import type {
+  ChecklistItemProposal,
+  ExportFormat,
+  Profile,
+  Report,
+  ReportResponse,
+  ReviewEvent,
+  Template,
+} from '../types';
 
 interface Props {
   profile: Profile;
+  onOpenProposals?: () => void;
 }
 
 function firstDayOfMonth() {
@@ -23,7 +36,7 @@ function firstDayOfMonth() {
   return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
 }
 
-export default function DashboardPage({ profile }: Props) {
+export default function DashboardPage({ profile, onOpenProposals }: Props) {
   const { t } = useLang();
   const { defs } = useRoleDefinitions();
   const [from, setFrom] = useState(firstDayOfMonth);
@@ -42,6 +55,7 @@ export default function DashboardPage({ profile }: Props) {
     profiles: {},
     reviewEvents: {},
     templates: { items: {}, stores: {}, scheduleVersions: {} },
+    checklistItemProposals: {},
   });
 
   const allReports: Report[] = (data?.reports ?? []) as Report[];
@@ -49,6 +63,7 @@ export default function DashboardPage({ profile }: Props) {
   const profiles = data?.profiles ?? [];
   const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];
   const allTemplates: Template[] = (data?.templates ?? []) as Template[];
+  const allProposals = (data?.checklistItemProposals ?? []) as ChecklistItemProposal[];
 
   const reports = useMemo(() => {
     let filtered = allReports.filter((r) => r.reportDate >= from && r.reportDate <= to);
@@ -147,6 +162,22 @@ export default function DashboardPage({ profile }: Props) {
     [reports, profiles],
   );
 
+  const proposalMetrics = useMemo(() => {
+    const scoped = filterProposalsForViewer(allProposals, profile, defs).filter((p) => {
+      const day = (p.createdAt || '').slice(0, 10);
+      if (day && (day < from || day > to)) return false;
+      if (filterStoreId !== 'all') {
+        return (
+          p.sourceStoreId === filterStoreId ||
+          p.requesterStoreId === filterStoreId ||
+          (p.affectedStoreIdsJson || '').includes(filterStoreId)
+        );
+      }
+      return true;
+    });
+    return { list: scoped, metrics: computeChecklistItemProposalMetrics(scoped) };
+  }, [allProposals, profile, defs, from, to, filterStoreId]);
+
   const displayStores = canAccessAllStores(profile.role, defs)
     ? stores
     : (profile.stores ?? []);
@@ -229,6 +260,99 @@ export default function DashboardPage({ profile }: Props) {
           <div className="metric">{metrics.failed.length}</div>
         </div>
       </div>
+
+      {canAccessChecklistItemProposals(profile.role, defs) && (
+        <div className="card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h2 style={{ margin: 0, flex: 1 }}>{t.checklistProposals.metricsTitle}</h2>
+            {onOpenProposals && (
+              <button type="button" className="secondary" onClick={onOpenProposals}>
+                {t.checklistProposals.viewAll}
+              </button>
+            )}
+          </div>
+          <div className="grid four" style={{ marginTop: 12 }}>
+            <div>
+              <div className="small">{t.checklistProposals.metricTotal}</div>
+              <div className="metric">{proposalMetrics.metrics.total}</div>
+            </div>
+            <div>
+              <div className="small">{t.checklistProposals.metricPendingFirst}</div>
+              <div className="metric">{proposalMetrics.metrics.pendingFirstApproval}</div>
+            </div>
+            <div>
+              <div className="small">{t.checklistProposals.metricPendingFinal}</div>
+              <div className="metric">{proposalMetrics.metrics.pendingFinalApproval}</div>
+            </div>
+            <div>
+              <div className="small">{t.checklistProposals.metricChanges}</div>
+              <div className="metric">{proposalMetrics.metrics.changesRequested}</div>
+            </div>
+            <div>
+              <div className="small">{t.checklistProposals.metricApproved}</div>
+              <div className="metric">{proposalMetrics.metrics.fullyApproved}</div>
+            </div>
+            <div>
+              <div className="small">{t.checklistProposals.metricPublished}</div>
+              <div className="metric">{proposalMetrics.metrics.published}</div>
+            </div>
+            <div>
+              <div className="small">{t.checklistProposals.metricRejected}</div>
+              <div className="metric">{proposalMetrics.metrics.rejected}</div>
+            </div>
+            <div>
+              <div className="small">{t.checklistProposals.metricApprovalRate}</div>
+              <div className="metric">
+                {proposalMetrics.metrics.approvalRate == null
+                  ? '—'
+                  : `${proposalMetrics.metrics.approvalRate}%`}
+              </div>
+            </div>
+            <div>
+              <div className="small">{t.checklistProposals.metricPublicationRate}</div>
+              <div className="metric">
+                {proposalMetrics.metrics.publicationRate == null
+                  ? '—'
+                  : `${proposalMetrics.metrics.publicationRate}%`}
+              </div>
+            </div>
+          </div>
+
+          {proposalMetrics.list.length > 0 && (
+            <div className="table-wrap" style={{ marginTop: 12 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>{t.checklistProposals.itemTitle}</th>
+                    <th>{t.checklistProposals.section}</th>
+                    <th>{t.checklistProposals.targetTemplate}</th>
+                    <th>{t.checklistProposals.requester}</th>
+                    <th>{t.checklistProposals.requesterRole}</th>
+                    <th>{t.common.status}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {proposalMetrics.list.slice(0, 20).map((p) => (
+                    <tr key={p.id}>
+                      <td>{p.title}</td>
+                      <td>{p.section}</td>
+                      <td>{p.templateNameSnapshot}</td>
+                      <td>{p.requesterNameSnapshot}</td>
+                      <td>{p.requesterRoleSnapshot}</td>
+                      <td>
+                        <span className={badgeClass(p.status)}>
+                          {(t.checklistProposals.statuses as Record<string, string>)[p.status] ??
+                            p.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {approvalShare.length > 0 && (
         <div className="card table-wrap">

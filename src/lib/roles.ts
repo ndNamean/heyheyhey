@@ -87,6 +87,37 @@ export function canClockIn(role: Role, defs?: RoleDefinition[]): boolean {
   return capability(role, defsOrDefault(defs), 'canClockIn');
 }
 
+export function canProposeTemplateItem(role: Role, defs?: RoleDefinition[]): boolean {
+  return capability(role, defsOrDefault(defs), 'canProposeTemplateItem');
+}
+
+export function canFirstApproveTemplateItemProposal(
+  role: Role,
+  defs?: RoleDefinition[],
+): boolean {
+  return capability(role, defsOrDefault(defs), 'canFirstApproveTemplateItemProposal');
+}
+
+export function canFinalApproveTemplateItemProposal(
+  role: Role,
+  defs?: RoleDefinition[],
+): boolean {
+  return capability(role, defsOrDefault(defs), 'canFinalApproveTemplateItemProposal');
+}
+
+export function canPublishTemplateItemProposal(role: Role, defs?: RoleDefinition[]): boolean {
+  return capability(role, defsOrDefault(defs), 'canPublishTemplateItemProposal');
+}
+
+export function canAccessChecklistItemProposals(role: Role, defs?: RoleDefinition[]): boolean {
+  return (
+    canProposeTemplateItem(role, defs) ||
+    canFirstApproveTemplateItemProposal(role, defs) ||
+    canFinalApproveTemplateItemProposal(role, defs) ||
+    canPublishTemplateItemProposal(role, defs)
+  );
+}
+
 export function canEditStoreLogo(role: Role, defs?: RoleDefinition[]): boolean {
   return canEditMaster(role, defs);
 }
