@@ -31,7 +31,9 @@ import {
   containedToLetterboxLayout,
   computeContainedMediaRect,
   drawRecordingCompositorFrame,
+  getEffectiveDimensions,
   type MediaTransformSnapshot,
+  type WatermarkDirection,
 } from '../lib/cameraMediaTransform';
 import { useDeviceLayoutOrientation } from '../hooks/useDeviceLayoutOrientation';
 import { needsVideoProof } from '../lib/roles';
@@ -189,6 +191,7 @@ export default function TimemarkCamera({
   const [capturedBlob, setCapturedBlob] = useState<Blob | null>(null);
   const [capturedUrl,  setCapturedUrl]  = useState('');
   const [captureSize, setCaptureSize] = useState<{ w: number; h: number } | null>(null);
+  const [captureFrameRotation, setCaptureFrameRotation] = useState<WatermarkDirection>(0);
 
   const [uploading,     setUploading]     = useState(false);
   const [confirmError, setConfirmError] = useState('');
@@ -208,6 +211,7 @@ export default function TimemarkCamera({
   const {
     layoutOrientation,
     sensorAvailable,
+    screenAngle,
     watermarkTiltRotation,
   } = useDeviceLayoutOrientation(cameraOn || !!capturedBlob);
   const previewWatermarkTilt =
@@ -758,6 +762,7 @@ export default function TimemarkCamera({
     mode: CaptureMode,
     proof: ProofSnapshot,
     mimeType: string,
+    frameRotation: WatermarkDirection = 0,
   ) {
     setUploading(true);
     try {
@@ -774,6 +779,7 @@ export default function TimemarkCamera({
         proofWeather: proof.proofWeather,
         proofLogoUrl: proof.proofLogoUrl,
         cameraOptionsSnapshot: proof.cameraOptionsSnapshot,
+        captureFrameRotation: frameRotation,
       });
 
       const resp = await fetch('/api/upload-photo', {
@@ -902,6 +908,7 @@ export default function TimemarkCamera({
     setCapturedBlob(null);
     setFrozenProof(null);
     setCaptureSize(null);
+    setCaptureFrameRotation(0);
     rawCaptureRef.current = null;
     captureTransformSnapshotRef.current = null;
     recordingTransformSnapshotRef.current = null;
@@ -946,6 +953,7 @@ export default function TimemarkCamera({
     setConfirmError('');
     setFrozenProof(null);
     setCaptureSize(null);
+    setCaptureFrameRotation(0);
     setCapturedMimeType('image/jpeg');
     setOptionsOpen(false);
     setCameraOn(false);
@@ -1051,9 +1059,16 @@ export default function TimemarkCamera({
     setCapturedMimeType(normalizeStoredMime(mimeType));
     const snap = recordingTransformSnapshotRef.current;
     if (snap) {
-      setCaptureSize({ w: snap.sourceVideoW, h: snap.sourceVideoH });
+      const { w, h } = getEffectiveDimensions(
+        snap.sourceVideoW,
+        snap.sourceVideoH,
+        snap.frameRotation,
+      );
+      setCaptureSize({ w, h });
+      setCaptureFrameRotation(snap.frameRotation);
     } else {
       setCaptureSize(null);
+      setCaptureFrameRotation(0);
     }
     recordingTransformSnapshotRef.current = null;
 
@@ -1102,6 +1117,7 @@ export default function TimemarkCamera({
       viewfinderW: viewfinder?.clientWidth ?? video.videoWidth,
       viewfinderH: viewfinder?.clientHeight ?? video.videoHeight,
       mirrorCapture: MIRROR_CAPTURE,
+      screenAngle,
     });
     if (!transformSnap) {
       setCamError(t.camera.cameraError);
@@ -1119,9 +1135,11 @@ export default function TimemarkCamera({
     }
     recordingLogoRef.current = logoImg;
 
-    // Video canvas stays sensor-native size; tilt only spins the stamp.
-    const outW = video.videoWidth;
-    const outH = video.videoHeight;
+    const { w: outW, h: outH } = getEffectiveDimensions(
+      video.videoWidth,
+      video.videoHeight,
+      transformSnap.frameRotation,
+    );
     const fontSize = Math.max(14, Math.round(outW * 0.035));
     await ensureProofFontsLoaded(fontSize);
 
@@ -1230,6 +1248,7 @@ export default function TimemarkCamera({
         viewfinderW: viewfinder?.clientWidth ?? videoW,
         viewfinderH: viewfinder?.clientHeight ?? videoH,
         mirrorCapture: MIRROR_CAPTURE,
+        screenAngle,
       });
       if (!transformSnap) {
         capturingRef.current = false;
@@ -1237,6 +1256,7 @@ export default function TimemarkCamera({
         return;
       }
       captureTransformSnapshotRef.current = transformSnap;
+      const frameRotation = transformSnap.frameRotation;
 
       const captureMoment = new Date();
       const proof = buildProofSnapshot(
@@ -1265,8 +1285,8 @@ export default function TimemarkCamera({
         source: video,
         sourceW: videoW,
         sourceH: videoH,
-        rotationDeg: 0,
-        watermarkTiltRotation: transformSnap.watermarkDirection,
+        rotationDeg: frameRotation,
+        watermarkTiltRotation: 0,
         mirrorCapture: MIRROR_CAPTURE,
         proof,
         logoImg: overlayLogoImg,
@@ -1274,6 +1294,7 @@ export default function TimemarkCamera({
       });
 
       setCaptureSize({ w: outW, h: outH });
+      setCaptureFrameRotation(frameRotation);
 
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
@@ -1310,12 +1331,14 @@ export default function TimemarkCamera({
         mode,
         frozenProof,
         mime,
+        captureFrameRotation,
       );
       URL.revokeObjectURL(capturedUrl);
       setCapturedBlob(null);
       setCapturedUrl('');
       setFrozenProof(null);
       setCaptureSize(null);
+      setCaptureFrameRotation(0);
       setCapturedMimeType('image/jpeg');
       rawCaptureRef.current = null;
       captureTransformSnapshotRef.current = null;
@@ -1332,6 +1355,7 @@ export default function TimemarkCamera({
     setConfirmError('');
     setFrozenProof(null);
     setCaptureSize(null);
+    setCaptureFrameRotation(0);
     setCapturedMimeType('image/jpeg');
     rawCaptureRef.current = null;
     captureTransformSnapshotRef.current = null;

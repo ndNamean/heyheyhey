@@ -8,6 +8,8 @@ export interface DeviceLayoutOrientation {
   layoutOrientation: LayoutOrientation;
   tiltSource: TiltSource;
   sensorAvailable: boolean;
+  /** Screen orientation angle when available (0/90/180/270). */
+  screenAngle: number | null;
   /**
    * Rotation applied to the watermark only when the phone is held sideways
    * while the viewport stays portrait (system auto-rotate OFF).
@@ -78,7 +80,7 @@ export function watermarkTiltFromSensor(
 /** @deprecated Use watermarkTiltFromSensor */
 export const gravityRotationFromSensor = watermarkTiltFromSensor;
 
-function readScreenAngle(): number | null {
+export function readScreenAngle(): number | null {
   const so = typeof window !== 'undefined' ? window.screen?.orientation : undefined;
   if (so && typeof so.angle === 'number' && Number.isFinite(so.angle)) return so.angle;
   const legacy = (window as Window & { orientation?: number }).orientation;
@@ -118,6 +120,9 @@ export function useDeviceLayoutOrientation(enabled = true): DeviceLayoutOrientat
   const [tiltSource, setTiltSource] = useState<TiltSource>('viewport');
   const [sensorAvailable, setSensorAvailable] = useState(false);
   const [watermarkTiltRotation, setWatermarkTiltRotation] = useState<WatermarkDirection>(0);
+  const [screenAngle, setScreenAngle] = useState<number | null>(() =>
+    enabled ? readScreenAngle() : null,
+  );
   const pendingTiltRef = useRef<{ next: WatermarkDirection; at: number } | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastGammaRef = useRef<number | null>(null);
@@ -133,6 +138,7 @@ export function useDeviceLayoutOrientation(enabled = true): DeviceLayoutOrientat
       setTiltSource('portrait-default');
       setSensorAvailable(false);
       setWatermarkTiltRotation(0);
+      setScreenAngle(null);
       return;
     }
 
@@ -165,6 +171,7 @@ export function useDeviceLayoutOrientation(enabled = true): DeviceLayoutOrientat
       const viewport = readViewportOrientation();
       setLayoutOrientation(viewport);
       setTiltSource(viewport === 'landscape' ? 'viewport' : 'viewport');
+      setScreenAngle(readScreenAngle());
 
       // OS landscape: page is already upright — no extra watermark spin.
       if (viewport === 'landscape') {
@@ -238,6 +245,7 @@ export function useDeviceLayoutOrientation(enabled = true): DeviceLayoutOrientat
     layoutOrientation,
     tiltSource,
     sensorAvailable,
+    screenAngle,
     watermarkTiltRotation,
   };
 }

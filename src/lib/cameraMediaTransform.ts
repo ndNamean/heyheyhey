@@ -35,8 +35,10 @@ export interface MediaTransformSnapshot {
   sourceVideoW: number;
   sourceVideoH: number;
   layoutOrientation: LayoutOrientation;
-  /** Stamp tilt only (0 when upright / OS landscape). Does not rotate video. */
+  /** Live-preview stamp tilt only (0 when upright / OS landscape). */
   watermarkDirection: WatermarkDirection;
+  /** Rotation baked into saved photo/video pixels (upright stamp). */
+  frameRotation: WatermarkDirection;
   /** @deprecated Alias of watermarkDirection */
   manualMediaRotation: WatermarkDirection;
   facingMode: 'environment' | 'user';
@@ -67,6 +69,29 @@ export function getEffectiveDimensions(
     return { w: sourceH, h: sourceW };
   }
   return { w: sourceW, h: sourceH };
+}
+
+const LANDSCAPE_ANGLE_TOLERANCE = 25;
+
+/** Output rotation for saved media: landscape JPEG when phone held sideways. */
+export function resolveCaptureFrameRotation(opts: {
+  layoutOrientation: LayoutOrientation;
+  watermarkTilt: WatermarkDirection;
+  sourceW: number;
+  sourceH: number;
+  screenAngle?: number | null;
+}): WatermarkDirection {
+  const { layoutOrientation, watermarkTilt, sourceW, sourceH, screenAngle } = opts;
+  if (watermarkTilt === 90 || watermarkTilt === 270) return watermarkTilt;
+  if (layoutOrientation === 'landscape' && sourceH > sourceW) {
+    if (screenAngle != null && Number.isFinite(screenAngle)) {
+      const a = ((Math.round(screenAngle) % 360) + 360) % 360;
+      if (Math.abs(a - 270) <= LANDSCAPE_ANGLE_TOLERANCE) return 270;
+      if (Math.abs(a - 90) <= LANDSCAPE_ANGLE_TOLERANCE) return 90;
+    }
+    return 90;
+  }
+  return 0;
 }
 
 export function computeContainedMediaRect(
@@ -161,10 +186,18 @@ export function buildMediaTransformSnapshot(opts: {
   viewfinderW: number;
   viewfinderH: number;
   mirrorCapture?: boolean;
+  screenAngle?: number | null;
 }): MediaTransformSnapshot | null {
   const direction = normalizeWatermarkDirection(
     opts.watermarkDirection ?? opts.manualMediaRotation ?? 0,
   );
+  const frameRotation = resolveCaptureFrameRotation({
+    layoutOrientation: opts.layoutOrientation,
+    watermarkTilt: direction,
+    sourceW: opts.sourceVideoW,
+    sourceH: opts.sourceVideoH,
+    screenAngle: opts.screenAngle,
+  });
   // Contain uses unrotated video; watermarkDirection is stamp tilt only.
   const contained = computeContainedMediaRect(
     opts.viewfinderW,
@@ -179,6 +212,7 @@ export function buildMediaTransformSnapshot(opts: {
     sourceVideoH: opts.sourceVideoH,
     layoutOrientation: opts.layoutOrientation,
     watermarkDirection: direction,
+    frameRotation,
     manualMediaRotation: direction,
     facingMode: opts.facingMode,
     mirrorCapture: opts.mirrorCapture ?? MIRROR_CAPTURE,
@@ -265,25 +299,13 @@ export function drawProofOverlayWithTilt(
     return;
   }
 
-  const off = document.createElement('canvas');
-  off.width = canvas.width;
-  off.height = canvas.height;
-  const octx = off.getContext('2d');
-  if (!octx) {
-    drawProofOverlay(ctx, canvas, proof, logoImg);
-    return;
-  }
-  drawProofOverlay(octx, off, proof, logoImg);
-
   const rad = (watermarkTiltRotation * Math.PI) / 180;
-  // Match CSS transform-origin: bottom left of the frame/overlay.
-  const ox = 0;
-  const oy = canvas.height;
+  // Match CSS transform-origin: bottom left — draw stamp in-place, not full-canvas rotate.
   ctx.save();
-  ctx.translate(ox, oy);
+  ctx.translate(0, canvas.height);
   ctx.rotate(rad);
-  ctx.translate(-ox, -oy);
-  ctx.drawImage(off, 0, 0);
+  ctx.translate(0, -canvas.height);
+  drawProofOverlay(ctx, canvas, proof, logoImg);
   ctx.restore();
 }
 
@@ -317,7 +339,7 @@ export async function composeWatermarkedFromRawBlob(opts: {
   }
 }
 
-/** Draw one frame: unrotated video + optionally tilted watermark (no video spin). */
+/** Draw one composited frame: oriented video + upright watermark. */
 export function drawRecordingCompositorFrame(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
@@ -326,9 +348,8 @@ export function drawRecordingCompositorFrame(
   proof: ProofSnapshot,
   logoImg: HTMLImageElement | null,
 ): void {
-  const { sourceVideoW: sw, sourceVideoH: sh, watermarkDirection, mirrorCapture } = snapshot;
+  const { sourceVideoW: sw, sourceVideoH: sh, frameRotation, mirrorCapture } = snapshot;
   void canvas;
-  // Video stays sensor-native; watermarkDirection is stamp tilt only.
-  drawOrientedFrame(ctx, video, sw, sh, 0, mirrorCapture);
-  drawProofOverlayWithTilt(ctx, canvas, proof, logoImg, watermarkDirection);
+  drawOrientedFrame(ctx, video, sw, sh, frameRotation, mirrorCapture);
+  drawProofOverlayWithTilt(ctx, canvas, proof, logoImg, 0);
 }

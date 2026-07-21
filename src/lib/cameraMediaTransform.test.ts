@@ -8,6 +8,7 @@ import {
   computeContainedMediaRect,
   getEffectiveDimensions,
   normalizeWatermarkDirection,
+  resolveCaptureFrameRotation,
 } from './cameraMediaTransform';
 
 describe('gravity / transform helpers', () => {
@@ -34,5 +35,33 @@ describe('gravity / transform helpers', () => {
     expect(normalizeWatermarkDirection(90)).toBe(90);
     const rect = computeContainedMediaRect(800, 360, 1920, 1080, 90);
     expect(rect?.effectiveW).toBe(1080);
+  });
+
+  it('resolves landscape save rotation from tilt or OS landscape', () => {
+    expect(
+      resolveCaptureFrameRotation({
+        layoutOrientation: 'portrait',
+        watermarkTilt: 270,
+        sourceW: 1080,
+        sourceH: 1920,
+      }),
+    ).toBe(270);
+    expect(
+      resolveCaptureFrameRotation({
+        layoutOrientation: 'landscape',
+        watermarkTilt: 0,
+        sourceW: 1080,
+        sourceH: 1920,
+        screenAngle: 90,
+      }),
+    ).toBe(90);
+    expect(
+      resolveCaptureFrameRotation({
+        layoutOrientation: 'portrait',
+        watermarkTilt: 0,
+        sourceW: 1080,
+        sourceH: 1920,
+      }),
+    ).toBe(0);
   });
 });

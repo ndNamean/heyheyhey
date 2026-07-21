@@ -177,6 +177,8 @@ export interface ProofMetadata {
   proofWeather: ProofWeather | null;
   proofLogoUrl: string;
   cameraOptionsSnapshot: CameraOptions;
+  /** Degrees applied when saving capture pixels (0 | 90 | 270). */
+  captureFrameRotation?: WatermarkDirection;
 }
 
 // Profile shape (from db.useQuery result — fields only, no links)
