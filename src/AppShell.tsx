@@ -32,6 +32,8 @@ export default function AppShell({ profile }: Props) {
   const [correctionReportId, setCorrectionReportId] = useState<string | null>(null);
   const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
   const [proposalPrefill, setProposalPrefill] = useState<ProposalFormPrefill | null>(null);
+  const [logbookFilter, setLogbookFilter] = useState<string | undefined>();
+  const [logbookHighlightId, setLogbookHighlightId] = useState<string | null>(null);
 
   useNativeBack(
     () => {
@@ -75,15 +77,40 @@ export default function AppShell({ profile }: Props) {
     setPage('proposals');
   }
 
+  function goLogbook(opts?: { filter?: string; entryId?: string | null }) {
+    setLogbookFilter(opts?.filter);
+    setLogbookHighlightId(opts?.entryId ?? null);
+    if (opts?.filter) {
+      try {
+        sessionStorage.setItem('logbookInitialFilter', opts.filter);
+      } catch {
+        /* ignore */
+      }
+    }
+    if (opts?.entryId) {
+      try {
+        sessionStorage.setItem('logbookHighlightEntryId', opts.entryId);
+      } catch {
+        /* ignore */
+      }
+    }
+    setPage('logbook');
+  }
+
   function renderPage() {
     switch (page) {
       case 'home':
         return usesDashboardHome(profile.role, defs) ? (
-          <DashboardPage profile={profile} onOpenProposals={() => goProposals()} />
+          <DashboardPage
+            profile={profile}
+            onOpenProposals={() => goProposals()}
+            onOpenLogbook={(filter) => goLogbook({ filter })}
+          />
         ) : (
           <StaffHome
             profile={profile}
             setPage={setPage}
+            onOpenLogbook={(filter) => goLogbook({ filter: filter ?? 'my-assigned' })}
             onStartReport={startNewReport}
             onFixReport={startCorrection}
             onProposeChecklistItem={() => openProposalForm()}
@@ -145,12 +172,19 @@ export default function AppShell({ profile }: Props) {
       case 'shifts':
         return <ShiftsPage profile={profile} />;
       case 'logbook':
-        return <LogbookPage profile={profile} />;
+        return (
+          <LogbookPage
+            profile={profile}
+            initialFilter={logbookFilter}
+            highlightEntryId={logbookHighlightId}
+          />
+        );
       default:
         return (
           <StaffHome
             profile={profile}
             setPage={setPage}
+            onOpenLogbook={(filter) => goLogbook({ filter: filter ?? 'my-assigned' })}
             onStartReport={startNewReport}
             onFixReport={startCorrection}
             onProposeChecklistItem={() => openProposalForm()}
@@ -163,7 +197,7 @@ export default function AppShell({ profile }: Props) {
   return (
     <div className="app-shell">
       <main className="page">
-        <DesktopNav page={page} setPage={setPage} profile={profile} />
+        <DesktopNav page={page} setPage={setPage} profile={profile} onOpenLogbook={() => goLogbook()} />
         {renderPage()}
         <MobileNav page={page} setPage={setPage} profile={profile} />
       </main>

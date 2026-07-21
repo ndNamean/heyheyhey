@@ -1,17 +1,28 @@
 import { id } from '@instantdb/react';
 import { db } from '../db';
+import type {
+  LogbookEntry,
+  Notification,
+  Profile,
+  Report,
+  ReportResponse,
+  Role,
+  RoleDefinition,
+} from '../types';
 import {
+  canReview,
   isHigherPositionReview,
   supervisorRolesToNotify,
   userCanAccessStore,
 } from './roles';
+import { rankOf } from './roleResolver';
+import { resolveLogbookIssueStatus } from './logbook';
 import { nowIso } from './utils';
 import {
   adminsForAccessNotify,
   managersForStores,
   parseAccessReviewStoreIds,
 } from './accessReview';
-import type { Notification, Profile, Report, ReportResponse, Role } from '../types';
 
 export function complianceFromResponses(responses: ReportResponse[]): number {
   if (!responses.length) return 0;
@@ -327,4 +338,271 @@ export function buildAccessFinalizedNotification(
       actor,
     ),
   ];
+}
+
+function emptyLogbookNotifFields(storeId: string, entryId: string, actionStatus: string) {
+  return {
+    reportId: entryId,
+    reportResponseId: '',
+    storeId,
+    itemTitle: '',
+    completionPercent: 0,
+    compliancePercent: 0,
+    actionStatus,
+  };
+}
+
+function profileHasStore(p: Profile, storeId: string, defs?: RoleDefinition[]): boolean {
+  return userCanAccessStore(p.role, (p.stores ?? []).map((s) => s.id), storeId, defs);
+}
+
+export function getLogbookAssigneeRecipients(
+  entry: Pick<LogbookEntry, 'storeId' | 'assigneeRole'>,
+  allProfiles: Profile[],
+  actorUserId?: string,
+  defs?: RoleDefinition[],
+): string[] {
+  const role = entry.assigneeRole ?? '';
+  if (!entry.storeId || !role) return [];
+  const recipients = new Set<string>();
+  for (const p of allProfiles) {
+    if (p.approvalStatus !== 'approved') continue;
+    if (p.role !== role) continue;
+    if (!profileHasStore(p, entry.storeId, defs)) continue;
+    if (actorUserId && p.userId === actorUserId) continue;
+    recipients.add(p.userId);
+  }
+  return [...recipients];
+}
+
+export function getLogbookReviewerRecipients(
+  entry: LogbookEntry,
+  allProfiles: Profile[],
+  actorUserId: string,
+  defs: RoleDefinition[],
+): string[] {
+  const assigneeRole = (entry.assigneeRole ?? '') as Role;
+  if (!entry.storeId || !assigneeRole) return [];
+  const assigneeRank = rankOf(assigneeRole, defs);
+  const recipients = new Set<string>();
+  for (const p of allProfiles) {
+    if (p.userId === actorUserId) continue;
+    if (p.approvalStatus !== 'approved') continue;
+    if (!canReview(p.role, defs)) continue;
+    if (rankOf(p.role, defs) >= assigneeRank) continue;
+    if (!profileHasStore(p, entry.storeId, defs)) continue;
+    recipients.add(p.userId);
+  }
+  return [...recipients];
+}
+
+export function getLogbookStoreManagerRecipients(
+  storeId: string,
+  allProfiles: Profile[],
+  actorUserId?: string,
+  defs?: RoleDefinition[],
+): string[] {
+  const recipients = new Set<string>();
+  for (const p of allProfiles) {
+    if (actorUserId && p.userId === actorUserId) continue;
+    if (p.approvalStatus !== 'approved') continue;
+    if (p.role !== 'manager') continue;
+    if (!profileHasStore(p, storeId, defs)) continue;
+    recipients.add(p.userId);
+  }
+  return [...recipients];
+}
+
+function buildLogbookNotificationTx(
+  recipientUserId: string,
+  type: string,
+  title: string,
+  body: string,
+  actor: Profile,
+  entry: Pick<LogbookEntry, 'id' | 'storeId'>,
+  actionStatus: string,
+) {
+  return db.tx.notifications[id()].update({
+    recipientUserId,
+    type,
+    title,
+    body,
+    actorUserId: actor.userId,
+    actorRole: actor.role,
+    readAt: '',
+    createdAt: nowIso(),
+    ...emptyLogbookNotifFields(entry.storeId, entry.id, actionStatus),
+  });
+}
+
+function issueSnippet(entry: LogbookEntry): string {
+  return entry.content.trim().slice(0, 120) || 'Logbook issue';
+}
+
+export function buildLogbookIssueAssignedNotifications(
+  entry: LogbookEntry,
+  actor: Profile,
+  allProfiles: Profile[],
+  defs?: RoleDefinition[],
+) {
+  const recipients = getLogbookAssigneeRecipients(entry, allProfiles, actor.userId, defs);
+  const body = [
+    'New Logbook issue assigned',
+    `Issue: ${issueSnippet(entry)}`,
+    `Severity: ${entry.severity}`,
+    `Due: ${entry.dueAt || '—'}`,
+  ].join('\n');
+  return recipients.map((uid) =>
+    buildLogbookNotificationTx(
+      uid,
+      'logbook_issue_assigned',
+      'New Logbook issue assigned',
+      body,
+      actor,
+      entry,
+      resolveLogbookIssueStatus(entry) || 'open',
+    ),
+  );
+}
+
+export function buildLogbookDueSoonNotifications(
+  entry: LogbookEntry,
+  actor: Profile,
+  allProfiles: Profile[],
+  defs?: RoleDefinition[],
+) {
+  const recipients = getLogbookAssigneeRecipients(entry, allProfiles, undefined, defs);
+  const body = [
+    'Logbook issue due soon',
+    `Issue: ${issueSnippet(entry)}`,
+    `Due: ${entry.dueAt || '—'}`,
+  ].join('\n');
+  return recipients.map((uid) =>
+    buildLogbookNotificationTx(
+      uid,
+      'logbook_issue_due_soon',
+      'Logbook issue due soon',
+      body,
+      actor,
+      entry,
+      resolveLogbookIssueStatus(entry) || 'open',
+    ),
+  );
+}
+
+export function buildLogbookOverdueNotifications(
+  entry: LogbookEntry,
+  actor: Profile,
+  allProfiles: Profile[],
+  defs: RoleDefinition[],
+) {
+  const recipients = new Set<string>([
+    ...getLogbookAssigneeRecipients(entry, allProfiles, undefined, defs),
+    ...getLogbookStoreManagerRecipients(entry.storeId, allProfiles, undefined, defs),
+    ...getLogbookReviewerRecipients(entry, allProfiles, actor.userId, defs),
+  ]);
+  const body = [
+    'Logbook issue overdue',
+    `Issue: ${issueSnippet(entry)}`,
+    `Due: ${entry.dueAt || '—'}`,
+  ].join('\n');
+  return [...recipients].map((uid) =>
+    buildLogbookNotificationTx(
+      uid,
+      'logbook_issue_overdue',
+      'Logbook issue overdue',
+      body,
+      actor,
+      entry,
+      resolveLogbookIssueStatus(entry) || 'open',
+    ),
+  );
+}
+
+export function buildLogbookResolutionSubmittedNotifications(
+  entry: LogbookEntry,
+  actor: Profile,
+  allProfiles: Profile[],
+  defs: RoleDefinition[],
+) {
+  const recipients = getLogbookReviewerRecipients(entry, allProfiles, actor.userId, defs);
+  const body = [
+    'Resolution submitted for review',
+    `Issue: ${issueSnippet(entry)}`,
+    entry.resolutionNote?.trim() ? `Note: ${entry.resolutionNote.trim()}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  return recipients.map((uid) =>
+    buildLogbookNotificationTx(
+      uid,
+      'logbook_resolution_submitted',
+      'Logbook resolution submitted',
+      body,
+      actor,
+      entry,
+      'waiting_approval',
+    ),
+  );
+}
+
+export function buildLogbookResolutionDecisionNotifications(
+  entry: LogbookEntry,
+  actor: Profile,
+  allProfiles: Profile[],
+  decision: 'approved' | 'rejected',
+  defs?: RoleDefinition[],
+) {
+  const recipients = new Set(getLogbookAssigneeRecipients(entry, allProfiles, actor.userId, defs));
+  const submitter = entry.resolutionSubmittedByUserId?.trim();
+  if (submitter && submitter !== actor.userId) recipients.add(submitter);
+  const type = decision === 'approved' ? 'logbook_resolution_approved' : 'logbook_resolution_rejected';
+  const title =
+    decision === 'approved' ? 'Logbook resolution approved' : 'Logbook resolution rejected';
+  const body = [
+    title,
+    `Issue: ${issueSnippet(entry)}`,
+    entry.reviewNote?.trim() ? `Note: ${entry.reviewNote.trim()}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  return [...recipients].map((uid) =>
+    buildLogbookNotificationTx(uid, type, title, body, actor, entry, decision === 'approved' ? 'resolved' : 'in_progress'),
+  );
+}
+
+export function buildLogbookIssueReopenedNotifications(
+  entry: LogbookEntry,
+  actor: Profile,
+  allProfiles: Profile[],
+  defs?: RoleDefinition[],
+) {
+  const recipients = new Set([
+    ...getLogbookAssigneeRecipients(entry, allProfiles, actor.userId, defs),
+    ...getLogbookStoreManagerRecipients(entry.storeId, allProfiles, actor.userId, defs),
+  ]);
+  const submitter = entry.resolutionSubmittedByUserId?.trim();
+  if (submitter && submitter !== actor.userId) recipients.add(submitter);
+  const body = [
+    'Logbook issue reopened',
+    `Issue: ${issueSnippet(entry)}`,
+    entry.reopenReason?.trim() ? `Reason: ${entry.reopenReason.trim()}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  return [...recipients].map((uid) =>
+    buildLogbookNotificationTx(
+      uid,
+      'logbook_issue_reopened',
+      'Logbook issue reopened',
+      body,
+      actor,
+      entry,
+      'in_progress',
+    ),
+  );
+}
+
+export function isLogbookNotificationType(type: string): boolean {
+  return type.startsWith('logbook_');
 }

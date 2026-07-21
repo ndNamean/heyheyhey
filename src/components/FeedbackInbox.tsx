@@ -4,6 +4,7 @@ import { useLang } from '../i18n';
 import { statusLabel } from '../lib/i18nUtils';
 import { badgeClass, nowIso } from '../lib/utils';
 import { formatIsoToLocalTime } from '../lib/proofTime';
+import { isLogbookNotificationType } from '../lib/notifications';
 import ReportTimeline from './ReportTimeline';
 import type { Notification, Report, ReviewEvent } from '../types';
 
@@ -11,9 +12,15 @@ interface Props {
   userId: string;
   title?: string;
   limit?: number;
+  onOpenLogbookEntry?: (entryId: string) => void;
 }
 
-export default function FeedbackInbox({ userId, title, limit = 15 }: Props) {
+export default function FeedbackInbox({
+  userId,
+  title,
+  limit = 15,
+  onOpenLogbookEntry,
+}: Props) {
   const { t } = useLang();
   const inboxTitle = title ?? t.staffHome.feedback;
   const [expandedReportId, setExpandedReportId] = useState<string | null>(null);
@@ -44,6 +51,7 @@ export default function FeedbackInbox({ userId, title, limit = 15 }: Props) {
   const eventsByReportId = useMemo(() => {
     const map = new Map<string, ReviewEvent[]>();
     for (const e of allEvents) {
+      if (!e.reportId) continue;
       const list = map.get(e.reportId) ?? [];
       list.push(e);
       map.set(e.reportId, list);
@@ -54,7 +62,7 @@ export default function FeedbackInbox({ userId, title, limit = 15 }: Props) {
   const notifsByReportId = useMemo(() => {
     const map = new Map<string, Notification[]>();
     for (const n of all) {
-      if (!n.reportId) continue;
+      if (!n.reportId || isLogbookNotificationType(n.type)) continue;
       const list = map.get(n.reportId) ?? [];
       list.push(n);
       map.set(n.reportId, list);
@@ -72,6 +80,13 @@ export default function FeedbackInbox({ userId, title, limit = 15 }: Props) {
     setExpandedReportId((prev) => (prev === reportId ? null : reportId));
   }
 
+  function handleClick(n: Notification) {
+    void markRead(n);
+    if (isLogbookNotificationType(n.type) && n.reportId && onOpenLogbookEntry) {
+      onOpenLogbookEntry(n.reportId);
+    }
+  }
+
   if (!notifications.length) return null;
 
   return (
@@ -87,7 +102,8 @@ export default function FeedbackInbox({ userId, title, limit = 15 }: Props) {
 
       <div className="feedback-list">
         {notifications.map((n) => {
-          const report = n.reportId ? reportById.get(n.reportId) : undefined;
+          const isLogbook = isLogbookNotificationType(n.type);
+          const report = !isLogbook && n.reportId ? reportById.get(n.reportId) : undefined;
           const showTimeline = expandedReportId === n.reportId && report;
 
           return (
@@ -95,17 +111,19 @@ export default function FeedbackInbox({ userId, title, limit = 15 }: Props) {
               key={n.id}
               type="button"
               className={`feedback-item${n.readAt ? '' : ' feedback-item--unread'}`}
-              onClick={() => markRead(n)}
+              onClick={() => handleClick(n)}
             >
               <div className="feedback-item-top">
                 <span className={badgeClass(n.actionStatus)}>{statusLabel(t, n.actionStatus)}</span>
                 <span className="feedback-item-time">{formatIsoToLocalTime(n.createdAt)}</span>
               </div>
               <div className="feedback-item-title">{n.title}</div>
-              <div className="feedback-item-stats">
-                {t.feedback.completion} {n.completionPercent ?? 0}% · {t.feedback.compliance}{' '}
-                {n.compliancePercent ?? 0}%
-              </div>
+              {!isLogbook && (
+                <div className="feedback-item-stats">
+                  {t.feedback.completion} {n.completionPercent ?? 0}% · {t.feedback.compliance}{' '}
+                  {n.compliancePercent ?? 0}%
+                </div>
+              )}
               <div className="feedback-item-body">{n.body}</div>
               {n.actorRole && (
                 <div className="feedback-item-actor">
@@ -113,13 +131,16 @@ export default function FeedbackInbox({ userId, title, limit = 15 }: Props) {
                   {n.type === 'report_finalized' ? ` · ${t.feedback.reportSummary}` : ''}
                 </div>
               )}
+              {isLogbook && onOpenLogbookEntry && n.reportId && (
+                <div className="feedback-item-actor">{t.logbook.openInLogbook}</div>
+              )}
               {n.reportId && report && (
                 <div className="feedback-item-timeline" onClick={(e) => e.stopPropagation()}>
                   <button
                     type="button"
                     className="report-timeline-toggle"
                     onClick={(e) => toggleTimeline(n.reportId, e)}
-                    aria-expanded={showTimeline}
+                    aria-expanded={!!showTimeline}
                   >
                     {showTimeline ? t.timeline.collapse : t.timeline.expand}
                   </button>

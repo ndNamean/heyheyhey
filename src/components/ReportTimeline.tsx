@@ -2,13 +2,121 @@ import { useMemo, useState } from 'react';
 import { useLang } from '../i18n';
 import { statusLabel } from '../lib/i18nUtils';
 import {
+  buildLogbookTimeline,
   buildReportTimeline,
   compactTimelineSummary,
   formatDurationMs,
+  type LogbookTimelineData,
   type ReportTimelineData,
+  type TimelineStep,
 } from '../lib/reviewTimeline';
 import { badgeClass } from '../lib/utils';
-import type { Notification, Report, ReviewEvent, ReviewEventType } from '../types';
+import type {
+  LogbookEntry,
+  Notification,
+  Report,
+  ReviewEvent,
+  ReviewEventType,
+} from '../types';
+
+export function eventLabel(
+  t: ReturnType<typeof useLang>['t'],
+  eventType: ReviewEventType | string,
+): string {
+  const timeline = t.timeline as Record<string, string>;
+  const map: Record<string, string> = {
+    submitted: timeline.submitted,
+    resubmitted: timeline.resubmitted,
+    item_approved: timeline.approved,
+    item_rejected: timeline.rejected,
+    item_correction: timeline.correction,
+    report_finalized: timeline.finalized,
+    issue_created: timeline.issueCreated ?? 'Issue created',
+    issue_assigned: timeline.issueAssigned ?? 'Assigned',
+    work_started: timeline.workStarted ?? 'Work started',
+    due_date_changed: timeline.dueDateChanged ?? 'Assignment changed',
+    resolution_submitted: timeline.resolutionSubmitted ?? 'Resolution submitted',
+    resolution_approved: timeline.resolutionApproved ?? 'Resolution approved',
+    resolution_rejected: timeline.resolutionRejected ?? 'Resolution rejected',
+    issue_reopened: timeline.issueReopened ?? 'Reopened',
+    issue_resolved: timeline.issueResolved ?? 'Resolved',
+    acknowledged: timeline.acknowledged ?? 'Acknowledged',
+  };
+  return map[eventType] ?? String(eventType);
+}
+
+export function TimelineStepsList({
+  t,
+  steps,
+}: {
+  t: ReturnType<typeof useLang>['t'];
+  steps: TimelineStep[];
+}) {
+  if (!steps.length) return null;
+  return (
+    <ul className="report-timeline-steps">
+      {steps.map((step, idx) => (
+        <li key={`${step.at}-${step.eventType}-${idx}`} className="report-timeline-step">
+          <span className="report-timeline-step-time">{step.atDisplay}</span>
+          <span className="report-timeline-step-label">{eventLabel(t, step.eventType)}</span>
+          {step.actorRole && (
+            <span className="small">
+              {t.timeline.by} {step.actorRole}
+            </span>
+          )}
+          {step.note && <span className="report-timeline-step-note">{step.note}</span>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function TimelineBody({
+  t,
+  timeline,
+}: {
+  t: ReturnType<typeof useLang>['t'];
+  timeline: ReportTimelineData;
+}) {
+  const reportLevelSteps = timeline.reportSteps.length
+    ? timeline.reportSteps
+    : timeline.items.flatMap((i) => i.steps).filter((s) => !s.reportResponseId);
+
+  return (
+    <div className="report-timeline-body">
+      {reportLevelSteps.length > 0 && (
+        <div className="report-timeline-section">
+          <div className="report-timeline-section-title">{t.timeline.reportMilestones}</div>
+          <TimelineStepsList t={t} steps={reportLevelSteps} />
+        </div>
+      )}
+
+      {timeline.items.some((i) => i.steps.length > 0) && (
+        <div className="report-timeline-section">
+          <div className="report-timeline-section-title">{t.timeline.perItem}</div>
+          {timeline.items
+            .filter((i) => i.steps.length > 0)
+            .map((item) => (
+              <details key={item.reportResponseId} className="report-timeline-item">
+                <summary>
+                  <span>{item.itemTitle}</span>
+                  <span className={badgeClass(item.currentStatus)}>
+                    {statusLabel(t, item.currentStatus)}
+                  </span>
+                  {item.durationMs != null && (
+                    <span className="small">
+                      {t.timeline.duration}: {formatDurationMs(item.durationMs)}
+                    </span>
+                  )}
+                </summary>
+                <TimelineStepsList t={t} steps={item.steps} />
+              </details>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface Props {
   report: Report;
@@ -16,21 +124,6 @@ interface Props {
   notifications?: Notification[];
   compact?: boolean;
   defaultExpanded?: boolean;
-}
-
-function eventLabel(
-  t: ReturnType<typeof useLang>['t'],
-  eventType: ReviewEventType,
-): string {
-  const map: Record<ReviewEventType, string> = {
-    submitted: t.timeline.submitted,
-    resubmitted: t.timeline.resubmitted,
-    item_approved: t.timeline.approved,
-    item_rejected: t.timeline.rejected,
-    item_correction: t.timeline.correction,
-    report_finalized: t.timeline.finalized,
-  };
-  return map[eventType] ?? eventType;
 }
 
 export default function ReportTimeline({
@@ -113,78 +206,6 @@ export default function ReportTimeline({
   );
 }
 
-function TimelineBody({
-  t,
-  timeline,
-}: {
-  t: ReturnType<typeof useLang>['t'];
-  timeline: ReportTimelineData;
-}) {
-  const reportLevelSteps = timeline.reportSteps.length
-    ? timeline.reportSteps
-    : timeline.items.flatMap((i) => i.steps).filter((s) => !s.reportResponseId);
-
-  return (
-    <div className="report-timeline-body">
-      {reportLevelSteps.length > 0 && (
-        <div className="report-timeline-section">
-          <div className="report-timeline-section-title">{t.timeline.reportMilestones}</div>
-          <ul className="report-timeline-steps">
-            {reportLevelSteps.map((step, idx) => (
-              <li key={`${step.at}-${step.eventType}-${idx}`} className="report-timeline-step">
-                <span className="report-timeline-step-time">{step.atDisplay}</span>
-                <span className="report-timeline-step-label">{eventLabel(t, step.eventType)}</span>
-                {step.actorRole && (
-                  <span className="small">
-                    {t.timeline.by} {step.actorRole}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {timeline.items.some((i) => i.steps.length > 0) && (
-        <div className="report-timeline-section">
-          <div className="report-timeline-section-title">{t.timeline.perItem}</div>
-          {timeline.items
-            .filter((i) => i.steps.length > 0)
-            .map((item) => (
-              <details key={item.reportResponseId} className="report-timeline-item">
-                <summary>
-                  <span>{item.itemTitle}</span>
-                  <span className={badgeClass(item.currentStatus)}>
-                    {statusLabel(t, item.currentStatus)}
-                  </span>
-                  {item.durationMs != null && (
-                    <span className="small">
-                      {t.timeline.duration}: {formatDurationMs(item.durationMs)}
-                    </span>
-                  )}
-                </summary>
-                <ul className="report-timeline-steps">
-                  {item.steps.map((step, idx) => (
-                    <li key={`${step.at}-${step.eventType}-${idx}`} className="report-timeline-step">
-                      <span className="report-timeline-step-time">{step.atDisplay}</span>
-                      <span className="report-timeline-step-label">{eventLabel(t, step.eventType)}</span>
-                      {step.actorRole && (
-                        <span className="small">
-                          {t.timeline.by} {step.actorRole}
-                        </span>
-                      )}
-                      {step.note && <span className="report-timeline-step-note">{step.note}</span>}
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function ReportTimelineLeadCell({
   report,
   events = [],
@@ -209,5 +230,49 @@ export function ReportTimelineLeadCell({
     <span className="small" title={compactTimelineSummary(timeline)}>
       {label}
     </span>
+  );
+}
+
+export function LogbookTimeline({
+  entry,
+  events = [],
+  defaultExpanded = true,
+}: {
+  entry: LogbookEntry;
+  events?: ReviewEvent[];
+  defaultExpanded?: boolean;
+}) {
+  const { t } = useLang();
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const timeline: LogbookTimelineData = useMemo(
+    () => buildLogbookTimeline(entry, events),
+    [entry, events],
+  );
+
+  if (!timeline.steps.length) return null;
+
+  return (
+    <div className="report-timeline">
+      <div className="report-timeline-header">
+        <div className="report-timeline-summary">
+          <strong>{t.logbook.timeline}</strong>
+        </div>
+        <button
+          type="button"
+          className="report-timeline-toggle"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+        >
+          {expanded ? t.timeline.collapse : t.timeline.expand}
+        </button>
+      </div>
+      {expanded && (
+        <div className="report-timeline-body">
+          <div className="report-timeline-section">
+            <TimelineStepsList t={t} steps={timeline.steps} />
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

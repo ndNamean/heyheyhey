@@ -45,12 +45,17 @@ import UltimateWatermarkSettings from './UltimateWatermarkSettings';
 import TimecardWatermarkSettings from './TimecardWatermarkSettings';
 import type { CameraOptions, Profile, ProofWeather, Store, UploadedMedia } from '../types';
 
+export type ProofContext =
+  | { type: 'report'; reportId: string; reportResponseId: string }
+  | { type: 'logbook'; logbookEntryId: string; storeId: string; content: string };
+
 interface Props {
   store: Store;
   itemTitle: string;
   reportDate: string;
-  reportId: string;
-  reportResponseId: string;
+  reportId?: string;
+  reportResponseId?: string;
+  proofContext?: ProofContext;
   profile: Profile;
   proofType?: string;
   existingMedia: UploadedMedia[];
@@ -129,8 +134,9 @@ export default function TimemarkCamera({
   store,
   itemTitle,
   reportDate,
-  reportId,
-  reportResponseId,
+  reportId = '',
+  reportResponseId = '',
+  proofContext,
   profile,
   proofType = 'photo',
   existingMedia,
@@ -771,7 +777,15 @@ export default function TimemarkCamera({
       const storedMime = normalizeStoredMime(mimeType);
       const photoCode = proof.photoCode?.trim() || generatePhotoCode(store?.code ?? 'XX');
       const capturedAt = proof.capturedAt;
-      const path       = `stores/${store.id}/reports/${reportId}/${reportResponseId}/${Date.now()}_${fileName}`;
+      const isLogbook = proofContext?.type === 'logbook';
+      const logbookEntryId = isLogbook ? proofContext.logbookEntryId : '';
+      const resolvedReportId = isLogbook ? '' : (proofContext?.type === 'report' ? proofContext.reportId : reportId);
+      const resolvedResponseId = isLogbook
+        ? ''
+        : (proofContext?.type === 'report' ? proofContext.reportResponseId : reportResponseId);
+      const path = isLogbook
+        ? `stores/${store.id}/logbook/${logbookEntryId}/${Date.now()}_${fileName}`
+        : `stores/${store.id}/reports/${resolvedReportId}/${resolvedResponseId}/${Date.now()}_${fileName}`;
       const watermarked = mode === 'live_video' || storedMime.startsWith('image/');
 
       const proofMetadataJson = JSON.stringify({
@@ -782,6 +796,8 @@ export default function TimemarkCamera({
         proofLogoUrl: proof.proofLogoUrl,
         cameraOptionsSnapshot: proof.cameraOptionsSnapshot,
         captureFrameRotation: frameRotation,
+        proofContextType: isLogbook ? 'logbook' : 'report',
+        logbookEntryId: logbookEntryId || undefined,
       });
 
       const resp = await fetch('/api/upload-photo', {
@@ -793,8 +809,8 @@ export default function TimemarkCamera({
           contentType: storedMime,
           fileBase64: await blobToBase64(blob),
           metadata: {
-            reportId,
-            reportResponseId,
+            reportId: resolvedReportId,
+            reportResponseId: resolvedResponseId,
             storeId: store.id,
             lat: proof.gps?.lat ?? 0,
             lng: proof.gps?.lng ?? 0,

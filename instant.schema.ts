@@ -258,7 +258,7 @@ const _schema = i.schema({
       createdAt: i.string(),
     }),
 
-    // ─── Logbook entries (Phase 2D) ──────────────────────────────────────────
+    // ─── Logbook entries (Phase 2D + issue lifecycle) ────────────────────────
     logbookEntries: i.entity({
       storeId: i.string().indexed(),
       authorUserId: i.string().indexed(),
@@ -271,15 +271,36 @@ const _schema = i.schema({
       ackUserIdsJson: i.string(),         // JSON array of user IDs who acknowledged
       createdAt: i.string(),
       updatedAt: i.string(),
+      // Issue lifecycle (additive; '' / missing = legacy note/announcement)
+      entryType: i.string().indexed().clientRequired(),           // note|announcement|issue
+      assigneeRole: i.string().indexed().clientRequired(),
+      dueAt: i.string().indexed().clientRequired(),
+      status: i.string().indexed().clientRequired(),              // open|in_progress|waiting_approval|resolved
+      startedAt: i.string().clientRequired(),
+      startedByUserId: i.string().clientRequired(),
+      resolutionNote: i.string().clientRequired(),
+      resolutionSubmittedAt: i.string().clientRequired(),
+      resolutionSubmittedByUserId: i.string().clientRequired(),
+      resolvedAt: i.string().clientRequired(),
+      resolvedByUserId: i.string().clientRequired(),
+      reviewedAt: i.string().clientRequired(),
+      reviewedByUserId: i.string().clientRequired(),
+      reviewNote: i.string().clientRequired(),
+      reopenedAt: i.string().clientRequired(),
+      reopenedByUserId: i.string().clientRequired(),
+      reopenReason: i.string().clientRequired(),
+      dueSoonNotifiedAt: i.string().clientRequired(),
+      overdueNotifiedAt: i.string().clientRequired(),
     }),
 
     // ─── Review audit trail ──────────────────────────────────────────────────
     reviewEvents: i.entity({
       reportId: i.string().indexed(),
-      reportResponseId: i.string().indexed(), // '' for report-level events
+      reportResponseId: i.string().indexed(), // '' for report-level / logbook events
       storeId: i.string().indexed(),
       eventType: i.string().indexed(),
-      // submitted|resubmitted|item_approved|item_rejected|item_correction|report_finalized
+      // report: submitted|resubmitted|item_approved|item_rejected|item_correction|report_finalized
+      // logbook: issue_created|issue_assigned|work_started|…
       itemTitle: i.string(),
       templateItemId: i.string().indexed().clientRequired(),
       sectionSnapshot: i.string().clientRequired(),
@@ -293,6 +314,8 @@ const _schema = i.schema({
       feedbackCode: i.string().clientRequired(),
       feedbackNote: i.string().clientRequired(),
       createdAt: i.string().indexed(),
+      logbookEntryId: i.string().indexed().clientRequired(), // '' for report events
+      targetType: i.string().clientRequired(),               // report|logbook
     }),
 
     // ─── Export jobs (async CSV/PDF generation) ─────────────────────────────

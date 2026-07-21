@@ -536,6 +536,10 @@ export interface ClockEvent {
   createdAt: string;
 }
 
+export type LogbookEntryType = 'note' | 'announcement' | 'issue';
+
+export type LogbookIssueStatus = 'open' | 'in_progress' | 'waiting_approval' | 'resolved';
+
 export interface LogbookEntry {
   id: string;
   storeId: string;
@@ -549,6 +553,25 @@ export interface LogbookEntry {
   ackUserIdsJson: string;
   createdAt: string;
   updatedAt: string;
+  entryType?: LogbookEntryType | string;
+  assigneeRole?: Role | string;
+  dueAt?: string;
+  status?: LogbookIssueStatus | string;
+  startedAt?: string;
+  startedByUserId?: string;
+  resolutionNote?: string;
+  resolutionSubmittedAt?: string;
+  resolutionSubmittedByUserId?: string;
+  resolvedAt?: string;
+  resolvedByUserId?: string;
+  reviewedAt?: string;
+  reviewedByUserId?: string;
+  reviewNote?: string;
+  reopenedAt?: string;
+  reopenedByUserId?: string;
+  reopenReason?: string;
+  dueSoonNotifiedAt?: string;
+  overdueNotifiedAt?: string;
   store?: Store;
   photo?: { id: string; url: string };
 }
@@ -559,7 +582,19 @@ export type ReviewEventType =
   | 'item_approved'
   | 'item_rejected'
   | 'item_correction'
-  | 'report_finalized';
+  | 'report_finalized'
+  | 'issue_created'
+  | 'issue_assigned'
+  | 'work_started'
+  | 'due_date_changed'
+  | 'resolution_submitted'
+  | 'resolution_approved'
+  | 'resolution_rejected'
+  | 'issue_reopened'
+  | 'issue_resolved'
+  | 'acknowledged';
+
+export type ReviewEventTargetType = 'report' | 'logbook';
 
 export interface ReviewEvent {
   id: string;
@@ -580,6 +615,8 @@ export interface ReviewEvent {
   feedbackCode?: string;
   feedbackNote?: string;
   createdAt: string;
+  logbookEntryId?: string;
+  targetType?: ReviewEventTargetType | string;
 }
 
 export type NotificationType =
@@ -594,7 +631,14 @@ export type NotificationType =
   | 'checklist_item_proposal_changes_requested'
   | 'checklist_item_proposal_rejected'
   | 'checklist_item_proposal_approved'
-  | 'checklist_item_proposal_published';
+  | 'checklist_item_proposal_published'
+  | 'logbook_issue_assigned'
+  | 'logbook_issue_due_soon'
+  | 'logbook_issue_overdue'
+  | 'logbook_resolution_submitted'
+  | 'logbook_resolution_approved'
+  | 'logbook_resolution_rejected'
+  | 'logbook_issue_reopened';
 
 export interface Notification {
   id: string;

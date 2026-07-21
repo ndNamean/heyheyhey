@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../db';
 import FeedbackInbox from '../components/FeedbackInbox';
 import ExportModal from '../components/ExportModal';
@@ -16,9 +16,23 @@ import {
   computeChecklistItemProposalMetrics,
   filterProposalsForViewer,
 } from '../lib/checklistItemProposals';
+import {
+  canReviewLogbookIssue,
+  canViewLogbookEntry,
+  isIssueOverdue,
+  resolveLogbookIssueStatus,
+} from '../lib/logbook';
+import {
+  computeLogbookIssueMetrics,
+  filterLogbookIssues,
+  formatDurationMs,
+  overdueDurationMs,
+} from '../lib/logbookMetrics';
+import { maybeNotifyLogbookDueStates } from '../lib/logbookDueNotify';
 import type {
   ChecklistItemProposal,
   ExportFormat,
+  LogbookEntry,
   Profile,
   Report,
   ReportResponse,
@@ -29,6 +43,7 @@ import type {
 interface Props {
   profile: Profile;
   onOpenProposals?: () => void;
+  onOpenLogbook?: (filter?: string) => void;
 }
 
 function firstDayOfMonth() {
@@ -36,7 +51,7 @@ function firstDayOfMonth() {
   return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
 }
 
-export default function DashboardPage({ profile, onOpenProposals }: Props) {
+export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook }: Props) {
   const { t } = useLang();
   const { defs } = useRoleDefinitions();
   const [from, setFrom] = useState(firstDayOfMonth);
@@ -45,6 +60,12 @@ export default function DashboardPage({ profile, onOpenProposals }: Props) {
   const [showOtherDetails, setShowOtherDetails] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [failureExportOpen, setFailureExportOpen] = useState(false);
+  const [issueStatusFilter, setIssueStatusFilter] = useState('all');
+  const [issueSeverityFilter, setIssueSeverityFilter] = useState('all');
+  const [issueAssigneeFilter, setIssueAssigneeFilter] = useState('all');
+  const [issueOverdueOnly, setIssueOverdueOnly] = useState(false);
+  const [issueWaitingMyReview, setIssueWaitingMyReview] = useState(false);
+  const dueNotifyRan = useRef(false);
 
   const { data } = db.useQuery({
     reports: {
@@ -52,10 +73,11 @@ export default function DashboardPage({ profile, onOpenProposals }: Props) {
       store: {},
     },
     stores: {},
-    profiles: {},
+    profiles: { stores: {} },
     reviewEvents: {},
     templates: { items: {}, stores: {}, scheduleVersions: {} },
     checklistItemProposals: {},
+    logbookEntries: { store: {} },
   });
 
   const allReports: Report[] = (data?.reports ?? []) as Report[];
@@ -64,6 +86,7 @@ export default function DashboardPage({ profile, onOpenProposals }: Props) {
   const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];
   const allTemplates: Template[] = (data?.templates ?? []) as Template[];
   const allProposals = (data?.checklistItemProposals ?? []) as ChecklistItemProposal[];
+  const allLogbookEntries = (data?.logbookEntries ?? []) as LogbookEntry[];
 
   const reports = useMemo(() => {
     let filtered = allReports.filter((r) => r.reportDate >= from && r.reportDate <= to);
@@ -178,13 +201,74 @@ export default function DashboardPage({ profile, onOpenProposals }: Props) {
     return { list: scoped, metrics: computeChecklistItemProposalMetrics(scoped) };
   }, [allProposals, profile, defs, from, to, filterStoreId]);
 
+  const logbookIssuesScoped = useMemo(() => {
+    const visible = allLogbookEntries.filter((e) => canViewLogbookEntry(profile, e, defs));
+    return filterLogbookIssues(visible, {
+      storeId: filterStoreId,
+      fromYmd: from,
+      toYmd: to,
+    });
+  }, [allLogbookEntries, profile, defs, filterStoreId, from, to]);
+
+  const logbookMetrics = useMemo(
+    () => computeLogbookIssueMetrics(logbookIssuesScoped),
+    [logbookIssuesScoped],
+  );
+
+  const logbookIssueRows = useMemo(() => {
+    const now = Date.now();
+    return logbookIssuesScoped.filter((e) => {
+      const status = resolveLogbookIssueStatus(e);
+      if (issueStatusFilter !== 'all' && status !== issueStatusFilter) return false;
+      if (issueSeverityFilter !== 'all' && e.severity !== issueSeverityFilter) return false;
+      if (issueAssigneeFilter !== 'all' && (e.assigneeRole || '') !== issueAssigneeFilter) {
+        return false;
+      }
+      if (issueOverdueOnly && !isIssueOverdue(e, now)) return false;
+      if (
+        issueWaitingMyReview &&
+        (status !== 'waiting_approval' || !canReviewLogbookIssue(profile, e, defs))
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [
+    logbookIssuesScoped,
+    issueStatusFilter,
+    issueSeverityFilter,
+    issueAssigneeFilter,
+    issueOverdueOnly,
+    issueWaitingMyReview,
+    profile,
+    defs,
+  ]);
+
+  useEffect(() => {
+    if (dueNotifyRan.current || !allLogbookEntries.length) return;
+    dueNotifyRan.current = true;
+    const visible = allLogbookEntries.filter((e) => canViewLogbookEntry(profile, e, defs));
+    void maybeNotifyLogbookDueStates(visible, profile, profiles as Profile[], defs);
+  }, [allLogbookEntries, profile, profiles, defs]);
+
   const displayStores = canAccessAllStores(profile.role, defs)
     ? stores
     : (profile.stores ?? []);
 
   return (
     <div>
-      <FeedbackInbox userId={profile.userId} title={t.dashboard.teamFeedback} />
+      <FeedbackInbox
+        userId={profile.userId}
+        title={t.dashboard.teamFeedback}
+        onOpenLogbookEntry={(entryId) => {
+          try {
+            sessionStorage.setItem('logbookHighlightEntryId', entryId);
+          } catch {
+            /* ignore */
+          }
+          onOpenLogbook?.('all');
+        }}
+      />
 
       <div className="card">
         <h1>{t.dashboard.title}</h1>
@@ -258,6 +342,188 @@ export default function DashboardPage({ profile, onOpenProposals }: Props) {
         <div className="card">
           <div className="small">{t.dashboard.failedItems}</div>
           <div className="metric">{metrics.failed.length}</div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <h2 style={{ margin: 0, flex: 1 }}>{t.logbook.dashboardTitle}</h2>
+          {onOpenLogbook && (
+            <button type="button" className="secondary" onClick={() => onOpenLogbook('all')}>
+              {t.logbook.openInLogbook}
+            </button>
+          )}
+        </div>
+        <div className="grid four" style={{ marginTop: 12 }}>
+          <div>
+            <div className="small">{t.logbook.statusOpen}</div>
+            <div className="metric">{logbookMetrics.counts.open}</div>
+          </div>
+          <div>
+            <div className="small">{t.logbook.statusInProgress}</div>
+            <div className="metric">{logbookMetrics.counts.inProgress}</div>
+          </div>
+          <div>
+            <div className="small">{t.logbook.statusWaiting}</div>
+            <div className="metric">{logbookMetrics.counts.waitingApproval}</div>
+          </div>
+          <div>
+            <div className="small">{t.logbook.statusOverdue}</div>
+            <div className="metric">{logbookMetrics.counts.overdue}</div>
+          </div>
+          <div>
+            <div className="small">{t.logbook.statusResolved}</div>
+            <div className="metric">{logbookMetrics.counts.resolved}</div>
+          </div>
+          <div>
+            <div className="small">{t.logbook.resolutionRate}</div>
+            <div className="metric">
+              {logbookMetrics.resolutionRate == null ? '—' : `${logbookMetrics.resolutionRate}%`}
+            </div>
+          </div>
+          <div>
+            <div className="small">{t.logbook.onTimeRate}</div>
+            <div className="metric">
+              {logbookMetrics.onTimeResolutionRate == null
+                ? '—'
+                : `${logbookMetrics.onTimeResolutionRate}%`}
+            </div>
+          </div>
+          <div>
+            <div className="small">{t.logbook.avgResolution}</div>
+            <div className="metric">
+              {formatDurationMs(logbookMetrics.avgResolutionDurationMs)}
+            </div>
+          </div>
+        </div>
+        <div className="grid two" style={{ marginTop: 12 }}>
+          <label>
+            {t.common.status}
+            <select
+              value={issueStatusFilter}
+              onChange={(e) => setIssueStatusFilter(e.target.value)}
+            >
+              <option value="all">{t.common.all}</option>
+              <option value="open">{t.logbook.statusOpen}</option>
+              <option value="in_progress">{t.logbook.statusInProgress}</option>
+              <option value="waiting_approval">{t.logbook.statusWaiting}</option>
+              <option value="resolved">{t.logbook.statusResolved}</option>
+            </select>
+          </label>
+          <label>
+            {t.common.severity}
+            <select
+              value={issueSeverityFilter}
+              onChange={(e) => setIssueSeverityFilter(e.target.value)}
+            >
+              <option value="all">{t.common.all}</option>
+              {['info', 'warning', 'critical'].map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {t.logbook.assigneeRole}
+            <select
+              value={issueAssigneeFilter}
+              onChange={(e) => setIssueAssigneeFilter(e.target.value)}
+            >
+              <option value="all">{t.common.all}</option>
+              {['staff', 'subleader', 'leader', 'manager'].map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={issueOverdueOnly}
+              onChange={(e) => setIssueOverdueOnly(e.target.checked)}
+            />
+            {t.logbook.overdueOnly}
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={issueWaitingMyReview}
+              onChange={(e) => setIssueWaitingMyReview(e.target.checked)}
+            />
+            {t.logbook.waitingMyReview}
+          </label>
+        </div>
+        <div className="table-wrap" style={{ marginTop: 12, overflowX: 'auto' }}>
+          <table>
+            <thead>
+              <tr>
+                <th>{t.logbook.typeIssue}</th>
+                <th>{t.common.store}</th>
+                <th>{t.common.severity}</th>
+                <th>{t.logbook.assigneeRole}</th>
+                <th>{t.logbook.dueAt}</th>
+                <th>{t.common.status}</th>
+                <th>{t.logbook.overdueDuration}</th>
+                <th>{t.common.actions}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logbookIssueRows.map((e) => {
+                const status = resolveLogbookIssueStatus(e);
+                const store = e.store || (stores as { id: string; code: string }[]).find((s) => s.id === e.storeId);
+                return (
+                  <tr key={e.id}>
+                    <td>{e.content.slice(0, 60)}</td>
+                    <td>{store?.code ?? e.storeId}</td>
+                    <td>{e.severity}</td>
+                    <td>{e.assigneeRole || '—'}</td>
+                    <td className="small">
+                      {e.dueAt ? new Date(e.dueAt).toLocaleString() : '—'}
+                    </td>
+                    <td>
+                      <span className={badgeClass(status)}>{statusLabel(t, status)}</span>
+                      {isIssueOverdue(e) && (
+                        <span className="badge bad" style={{ marginLeft: 4 }}>
+                          {t.logbook.statusOverdue}
+                        </span>
+                      )}
+                    </td>
+                    <td className="small">{formatDurationMs(overdueDurationMs(e))}</td>
+                    <td>
+                      {onOpenLogbook && (
+                        <button
+                          type="button"
+                          className="secondary"
+                          style={{ fontSize: 12, padding: '4px 8px', minHeight: 28 }}
+                          onClick={() => {
+                            try {
+                              sessionStorage.setItem('logbookHighlightEntryId', e.id);
+                            } catch {
+                              /* ignore */
+                            }
+                            onOpenLogbook('all');
+                          }}
+                        >
+                          {t.common.view}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {!logbookIssueRows.length && (
+                <tr>
+                  <td colSpan={8} className="small">
+                    {t.logbook.noEntries}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 

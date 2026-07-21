@@ -7,12 +7,13 @@ import {
   canScheduleShifts,
   canUseOpsTools,
 } from '../lib/roles';
+import { isLogbookIssue, resolveLogbookIssueStatus } from '../lib/logbook';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import LanguageSelector from './LanguageSelector';
 import ProfileAvatar from './profileAvatar/ProfileAvatar';
 import { useUnreadNotificationCount } from './FeedbackInbox';
-import type { Profile } from '../types';
+import type { LogbookEntry, Profile } from '../types';
 
 export type Page =
   | 'home' | 'submit' | 'review' | 'profile'
@@ -24,11 +25,25 @@ interface NavProps {
   page: Page;
   setPage: (p: Page) => void;
   profile: Profile;
+  onOpenLogbook?: () => void;
 }
 
-export function DesktopNav({ page, setPage, profile }: NavProps) {
+export function DesktopNav({ page, setPage, profile, onOpenLogbook }: NavProps) {
   const { t } = useLang();
   const { defs } = useRoleDefinitions();
+
+  const { data: logbookData } = db.useQuery({
+    logbookEntries: {},
+  });
+  const assignedIssueExists = ((logbookData?.logbookEntries ?? []) as LogbookEntry[]).some(
+    (e) =>
+      isLogbookIssue(e) &&
+      resolveLogbookIssueStatus(e) !== 'resolved' &&
+      e.assigneeRole === profile.role &&
+      (profile.stores ?? []).some((s) => s.id === e.storeId),
+  );
+
+  const showLogbook = canUseOpsTools(profile.role, defs) || assignedIssueExists;
 
   const links: { id: Page; label: string }[] = [
     { id: 'home',    label: t.nav.dashboard },
@@ -53,7 +68,9 @@ export function DesktopNav({ page, setPage, profile }: NavProps) {
     links.push({ id: 'corrective', label: t.nav.corrective });
     links.push({ id: 'photos',     label: t.nav.photos });
     links.push({ id: 'verify',     label: t.nav.verify });
-    links.push({ id: 'logbook',    label: t.nav.logbook });
+  }
+  if (showLogbook) {
+    links.push({ id: 'logbook', label: t.nav.logbook });
   }
   if (canScheduleShifts(profile.role, defs) || canReview(profile.role, defs)) {
     links.push({ id: 'shifts', label: t.nav.shifts });
@@ -65,7 +82,10 @@ export function DesktopNav({ page, setPage, profile }: NavProps) {
         <button
           key={l.id}
           className={page === l.id || (l.id === 'proposals' && page === 'proposalForm') ? 'active' : ''}
-          onClick={() => setPage(l.id)}
+          onClick={() => {
+            if (l.id === 'logbook' && onOpenLogbook) onOpenLogbook();
+            else setPage(l.id);
+          }}
         >
           {l.label}
         </button>

@@ -350,7 +350,8 @@ const rules = {
     allow: {
       view: 'isApproved',
       create: 'canReview',
-      update: 'isAuthor || canEditMaster',
+      update:
+        'isAuthor || canEditMaster || canAckUpdate || canIssueLifecycleUpdate || canIssueReviewUpdate || canDueStampUpdate',
       delete: 'isOwner',
       link: {
         store: 'isApproved',
@@ -358,12 +359,24 @@ const rules = {
       },
       unlink: {
         store: 'isOwner',
-        photo: 'isOwner',
+        // Resubmit replaces proof — assignees/reviewers must unlink prior photo
+        photo: 'isApproved',
       },
     },
     bind: {
       ...LEGACY_BIND,
       isAuthor: "auth.id != null && data.authorUserId == auth.id",
+      onlyAckFields: "request.modifiedFields.all(f, f in ['ackUserIdsJson', 'updatedAt'])",
+      canAckUpdate: 'isApproved && onlyAckFields',
+      onlyIssueLifecycleFields:
+        "request.modifiedFields.all(f, f in ['status', 'startedAt', 'startedByUserId', 'resolutionNote', 'resolutionSubmittedAt', 'resolutionSubmittedByUserId', 'updatedAt'])",
+      canIssueLifecycleUpdate: 'isApproved && onlyIssueLifecycleFields',
+      onlyIssueReviewFields:
+        "request.modifiedFields.all(f, f in ['status', 'resolvedAt', 'resolvedByUserId', 'reviewedAt', 'reviewedByUserId', 'reviewNote', 'reopenedAt', 'reopenedByUserId', 'reopenReason', 'updatedAt', 'assigneeRole', 'dueAt', 'severity'])",
+      canIssueReviewUpdate: 'canReview && onlyIssueReviewFields',
+      onlyDueStampFields:
+        "request.modifiedFields.all(f, f in ['dueSoonNotifiedAt', 'overdueNotifiedAt', 'updatedAt'])",
+      canDueStampUpdate: 'isApproved && onlyDueStampFields',
     },
   },
 
@@ -401,10 +414,12 @@ const rules = {
   },
 
   // ── Review feedback notifications ─────────────────────────────────────────
+  // isApproved create: assignment/due/overdue stamps may be written by assignees
+  // opening Logbook (not only canReview actors).
   notifications: {
     allow: {
       view: "isApproved && data.recipientUserId == auth.id",
-      create: 'canReview',
+      create: 'isApproved',
       update: "isApproved && data.recipientUserId == auth.id && onlyReadAt",
       delete: 'false',
     },

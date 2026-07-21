@@ -10,8 +10,14 @@ import { formatMediaCaptureTime } from '../lib/proofTime';
 import ProofReviewOverlay from './ProofReviewOverlay';
 import type { MediaRecord } from '../types';
 
+/** Full media record or thin $files-linked shape (e.g. logbookEntryPhoto). */
+export type ProofPhotoMedia = Partial<MediaRecord> & {
+  id: string;
+  url?: string;
+};
+
 interface Props {
-  media: MediaRecord;
+  media: ProofPhotoMedia;
   className?: string;
   reviewContext?: ReviewContext;
 }
@@ -24,7 +30,7 @@ function logVideoDebug(tag: string, payload: unknown) {
 
 export default function ProofPhoto({ media, className = '', reviewContext }: Props) {
   const { t } = useLang();
-  const directUrl = media.fileUrl || media.file?.url || '';
+  const directUrl = media.fileUrl || media.url || media.file?.url || '';
   const [url, setUrl] = useState(directUrl);
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>(
     directUrl ? 'ready' : 'idle',
@@ -35,12 +41,17 @@ export default function ProofPhoto({ media, className = '', reviewContext }: Pro
   const isVideo = isVideoMedia(media.mimeType, media.fileName);
 
   const showReviewOverlay = useMemo(
-    () => shouldRenderReviewOverlay(media, reviewContext),
+    () =>
+      !!(media.lat != null && media.proofMetadataJson != null) &&
+      shouldRenderReviewOverlay(media as MediaRecord, reviewContext),
     [media, reviewContext],
   );
 
   const legacyProof = useMemo(
-    () => (showReviewOverlay ? buildReviewProofSnapshot(media, reviewContext) : null),
+    () =>
+      showReviewOverlay
+        ? buildReviewProofSnapshot(media as MediaRecord, reviewContext)
+        : null,
     [showReviewOverlay, media, reviewContext],
   );
 
@@ -123,7 +134,9 @@ export default function ProofPhoto({ media, className = '', reviewContext }: Pro
         <div className="proof-photo-removed-title">{t.photoSheet.photoRemoved}</div>
         <div className="proof-photo-removed-meta">
           {media.photoCode && <span>{media.photoCode}</span>}
-          {media.capturedAt && <span>{formatMediaCaptureTime(media)}</span>}
+          {media.capturedAt && (
+            <span>{formatMediaCaptureTime(media as MediaRecord)}</span>
+          )}
         </div>
       </div>
     );

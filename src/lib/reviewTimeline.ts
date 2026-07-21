@@ -1,5 +1,6 @@
 import { formatIsoToLocalTime } from './proofTime';
 import type {
+  LogbookEntry,
   Notification,
   Report,
   ReportResponse,
@@ -39,6 +40,13 @@ export interface ReportTimelineData {
   currentStatus: string;
   reportSteps: TimelineStep[];
   items: ItemTimeline[];
+}
+
+export interface LogbookTimelineData {
+  logbookEntryId: string;
+  source: 'events';
+  currentStatus: string;
+  steps: TimelineStep[];
 }
 
 const NOTIFICATION_TO_EVENT: Partial<Record<string, ReviewEventType>> = {
@@ -275,4 +283,21 @@ export function compactTimelineSummary(timeline: ReportTimelineData): string {
     : '…';
   const duration = formatDurationMs(timeline.totalDurationMs);
   return `${start} → ${end} (${duration})`;
+}
+
+export function buildLogbookTimeline(
+  entry: LogbookEntry,
+  events: ReviewEvent[],
+): LogbookTimelineData {
+  const entryEvents = events.filter(
+    (e) =>
+      e.logbookEntryId === entry.id ||
+      (e.targetType === 'logbook' && e.logbookEntryId === entry.id),
+  );
+  return {
+    logbookEntryId: entry.id,
+    source: 'events',
+    currentStatus: entry.status ?? '',
+    steps: sortSteps(entryEvents.map(eventToStep)),
+  };
 }

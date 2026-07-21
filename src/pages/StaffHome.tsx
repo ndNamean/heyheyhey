@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { db } from '../db';
 import FeedbackInbox from '../components/FeedbackInbox';
 import MyReportsPanel from '../components/MyReportsPanel';
@@ -10,12 +11,14 @@ import {
   canProposeTemplateItem,
   canReview,
 } from '../lib/roles';
+import { countAssignedOpenOrOverdue, isAssignedUnresolvedIssue } from '../lib/logbook';
 import type { Page } from '../components/Nav';
-import type { Profile } from '../types';
+import type { LogbookEntry, Profile } from '../types';
 
 interface Props {
   profile: Profile;
   setPage: (p: Page) => void;
+  onOpenLogbook?: (filter?: string) => void;
   onStartReport: () => void;
   onFixReport: (reportId: string) => void;
   onProposeChecklistItem: () => void;
@@ -24,6 +27,8 @@ interface Props {
 
 export default function StaffHome({
   profile,
+  setPage,
+  onOpenLogbook,
   onStartReport,
   onFixReport,
   onProposeChecklistItem,
@@ -43,6 +48,7 @@ export default function StaffHome({
       },
       store: {},
     },
+    logbookEntries: {},
   });
 
   const slots = data?.reportSlots ?? [];
@@ -50,12 +56,35 @@ export default function StaffHome({
     (s) => s.status === 'pending' || s.status === 'missed',
   );
 
+  const logbookEntries = (data?.logbookEntries ?? []) as LogbookEntry[];
+  const assignedCount = useMemo(
+    () => countAssignedOpenOrOverdue(profile, logbookEntries, defs),
+    [profile, logbookEntries, defs],
+  );
+  const hasAssigned = useMemo(
+    () => logbookEntries.some((e) => isAssignedUnresolvedIssue(profile, e, defs)),
+    [logbookEntries, profile, defs],
+  );
+
   const storeNames = (profile.stores ?? []).map((s) => `${s.code} — ${s.name}`).join(', ');
+
+  function openAssignedIssues() {
+    if (onOpenLogbook) onOpenLogbook('my-assigned');
+    else setPage('logbook');
+  }
 
   return (
     <div>
       <MyReportsPanel profile={profile} onFixReport={onFixReport} />
-      <FeedbackInbox userId={profile.userId} />
+      <FeedbackInbox userId={profile.userId} onOpenLogbookEntry={(entryId) => {
+        try {
+          sessionStorage.setItem('logbookHighlightEntryId', entryId);
+          sessionStorage.setItem('logbookInitialFilter', 'my-assigned');
+        } catch {
+          /* ignore */
+        }
+        setPage('logbook');
+      }} />
 
       {canReview(profile.role, defs) && !canEditMaster(profile.role, defs) && (
         <ReportReviewStatusPanel profile={profile} />
@@ -69,6 +98,19 @@ export default function StaffHome({
           {t.staffHome.role}: <span className="badge">{profile.role}</span>
         </p>
       </div>
+
+      {(hasAssigned || assignedCount > 0) && (
+        <div className="card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h2 style={{ margin: 0, flex: 1 }}>{t.staffHome.assignedIssues}</h2>
+            {assignedCount > 0 && <span className="badge warn">{assignedCount}</span>}
+          </div>
+          <p className="small">{t.staffHome.assignedIssuesHint}</p>
+          <button style={{ marginTop: 8 }} type="button" onClick={openAssignedIssues}>
+            {t.staffHome.openAssignedIssues}
+          </button>
+        </div>
+      )}
 
       {(canProposeTemplateItem(profile.role, defs) ||
         canAccessChecklistItemProposals(profile.role, defs)) && (
