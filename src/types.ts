@@ -31,10 +31,10 @@ export interface RoleDefinitionSeed {
   canDeleteShifts: boolean;
   canUseOpsTools: boolean;
   canClockIn: boolean;
-  canProposeTemplateItem: boolean;
-  canFirstApproveTemplateItemProposal: boolean;
-  canFinalApproveTemplateItemProposal: boolean;
-  canPublishTemplateItemProposal: boolean;
+  canProposeTemplateItem?: boolean;
+  canFirstApproveTemplateItemProposal?: boolean;
+  canFinalApproveTemplateItemProposal?: boolean;
+  canPublishTemplateItemProposal?: boolean;
   approvesSubmitterRolesJson: string;
 }
 
