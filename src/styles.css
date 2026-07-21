@@ -1046,7 +1046,6 @@ body.wizard-active .page {
 }
 .proof-overlay-letterbox--staged {
   position: absolute;
-  transform-origin: bottom left;
   z-index: 3;
   pointer-events: none;
 }

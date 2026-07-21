@@ -82,16 +82,57 @@ export function resolveCaptureFrameRotation(opts: {
   screenAngle?: number | null;
 }): WatermarkDirection {
   const { layoutOrientation, watermarkTilt, sourceW, sourceH, screenAngle } = opts;
-  if (watermarkTilt === 90 || watermarkTilt === 270) return watermarkTilt;
+  // CSS tilt is clockwise; canvas drawOrientedFrame is CCW — invert 90↔270.
+  if (watermarkTilt === 90) return 270;
+  if (watermarkTilt === 270) return 90;
   if (layoutOrientation === 'landscape' && sourceH > sourceW) {
     if (screenAngle != null && Number.isFinite(screenAngle)) {
       const a = ((Math.round(screenAngle) % 360) + 360) % 360;
-      if (Math.abs(a - 270) <= LANDSCAPE_ANGLE_TOLERANCE) return 270;
-      if (Math.abs(a - 90) <= LANDSCAPE_ANGLE_TOLERANCE) return 90;
+      if (Math.abs(a - 270) <= LANDSCAPE_ANGLE_TOLERANCE) return 90;
+      if (Math.abs(a - 90) <= LANDSCAPE_ANGLE_TOLERANCE) return 270;
     }
-    return 90;
+    return 270;
   }
   return 0;
+}
+
+/** Live overlay CSS so tilted stamp stays inside the letterbox (not clipped). */
+export function liveWatermarkOverlayStyle(
+  scale: number,
+  tilt: WatermarkDirection,
+): {
+  left: number | 'auto';
+  right: number | 'auto';
+  bottom: number;
+  transform: string;
+  transformOrigin: string;
+} {
+  if (tilt === 90) {
+    return {
+      left: 0,
+      right: 'auto',
+      bottom: 0,
+      transformOrigin: 'bottom left',
+      transform: `scale(${scale}) rotate(90deg)`,
+    };
+  }
+  if (tilt === 270) {
+    // Origin bottom-right so CW 270° swings the stamp onto the right edge (inside).
+    return {
+      left: 'auto',
+      right: 0,
+      bottom: 0,
+      transformOrigin: 'bottom right',
+      transform: `scale(${scale}) rotate(270deg)`,
+    };
+  }
+  return {
+    left: 0,
+    right: 'auto',
+    bottom: 0,
+    transformOrigin: 'bottom left',
+    transform: `scale(${scale})`,
+  };
 }
 
 export function computeContainedMediaRect(

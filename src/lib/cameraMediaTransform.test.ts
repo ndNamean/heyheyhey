@@ -9,6 +9,7 @@ import {
   getEffectiveDimensions,
   normalizeWatermarkDirection,
   resolveCaptureFrameRotation,
+  liveWatermarkOverlayStyle,
 } from './cameraMediaTransform';
 
 describe('gravity / transform helpers', () => {
@@ -38,10 +39,19 @@ describe('gravity / transform helpers', () => {
   });
 
   it('resolves landscape save rotation from tilt or OS landscape', () => {
+    // CSS tilt is CW; canvas frame rotation is inverted (90↔270).
     expect(
       resolveCaptureFrameRotation({
         layoutOrientation: 'portrait',
         watermarkTilt: 270,
+        sourceW: 1080,
+        sourceH: 1920,
+      }),
+    ).toBe(90);
+    expect(
+      resolveCaptureFrameRotation({
+        layoutOrientation: 'portrait',
+        watermarkTilt: 90,
         sourceW: 1080,
         sourceH: 1920,
       }),
@@ -54,7 +64,7 @@ describe('gravity / transform helpers', () => {
         sourceH: 1920,
         screenAngle: 90,
       }),
-    ).toBe(90);
+    ).toBe(270);
     expect(
       resolveCaptureFrameRotation({
         layoutOrientation: 'portrait',
@@ -63,5 +73,12 @@ describe('gravity / transform helpers', () => {
         sourceH: 1920,
       }),
     ).toBe(0);
+  });
+
+  it('keeps live tilt overlay anchored so 270deg does not use bottom-left origin', () => {
+    expect(liveWatermarkOverlayStyle(0.5, 90).transformOrigin).toBe('bottom left');
+    expect(liveWatermarkOverlayStyle(0.5, 270).transformOrigin).toBe('bottom right');
+    expect(liveWatermarkOverlayStyle(0.5, 270).right).toBe(0);
+    expect(liveWatermarkOverlayStyle(0.5, 0).transform).toBe('scale(0.5)');
   });
 });

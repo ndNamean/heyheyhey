@@ -32,6 +32,7 @@ import {
   computeContainedMediaRect,
   drawRecordingCompositorFrame,
   getEffectiveDimensions,
+  liveWatermarkOverlayStyle,
   type MediaTransformSnapshot,
   type WatermarkDirection,
 } from '../lib/cameraMediaTransform';
@@ -1655,11 +1656,9 @@ export default function TimemarkCamera({
                     className="proof-overlay-letterbox proof-overlay-letterbox--staged"
                     style={
                       {
-                        left: 0,
-                        bottom: 0,
                         width: sourceFrameSize.w,
                         height: sourceFrameSize.h,
-                        transform: `scale(${letterboxLayout.scale}) rotate(${previewWatermarkTilt}deg)`,
+                        ...liveWatermarkOverlayStyle(letterboxLayout.scale, previewWatermarkTilt),
                       } as CSSProperties
                     }
                   >
