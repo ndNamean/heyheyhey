@@ -931,6 +931,54 @@ body.wizard-active .page {
   transition: none;
 }
 
+/* Sensor tilt while viewport stays portrait: rotate chrome glyphs upright (camera UI only). */
+.camera-fullscreen--chrome-tilt-90 .camera-topbar .cam-icon-btn,
+.camera-fullscreen--chrome-tilt-90 .camera-topbar-title,
+.camera-fullscreen--chrome-tilt-90 .camera-topbar .gps-badge,
+.camera-fullscreen--chrome-tilt-90 .camera-controls .cam-icon-btn,
+.camera-fullscreen--chrome-tilt-90 .camera-controls .shutter,
+.camera-fullscreen--chrome-tilt-90 .cam-mic-banner,
+.camera-fullscreen--chrome-tilt-90 .cam-tilt-hint-banner,
+.camera-fullscreen--chrome-tilt-90 .camera-error {
+  transform: rotate(90deg);
+}
+.camera-fullscreen--chrome-tilt-270 .camera-topbar .cam-icon-btn,
+.camera-fullscreen--chrome-tilt-270 .camera-topbar-title,
+.camera-fullscreen--chrome-tilt-270 .camera-topbar .gps-badge,
+.camera-fullscreen--chrome-tilt-270 .camera-controls .cam-icon-btn,
+.camera-fullscreen--chrome-tilt-270 .camera-controls .shutter,
+.camera-fullscreen--chrome-tilt-270 .cam-mic-banner,
+.camera-fullscreen--chrome-tilt-270 .cam-tilt-hint-banner,
+.camera-fullscreen--chrome-tilt-270 .camera-error {
+  transform: rotate(270deg);
+}
+.camera-fullscreen--chrome-tilt-90.camera-fullscreen--portrait .cam-mode-chip {
+  transform: translateX(-50%) rotate(90deg);
+}
+.camera-fullscreen--chrome-tilt-270.camera-fullscreen--portrait .cam-mode-chip {
+  transform: translateX(-50%) rotate(270deg);
+}
+.camera-fullscreen--chrome-tilt-90 .cam-recording-badge {
+  transform: translateX(-50%) rotate(90deg);
+}
+.camera-fullscreen--chrome-tilt-270 .cam-recording-badge {
+  transform: translateX(-50%) rotate(270deg);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .camera-fullscreen--chrome-tilt-90 .camera-topbar .cam-icon-btn,
+  .camera-fullscreen--chrome-tilt-90 .camera-topbar-title,
+  .camera-fullscreen--chrome-tilt-90 .camera-topbar .gps-badge,
+  .camera-fullscreen--chrome-tilt-90 .camera-controls .cam-icon-btn,
+  .camera-fullscreen--chrome-tilt-90 .camera-controls .shutter,
+  .camera-fullscreen--chrome-tilt-270 .camera-topbar .cam-icon-btn,
+  .camera-fullscreen--chrome-tilt-270 .camera-topbar-title,
+  .camera-fullscreen--chrome-tilt-270 .camera-topbar .gps-badge,
+  .camera-fullscreen--chrome-tilt-270 .camera-controls .cam-icon-btn,
+  .camera-fullscreen--chrome-tilt-270 .camera-controls .shutter {
+    transition: transform 200ms ease;
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .camera-fullscreen--portrait .camera-controls,
   .camera-fullscreen--landscape .camera-controls,

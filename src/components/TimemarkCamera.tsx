@@ -1377,6 +1377,13 @@ export default function TimemarkCamera({
     layoutOrientation === 'landscape'
       ? 'camera-fullscreen--landscape'
       : 'camera-fullscreen--portrait';
+  // Live camera only: keep portrait layout, but spin chrome icons upright with gravity.
+  const chromeTiltClass =
+    previewWatermarkTilt === 90
+      ? ' camera-fullscreen--chrome-tilt-90'
+      : previewWatermarkTilt === 270
+        ? ' camera-fullscreen--chrome-tilt-270'
+        : '';
   const stageScale = letterboxLayout?.scale ?? 1;
   const stageDisplayW = letterboxLayout ? letterboxLayout.videoW * stageScale : 0;
   const stageDisplayH = letterboxLayout ? letterboxLayout.videoH * stageScale : 0;
@@ -1394,7 +1401,7 @@ export default function TimemarkCamera({
       )}
 
       {cameraOn && createPortal(
-        <div className={`camera-fullscreen ${orientationClass}`}>
+        <div className={`camera-fullscreen ${orientationClass}${chromeTiltClass}`}>
           <div className="camera-topbar">
             <button
               className="cam-icon-btn"
