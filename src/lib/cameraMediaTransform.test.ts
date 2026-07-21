@@ -9,6 +9,7 @@ import {
   getEffectiveDimensions,
   normalizeWatermarkDirection,
   resolveCaptureFrameRotation,
+  liveTiltViewfinderOverlayStyle,
   liveWatermarkOverlayStyle,
 } from './cameraMediaTransform';
 
@@ -75,10 +76,21 @@ describe('gravity / transform helpers', () => {
     ).toBe(0);
   });
 
-  it('keeps live tilt overlay anchored so 270deg does not use bottom-left origin', () => {
-    expect(liveWatermarkOverlayStyle(0.5, 90).transformOrigin).toBe('bottom left');
-    expect(liveWatermarkOverlayStyle(0.5, 270).transformOrigin).toBe('bottom right');
-    expect(liveWatermarkOverlayStyle(0.5, 270).right).toBe(0);
+  it('anchors live tilt stamp as a compact strip inside the viewfinder', () => {
+    const left = liveTiltViewfinderOverlayStyle(90, 360, 640);
+    expect(left).not.toBeNull();
+    expect(left!.transform).toBe('rotate(90deg)');
+    expect(left!.transformOrigin).toBe('bottom left');
+    expect(left!.height).toBeLessThan(360);
+    expect(left!.width).toBeGreaterThan(left!.height);
+    // Pivot inset by depth so stamp stack stays on-screen after CW 90.
+    expect(left!.left).toBeGreaterThan(10);
+
+    const right = liveTiltViewfinderOverlayStyle(270, 360, 640);
+    expect(right).not.toBeNull();
+    expect(right!.left).toBe(350);
+    expect(right!.transform).toBe('rotate(90deg)');
+
     expect(liveWatermarkOverlayStyle(0.5, 0).transform).toBe('scale(0.5)');
   });
 });

@@ -958,6 +958,11 @@ body.wizard-active .page {
 .camera-fullscreen--chrome-tilt-270.camera-fullscreen--portrait .cam-mode-chip {
   transform: translateX(-50%) rotate(270deg);
 }
+/* Tilt stamp strip is wider than the viewfinder before rotate — allow it to paint. */
+.camera-fullscreen--chrome-tilt-90 .camera-viewfinder,
+.camera-fullscreen--chrome-tilt-270 .camera-viewfinder {
+  overflow: visible;
+}
 .camera-fullscreen--chrome-tilt-90 .cam-recording-badge {
   transform: translateX(-50%) rotate(90deg);
 }
@@ -1096,6 +1101,17 @@ body.wizard-active .page {
   position: absolute;
   z-index: 3;
   pointer-events: none;
+}
+.proof-overlay-live-tilt {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  overflow: visible;
+}
+.proof-overlay-live-tilt .proof-overlay-root {
+  bottom: var(--stamp-margin, 10px);
+  left: var(--stamp-margin, 10px);
+  max-width: calc(100% - var(--stamp-margin, 10px) * 2);
 }
 .cam-mode-chip {
   display: inline-flex;

@@ -96,7 +96,58 @@ export function resolveCaptureFrameRotation(opts: {
   return 0;
 }
 
-/** Live overlay CSS so tilted stamp stays inside the letterbox (not clipped). */
+/**
+ * Live watermark when phone is tilted (viewport still portrait).
+ * Uses a compact strip on the viewfinder gravity-bottom edge (left/right),
+ * sized so CW 90° around bottom-left keeps the stamp inside the viewfinder.
+ */
+export function liveTiltViewfinderOverlayStyle(
+  tilt: WatermarkDirection,
+  viewfinderW: number,
+  viewfinderH: number,
+  insetPx = 10,
+): {
+  left: number;
+  right: 'auto';
+  bottom: number;
+  width: number;
+  height: number;
+  transform: string;
+  transformOrigin: string;
+} | null {
+  if (viewfinderW <= 0 || viewfinderH <= 0) return null;
+  if (tilt !== 90 && tilt !== 270) return null;
+
+  // After rotate(90deg): width runs along the side; height runs into the preview.
+  const edgeLen = Math.max(160, viewfinderH - insetPx * 2);
+  const depth = Math.max(96, Math.round(viewfinderW * 0.4));
+
+  if (tilt === 90) {
+    // Pivot inset by `depth` so the stamp stack (swings left) lands on-screen.
+    return {
+      left: insetPx + depth,
+      right: 'auto',
+      bottom: insetPx,
+      width: edgeLen,
+      height: depth,
+      transformOrigin: 'bottom left',
+      transform: 'rotate(90deg)',
+    };
+  }
+
+  // Right edge: pivot on the right; stamp swings up the side and into the frame.
+  return {
+    left: viewfinderW - insetPx,
+    right: 'auto',
+    bottom: insetPx,
+    width: edgeLen,
+    height: depth,
+    transformOrigin: 'bottom left',
+    transform: 'rotate(90deg)',
+  };
+}
+
+/** @deprecated Prefer letterbox scale for tilt 0; use liveTiltViewfinderOverlayStyle when tilted. */
 export function liveWatermarkOverlayStyle(
   scale: number,
   tilt: WatermarkDirection,
@@ -107,23 +158,14 @@ export function liveWatermarkOverlayStyle(
   transform: string;
   transformOrigin: string;
 } {
-  if (tilt === 90) {
+  if (tilt === 90 || tilt === 270) {
+    // Kept for tests/compat — TimemarkCamera uses liveTiltViewfinderOverlayStyle instead.
     return {
       left: 0,
       right: 'auto',
       bottom: 0,
       transformOrigin: 'bottom left',
-      transform: `scale(${scale}) rotate(90deg)`,
-    };
-  }
-  if (tilt === 270) {
-    // Origin bottom-right so CW 270° swings the stamp onto the right edge (inside).
-    return {
-      left: 'auto',
-      right: 0,
-      bottom: 0,
-      transformOrigin: 'bottom right',
-      transform: `scale(${scale}) rotate(270deg)`,
+      transform: `scale(${scale}) rotate(${tilt === 90 ? 90 : -90}deg)`,
     };
   }
   return {
