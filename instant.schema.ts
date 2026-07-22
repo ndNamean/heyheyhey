@@ -275,7 +275,7 @@ const _schema = i.schema({
       entryType: i.string().indexed().clientRequired(),           // note|announcement|issue
       assigneeRole: i.string().indexed().clientRequired(),
       dueAt: i.string().indexed().clientRequired(),
-      status: i.string().indexed().clientRequired(),              // open|in_progress|waiting_approval|resolved
+      status: i.string().indexed().clientRequired(),              // open|in_progress|waiting_approval|resolved|recalled
       startedAt: i.string().clientRequired(),
       startedByUserId: i.string().clientRequired(),
       resolutionProofType: i.string().indexed().clientRequired(), // PROOF_TYPES; default photo for issues
@@ -285,6 +285,7 @@ const _schema = i.schema({
       resolutionNote: i.string().clientRequired(),
       resolutionSubmittedAt: i.string().clientRequired(),
       resolutionSubmittedByUserId: i.string().clientRequired(),
+      resolutionAttemptId: i.string().clientRequired(),           // idempotency key for Stage A/B submit
       resolvedAt: i.string().clientRequired(),
       resolvedByUserId: i.string().clientRequired(),
       reviewedAt: i.string().clientRequired(),
@@ -293,6 +294,9 @@ const _schema = i.schema({
       reopenedAt: i.string().clientRequired(),
       reopenedByUserId: i.string().clientRequired(),
       reopenReason: i.string().clientRequired(),
+      recalledAt: i.string().clientRequired(),
+      recalledByUserId: i.string().clientRequired(),
+      recallReason: i.string().clientRequired(),
       dueSoonNotifiedAt: i.string().clientRequired(),
       overdueNotifiedAt: i.string().clientRequired(),
     }),
@@ -614,10 +618,22 @@ const _schema = i.schema({
       reverse: { on: 'stores', has: 'many', label: 'logbookEntries' },
     },
 
-    // ─── LogbookEntries -> $files (attached photo) ───────────────────────────
+    // ─── LogbookEntries -> $files (legacy attached photo; resolution or source) ─
     logbookEntryPhoto: {
       forward: { on: 'logbookEntries', has: 'one', label: 'photo' },
       reverse: { on: '$files', has: 'many', label: 'logbookEntries' },
+    },
+
+    // Creator / context media (many)
+    logbookEntrySourceMedia: {
+      forward: { on: 'logbookEntries', has: 'many', label: 'sourceMedia' },
+      reverse: { on: '$files', has: 'many', label: 'logbookSourceEntries' },
+    },
+
+    // Resolution proof media (one)
+    logbookEntryResolutionMedia: {
+      forward: { on: 'logbookEntries', has: 'one', label: 'resolutionMedia' },
+      reverse: { on: '$files', has: 'many', label: 'logbookResolutionEntries' },
     },
 
     // ─── Checklist item proposals ────────────────────────────────────────────

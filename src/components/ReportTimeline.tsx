@@ -40,6 +40,8 @@ export function eventLabel(
     resolution_rejected: timeline.resolutionRejected ?? 'Resolution rejected',
     issue_reopened: timeline.issueReopened ?? 'Reopened',
     issue_resolved: timeline.issueResolved ?? 'Resolved',
+    issue_recalled: timeline.issueRecalled ?? 'Recalled',
+    creator_update: timeline.creatorUpdate ?? 'Creator update',
     acknowledged: timeline.acknowledged ?? 'Acknowledged',
   };
   return map[eventType] ?? String(eventType);

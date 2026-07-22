@@ -14,23 +14,32 @@ import {
   LOGBOOK_FILTER_KEY,
   LOGBOOK_HIGHLIGHT_KEY,
   canActOnAssignedIssue,
+  canAddCreatorUpdate,
   canEditLogbookAssignment,
+  canHardDeleteLogbookIssue,
   canOpenLogbook,
+  canRecallLogbookIssue,
   canReviewLogbookIssue,
+  canSubmitResolutionNow,
   canViewLogbookEntry,
   defaultLogbookFilterTab,
+  getIssueConfigurationState,
   isIssueOverdue,
   isLogbookIssue,
   issueCreateFields,
+  logSubmitStepFailure,
   noteOrAnnouncementFields,
   resolveLogbookEntryType,
   resolveLogbookIssueStatus,
+  resolveResolutionMedia,
+  resolveSourceMedia,
 } from '../lib/logbook';
 import {
   PROOF_TYPES,
   canSubmitResolutionDraft,
   emptyResolutionDraft,
   hasCorrectionFeedback,
+  isSameResolutionAttempt,
   needsMedia,
   needsNote,
   needsNumber,
@@ -40,15 +49,19 @@ import {
   type LogbookResolutionDraft,
 } from '../lib/logbookResolution';
 import { maybeNotifyLogbookDueStates } from '../lib/logbookDueNotify';
+import { postLogbookNotify } from '../lib/logbookNotifyClient';
 import {
+  buildLogbookCreatorUpdateNotifications,
   buildLogbookIssueAssignedNotifications,
+  buildLogbookIssueRecalledNotifications,
   buildLogbookIssueReopenedNotifications,
   buildLogbookResolutionDecisionNotifications,
-  buildLogbookResolutionSubmittedNotifications,
 } from '../lib/notifications';
 import {
   buildLogbookAssignmentChangedEvent,
+  buildLogbookCreatorUpdateEvent,
   buildLogbookIssueCreatedEvents,
+  buildLogbookIssueRecalledEvent,
   buildLogbookIssueReopenedEvent,
   buildLogbookResolutionApprovedEvent,
   buildLogbookResolutionRejectedEvent,
@@ -56,6 +69,7 @@ import {
   buildLogbookWorkStartedEvent,
 } from '../lib/reviewEvents';
 import type {
+  IssueConfigurationState,
   LogbookEntry,
   LogbookEntryType,
   Profile,
@@ -156,12 +170,29 @@ export default function LogbookPage({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [notifySoftFail, setNotifySoftFail] = useState<{
+    entryId: string;
+    attemptId: string;
+  } | null>(null);
+  const [creatorUpdateEntryId, setCreatorUpdateEntryId] = useState<string | null>(null);
+  const [creatorNote, setCreatorNote] = useState('');
+  const [creatorMedia, setCreatorMedia] = useState<UploadedMedia | null>(null);
+  const [showCreatorCamera, setShowCreatorCamera] = useState(false);
+  const [setupEntryId, setSetupEntryId] = useState<string | null>(null);
+  const [setupForm, setSetupForm] = useState({
+    assigneeRole: 'staff',
+    dueAt: '',
+    resolutionProofType: 'photo' as ProofType,
+    resolutionRequirement: '',
+  });
   const dueNotifyRan = useRef(false);
 
   const { data } = db.useQuery({
     logbookEntries: {
       store: {},
       photo: {},
+      sourceMedia: {},
+      resolutionMedia: {},
     },
     stores: {},
     profiles: { stores: {} },
@@ -179,6 +210,7 @@ export default function LogbookPage({
         (e) =>
           isLogbookIssue(e) &&
           resolveLogbookIssueStatus(e) !== 'resolved' &&
+          resolveLogbookIssueStatus(e) !== 'recalled' &&
           e.assigneeRole === profile.role &&
           (profile.stores ?? []).some((s) => s.id === e.storeId),
       ),
@@ -188,11 +220,19 @@ export default function LogbookPage({
   const canCreate = canReview(profile.role, defs);
   const pageOpen = canOpenLogbook(profile, defs, assignedIssueExists);
 
+  /** Active proof panel entry — resolved from all entries, ignoring filters. */
+  const activeProofEntry = useMemo(() => {
+    if (!proofEntryId) return null;
+    return allEntries.find((e) => e.id === proofEntryId) || null;
+  }, [allEntries, proofEntryId]);
+
   const visibleEntries = useMemo(() => {
     const now = Date.now();
     return allEntries
       .filter((e) => canViewLogbookEntry(profile, e, defs))
       .filter((e) => {
+        // Hide the duplicate issue card while the resolution form is open
+        if (proofEntryId && e.id === proofEntryId) return false;
         if (storeId !== 'all' && e.storeId !== storeId && e.storeId !== '') return false;
         if (date && e.date !== date) return false;
         const type = resolveLogbookEntryType(e);
@@ -216,6 +256,7 @@ export default function LogbookPage({
           case 'my-assigned':
             return (
               isLogbookIssue(e) &&
+              status !== 'recalled' &&
               e.assigneeRole === profile.role &&
               (profile.stores ?? []).some((s) => s.id === e.storeId)
             );
@@ -248,6 +289,7 @@ export default function LogbookPage({
     waitingMyReview,
     correctionOnly,
     filterTab,
+    proofEntryId,
   ]);
 
   useEffect(() => {
@@ -416,7 +458,18 @@ export default function LogbookPage({
   }
 
   async function submitResolution(entry: LogbookEntry) {
-    const proofType = resolveLogbookProofType(entry);
+    const live = allEntries.find((e) => e.id === entry.id) || entry;
+    if (!canSubmitResolutionNow(profile, live, defs)) {
+      setSubmitError(t.logbook.staleSubmitBlocked);
+      logSubmitStepFailure({
+        entryId: live.id,
+        actorRole: profile.role,
+        attemptedStep: 'gate',
+        message: 'Cannot submit — status/assignee gate failed',
+      });
+      return;
+    }
+    const proofType = resolveLogbookProofType(live);
     if (!canSubmitResolutionDraft(proofType, draft)) {
       setSubmitError(t.logbook.resolutionIncomplete);
       return;
@@ -426,55 +479,113 @@ export default function LogbookPage({
       return;
     }
 
+    const attemptId = id();
+    if (isSameResolutionAttempt(live, attemptId)) {
+      return;
+    }
+
     setSubmitting(true);
     setSubmitError('');
+    setNotifySoftFail(null);
+    const note = draft.note.trim();
+    const prevStatus = resolveLogbookIssueStatus(live) || 'in_progress';
+    const priorResolutionId = live.resolutionMedia?.id || live.photo?.id || '';
+
     try {
-      const priorFileId = entry.photo?.id ?? '';
-      const note = draft.note.trim();
-      const prevStatus = resolveLogbookIssueStatus(entry) || 'in_progress';
+      // Stage A — core tx only (no notifications)
       const txs: unknown[] = [];
-      if (priorFileId && draft.media) {
-        txs.push(db.tx.logbookEntries[entry.id].unlink({ photo: priorFileId }));
+      if (priorResolutionId && draft.media) {
+        if (live.resolutionMedia?.id) {
+          txs.push(
+            db.tx.logbookEntries[live.id].unlink({ resolutionMedia: priorResolutionId }),
+          );
+        }
+        if (live.photo?.id === priorResolutionId) {
+          txs.push(db.tx.logbookEntries[live.id].unlink({ photo: priorResolutionId }));
+        }
       }
       txs.push(
-        db.tx.logbookEntries[entry.id].update({
+        db.tx.logbookEntries[live.id].update({
           status: 'waiting_approval',
           resolutionNote: note,
           resolutionNumber: draft.numberValue.trim(),
           resolutionChecked: draft.checked,
           resolutionSubmittedAt: nowIso(),
           resolutionSubmittedByUserId: profile.userId,
+          resolutionAttemptId: attemptId,
           updatedAt: nowIso(),
         }),
       );
       if (draft.media) {
-        txs.push(db.tx.logbookEntries[entry.id].link({ photo: draft.media.fileId }));
+        txs.push(
+          db.tx.logbookEntries[live.id].link({ resolutionMedia: draft.media.fileId }),
+          // Keep legacy photo in sync during transition
+          db.tx.logbookEntries[live.id].link({ photo: draft.media.fileId }),
+        );
       }
       txs.push(
-        buildLogbookResolutionSubmittedEvent(entry, profile, prevStatus, note, priorFileId),
-        ...buildLogbookResolutionSubmittedNotifications(
-          {
-            ...entry,
-            resolutionNote: note,
-            resolutionSubmittedByUserId: profile.userId,
-          },
+        buildLogbookResolutionSubmittedEvent(
+          live,
           profile,
-          allProfiles,
-          defs,
+          prevStatus,
+          note ? `${note}\nattempt:${attemptId}` : `attempt:${attemptId}`,
+          priorResolutionId,
         ),
       );
       await db.transact(txs as Parameters<typeof db.transact>[0]);
-      setSuccessMsg(t.logbook.submitSuccess);
-      closeResolutionForm();
-      setFilterTab('my-assigned');
-      setWaitingMyReview(false);
-      setOverdueOnly(false);
-      setCorrectionOnly(false);
-      setRequiresAckOnly(false);
     } catch (e) {
-      setSubmitError(e instanceof Error ? e.message : t.logbook.saveFailed);
-    } finally {
+      const message = e instanceof Error ? e.message : t.logbook.saveFailed;
+      logSubmitStepFailure({
+        entryId: live.id,
+        actorRole: profile.role,
+        attemptedStep: 'stage_a',
+        message,
+      });
+      setSubmitError(message);
       setSubmitting(false);
+      return;
+    }
+
+    // Stage B — soft-fail notifications via Admin SDK
+    const notify = await postLogbookNotify({
+      entryId: live.id,
+      type: 'resolution_submitted',
+      attemptId,
+    });
+    if (!notify.ok) {
+      logSubmitStepFailure({
+        entryId: live.id,
+        actorRole: profile.role,
+        attemptedStep: 'stage_b_notify',
+        message: notify.message,
+      });
+      setNotifySoftFail({ entryId: live.id, attemptId });
+      setSuccessMsg(t.logbook.submitSuccessNotifyPending);
+    } else {
+      setSuccessMsg(t.logbook.submitSuccess);
+    }
+
+    closeResolutionForm();
+    setFilterTab('my-assigned');
+    setWaitingMyReview(false);
+    setOverdueOnly(false);
+    setCorrectionOnly(false);
+    setRequiresAckOnly(false);
+    setSubmitting(false);
+  }
+
+  async function retryNotify() {
+    if (!notifySoftFail) return;
+    const result = await postLogbookNotify({
+      entryId: notifySoftFail.entryId,
+      type: 'resolution_submitted',
+      attemptId: notifySoftFail.attemptId,
+    });
+    if (result.ok) {
+      setNotifySoftFail(null);
+      setSuccessMsg(t.logbook.notifyRetrySuccess);
+    } else {
+      setSubmitError(result.message);
     }
   }
 
@@ -567,7 +678,12 @@ export default function LogbookPage({
 
     const dueAt = new Date(dueLocal).toISOString();
     const prevStatus = resolveLogbookIssueStatus(entry) || 'open';
-    const nextStatus = prevStatus === 'waiting_approval' ? 'in_progress' : prevStatus;
+    let nextStatus = prevStatus;
+    if (prevStatus === 'waiting_approval') {
+      const ok = confirm(t.logbook.invalidateWaitingConfirm);
+      if (!ok) return;
+      nextStatus = 'in_progress';
+    }
     const note = `Role: ${entry.assigneeRole} → ${role}; due: ${entry.dueAt} → ${dueAt}. ${reason.trim()}`;
 
     const updated = { ...entry, assigneeRole: role, dueAt, status: nextStatus };
@@ -583,6 +699,141 @@ export default function LogbookPage({
     ]);
   }
 
+  async function recallIssue(entry: LogbookEntry) {
+    if (!canRecallLogbookIssue(profile, entry, defs)) return;
+    const reason = prompt(t.logbook.recallReasonPrompt) ?? '';
+    if (!reason.trim()) return alert(t.logbook.recallReasonRequired);
+    const prevStatus = resolveLogbookIssueStatus(entry) || 'open';
+    const now = nowIso();
+    try {
+      await db.transact([
+        db.tx.logbookEntries[entry.id].update({
+          status: 'recalled',
+          recalledAt: now,
+          recalledByUserId: profile.userId,
+          recallReason: reason.trim(),
+          updatedAt: now,
+        }),
+        buildLogbookIssueRecalledEvent(entry, profile, reason.trim(), prevStatus),
+        ...buildLogbookIssueRecalledNotifications(
+          { ...entry, recallReason: reason.trim() },
+          profile,
+          allProfiles,
+          reason.trim(),
+          defs,
+        ),
+      ]);
+      if (proofEntryId === entry.id) closeResolutionForm();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.logbook.saveFailed);
+    }
+  }
+
+  async function hardDeleteIssue(entry: LogbookEntry) {
+    if (!canHardDeleteLogbookIssue(profile, entry, defs)) {
+      return alert(t.logbook.hardDeleteBlocked);
+    }
+    if (!confirm(t.logbook.hardDeleteConfirm)) return;
+    try {
+      await db.transact(db.tx.logbookEntries[entry.id].delete());
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.logbook.saveFailed);
+    }
+  }
+
+  function openSetup(entry: LogbookEntry) {
+    setSetupEntryId(entry.id);
+    setSetupForm({
+      assigneeRole: entry.assigneeRole || 'staff',
+      dueAt: entry.dueAt ? entry.dueAt.slice(0, 16) : '',
+      resolutionProofType: (resolveLogbookProofType(entry) || 'photo') as ProofType,
+      resolutionRequirement: entry.resolutionRequirement || '',
+    });
+  }
+
+  async function saveSetup(entry: LogbookEntry) {
+    if (!canEditLogbookAssignment(profile, entry, defs)) return;
+    if (!setupForm.assigneeRole) return alert(t.logbook.assigneeRequired);
+    if (!setupForm.dueAt) return alert(t.logbook.dueRequired);
+    const dueAt = new Date(setupForm.dueAt).toISOString();
+    const prevStatus = resolveLogbookIssueStatus(entry) || 'open';
+    await db.transact([
+      db.tx.logbookEntries[entry.id].update({
+        assigneeRole: setupForm.assigneeRole,
+        dueAt,
+        resolutionProofType: setupForm.resolutionProofType || 'photo',
+        resolutionRequirement: setupForm.resolutionRequirement.trim(),
+        updatedAt: nowIso(),
+      }),
+      buildLogbookAssignmentChangedEvent(
+        entry,
+        profile,
+        `Complete setup: role=${setupForm.assigneeRole}; due=${dueAt}`,
+        prevStatus,
+        prevStatus,
+      ),
+      ...buildLogbookIssueAssignedNotifications(
+        {
+          ...entry,
+          assigneeRole: setupForm.assigneeRole,
+          dueAt,
+          resolutionProofType: setupForm.resolutionProofType,
+          resolutionRequirement: setupForm.resolutionRequirement,
+        },
+        profile,
+        allProfiles,
+        defs,
+      ),
+    ]);
+    setSetupEntryId(null);
+  }
+
+  async function saveCreatorUpdate(entry: LogbookEntry) {
+    if (!canAddCreatorUpdate(profile, entry, defs)) return;
+    if (!creatorNote.trim() && !creatorMedia) {
+      return alert(t.logbook.creatorUpdateRequired);
+    }
+    const prevStatus = resolveLogbookIssueStatus(entry) || 'open';
+    let nextStatus = prevStatus;
+    if (prevStatus === 'waiting_approval') {
+      // Creator update of media/note does not auto-invalidate; assignment change does.
+      nextStatus = prevStatus;
+    }
+    const note = creatorNote.trim() || 'Creator media update';
+    const txs: unknown[] = [
+      buildLogbookCreatorUpdateEvent(entry, profile, note, nextStatus, prevStatus),
+    ];
+    if (creatorMedia) {
+      txs.push(db.tx.logbookEntries[entry.id].link({ sourceMedia: creatorMedia.fileId }));
+    }
+    txs.push(
+      db.tx.logbookEntries[entry.id].update({ updatedAt: nowIso() }),
+      ...buildLogbookCreatorUpdateNotifications(
+        entry,
+        profile,
+        allProfiles,
+        note,
+        defs,
+      ),
+    );
+    try {
+      await db.transact(txs as Parameters<typeof db.transact>[0]);
+      setCreatorUpdateEntryId(null);
+      setCreatorNote('');
+      setCreatorMedia(null);
+      setShowCreatorCamera(false);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.logbook.saveFailed);
+    }
+  }
+
+  function configBannerLabel(state: IssueConfigurationState): string {
+    if (state === 'missing_assignment') return t.logbook.configMissingAssignment;
+    if (state === 'missing_deadline') return t.logbook.configMissingDeadline;
+    if (state === 'missing_resolution_requirement') return t.logbook.configMissingRequirement;
+    return '';
+  }
+
   const tabs: { id: FilterTab; label: string }[] = [
     { id: 'all', label: t.common.all },
     { id: 'my-assigned', label: t.logbook.myAssigned },
@@ -593,9 +844,7 @@ export default function LogbookPage({
     { id: 'resolved', label: t.logbook.statusResolved },
   ];
 
-  const proofEntry = proofEntryId
-    ? allEntries.find((e) => e.id === proofEntryId) || null
-    : null;
+  const proofEntry = activeProofEntry;
   const proofStore = proofEntry
     ? stores.find((s) => s.id === proofEntry.storeId) || proofEntry.store
     : null;
@@ -609,7 +858,12 @@ export default function LogbookPage({
       {successMsg && (
         <div className="card" style={{ borderColor: 'var(--success-border, #16a34a)' }}>
           <p style={{ margin: 0 }}>{successMsg}</p>
-          <button className="secondary" style={{ marginTop: 8 }} type="button" onClick={() => setSuccessMsg('')}>
+          {notifySoftFail && (
+            <button className="secondary" style={{ marginTop: 8 }} type="button" onClick={() => void retryNotify()}>
+              {t.logbook.retryNotify}
+            </button>
+          )}
+          <button className="secondary" style={{ marginTop: 8, marginLeft: notifySoftFail ? 8 : 0 }} type="button" onClick={() => setSuccessMsg('')}>
             {t.common.cancel}
           </button>
         </div>
@@ -859,21 +1113,26 @@ export default function LogbookPage({
       {proofEntry && (
         <div className="card" id="logbook-resolution-panel">
           <h2>{t.logbook.submitResolution}</h2>
-          <div className="small" style={{ marginBottom: 8 }}>
+          <div
+            className="small"
+            style={{
+              marginBottom: 12,
+              padding: 10,
+              border: '1px solid var(--border, #e5e7eb)',
+              borderRadius: 8,
+              background: 'var(--surface-muted, #f8fafc)',
+            }}
+          >
+            <div>
+              <strong>{t.logbook.activeIssueSummary}</strong>
+            </div>
+            <div>{proofEntry.content}</div>
             <div>
               <strong>{t.logbook.resolutionProofType}:</strong> {proofTypeLabel(proofType)}
-            </div>
-            {proofEntry.dueAt && (
-              <div>
-                <strong>{t.logbook.dueAt}:</strong>{' '}
-                {new Date(proofEntry.dueAt).toLocaleString()}
-              </div>
-            )}
-            <div>
-              <strong>{t.logbook.assigneeRole}:</strong> {proofEntry.assigneeRole}
-            </div>
-            <div>
-              <strong>{t.common.severity}:</strong> {proofEntry.severity}
+              {proofEntry.dueAt
+                ? ` · ${t.logbook.dueAt}: ${new Date(proofEntry.dueAt).toLocaleString()}`
+                : ` · ${t.logbook.noDeadline}`}
+              {` · ${t.logbook.assigneeRole}: ${proofEntry.assigneeRole || '—'}`}
             </div>
             {(proofStore || proofEntry.store) && (
               <div>
@@ -882,7 +1141,6 @@ export default function LogbookPage({
               </div>
             )}
           </div>
-          <p style={{ margin: '0 0 8px' }}>{proofEntry.content}</p>
           {proofEntry.resolutionRequirement?.trim() && (
             <p className="small" style={{ marginBottom: 12 }}>
               <strong>{t.logbook.resolutionRequirement}:</strong>{' '}
@@ -981,6 +1239,7 @@ export default function LogbookPage({
                       logbookEntryId: proofEntry.id,
                       storeId: proofEntry.storeId,
                       content: proofEntry.content,
+                      mediaPurpose: 'resolution_proof',
                     }}
                     profile={profile}
                     proofType={proofType}
@@ -1031,6 +1290,10 @@ export default function LogbookPage({
         const entryEvents = allEvents.filter((ev) => ev.logbookEntryId === entry.id);
         const entryProofType = resolveLogbookProofType(entry);
         const correction = hasCorrectionFeedback(entry);
+        const configState = getIssueConfigurationState(entry);
+        const sourceMedia = resolveSourceMedia(entry);
+        const resolutionMedia = resolveResolutionMedia(entry);
+        const showSetup = type === 'issue' && configState !== 'ready' && canEditLogbookAssignment(profile, entry, defs);
 
         return (
           <div
@@ -1076,6 +1339,83 @@ export default function LogbookPage({
                 </span>
               )}
             </div>
+
+            {type === 'issue' && configState !== 'ready' && (
+              <div className="badge warn" style={{ display: 'block', marginTop: 8, padding: 8 }}>
+                {configBannerLabel(configState)}
+                {showSetup && (
+                  <div style={{ marginTop: 6 }}>
+                    <button type="button" className="secondary" onClick={() => openSetup(entry)}>
+                      {t.logbook.completeIssueSetup}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {setupEntryId === entry.id && (
+              <div style={{ marginTop: 10, padding: 10, border: '1px solid var(--border, #e5e7eb)' }}>
+                <div className="grid two">
+                  <label>
+                    {t.logbook.assigneeRole}
+                    <select
+                      value={setupForm.assigneeRole}
+                      onChange={(e) => setSetupForm({ ...setupForm, assigneeRole: e.target.value })}
+                    >
+                      {LOGBOOK_ASSIGNEE_ROLES.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    {t.logbook.dueAt}
+                    <input
+                      type="datetime-local"
+                      value={setupForm.dueAt}
+                      onChange={(e) => setSetupForm({ ...setupForm, dueAt: e.target.value })}
+                    />
+                  </label>
+                  <label>
+                    {t.logbook.resolutionProofType}
+                    <select
+                      value={setupForm.resolutionProofType}
+                      onChange={(e) =>
+                        setSetupForm({
+                          ...setupForm,
+                          resolutionProofType: e.target.value as ProofType,
+                        })
+                      }
+                    >
+                      {PROOF_TYPES.map((p) => (
+                        <option key={p} value={p}>
+                          {proofTypeLabel(p)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <label style={{ display: 'block', marginTop: 8 }}>
+                  {t.logbook.resolutionRequirement}
+                  <textarea
+                    value={setupForm.resolutionRequirement}
+                    onChange={(e) =>
+                      setSetupForm({ ...setupForm, resolutionRequirement: e.target.value })
+                    }
+                  />
+                </label>
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <button type="button" onClick={() => void saveSetup(entry)}>
+                    {t.logbook.saveSetup}
+                  </button>
+                  <button type="button" className="secondary" onClick={() => setSetupEntryId(null)}>
+                    {t.common.cancel}
+                  </button>
+                </div>
+              </div>
+            )}
+
             <p style={{ margin: '8px 0 0' }}>{entry.content}</p>
             {entry.resolutionRequirement?.trim() && type === 'issue' && (
               <p className="small" style={{ margin: '4px 0 0' }}>
@@ -1084,7 +1424,11 @@ export default function LogbookPage({
             )}
             <p className="small" style={{ margin: '4px 0 0' }}>
               {entry.date} · {entry.createdAt?.slice(11, 16)}
-              {entry.dueAt ? ` · ${t.logbook.dueAt}: ${new Date(entry.dueAt).toLocaleString()}` : ''}
+              {entry.dueAt
+                ? ` · ${t.logbook.dueAt}: ${new Date(entry.dueAt).toLocaleString()}`
+                : type === 'issue'
+                  ? ` · ${t.logbook.noDeadline}`
+                  : ''}
             </p>
 
             {correction && (
@@ -1094,10 +1438,18 @@ export default function LogbookPage({
               </div>
             )}
 
-            {entry.photo?.url && (
+            {sourceMedia.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div className="small">{t.logbook.sourceMedia}</div>
+                {sourceMedia.map((m) => (
+                  <ProofPhoto key={m.id} media={{ id: m.id, url: m.url }} />
+                ))}
+              </div>
+            )}
+            {resolutionMedia?.url && (
               <div style={{ marginTop: 8 }}>
                 <div className="small">{t.logbook.resolutionProof}</div>
-                <ProofPhoto media={{ id: entry.photo.id, url: entry.photo.url }} />
+                <ProofPhoto media={{ id: resolutionMedia.id, url: resolutionMedia.url }} />
               </div>
             )}
             {type === 'issue' && (entry.resolutionNote || entry.resolutionNumber || entry.resolutionChecked) && (
@@ -1113,6 +1465,96 @@ export default function LogbookPage({
                     {t.logbook.resolutionNoteOptional}: {entry.resolutionNote}
                   </div>
                 )}
+              </div>
+            )}
+
+            {creatorUpdateEntryId === entry.id && entryStore && (
+              <div style={{ marginTop: 10, padding: 10, border: '1px solid var(--border, #e5e7eb)' }}>
+                <label style={{ display: 'block' }}>
+                  {t.logbook.creatorUpdateNote}
+                  <textarea
+                    value={creatorNote}
+                    onChange={(e) => setCreatorNote(e.target.value)}
+                    style={{ marginTop: 4 }}
+                  />
+                </label>
+                {creatorMedia ? (
+                  <div style={{ marginTop: 8 }}>
+                    <ProofPhoto
+                      media={{
+                        id: creatorMedia.fileId,
+                        url: creatorMedia.url,
+                        fileName: creatorMedia.fileName,
+                        mimeType: creatorMedia.mimeType,
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="secondary"
+                      style={{ marginTop: 6 }}
+                      onClick={() => setCreatorMedia(null)}
+                    >
+                      {t.logbook.removeProof}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="secondary"
+                    style={{ marginTop: 8 }}
+                    onClick={() => setShowCreatorCamera(true)}
+                  >
+                    {t.logbook.addSourceMedia}
+                  </button>
+                )}
+                {showCreatorCamera && (
+                  <div style={{ marginTop: 8 }}>
+                    <TimemarkCamera
+                      store={entryStore}
+                      itemTitle={`Logbook update · ${entry.content.slice(0, 40)}`}
+                      reportDate={entry.date}
+                      proofContext={{
+                        type: 'logbook',
+                        logbookEntryId: entry.id,
+                        storeId: entry.storeId,
+                        content: entry.content,
+                        mediaPurpose: 'source_context',
+                      }}
+                      profile={profile}
+                      proofType="photo"
+                      existingMedia={[]}
+                      onCapture={(media: UploadedMedia) => {
+                        setCreatorMedia(media);
+                        setShowCreatorCamera(false);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="secondary"
+                      style={{ marginTop: 8 }}
+                      onClick={() => setShowCreatorCamera(false)}
+                    >
+                      {t.common.cancel}
+                    </button>
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <button type="button" onClick={() => void saveCreatorUpdate(entry)}>
+                    {t.logbook.saveCreatorUpdate}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      setCreatorUpdateEntryId(null);
+                      setCreatorNote('');
+                      setCreatorMedia(null);
+                      setShowCreatorCamera(false);
+                    }}
+                  >
+                    {t.common.cancel}
+                  </button>
+                </div>
               </div>
             )}
 
@@ -1150,13 +1592,36 @@ export default function LogbookPage({
                       {t.logbook.reopen}
                     </button>
                   )}
-                {canEditLogbookAssignment(profile, entry, defs) && status !== 'resolved' && (
+                {canEditLogbookAssignment(profile, entry, defs) && status !== 'resolved' && status !== 'recalled' && (
                   <button
                     type="button"
                     className="secondary"
                     onClick={() => void changeAssignment(entry)}
                   >
                     {t.logbook.changeAssignment}
+                  </button>
+                )}
+                {canAddCreatorUpdate(profile, entry, defs) && (
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      setCreatorUpdateEntryId(entry.id);
+                      setCreatorNote('');
+                      setCreatorMedia(null);
+                    }}
+                  >
+                    {t.logbook.addUpdate}
+                  </button>
+                )}
+                {canRecallLogbookIssue(profile, entry, defs) && (
+                  <button type="button" className="secondary" onClick={() => void recallIssue(entry)}>
+                    {t.logbook.recall}
+                  </button>
+                )}
+                {canHardDeleteLogbookIssue(profile, entry, defs) && (
+                  <button type="button" className="secondary" onClick={() => void hardDeleteIssue(entry)}>
+                    {t.logbook.hardDelete}
                   </button>
                 )}
               </div>
@@ -1190,7 +1655,7 @@ export default function LogbookPage({
         );
       })}
 
-      {!visibleEntries.length && !proofEntry && (
+      {!activeProofEntry && !visibleEntries.length && (
         <div className="card">
           <p>{t.logbook.noEntries}</p>
         </div>

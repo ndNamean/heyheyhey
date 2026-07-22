@@ -9,11 +9,14 @@ import {
   canEditMaster,
   canReview,
   canUseOpsTools,
+  isOwner,
   userCanAccessStore,
 } from './roles';
 import type {
+  IssueConfigurationState,
   LogbookEntry,
   LogbookEntryType,
+  LogbookFileRef,
   LogbookIssueStatus,
   Profile,
   Role,
@@ -27,6 +30,7 @@ export const LOGBOOK_ISSUE_STATUSES: LogbookIssueStatus[] = [
   'in_progress',
   'waiting_approval',
   'resolved',
+  'recalled',
 ];
 
 export const LOGBOOK_HIGHLIGHT_KEY = 'logbookHighlightEntryId';
@@ -58,11 +62,16 @@ export function resolveLogbookIssueStatus(
     raw === 'open' ||
     raw === 'in_progress' ||
     raw === 'waiting_approval' ||
-    raw === 'resolved'
+    raw === 'resolved' ||
+    raw === 'recalled'
   ) {
     return raw;
   }
   return 'open';
+}
+
+export function isIssueActiveQueueStatus(status: LogbookIssueStatus | ''): boolean {
+  return status === 'open' || status === 'in_progress' || status === 'waiting_approval';
 }
 
 export function isIssueOverdue(
@@ -71,7 +80,7 @@ export function isIssueOverdue(
 ): boolean {
   if (!isLogbookIssue(entry)) return false;
   const status = resolveLogbookIssueStatus(entry);
-  if (status === 'resolved') return false;
+  if (status === 'resolved' || status === 'recalled') return false;
   const dueAt = (entry.dueAt ?? '').trim();
   if (!dueAt) return false;
   const dueMs = new Date(dueAt).getTime();
@@ -86,13 +95,30 @@ export function isIssueDueSoon(
 ): boolean {
   if (!isLogbookIssue(entry)) return false;
   const status = resolveLogbookIssueStatus(entry);
-  if (status === 'resolved') return false;
+  if (status === 'resolved' || status === 'recalled') return false;
   if (isIssueOverdue(entry, now)) return false;
   const dueAt = (entry.dueAt ?? '').trim();
   if (!dueAt) return false;
   const dueMs = new Date(dueAt).getTime();
   if (Number.isNaN(dueMs)) return false;
   return dueMs - now <= windowMs && dueMs >= now;
+}
+
+export function getIssueConfigurationState(
+  entry: Pick<
+    LogbookEntry,
+    'entryType' | 'isAnnouncement' | 'assigneeRole' | 'dueAt' | 'resolutionProofType' | 'resolutionRequirement'
+  >,
+): IssueConfigurationState {
+  if (!isLogbookIssue(entry)) return 'ready';
+  if (!(entry.assigneeRole ?? '').trim()) return 'missing_assignment';
+  if (!(entry.dueAt ?? '').trim()) return 'missing_deadline';
+  const proof = (entry.resolutionProofType ?? '').trim();
+  const req = (entry.resolutionRequirement ?? '').trim();
+  // Proof type defaults to photo; only flag when both proof + requirement empty is not enough —
+  // requirement text is optional guidance, but missing assignee/due block Staff actions.
+  if (!proof && !req) return 'missing_resolution_requirement';
+  return 'ready';
 }
 
 export function canOpenLogbook(
@@ -148,6 +174,9 @@ export function canActOnAssignedIssue(
 ): boolean {
   if (!isLogbookIssue(entry)) return false;
   if (profile.approvalStatus !== 'approved') return false;
+  const status = resolveLogbookIssueStatus(entry);
+  if (status === 'recalled' || status === 'resolved') return false;
+  if (getIssueConfigurationState(entry) === 'missing_assignment') return false;
   return profileMatchesAssignee(profile, entry, defs);
 }
 
@@ -169,6 +198,7 @@ export function canReviewLogbookIssue(
   // Lower rank number = higher authority
   if (rankOf(profile.role, defs) >= rankOf(assigneeRole, defs)) return false;
 
+  // Block only when reviewer is the resolution submitter (not author identity)
   const submitter = (entry.resolutionSubmittedByUserId ?? '').trim();
   if (submitter && submitter === profile.userId) return false;
 
@@ -181,6 +211,7 @@ export function canEditLogbookAssignment(
   defs: RoleDefinition[],
 ): boolean {
   if (!isLogbookIssue(entry)) return false;
+  if (resolveLogbookIssueStatus(entry) === 'recalled') return false;
   if (canEditMaster(profile.role, defs)) return true;
   if (entry.authorUserId === profile.userId) return true;
   // Store manager+ with store access
@@ -188,6 +219,94 @@ export function canEditLogbookAssignment(
     return userCanAccessStore(profile.role, profileStoreIds(profile), entry.storeId, defs);
   }
   return false;
+}
+
+export function canAddCreatorUpdate(
+  profile: Profile,
+  entry: LogbookEntry,
+  defs: RoleDefinition[],
+): boolean {
+  if (!isLogbookIssue(entry)) return false;
+  const status = resolveLogbookIssueStatus(entry);
+  if (status === 'recalled' || status === 'resolved') return false;
+  return canEditLogbookAssignment(profile, entry, defs);
+}
+
+/** Untouched open issue: no start/submit/review/media beyond create. */
+export function isPristineLogbookIssue(entry: LogbookEntry): boolean {
+  if (!isLogbookIssue(entry)) return false;
+  if (resolveLogbookIssueStatus(entry) !== 'open') return false;
+  if ((entry.startedAt ?? '').trim()) return false;
+  if ((entry.startedByUserId ?? '').trim()) return false;
+  if ((entry.resolutionSubmittedAt ?? '').trim()) return false;
+  if ((entry.resolutionSubmittedByUserId ?? '').trim()) return false;
+  if ((entry.reviewedAt ?? '').trim()) return false;
+  if ((entry.reviewedByUserId ?? '').trim()) return false;
+  if ((entry.resolvedAt ?? '').trim()) return false;
+  if ((entry.reopenedAt ?? '').trim()) return false;
+  if ((entry.ackUserIdsJson ?? '[]') !== '[]' && (entry.ackUserIdsJson ?? '').trim() !== '[]') {
+    try {
+      const ids = JSON.parse(entry.ackUserIdsJson || '[]') as unknown[];
+      if (Array.isArray(ids) && ids.length > 0) return false;
+    } catch {
+      /* ignore */
+    }
+  }
+  if (entry.photo?.id) return false;
+  if (entry.resolutionMedia?.id) return false;
+  if ((entry.sourceMedia ?? []).length > 0) return false;
+  return true;
+}
+
+export function canRecallLogbookIssue(
+  profile: Profile,
+  entry: LogbookEntry,
+  defs: RoleDefinition[],
+): boolean {
+  if (!isLogbookIssue(entry)) return false;
+  if (profile.approvalStatus !== 'approved') return false;
+  const status = resolveLogbookIssueStatus(entry);
+  if (status === 'recalled' || status === 'resolved') return false;
+
+  // Staff: no recall
+  if (profile.role === 'staff') return false;
+
+  const elevated =
+    isOwner(profile.role) ||
+    canEditMaster(profile.role, defs) ||
+    profile.role === 'areaManager' ||
+    profile.role === 'admin';
+
+  if (elevated) {
+    return status === 'open' || status === 'in_progress' || status === 'waiting_approval';
+  }
+
+  // Author: recall only untouched open
+  if (entry.authorUserId === profile.userId) {
+    return status === 'open' && isPristineLogbookIssue(entry);
+  }
+
+  return false;
+}
+
+export function canHardDeleteLogbookIssue(
+  profile: Profile,
+  entry: LogbookEntry,
+  _defs?: RoleDefinition[],
+): boolean {
+  if (!isLogbookIssue(entry)) return false;
+  if (!isOwner(profile.role)) return false;
+  return isPristineLogbookIssue(entry);
+}
+
+export function canSubmitResolutionNow(
+  profile: Profile,
+  entry: LogbookEntry,
+  defs: RoleDefinition[],
+): boolean {
+  if (!canActOnAssignedIssue(profile, entry, defs)) return false;
+  const status = resolveLogbookIssueStatus(entry);
+  return status === 'open' || status === 'in_progress';
 }
 
 export function defaultLogbookFilterTab(
@@ -223,6 +342,7 @@ export function emptyLogbookIssueFields() {
     resolutionNote: '',
     resolutionSubmittedAt: '',
     resolutionSubmittedByUserId: '',
+    resolutionAttemptId: '',
     resolvedAt: '',
     resolvedByUserId: '',
     reviewedAt: '',
@@ -231,6 +351,9 @@ export function emptyLogbookIssueFields() {
     reopenedAt: '',
     reopenedByUserId: '',
     reopenReason: '',
+    recalledAt: '',
+    recalledByUserId: '',
+    recallReason: '',
     dueSoonNotifiedAt: '',
     overdueNotifiedAt: '',
   };
@@ -257,6 +380,7 @@ export function issueCreateFields(
     resolutionNote: '',
     resolutionSubmittedAt: '',
     resolutionSubmittedByUserId: '',
+    resolutionAttemptId: '',
     resolvedAt: '',
     resolvedByUserId: '',
     reviewedAt: '',
@@ -265,6 +389,9 @@ export function issueCreateFields(
     reopenedAt: '',
     reopenedByUserId: '',
     reopenReason: '',
+    recalledAt: '',
+    recalledByUserId: '',
+    recallReason: '',
     dueSoonNotifiedAt: '',
     overdueNotifiedAt: '',
   };
@@ -284,7 +411,8 @@ export function isAssignedUnresolvedIssue(
   defs: RoleDefinition[],
 ): boolean {
   if (!isLogbookIssue(entry)) return false;
-  if (resolveLogbookIssueStatus(entry) === 'resolved') return false;
+  const status = resolveLogbookIssueStatus(entry);
+  if (status === 'resolved' || status === 'recalled') return false;
   return profileMatchesAssignee(profile, entry, defs);
 }
 
@@ -326,7 +454,7 @@ export function countAssignedIssueBreakdown(
     if (!isLogbookIssue(e)) continue;
     if (!profileMatchesAssignee(profile, e, defs)) continue;
     const status = resolveLogbookIssueStatus(e);
-    if (status === 'resolved') continue;
+    if (status === 'resolved' || status === 'recalled') continue;
     if (status === 'open') counters.open += 1;
     if (status === 'in_progress') {
       counters.inProgress += 1;
@@ -336,4 +464,37 @@ export function countAssignedIssueBreakdown(
     if (isIssueOverdue(e, now)) counters.overdue += 1;
   }
   return counters;
+}
+
+export function resolveSourceMedia(entry: LogbookEntry): LogbookFileRef[] {
+  const linked = entry.sourceMedia ?? [];
+  if (linked.length) return linked;
+  // Legacy photo without resolution submit → treat as source/context
+  if (entry.photo?.id && !(entry.resolutionSubmittedAt ?? '').trim()) {
+    return [entry.photo];
+  }
+  return [];
+}
+
+export function resolveResolutionMedia(entry: LogbookEntry): LogbookFileRef | null {
+  if (entry.resolutionMedia?.id) return entry.resolutionMedia;
+  // Legacy photo after resolution submit → resolution proof
+  if (entry.photo?.id && (entry.resolutionSubmittedAt ?? '').trim()) {
+    return entry.photo;
+  }
+  return null;
+}
+
+export function logSubmitStepFailure(info: {
+  entryId: string;
+  actorRole: string;
+  attemptedStep: string;
+  message: string;
+}) {
+  console.error('[logbook-submit]', {
+    entryId: info.entryId,
+    actorRole: info.actorRole,
+    attemptedStep: info.attemptedStep,
+    message: info.message,
+  });
 }

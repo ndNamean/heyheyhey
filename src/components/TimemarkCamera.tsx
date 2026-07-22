@@ -47,7 +47,14 @@ import type { CameraOptions, Profile, ProofWeather, Store, UploadedMedia } from 
 
 export type ProofContext =
   | { type: 'report'; reportId: string; reportResponseId: string }
-  | { type: 'logbook'; logbookEntryId: string; storeId: string; content: string };
+  | {
+      type: 'logbook';
+      logbookEntryId: string;
+      storeId: string;
+      content: string;
+      /** source_context | resolution_proof — stored in upload metadata only */
+      mediaPurpose?: 'source_context' | 'resolution_proof';
+    };
 
 interface Props {
   store: Store;

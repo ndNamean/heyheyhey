@@ -619,6 +619,68 @@ export function buildLogbookIssueReopenedNotifications(
   );
 }
 
+export function buildLogbookCreatorUpdateNotifications(
+  entry: LogbookEntry,
+  actor: Profile,
+  allProfiles: Profile[],
+  note: string,
+  defs?: RoleDefinition[],
+) {
+  const recipients = getLogbookAssigneeRecipients(entry, allProfiles, actor.userId, defs);
+  const body = [
+    'Logbook issue updated by creator',
+    `Issue: ${issueSnippet(entry)}`,
+    note.trim() ? `Update: ${note.trim()}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  return recipients.map((uid) =>
+    buildLogbookNotificationTx(
+      uid,
+      'logbook_creator_update',
+      'Logbook issue updated',
+      body,
+      actor,
+      entry,
+      resolveLogbookIssueStatus(entry) || 'open',
+    ),
+  );
+}
+
+export function buildLogbookIssueRecalledNotifications(
+  entry: LogbookEntry,
+  actor: Profile,
+  allProfiles: Profile[],
+  reason: string,
+  defs?: RoleDefinition[],
+) {
+  const recipients = new Set([
+    ...getLogbookAssigneeRecipients(entry, allProfiles, actor.userId, defs),
+    ...getLogbookStoreManagerRecipients(entry.storeId, allProfiles, actor.userId, defs),
+  ]);
+  if (entry.authorUserId && entry.authorUserId !== actor.userId) {
+    recipients.add(entry.authorUserId);
+  }
+  const body = [
+    'Logbook issue recalled',
+    `Issue: ${issueSnippet(entry)}`,
+    reason.trim() ? `Reason: ${reason.trim()}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+  return [...recipients].map((uid) =>
+    buildLogbookNotificationTx(
+      uid,
+      'logbook_issue_recalled',
+      'Logbook issue recalled',
+      body,
+      actor,
+      entry,
+      'recalled',
+    ),
+  );
+}
+
 export function isLogbookNotificationType(type: string): boolean {
   return type.startsWith('logbook_');
 }

@@ -25,9 +25,12 @@ import { formatMediaCaptureTime } from '../lib/proofTime';
 import ReportTimeline, { LogbookTimeline } from '../components/ReportTimeline';
 import {
   canReviewLogbookIssue,
+  getIssueConfigurationState,
   isIssueOverdue,
   isLogbookIssue,
   resolveLogbookIssueStatus,
+  resolveResolutionMedia,
+  resolveSourceMedia,
 } from '../lib/logbook';
 import {
   proofTypeLabel,
@@ -66,7 +69,7 @@ export default function ReviewPage({ profile }: Props) {
       responses: { media: { file: {} } },
       store: {},
     },
-    logbookEntries: { store: {}, photo: {} },
+    logbookEntries: { store: {}, photo: {}, sourceMedia: {}, resolutionMedia: {} },
     profiles: { stores: {} },
     reviewEvents: {},
   });
@@ -299,6 +302,9 @@ export default function ReviewPage({ profile }: Props) {
           );
           const creator = resolveActorDisplay(entry.authorUserId, undefined, allProfiles);
           const entryEvents = allEvents.filter((e) => e.logbookEntryId === entry.id);
+          const sourceMedia = resolveSourceMedia(entry);
+          const resolutionMedia = resolveResolutionMedia(entry);
+          const configState = getIssueConfigurationState(entry);
           return (
             <div className="card" key={entry.id}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -312,12 +318,23 @@ export default function ReviewPage({ profile }: Props) {
               <p style={{ margin: '8px 0 0' }}>{entry.content}</p>
               <p className="small">
                 {entry.store?.code || entry.storeId} · {t.common.severity}: {entry.severity} ·{' '}
-                {t.logbook.assigneeRole}: {entry.assigneeRole}
+                {t.logbook.assigneeRole}: {entry.assigneeRole || '—'}
               </p>
               <p className="small">
                 {t.review.submittedBy} {creator}
-                {entry.dueAt ? ` · ${t.logbook.dueAt}: ${new Date(entry.dueAt).toLocaleString()}` : ''}
+                {entry.dueAt
+                  ? ` · ${t.logbook.dueAt}: ${new Date(entry.dueAt).toLocaleString()}`
+                  : ` · ${t.logbook.noDeadline}`}
               </p>
+              {configState !== 'ready' && (
+                <p className="small" style={{ color: 'var(--warn, #b45309)' }}>
+                  {configState === 'missing_assignment'
+                    ? t.logbook.configMissingAssignment
+                    : configState === 'missing_deadline'
+                      ? t.logbook.configMissingDeadline
+                      : t.logbook.configMissingRequirement}
+                </p>
+              )}
               {entry.resolutionRequirement?.trim() && (
                 <p className="small">
                   <strong>{t.logbook.resolutionRequirement}:</strong> {entry.resolutionRequirement}
@@ -327,6 +344,9 @@ export default function ReviewPage({ profile }: Props) {
                 {t.logbook.resolvedBySubmitter}: {submitter}
                 {entry.resolutionSubmittedAt
                   ? ` · ${new Date(entry.resolutionSubmittedAt).toLocaleString()}`
+                  : ''}
+                {entry.resolutionAttemptId
+                  ? ` · attempt ${entry.resolutionAttemptId.slice(0, 8)}`
                   : ''}
               </p>
               {entry.resolutionChecked && (
@@ -344,10 +364,18 @@ export default function ReviewPage({ profile }: Props) {
                   <strong>{t.common.note}:</strong> {entry.resolutionNote}
                 </p>
               )}
-              {entry.photo?.url && (
+              {sourceMedia.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <div className="small">{t.logbook.sourceMedia}</div>
+                  {sourceMedia.map((m) => (
+                    <ProofPhoto key={m.id} media={{ id: m.id, url: m.url }} />
+                  ))}
+                </div>
+              )}
+              {resolutionMedia?.url && (
                 <div style={{ marginTop: 8 }}>
                   <div className="small">{t.logbook.resolutionProof}</div>
-                  <ProofPhoto media={{ id: entry.photo.id, url: entry.photo.url }} />
+                  <ProofPhoto media={{ id: resolutionMedia.id, url: resolutionMedia.url }} />
                 </div>
               )}
               {entryEvents.length > 0 && (

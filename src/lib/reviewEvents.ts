@@ -243,6 +243,45 @@ export function buildLogbookAcknowledgedEvent(
   });
 }
 
+export function buildLogbookCreatorUpdateEvent(
+  entry: LogbookEntry,
+  profile: Profile,
+  note: string,
+  statusAfter: string,
+  previousStatus: string,
+  createdAt?: string,
+) {
+  return createLogbookEventTx(
+    logbookActorBase(entry.id, entry.storeId, profile, createdAt),
+    'creator_update',
+    {
+      statusAfter,
+      previousStatus,
+      itemTitle: entry.content.slice(0, 80),
+      note,
+    },
+  );
+}
+
+export function buildLogbookIssueRecalledEvent(
+  entry: LogbookEntry,
+  profile: Profile,
+  reason: string,
+  previousStatus: string,
+  createdAt?: string,
+) {
+  return createLogbookEventTx(
+    logbookActorBase(entry.id, entry.storeId, profile, createdAt),
+    'issue_recalled',
+    {
+      statusAfter: 'recalled',
+      previousStatus,
+      itemTitle: entry.content.slice(0, 80),
+      note: reason,
+    },
+  );
+}
+
 export function buildReportSubmittedEvents(
   reportId: string,
   storeId: string,

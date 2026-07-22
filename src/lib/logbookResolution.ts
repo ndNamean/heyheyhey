@@ -59,6 +59,17 @@ export function emptyResolutionDraft(entry?: LogbookEntry): LogbookResolutionDra
   };
 }
 
+/** Same attempt already committed (Stage A idempotency). */
+export function isSameResolutionAttempt(
+  entry: Pick<LogbookEntry, 'resolutionAttemptId' | 'resolutionSubmittedAt' | 'status'>,
+  attemptId: string,
+): boolean {
+  const existing = (entry.resolutionAttemptId ?? '').trim();
+  if (!existing || !attemptId || existing !== attemptId) return false;
+  const status = (entry.status ?? '').trim();
+  return status === 'waiting_approval' && Boolean((entry.resolutionSubmittedAt ?? '').trim());
+}
+
 export {
   needsTick,
   needsMedia,

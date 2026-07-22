@@ -46,10 +46,12 @@ export function filterLogbookIssues(
     storeId?: string;
     fromYmd?: string;
     toYmd?: string;
+    includeRecalled?: boolean;
   } = {},
 ): LogbookEntry[] {
   return entries.filter((e) => {
     if (!isLogbookIssue(e)) return false;
+    if (!opts.includeRecalled && resolveLogbookIssueStatus(e) === 'recalled') return false;
     if (opts.storeId && opts.storeId !== 'all' && e.storeId !== opts.storeId) return false;
     if (opts.fromYmd && e.date < opts.fromYmd) return false;
     if (opts.toYmd && e.date > opts.toYmd) return false;
@@ -66,8 +68,11 @@ export function countLogbookIssues(
   let waitingApproval = 0;
   let overdue = 0;
   let resolved = 0;
+  let activeTotal = 0;
   for (const e of issues) {
     const status = resolveLogbookIssueStatus(e);
+    if (status === 'recalled') continue;
+    activeTotal += 1;
     if (status === 'open') open += 1;
     else if (status === 'in_progress') inProgress += 1;
     else if (status === 'waiting_approval') waitingApproval += 1;
@@ -80,7 +85,7 @@ export function countLogbookIssues(
     waitingApproval,
     overdue,
     resolved,
-    total: issues.length,
+    total: activeTotal,
   };
 }
 

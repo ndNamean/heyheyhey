@@ -538,7 +538,26 @@ export interface ClockEvent {
 
 export type LogbookEntryType = 'note' | 'announcement' | 'issue';
 
-export type LogbookIssueStatus = 'open' | 'in_progress' | 'waiting_approval' | 'resolved';
+export type LogbookIssueStatus =
+  | 'open'
+  | 'in_progress'
+  | 'waiting_approval'
+  | 'resolved'
+  | 'recalled';
+
+export type LogbookMediaPurpose = 'source_context' | 'resolution_proof';
+
+export type IssueConfigurationState =
+  | 'ready'
+  | 'missing_assignment'
+  | 'missing_deadline'
+  | 'missing_resolution_requirement';
+
+export interface LogbookFileRef {
+  id: string;
+  url: string;
+  path?: string;
+}
 
 export interface LogbookEntry {
   id: string;
@@ -566,6 +585,7 @@ export interface LogbookEntry {
   resolutionNote?: string;
   resolutionSubmittedAt?: string;
   resolutionSubmittedByUserId?: string;
+  resolutionAttemptId?: string;
   resolvedAt?: string;
   resolvedByUserId?: string;
   reviewedAt?: string;
@@ -574,10 +594,16 @@ export interface LogbookEntry {
   reopenedAt?: string;
   reopenedByUserId?: string;
   reopenReason?: string;
+  recalledAt?: string;
+  recalledByUserId?: string;
+  recallReason?: string;
   dueSoonNotifiedAt?: string;
   overdueNotifiedAt?: string;
   store?: Store;
-  photo?: { id: string; url: string };
+  /** Legacy single photo link — interpret via resolveLogbookMedia helpers */
+  photo?: LogbookFileRef;
+  sourceMedia?: LogbookFileRef[];
+  resolutionMedia?: LogbookFileRef;
 }
 
 export type ReviewEventType =
@@ -596,6 +622,8 @@ export type ReviewEventType =
   | 'resolution_rejected'
   | 'issue_reopened'
   | 'issue_resolved'
+  | 'issue_recalled'
+  | 'creator_update'
   | 'acknowledged';
 
 export type ReviewEventTargetType = 'report' | 'logbook';

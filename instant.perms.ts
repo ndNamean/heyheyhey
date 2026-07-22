@@ -346,6 +346,8 @@ const rules = {
   },
 
   // ── Logbook entries ───────────────────────────────────────────────────────
+  // Staff/assignees may only touch lifecycle fields + resolution/source media links.
+  // Resolution-submitted inbox rows are created via Admin SDK (api/logbook-notify).
   logbookEntries: {
     allow: {
       view: 'isApproved',
@@ -356,11 +358,15 @@ const rules = {
       link: {
         store: 'isApproved',
         photo: 'isApproved',
+        resolutionMedia: 'isApproved',
+        sourceMedia: 'isApproved',
       },
       unlink: {
         store: 'isOwner',
         // Resubmit replaces proof — assignees/reviewers must unlink prior photo
         photo: 'isApproved',
+        resolutionMedia: 'isApproved',
+        sourceMedia: 'isApproved',
       },
     },
     bind: {
@@ -369,10 +375,10 @@ const rules = {
       onlyAckFields: "request.modifiedFields.all(f, f in ['ackUserIdsJson', 'updatedAt'])",
       canAckUpdate: 'isApproved && onlyAckFields',
       onlyIssueLifecycleFields:
-        "request.modifiedFields.all(f, f in ['status', 'startedAt', 'startedByUserId', 'resolutionNote', 'resolutionNumber', 'resolutionChecked', 'resolutionSubmittedAt', 'resolutionSubmittedByUserId', 'updatedAt'])",
+        "request.modifiedFields.all(f, f in ['status', 'startedAt', 'startedByUserId', 'resolutionNote', 'resolutionNumber', 'resolutionChecked', 'resolutionSubmittedAt', 'resolutionSubmittedByUserId', 'resolutionAttemptId', 'updatedAt'])",
       canIssueLifecycleUpdate: 'isApproved && onlyIssueLifecycleFields',
       onlyIssueReviewFields:
-        "request.modifiedFields.all(f, f in ['status', 'resolvedAt', 'resolvedByUserId', 'reviewedAt', 'reviewedByUserId', 'reviewNote', 'reopenedAt', 'reopenedByUserId', 'reopenReason', 'updatedAt', 'assigneeRole', 'dueAt', 'severity'])",
+        "request.modifiedFields.all(f, f in ['status', 'resolvedAt', 'resolvedByUserId', 'reviewedAt', 'reviewedByUserId', 'reviewNote', 'reopenedAt', 'reopenedByUserId', 'reopenReason', 'recalledAt', 'recalledByUserId', 'recallReason', 'updatedAt', 'assigneeRole', 'dueAt', 'severity', 'resolutionRequirement', 'resolutionProofType'])",
       canIssueReviewUpdate: 'canReview && onlyIssueReviewFields',
       onlyDueStampFields:
         "request.modifiedFields.all(f, f in ['dueSoonNotifiedAt', 'overdueNotifiedAt', 'updatedAt'])",
@@ -414,8 +420,9 @@ const rules = {
   },
 
   // ── Review feedback notifications ─────────────────────────────────────────
-  // isApproved create: assignment/due/overdue stamps may be written by assignees
-  // opening Logbook (not only canReview actors).
+  // Client create remains for assignment/due (canReview / approved). Resolution
+  // submitted notifications use Admin SDK (api/logbook-notify) so Staff submit
+  // Stage A never depends on notifications.create.
   notifications: {
     allow: {
       view: "isApproved && data.recipientUserId == auth.id",

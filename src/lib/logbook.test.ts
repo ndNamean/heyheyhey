@@ -1,14 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
   canActOnAssignedIssue,
+  canHardDeleteLogbookIssue,
   canOpenLogbook,
+  canRecallLogbookIssue,
   canReviewLogbookIssue,
+  canSubmitResolutionNow,
   canViewLogbookEntry,
+  getIssueConfigurationState,
   isIssueDueSoon,
   isIssueOverdue,
   isLogbookIssue,
+  isPristineLogbookIssue,
   resolveLogbookEntryType,
   resolveLogbookIssueStatus,
+  resolveResolutionMedia,
+  resolveSourceMedia,
 } from './logbook';
 import {
   computeLogbookIssueMetrics,
@@ -18,6 +25,7 @@ import {
 import {
   canSubmitResolutionDraft,
   hasCorrectionFeedback,
+  isSameResolutionAttempt,
   resolveLogbookProofType,
 } from './logbookResolution';
 import { defaultDefinitionsAsEntities } from './roleResolver';
@@ -82,11 +90,15 @@ function entry(partial: Partial<LogbookEntry>): LogbookEntry {
     resolutionNote: partial.resolutionNote,
     resolutionSubmittedAt: partial.resolutionSubmittedAt,
     resolutionSubmittedByUserId: partial.resolutionSubmittedByUserId,
+    resolutionAttemptId: partial.resolutionAttemptId,
     resolvedAt: partial.resolvedAt,
     resolvedByUserId: partial.resolvedByUserId,
     reviewedAt: partial.reviewedAt,
     reviewedByUserId: partial.reviewedByUserId,
     reviewNote: partial.reviewNote,
+    photo: partial.photo,
+    sourceMedia: partial.sourceMedia,
+    resolutionMedia: partial.resolutionMedia,
   };
 }
 
@@ -116,13 +128,36 @@ describe('issue overdue / due soon', () => {
     expect(isIssueDueSoon(e, now)).toBe(false);
   });
 
-  it('does not mark resolved as overdue', () => {
-    const e = entry({
-      entryType: 'issue',
-      status: 'resolved',
-      dueAt: '2026-07-21T10:00:00.000Z',
-    });
-    expect(isIssueOverdue(e, now)).toBe(false);
+  it('does not mark resolved or recalled as overdue', () => {
+    expect(
+      isIssueOverdue(
+        entry({
+          entryType: 'issue',
+          status: 'resolved',
+          dueAt: '2026-07-21T10:00:00.000Z',
+        }),
+        now,
+      ),
+    ).toBe(false);
+    expect(
+      isIssueOverdue(
+        entry({
+          entryType: 'issue',
+          status: 'recalled',
+          dueAt: '2026-07-21T10:00:00.000Z',
+        }),
+        now,
+      ),
+    ).toBe(false);
+  });
+
+  it('no overdue when dueAt missing', () => {
+    expect(
+      isIssueOverdue(
+        entry({ entryType: 'issue', status: 'open', dueAt: '' }),
+        now,
+      ),
+    ).toBe(false);
   });
 
   it('detects due soon within 2h', () => {
@@ -133,6 +168,42 @@ describe('issue overdue / due soon', () => {
     });
     expect(isIssueDueSoon(e, now)).toBe(true);
     expect(isIssueOverdue(e, now)).toBe(false);
+  });
+});
+
+describe('legacy configuration', () => {
+  it('flags missing assignment / deadline', () => {
+    expect(
+      getIssueConfigurationState(
+        entry({ entryType: 'issue', assigneeRole: '', dueAt: '2026-07-21T10:00:00.000Z' }),
+      ),
+    ).toBe('missing_assignment');
+    expect(
+      getIssueConfigurationState(
+        entry({ entryType: 'issue', assigneeRole: 'staff', dueAt: '' }),
+      ),
+    ).toBe('missing_deadline');
+    expect(
+      getIssueConfigurationState(
+        entry({
+          entryType: 'issue',
+          assigneeRole: 'staff',
+          dueAt: '2026-07-21T10:00:00.000Z',
+          resolutionProofType: 'photo',
+        }),
+      ),
+    ).toBe('ready');
+  });
+
+  it('blocks staff actions without assignee', () => {
+    const staff = profile({ userId: 's1', role: 'staff' });
+    const incomplete = entry({
+      entryType: 'issue',
+      status: 'open',
+      assigneeRole: '',
+      storeId: 'store-a',
+    });
+    expect(canActOnAssignedIssue(staff, incomplete, defs)).toBe(false);
   });
 });
 
@@ -203,6 +274,18 @@ describe('visibility and actions', () => {
     ).toBe(false);
   });
 
+  it('owner/author can approve Staff submitter when not the submitter', () => {
+    const ownerAuthor = profile({ userId: 'author', role: 'owner' });
+    const waiting = entry({
+      entryType: 'issue',
+      status: 'waiting_approval',
+      assigneeRole: 'staff',
+      authorUserId: 'author',
+      resolutionSubmittedByUserId: 's1',
+    });
+    expect(canReviewLogbookIssue(ownerAuthor, waiting, defs)).toBe(true);
+  });
+
   it('reviewer must outrank assigneeRole (lower rank number)', () => {
     const leaderIssue = entry({
       entryType: 'issue',
@@ -210,12 +293,106 @@ describe('visibility and actions', () => {
       assigneeRole: 'leader',
       resolutionSubmittedByUserId: 'x',
     });
-    // subleader rank is below leader? staff < subleader < leader < manager in authority
-    // rankOf: lower number = higher authority. leader reviews staff, not vice versa.
     const subleader = profile({ userId: 'sl', role: 'subleader' });
     const areaManager = profile({ userId: 'am', role: 'areaManager' });
     expect(canReviewLogbookIssue(subleader, leaderIssue, defs)).toBe(false);
     expect(canReviewLogbookIssue(areaManager, leaderIssue, defs)).toBe(true);
+  });
+});
+
+describe('recall and delete', () => {
+  it('author recalls only pristine open', () => {
+    const author = profile({ userId: 'author', role: 'manager' });
+    const pristine = entry({
+      entryType: 'issue',
+      status: 'open',
+      authorUserId: 'author',
+      assigneeRole: 'staff',
+    });
+    expect(isPristineLogbookIssue(pristine)).toBe(true);
+    expect(canRecallLogbookIssue(author, pristine, defs)).toBe(true);
+
+    const started = entry({
+      ...pristine,
+      startedAt: '2026-07-21T09:00:00.000Z',
+      startedByUserId: 's1',
+      status: 'in_progress',
+    });
+    expect(canRecallLogbookIssue(author, started, defs)).toBe(false);
+  });
+
+  it('owner/am can recall active statuses; staff cannot', () => {
+    const owner = profile({ userId: 'o1', role: 'owner' });
+    const staff = profile({ userId: 's1', role: 'staff' });
+    const waiting = entry({
+      entryType: 'issue',
+      status: 'waiting_approval',
+      assigneeRole: 'staff',
+      authorUserId: 'someone',
+      resolutionSubmittedAt: '2026-07-21T10:00:00.000Z',
+    });
+    expect(canRecallLogbookIssue(owner, waiting, defs)).toBe(true);
+    expect(canRecallLogbookIssue(staff, waiting, defs)).toBe(false);
+  });
+
+  it('hard delete owner + pristine only', () => {
+    const owner = profile({ userId: 'o1', role: 'owner' });
+    const manager = profile({ userId: 'm1', role: 'manager' });
+    const pristine = entry({
+      entryType: 'issue',
+      status: 'open',
+      assigneeRole: 'staff',
+    });
+    expect(canHardDeleteLogbookIssue(owner, pristine, defs)).toBe(true);
+    expect(canHardDeleteLogbookIssue(manager, pristine, defs)).toBe(false);
+    expect(
+      canHardDeleteLogbookIssue(
+        owner,
+        entry({ ...pristine, startedAt: 'x', status: 'in_progress' }),
+        defs,
+      ),
+    ).toBe(false);
+  });
+
+  it('blocks stale submit on recalled', () => {
+    const staff = profile({ userId: 's1', role: 'staff' });
+    const recalled = entry({
+      entryType: 'issue',
+      status: 'recalled',
+      assigneeRole: 'staff',
+    });
+    expect(canSubmitResolutionNow(staff, recalled, defs)).toBe(false);
+  });
+});
+
+describe('media separation', () => {
+  it('treats legacy photo as source before submit, resolution after', () => {
+    const before = entry({
+      entryType: 'issue',
+      photo: { id: 'f1', url: 'https://x/a.jpg' },
+    });
+    expect(resolveSourceMedia(before)).toEqual([{ id: 'f1', url: 'https://x/a.jpg' }]);
+    expect(resolveResolutionMedia(before)).toBeNull();
+
+    const after = entry({
+      entryType: 'issue',
+      resolutionSubmittedAt: '2026-07-21T12:00:00.000Z',
+      photo: { id: 'f1', url: 'https://x/a.jpg' },
+    });
+    expect(resolveSourceMedia(after)).toEqual([]);
+    expect(resolveResolutionMedia(after)?.id).toBe('f1');
+  });
+
+  it('prefers explicit sourceMedia / resolutionMedia links', () => {
+    const e = entry({
+      entryType: 'issue',
+      resolutionSubmittedAt: '2026-07-21T12:00:00.000Z',
+      photo: { id: 'legacy', url: 'https://x/l.jpg' },
+      sourceMedia: [{ id: 's1', url: 'https://x/s.jpg' }],
+      resolutionMedia: { id: 'r1', url: 'https://x/r.jpg' },
+    });
+    expect(resolveSourceMedia(e)[0]?.id).toBe('s1');
+    expect(resolveResolutionMedia(e)?.id).toBe('r1');
   });
 });
 
@@ -288,6 +465,29 @@ describe('resolution proof types', () => {
     ).toBe(false);
   });
 
+  it('idempotent attempt detection', () => {
+    expect(
+      isSameResolutionAttempt(
+        entry({
+          status: 'waiting_approval',
+          resolutionSubmittedAt: '2026-07-21T12:00:00.000Z',
+          resolutionAttemptId: 'att-1',
+        }),
+        'att-1',
+      ),
+    ).toBe(true);
+    expect(
+      isSameResolutionAttempt(
+        entry({
+          status: 'waiting_approval',
+          resolutionSubmittedAt: '2026-07-21T12:00:00.000Z',
+          resolutionAttemptId: 'att-1',
+        }),
+        'att-2',
+      ),
+    ).toBe(false);
+  });
+
   it('my-assigned style matching includes waiting_approval', () => {
     const staff = profile({ userId: 's1', role: 'staff' });
     const waiting = entry({
@@ -327,9 +527,16 @@ describe('logbook metrics', () => {
       entryType: 'note',
       date: '2026-07-21',
     }),
+    entry({
+      id: '4',
+      entryType: 'issue',
+      status: 'recalled',
+      dueAt: '2026-07-20T10:00:00.000Z',
+      date: '2026-07-20',
+    }),
   ];
 
-  it('filters to issues only and counts statuses', () => {
+  it('filters to issues only, excludes recalled by default, and counts statuses', () => {
     const filtered = filterLogbookIssues(issues, { fromYmd: '2026-07-20', toYmd: '2026-07-21' });
     expect(filtered).toHaveLength(2);
     const now = new Date('2026-07-21T12:00:00.000Z').getTime();
