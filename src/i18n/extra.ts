@@ -923,6 +923,8 @@ export const sectionsEn = {
     overdueDuration: 'Overdue',
     submitSuccessNotifyPending:
       'Submitted; reviewer notification will be retried.',
+    submitPermissionDenied:
+      'Could not save resolution proof. Please retry — if it keeps failing, ask an admin to check Instant Admin token / deploy.',
     retryNotify: 'Retry reviewer notification',
     notifyRetrySuccess: 'Reviewer notification sent.',
     staleSubmitBlocked: 'This issue can no longer be submitted (recalled, resolved, or not assigned to you).',
@@ -1984,6 +1986,8 @@ export const sectionsVi = {
     overdueDuration: 'Quá hạn',
     submitSuccessNotifyPending:
       'Đã gửi; thông báo cho người duyệt sẽ được thử lại.',
+    submitPermissionDenied:
+      'Không lưu được bằng chứng xử lý. Thử lại — nếu vẫn lỗi, nhờ admin kiểm tra Instant Admin token / deploy.',
     retryNotify: 'Thử gửi lại thông báo',
     notifyRetrySuccess: 'Đã gửi thông báo cho người duyệt.',
     staleSubmitBlocked: 'Không thể gửi (đã thu hồi, đã xong, hoặc không được giao cho bạn).',

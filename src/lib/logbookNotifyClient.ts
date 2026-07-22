@@ -1,5 +1,5 @@
 /**
- * Client helper for Logbook Stage B notifications (Admin SDK route).
+ * Client helpers for Logbook Admin SDK routes (Stage A submit + Stage B notify).
  */
 
 import { db } from '../db';
@@ -13,6 +13,10 @@ export type LogbookNotifyResult =
   | { ok: true; created: number; softFail?: false; deduped?: boolean }
   | { ok: false; softFail: true; message: string };
 
+export type LogbookSubmitResolutionResult =
+  | { ok: true; deduped?: boolean }
+  | { ok: false; message: string };
+
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const user = await db.getAuth();
   const token = user?.refresh_token;
@@ -21,6 +25,49 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',
   };
+}
+
+/** Stage A — Admin commit (required when resolution media is attached). */
+export async function postLogbookSubmitResolution(params: {
+  entryId: string;
+  attemptId: string;
+  note: string;
+  resolutionNumber: string;
+  resolutionChecked: boolean;
+  fileId?: string;
+}): Promise<LogbookSubmitResolutionResult> {
+  try {
+    const headers = await getAuthHeaders();
+    const resp = await fetch('/api/logbook-submit-resolution', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        entryId: params.entryId,
+        attemptId: params.attemptId,
+        note: params.note,
+        resolutionNumber: params.resolutionNumber,
+        resolutionChecked: params.resolutionChecked,
+        fileId: params.fileId || '',
+      }),
+    });
+    const data = (await resp.json().catch(() => ({}))) as {
+      ok?: boolean;
+      deduped?: boolean;
+      error?: string;
+    };
+    if (!resp.ok || !data.ok) {
+      return {
+        ok: false,
+        message: data.error || `Submit failed (${resp.status})`,
+      };
+    }
+    return { ok: true, deduped: data.deduped };
+  } catch (e) {
+    return {
+      ok: false,
+      message: e instanceof Error ? e.message : 'Submit failed',
+    };
+  }
 }
 
 export async function postLogbookNotify(params: {

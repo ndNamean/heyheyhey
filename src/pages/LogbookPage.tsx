@@ -49,7 +49,10 @@ import {
   type LogbookResolutionDraft,
 } from '../lib/logbookResolution';
 import { maybeNotifyLogbookDueStates } from '../lib/logbookDueNotify';
-import { postLogbookNotify } from '../lib/logbookNotifyClient';
+import {
+  postLogbookNotify,
+  postLogbookSubmitResolution,
+} from '../lib/logbookNotifyClient';
 import {
   buildLogbookCreatorUpdateNotifications,
   buildLogbookIssueAssignedNotifications,
@@ -65,7 +68,6 @@ import {
   buildLogbookIssueReopenedEvent,
   buildLogbookResolutionApprovedEvent,
   buildLogbookResolutionRejectedEvent,
-  buildLogbookResolutionSubmittedEvent,
   buildLogbookWorkStartedEvent,
 } from '../lib/reviewEvents';
 import type {
@@ -488,60 +490,29 @@ export default function LogbookPage({
     setSubmitError('');
     setNotifySoftFail(null);
     const note = draft.note.trim();
-    const prevStatus = resolveLogbookIssueStatus(live) || 'in_progress';
-    const priorResolutionId = live.resolutionMedia?.id || live.photo?.id || '';
 
-    try {
-      // Stage A — core tx only (no notifications)
-      const txs: unknown[] = [];
-      if (priorResolutionId && draft.media) {
-        if (live.resolutionMedia?.id) {
-          txs.push(
-            db.tx.logbookEntries[live.id].unlink({ resolutionMedia: priorResolutionId }),
-          );
-        }
-        if (live.photo?.id === priorResolutionId) {
-          txs.push(db.tx.logbookEntries[live.id].unlink({ photo: priorResolutionId }));
-        }
-      }
-      txs.push(
-        db.tx.logbookEntries[live.id].update({
-          status: 'waiting_approval',
-          resolutionNote: note,
-          resolutionNumber: draft.numberValue.trim(),
-          resolutionChecked: draft.checked,
-          resolutionSubmittedAt: nowIso(),
-          resolutionSubmittedByUserId: profile.userId,
-          resolutionAttemptId: attemptId,
-          updatedAt: nowIso(),
-        }),
-      );
-      if (draft.media) {
-        txs.push(
-          db.tx.logbookEntries[live.id].link({ resolutionMedia: draft.media.fileId }),
-          // Keep legacy photo in sync during transition
-          db.tx.logbookEntries[live.id].link({ photo: draft.media.fileId }),
-        );
-      }
-      txs.push(
-        buildLogbookResolutionSubmittedEvent(
-          live,
-          profile,
-          prevStatus,
-          note ? `${note}\nattempt:${attemptId}` : `attempt:${attemptId}`,
-          priorResolutionId,
-        ),
-      );
-      await db.transact(txs as Parameters<typeof db.transact>[0]);
-    } catch (e) {
-      const message = e instanceof Error ? e.message : t.logbook.saveFailed;
+    // Stage A — Admin SDK (client Instant link of resolutionMedia still denies for Staff)
+    const stageA = await postLogbookSubmitResolution({
+      entryId: live.id,
+      attemptId,
+      note,
+      resolutionNumber: draft.numberValue.trim(),
+      resolutionChecked: draft.checked,
+      fileId: draft.media?.fileId,
+    });
+    if (!stageA.ok) {
+      const raw = stageA.message;
+      const friendly =
+        /perms-pass|Permission denied/i.test(raw)
+          ? t.logbook.submitPermissionDenied
+          : raw || t.logbook.saveFailed;
       logSubmitStepFailure({
         entryId: live.id,
         actorRole: profile.role,
         attemptedStep: 'stage_a',
-        message,
+        message: raw,
       });
-      setSubmitError(message);
+      setSubmitError(friendly);
       setSubmitting(false);
       return;
     }
@@ -1211,7 +1182,11 @@ export default function LogbookPage({
                       : ''}
                   </p>
                   <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                    <button type="button" className="secondary" onClick={() => setShowCamera(true)}>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => setDraft({ ...draft, media: null })}
+                    >
                       {t.camera.retake}
                     </button>
                     <button
@@ -1224,40 +1199,25 @@ export default function LogbookPage({
                   </div>
                 </div>
               ) : (
-                <button type="button" onClick={() => setShowCamera(true)}>
-                  {t.camera.openCamera}
-                </button>
-              )}
-              {showCamera && (
-                <div style={{ marginTop: 12 }}>
-                  <TimemarkCamera
-                    store={proofStore}
-                    itemTitle={`Logbook Issue · ${proofEntry.content.slice(0, 40)}`}
-                    reportDate={proofEntry.date}
-                    proofContext={{
-                      type: 'logbook',
-                      logbookEntryId: proofEntry.id,
-                      storeId: proofEntry.storeId,
-                      content: proofEntry.content,
-                      mediaPurpose: 'resolution_proof',
-                    }}
-                    profile={profile}
-                    proofType={proofType}
-                    existingMedia={[]}
-                    onCapture={(media: UploadedMedia) => {
-                      setDraft((d) => ({ ...d, media }));
-                      setShowCamera(false);
-                    }}
-                  />
-                  <button
-                    className="secondary"
-                    style={{ marginTop: 8 }}
-                    type="button"
-                    onClick={() => setShowCamera(false)}
-                  >
-                    {t.common.cancel}
-                  </button>
-                </div>
+                <TimemarkCamera
+                  store={proofStore}
+                  itemTitle={`Logbook Issue · ${proofEntry.content.slice(0, 40)}`}
+                  reportDate={proofEntry.date}
+                  proofContext={{
+                    type: 'logbook',
+                    logbookEntryId: proofEntry.id,
+                    storeId: proofEntry.storeId,
+                    content: proofEntry.content,
+                    mediaPurpose: 'resolution_proof',
+                  }}
+                  profile={profile}
+                  proofType={proofType}
+                  existingMedia={[]}
+                  onCapture={(media: UploadedMedia) => {
+                    setDraft((d) => ({ ...d, media }));
+                    setShowCamera(false);
+                  }}
+                />
               )}
             </div>
           )}
