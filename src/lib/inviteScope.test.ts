@@ -4,9 +4,10 @@ import {
   rolesAssignableBy,
   storesSelectableBy,
   assertStoreIdsAllowed,
+  canViewManagedProfile,
 } from './inviteScope';
 import { defaultDefinitionsAsEntities } from './roleResolver';
-import type { Store } from '../types';
+import type { Profile, Store } from '../types';
 
 const defs = defaultDefinitionsAsEntities();
 
@@ -77,5 +78,40 @@ describe('storesSelectableBy', () => {
     expect(assertStoreIdsAllowed('manager', ['s1'], ['s1'], defs)).toBeNull();
     expect(assertStoreIdsAllowed('manager', ['s1'], ['s2'], defs)).toMatch(/Forbidden/);
     expect(assertStoreIdsAllowed('owner', [], ['s2'], defs)).toBeNull();
+  });
+});
+
+describe('canViewManagedProfile', () => {
+  const base = {
+    id: 'p1',
+    userId: 'u1',
+    email: 'a@b.c',
+    displayName: 'A',
+    approvalStatus: 'approved' as const,
+    createdAt: '',
+    updatedAt: '',
+  };
+
+  it('hides owner from non-owners', () => {
+    const owner = { ...base, role: 'owner', stores: [{ id: 's1' }] } as Profile;
+    expect(canViewManagedProfile('manager', owner, ['s1'], defs)).toBe(false);
+    expect(canViewManagedProfile('admin', owner, ['s1'], defs)).toBe(false);
+    expect(canViewManagedProfile('owner', owner, [], defs)).toBe(true);
+  });
+
+  it('hides peer managers and higher roles from a manager', () => {
+    const peer = { ...base, role: 'manager', stores: [{ id: 's1' }] } as Profile;
+    const admin = { ...base, role: 'admin', stores: [{ id: 's1' }] } as Profile;
+    const staff = { ...base, role: 'staff', stores: [{ id: 's1' }] } as Profile;
+    expect(canViewManagedProfile('manager', peer, ['s1'], defs)).toBe(false);
+    expect(canViewManagedProfile('manager', admin, ['s1'], defs)).toBe(false);
+    expect(canViewManagedProfile('manager', staff, ['s1'], defs)).toBe(true);
+  });
+
+  it('requires store overlap for managers', () => {
+    const staffOther = { ...base, role: 'staff', stores: [{ id: 's2' }] } as Profile;
+    const staffMine = { ...base, role: 'staff', stores: [{ id: 's1' }] } as Profile;
+    expect(canViewManagedProfile('manager', staffOther, ['s1'], defs)).toBe(false);
+    expect(canViewManagedProfile('manager', staffMine, ['s1'], defs)).toBe(true);
   });
 });

@@ -27,7 +27,7 @@ import {
   canPreApproveAccess,
   canViewRolesPermissions,
 } from '../lib/roles';
-import { rolesAssignableBy, storesSelectableBy, canAssignRole } from '../lib/inviteScope';
+import { rolesAssignableBy, storesSelectableBy, canAssignRole, filterManagedProfiles } from '../lib/inviteScope';
 import { OWNER_ROLE_KEY } from '../types';
 import { badgeClass, nowIso } from '../lib/utils';
 import type { InvitationAdminRow, Profile, Role, Store } from '../types';
@@ -269,6 +269,7 @@ function StoresAssignControl({
   canEdit,
 }: {
   profile: Profile;
+  /** Stores the actor may view/edit — out-of-scope assignments are preserved on save. */
   allStores: Store[];
   canEdit: boolean;
 }) {
@@ -278,21 +279,24 @@ function StoresAssignControl({
   const [saving, setSaving] = useState(false);
 
   const assignedIds = (profile.stores ?? []).map((s) => s.id);
+  const editableIds = new Set(allStores.map((s) => s.id));
+  const visibleAssignedIds = assignedIds.filter((id) => editableIds.has(id));
   const assignedCodes = allStores
-    .filter((s) => assignedIds.includes(s.id))
+    .filter((s) => visibleAssignedIds.includes(s.id))
     .map((s) => s.code);
+  const hiddenAssignedCount = assignedIds.filter((id) => !editableIds.has(id)).length;
 
   function openModal() {
     if (!canEdit) return;
-    setSelectedStoreIds([...assignedIds]);
+    setSelectedStoreIds([...visibleAssignedIds]);
     setOpen(true);
   }
 
   async function save() {
     setSaving(true);
     try {
-      const prev = new Set(assignedIds);
-      const next = new Set(selectedStoreIds);
+      const prev = new Set(visibleAssignedIds);
+      const next = new Set(selectedStoreIds.filter((id) => editableIds.has(id)));
       const txs = [
         ...[...next]
           .filter((id) => !prev.has(id))
@@ -309,6 +313,12 @@ function StoresAssignControl({
       setSaving(false);
     }
   }
+
+  const label = assignedCodes.length
+    ? assignedCodes.join(', ')
+    : hiddenAssignedCount
+      ? t.common.none
+      : t.common.none;
 
   return (
     <>
@@ -327,7 +337,7 @@ function StoresAssignControl({
         title={canEdit ? t.users.manageStoresTitle : t.users.noPermissionStores}
       >
         <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {assignedCodes.length ? assignedCodes.join(', ') : t.common.none}
+          {label}
         </span>
         {canEdit && <span style={{ opacity: 0.5 }}>✎</span>}
       </button>
@@ -894,8 +904,15 @@ export default function UsersPage({ currentProfile }: Props) {
     return <div className="card">{t.users.noPermission}</div>;
   }
 
-  const accessQueueProfiles = profiles.filter((p) => isAccessPending(p.approvalStatus));
-  const allProfiles = profiles.filter((p) => p.id !== currentProfile.id);
+  const managedProfiles = filterManagedProfiles(
+    currentProfile.role,
+    actorStoreIds,
+    profiles,
+    defs,
+    { excludeProfileId: currentProfile.id },
+  );
+  const accessQueueProfiles = managedProfiles.filter((p) => isAccessPending(p.approvalStatus));
+  const allProfiles = managedProfiles;
 
   const managerQueueProfiles = isManager
     ? accessQueueProfiles.filter((p) => managerCanReviewAccess(currentProfile, p))
@@ -1011,7 +1028,7 @@ export default function UsersPage({ currentProfile }: Props) {
             <AccessRequestCard
               key={p.id}
               profile={p}
-              stores={stores}
+              stores={scopedStores}
               isAdmin={false}
               onPreApprove={() => preApproveAccess(p)}
               onFlag={() => setFlagId(p.id)}
@@ -1077,7 +1094,7 @@ export default function UsersPage({ currentProfile }: Props) {
           target={requestManagerProfile}
           stores={scopedStores}
           currentProfile={currentProfile}
-          allProfiles={profiles}
+          allProfiles={managedProfiles}
           onClose={() => setRequestManagerId(null)}
         />
       )}
@@ -1158,7 +1175,7 @@ export default function UsersPage({ currentProfile }: Props) {
       {tab === 'roles' && showRolesTab && (
         <RolesPermissionsPanel
           currentProfile={currentProfile}
-          allProfiles={profiles}
+          allProfiles={managedProfiles}
           readOnly={!isOwner}
         />
       )}
@@ -1174,7 +1191,7 @@ export default function UsersPage({ currentProfile }: Props) {
               <AccessRequestCard
                 key={p.id}
                 profile={p}
-                stores={stores}
+                stores={scopedStores}
                 isAdmin
                 onApprove={() => setApprovingId(p.id)}
                 onRequestManager={() => setRequestManagerId(p.id)}
@@ -1284,7 +1301,7 @@ export default function UsersPage({ currentProfile }: Props) {
                     <td>
                       <StoresAssignControl
                         profile={p}
-                        allStores={stores}
+                        allStores={scopedStores}
                         canEdit={isAdmin}
                       />
                     </td>

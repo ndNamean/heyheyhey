@@ -7,7 +7,7 @@ import { id } from '@instantdb/admin';
 import { getAdminDb, parseBody } from './_lib/export/instant-admin.js';
 import { verifyRequestUser, loadProfileContext } from './_lib/export/auth.js';
 import { roleCanManageUsers } from './_lib/export/role-capabilities.js';
-import { canInviteAsRole, assertInviteStoreIds } from './_lib/export/invite-scope.js';
+import { canInviteAsRole, assertInviteStoreIds, roleCanAccessAllStores } from './_lib/export/invite-scope.js';
 import { getAppOrigin } from './_lib/magic-code-email.js';
 import { sendInviteEmail } from './_lib/invite-email.js';
 import {
@@ -433,7 +433,7 @@ async function revokeInvite(req, res) {
 }
 
 async function listInvites(req, res) {
-  await requireManager(req);
+  const ctx = await requireManager(req);
   const adminDb = getAdminDb();
   const result = await adminDb.query({
     invitations: {},
@@ -441,6 +441,9 @@ async function listInvites(req, res) {
   });
   const storesById = new Map((result.stores ?? []).map((s) => [s.id, s.name || s.code || s.id]));
   const now = new Date();
+  const defs = ctx.roleDefinitions ?? [];
+  const canAllStores = roleCanAccessAllStores(ctx.role, ctx.roleDefinition, defs);
+  const allowedStores = new Set(ctx.storeIds ?? []);
 
   const rows = (result.invitations ?? [])
     .map((inv) => {
@@ -466,6 +469,21 @@ async function listInvites(req, res) {
         lastOpenedAt: inv.lastOpenedAt || '',
         acceptedAt: inv.acceptedAt || '',
         revokedAt: inv.revokedAt || '',
+      };
+    })
+    .filter((row) => {
+      if (!canInviteAsRole(ctx.role, row.role, defs)) return false;
+      if (canAllStores) return true;
+      if (!row.storeIds.length) return true;
+      return row.storeIds.some((id) => allowedStores.has(id));
+    })
+    .map((row) => {
+      if (canAllStores) return row;
+      const scopedIds = row.storeIds.filter((id) => allowedStores.has(id));
+      return {
+        ...row,
+        storeIds: scopedIds,
+        storeNames: scopedIds.map((sid) => storesById.get(sid) || sid),
       };
     })
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));

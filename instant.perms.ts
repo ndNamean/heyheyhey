@@ -51,7 +51,9 @@ const rules = {
   // ── Profiles ─────────────────────────────────────────────────────────────
   profiles: {
     allow: {
-      view: "auth.id != null && ('approved' in auth.ref('$user.profile.approvalStatus') || data.userId == auth.id)",
+      // Owner profiles are only visible to the owner (or self). Everyone else is hidden from other roles.
+      view:
+        "auth.id != null && ('approved' in auth.ref('$user.profile.approvalStatus') || data.userId == auth.id) && (data.role != 'owner' || isOwner || data.userId == auth.id)",
       create: "auth.id != null && data.userId == auth.id && data.approvalStatus == 'pending'",
       update: 'isAdmin || managerAccessReview || (isOwnProfile && onlyDisplayName)',
       delete: 'false',
