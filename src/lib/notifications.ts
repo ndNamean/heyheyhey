@@ -556,18 +556,34 @@ export function buildLogbookResolutionDecisionNotifications(
   const recipients = new Set(getLogbookAssigneeRecipients(entry, allProfiles, actor.userId, defs));
   const submitter = entry.resolutionSubmittedByUserId?.trim();
   if (submitter && submitter !== actor.userId) recipients.add(submitter);
-  const type = decision === 'approved' ? 'logbook_resolution_approved' : 'logbook_resolution_rejected';
+  if (decision === 'approved' && entry.authorUserId && entry.authorUserId !== actor.userId) {
+    recipients.add(entry.authorUserId);
+  }
+  const type =
+    decision === 'approved'
+      ? 'logbook_resolution_approved'
+      : 'logbook_resolution_correction_requested';
   const title =
-    decision === 'approved' ? 'Logbook resolution approved' : 'Logbook resolution rejected';
+    decision === 'approved'
+      ? 'Logbook resolution approved'
+      : 'Logbook resolution correction requested';
   const body = [
     title,
     `Issue: ${issueSnippet(entry)}`,
-    entry.reviewNote?.trim() ? `Note: ${entry.reviewNote.trim()}` : '',
+    entry.reviewNote?.trim() ? `Feedback: ${entry.reviewNote.trim()}` : '',
   ]
     .filter(Boolean)
     .join('\n');
   return [...recipients].map((uid) =>
-    buildLogbookNotificationTx(uid, type, title, body, actor, entry, decision === 'approved' ? 'resolved' : 'in_progress'),
+    buildLogbookNotificationTx(
+      uid,
+      type,
+      title,
+      body,
+      actor,
+      entry,
+      decision === 'approved' ? 'resolved' : 'in_progress',
+    ),
   );
 }
 

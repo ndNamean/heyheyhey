@@ -15,6 +15,11 @@ import {
   countLogbookIssues,
   filterLogbookIssues,
 } from './logbookMetrics';
+import {
+  canSubmitResolutionDraft,
+  hasCorrectionFeedback,
+  resolveLogbookProofType,
+} from './logbookResolution';
 import { defaultDefinitionsAsEntities } from './roleResolver';
 import type { LogbookEntry, Profile, Store } from '../types';
 
@@ -70,6 +75,10 @@ function entry(partial: Partial<LogbookEntry>): LogbookEntry {
     status: partial.status,
     startedAt: partial.startedAt,
     startedByUserId: partial.startedByUserId,
+    resolutionProofType: partial.resolutionProofType,
+    resolutionRequirement: partial.resolutionRequirement,
+    resolutionChecked: partial.resolutionChecked,
+    resolutionNumber: partial.resolutionNumber,
     resolutionNote: partial.resolutionNote,
     resolutionSubmittedAt: partial.resolutionSubmittedAt,
     resolutionSubmittedByUserId: partial.resolutionSubmittedByUserId,
@@ -207,6 +216,88 @@ describe('visibility and actions', () => {
     const areaManager = profile({ userId: 'am', role: 'areaManager' });
     expect(canReviewLogbookIssue(subleader, leaderIssue, defs)).toBe(false);
     expect(canReviewLogbookIssue(areaManager, leaderIssue, defs)).toBe(true);
+  });
+});
+
+describe('resolution proof types', () => {
+  it('defaults missing proof type to photo', () => {
+    expect(resolveLogbookProofType(entry({}))).toBe('photo');
+    expect(resolveLogbookProofType(entry({ resolutionProofType: 'photo_note' }))).toBe(
+      'photo_note',
+    );
+  });
+
+  it('validates draft requirements per proof type', () => {
+    expect(
+      canSubmitResolutionDraft('tick', {
+        note: '',
+        numberValue: '',
+        checked: true,
+        media: null,
+      }),
+    ).toBe(true);
+    expect(
+      canSubmitResolutionDraft('tick', {
+        note: '',
+        numberValue: '',
+        checked: false,
+        media: null,
+      }),
+    ).toBe(false);
+    expect(
+      canSubmitResolutionDraft('note', {
+        note: 'done',
+        numberValue: '',
+        checked: false,
+        media: null,
+      }),
+    ).toBe(true);
+    expect(
+      canSubmitResolutionDraft('photo_note', {
+        note: 'done',
+        numberValue: '',
+        checked: false,
+        media: null,
+      }),
+    ).toBe(false);
+    expect(
+      canSubmitResolutionDraft('photo_note', {
+        note: 'done',
+        numberValue: '',
+        checked: false,
+        media: {
+          mediaRecordId: 'm1',
+          fileId: 'f1',
+          url: 'https://example.com/a.jpg',
+          fileName: 'a.jpg',
+          photoCode: 'x',
+          capturedAt: '2026-07-21T12:00:00.000Z',
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it('detects correction feedback on in_progress issues', () => {
+    expect(
+      hasCorrectionFeedback(
+        entry({ entryType: 'issue', status: 'in_progress', reviewNote: 'Retake photo' }),
+      ),
+    ).toBe(true);
+    expect(
+      hasCorrectionFeedback(entry({ entryType: 'issue', status: 'in_progress', reviewNote: '' })),
+    ).toBe(false);
+  });
+
+  it('my-assigned style matching includes waiting_approval', () => {
+    const staff = profile({ userId: 's1', role: 'staff' });
+    const waiting = entry({
+      entryType: 'issue',
+      status: 'waiting_approval',
+      assigneeRole: 'staff',
+      storeId: 'store-a',
+    });
+    expect(canViewLogbookEntry(staff, waiting, defs)).toBe(true);
+    expect(canActOnAssignedIssue(staff, waiting, defs)).toBe(true);
   });
 });
 

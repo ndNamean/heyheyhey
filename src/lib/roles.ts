@@ -188,6 +188,10 @@ export function failureCategoryOptions(current: string): string[] {
   return [...FAILURE_CATEGORIES, normalized];
 }
 
+export function needsTick(proofType: string): boolean {
+  return proofType === 'tick';
+}
+
 export function needsMedia(proofType: string): boolean {
   return proofType.includes('photo') || proofType.includes('video');
 }

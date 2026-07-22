@@ -559,6 +559,10 @@ export interface LogbookEntry {
   status?: LogbookIssueStatus | string;
   startedAt?: string;
   startedByUserId?: string;
+  resolutionProofType?: ProofType | string;
+  resolutionRequirement?: string;
+  resolutionChecked?: boolean;
+  resolutionNumber?: string;
   resolutionNote?: string;
   resolutionSubmittedAt?: string;
   resolutionSubmittedByUserId?: string;
@@ -638,6 +642,7 @@ export type NotificationType =
   | 'logbook_resolution_submitted'
   | 'logbook_resolution_approved'
   | 'logbook_resolution_rejected'
+  | 'logbook_resolution_correction_requested'
   | 'logbook_issue_reopened';
 
 export interface Notification {

@@ -193,7 +193,7 @@ export function canEditLogbookAssignment(
 export function defaultLogbookFilterTab(
   profile: Profile,
   defs: RoleDefinition[],
-): 'all' | 'my-assigned' | 'open' | 'waiting_approval' | 'overdue' | 'resolved' {
+): 'all' | 'my-assigned' | 'open' | 'waiting_approval' | 'overdue' | 'resolved' | 'correction' {
   if (!canUseOpsTools(profile.role, defs) && !canReview(profile.role, defs)) {
     return 'my-assigned';
   }
@@ -216,6 +216,10 @@ export function emptyLogbookIssueFields() {
     status: '',
     startedAt: '',
     startedByUserId: '',
+    resolutionProofType: '',
+    resolutionRequirement: '',
+    resolutionChecked: false,
+    resolutionNumber: '',
     resolutionNote: '',
     resolutionSubmittedAt: '',
     resolutionSubmittedByUserId: '',
@@ -232,7 +236,12 @@ export function emptyLogbookIssueFields() {
   };
 }
 
-export function issueCreateFields(assigneeRole: string, dueAt: string) {
+export function issueCreateFields(
+  assigneeRole: string,
+  dueAt: string,
+  resolutionProofType: string,
+  resolutionRequirement: string,
+) {
   return {
     entryType: 'issue' as const,
     isAnnouncement: false,
@@ -241,6 +250,10 @@ export function issueCreateFields(assigneeRole: string, dueAt: string) {
     status: 'open' as const,
     startedAt: '',
     startedByUserId: '',
+    resolutionProofType: resolutionProofType || 'photo',
+    resolutionRequirement: resolutionRequirement.trim(),
+    resolutionChecked: false,
+    resolutionNumber: '',
     resolutionNote: '',
     resolutionSubmittedAt: '',
     resolutionSubmittedByUserId: '',
@@ -286,4 +299,41 @@ export function countAssignedOpenOrOverdue(
     const status = resolveLogbookIssueStatus(e);
     return status === 'open' || status === 'in_progress' || isIssueOverdue(e, now);
   }).length;
+}
+
+export type AssignedIssueCounters = {
+  open: number;
+  inProgress: number;
+  waiting: number;
+  overdue: number;
+  correction: number;
+};
+
+export function countAssignedIssueBreakdown(
+  profile: Profile,
+  entries: LogbookEntry[],
+  defs: RoleDefinition[],
+  now: number = Date.now(),
+): AssignedIssueCounters {
+  const counters: AssignedIssueCounters = {
+    open: 0,
+    inProgress: 0,
+    waiting: 0,
+    overdue: 0,
+    correction: 0,
+  };
+  for (const e of entries) {
+    if (!isLogbookIssue(e)) continue;
+    if (!profileMatchesAssignee(profile, e, defs)) continue;
+    const status = resolveLogbookIssueStatus(e);
+    if (status === 'resolved') continue;
+    if (status === 'open') counters.open += 1;
+    if (status === 'in_progress') {
+      counters.inProgress += 1;
+      if ((e.reviewNote ?? '').trim()) counters.correction += 1;
+    }
+    if (status === 'waiting_approval') counters.waiting += 1;
+    if (isIssueOverdue(e, now)) counters.overdue += 1;
+  }
+  return counters;
 }

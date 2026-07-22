@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
@@ -6,10 +6,13 @@ import { canApproveItem, canReview } from '../lib/roles';
 import { statusLabel } from '../lib/i18nUtils';
 import {
   buildItemReviewNotifications,
+  buildLogbookResolutionDecisionNotifications,
   buildReportFinalizedNotifications,
 } from '../lib/notifications';
 import {
   buildItemReviewEvent,
+  buildLogbookResolutionApprovedEvent,
+  buildLogbookResolutionRejectedEvent,
   buildReportFinalizedEvent,
 } from '../lib/reviewEvents';
 import { resolveActorDisplay } from '../lib/actorDisplay';
@@ -19,8 +22,25 @@ import ProofMediaDetails from '../components/ProofMediaDetails';
 import ReviewFeedbackModal, { type FeedbackResult } from '../components/ReviewFeedbackModal';
 import { isVideoMedia } from '../lib/mediaMime';
 import { formatMediaCaptureTime } from '../lib/proofTime';
-import ReportTimeline from '../components/ReportTimeline';
-import type { MediaRecord, Profile, Report, ReportResponse, ReviewEvent } from '../types';
+import ReportTimeline, { LogbookTimeline } from '../components/ReportTimeline';
+import {
+  canReviewLogbookIssue,
+  isIssueOverdue,
+  isLogbookIssue,
+  resolveLogbookIssueStatus,
+} from '../lib/logbook';
+import {
+  proofTypeLabel,
+  resolveLogbookProofType,
+} from '../lib/logbookResolution';
+import type {
+  LogbookEntry,
+  MediaRecord,
+  Profile,
+  Report,
+  ReportResponse,
+  ReviewEvent,
+} from '../types';
 
 interface Props {
   profile: Profile;
@@ -32,10 +52,13 @@ interface PendingFeedback {
   status: 'rejected' | 'need_correction';
 }
 
+type ReviewSurface = 'reports' | 'logbook';
+
 export default function ReviewPage({ profile }: Props) {
   const { t } = useLang();
   const { defs } = useRoleDefinitions();
   const [pendingFeedback, setPendingFeedback] = useState<PendingFeedback | null>(null);
+  const [surface, setSurface] = useState<ReviewSurface>('reports');
 
   const { data } = db.useQuery({
     reports: {
@@ -43,6 +66,7 @@ export default function ReviewPage({ profile }: Props) {
       responses: { media: { file: {} } },
       store: {},
     },
+    logbookEntries: { store: {}, photo: {} },
     profiles: { stores: {} },
     reviewEvents: {},
   });
@@ -50,9 +74,67 @@ export default function ReviewPage({ profile }: Props) {
   const reports: Report[] = (data?.reports ?? []) as Report[];
   const allProfiles: Profile[] = (data?.profiles ?? []) as Profile[];
   const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];
+  const logbookIssues = useMemo(() => {
+    return ((data?.logbookEntries ?? []) as LogbookEntry[]).filter(
+      (e) =>
+        isLogbookIssue(e) &&
+        resolveLogbookIssueStatus(e) === 'waiting_approval' &&
+        canReviewLogbookIssue(profile, e, defs),
+    );
+  }, [data?.logbookEntries, profile, defs]);
 
   if (!canReview(profile.role, defs)) {
     return <div className="card">{t.review.noPermission}</div>;
+  }
+
+  async function approveLogbookIssue(entry: LogbookEntry) {
+    if (!canReviewLogbookIssue(profile, entry, defs)) return;
+    const note = prompt(t.logbook.reviewNotePrompt) ?? '';
+    if (!note.trim()) return alert(t.logbook.reviewNoteRequired);
+    const now = nowIso();
+    await db.transact([
+      db.tx.logbookEntries[entry.id].update({
+        status: 'resolved',
+        resolvedAt: now,
+        resolvedByUserId: entry.resolutionSubmittedByUserId || '',
+        reviewedAt: now,
+        reviewedByUserId: profile.userId,
+        reviewNote: note.trim(),
+        updatedAt: now,
+      }),
+      buildLogbookResolutionApprovedEvent(entry, profile, note.trim()),
+      ...buildLogbookResolutionDecisionNotifications(
+        { ...entry, reviewNote: note.trim() },
+        profile,
+        allProfiles,
+        'approved',
+        defs,
+      ),
+    ]);
+  }
+
+  async function requestLogbookCorrection(entry: LogbookEntry) {
+    if (!canReviewLogbookIssue(profile, entry, defs)) return;
+    const note = prompt(t.logbook.correctionNotePrompt) ?? '';
+    if (!note.trim()) return alert(t.logbook.reviewNoteRequired);
+    const now = nowIso();
+    await db.transact([
+      db.tx.logbookEntries[entry.id].update({
+        status: 'in_progress',
+        reviewedAt: now,
+        reviewedByUserId: profile.userId,
+        reviewNote: note.trim(),
+        updatedAt: now,
+      }),
+      buildLogbookResolutionRejectedEvent(entry, profile, note.trim()),
+      ...buildLogbookResolutionDecisionNotifications(
+        { ...entry, reviewNote: note.trim() },
+        profile,
+        allProfiles,
+        'rejected',
+        defs,
+      ),
+    ]);
   }
 
   function openFeedbackModal(
@@ -178,9 +260,125 @@ export default function ReviewPage({ profile }: Props) {
       <div className="card">
         <h1>{t.review.title}</h1>
         <p className="small">{t.review.subtitle}</p>
+        <div className="tabs" style={{ marginTop: 12, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className={surface === 'reports' ? 'active' : ''}
+            onClick={() => setSurface('reports')}
+          >
+            {t.review.tabReports}
+            {reports.length > 0 && (
+              <span className="badge warn" style={{ marginLeft: 6 }}>
+                {reports.length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            className={surface === 'logbook' ? 'active' : ''}
+            onClick={() => setSurface('logbook')}
+          >
+            {t.review.tabLogbook}
+            {logbookIssues.length > 0 && (
+              <span className="badge warn" style={{ marginLeft: 6 }}>
+                {logbookIssues.length}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
-      {reports.map((report) => {
+      {surface === 'logbook' &&
+        logbookIssues.map((entry) => {
+          const proofType = resolveLogbookProofType(entry);
+          const overdue = isIssueOverdue(entry);
+          const submitter = resolveActorDisplay(
+            entry.resolutionSubmittedByUserId || '',
+            undefined,
+            allProfiles,
+          );
+          const creator = resolveActorDisplay(entry.authorUserId, undefined, allProfiles);
+          const entryEvents = allEvents.filter((e) => e.logbookEntryId === entry.id);
+          return (
+            <div className="card" key={entry.id}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <h2 style={{ margin: 0, flex: 1 }}>{t.logbook.typeIssue}</h2>
+                <span className={badgeClass('waiting_approval')}>
+                  {statusLabel(t, 'waiting_approval')}
+                </span>
+                {overdue && <span className="badge bad">{t.logbook.statusOverdue}</span>}
+                <span className="badge">{proofTypeLabel(proofType)}</span>
+              </div>
+              <p style={{ margin: '8px 0 0' }}>{entry.content}</p>
+              <p className="small">
+                {entry.store?.code || entry.storeId} · {t.common.severity}: {entry.severity} ·{' '}
+                {t.logbook.assigneeRole}: {entry.assigneeRole}
+              </p>
+              <p className="small">
+                {t.review.submittedBy} {creator}
+                {entry.dueAt ? ` · ${t.logbook.dueAt}: ${new Date(entry.dueAt).toLocaleString()}` : ''}
+              </p>
+              {entry.resolutionRequirement?.trim() && (
+                <p className="small">
+                  <strong>{t.logbook.resolutionRequirement}:</strong> {entry.resolutionRequirement}
+                </p>
+              )}
+              <p className="small">
+                {t.logbook.resolvedBySubmitter}: {submitter}
+                {entry.resolutionSubmittedAt
+                  ? ` · ${new Date(entry.resolutionSubmittedAt).toLocaleString()}`
+                  : ''}
+              </p>
+              {entry.resolutionChecked && (
+                <p className="small">
+                  {t.logbook.resolutionTick}: ✓
+                </p>
+              )}
+              {entry.resolutionNumber && (
+                <p className="small">
+                  <strong>{t.logbook.resolutionNumber}:</strong> {entry.resolutionNumber}
+                </p>
+              )}
+              {entry.resolutionNote && (
+                <p>
+                  <strong>{t.common.note}:</strong> {entry.resolutionNote}
+                </p>
+              )}
+              {entry.photo?.url && (
+                <div style={{ marginTop: 8 }}>
+                  <div className="small">{t.logbook.resolutionProof}</div>
+                  <ProofPhoto media={{ id: entry.photo.id, url: entry.photo.url }} />
+                </div>
+              )}
+              {entryEvents.length > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  <LogbookTimeline entry={entry} events={entryEvents} />
+                </div>
+              )}
+              <div className="capture-actions" style={{ marginTop: 12 }}>
+                <button className="success" type="button" onClick={() => void approveLogbookIssue(entry)}>
+                  {t.logbook.approveResolution}
+                </button>
+                <button
+                  className="secondary"
+                  type="button"
+                  onClick={() => void requestLogbookCorrection(entry)}
+                >
+                  {t.logbook.requestCorrection}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+
+      {surface === 'logbook' && !logbookIssues.length && (
+        <div className="card">
+          <p>{t.review.noLogbookAwaiting}</p>
+        </div>
+      )}
+
+      {surface === 'reports' &&
+        reports.map((report) => {
         const responses = (report.responses ?? []) as ReportResponse[];
         const pendingCount = responses.filter((r) => r.status === 'waiting_approval').length;
         const reportSubmitterName = resolveActorDisplay(
@@ -312,7 +510,7 @@ export default function ReviewPage({ profile }: Props) {
         );
       })}
 
-      {!reports.length && (
+      {surface === 'reports' && !reports.length && (
         <div className="card">
           <p>{t.review.noAwaitingReview}</p>
         </div>

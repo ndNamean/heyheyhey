@@ -11,7 +11,11 @@ import {
   canProposeTemplateItem,
   canReview,
 } from '../lib/roles';
-import { countAssignedOpenOrOverdue, isAssignedUnresolvedIssue } from '../lib/logbook';
+import {
+  countAssignedIssueBreakdown,
+  countAssignedOpenOrOverdue,
+  isAssignedUnresolvedIssue,
+} from '../lib/logbook';
 import type { Page } from '../components/Nav';
 import type { LogbookEntry, Profile } from '../types';
 
@@ -61,6 +65,10 @@ export default function StaffHome({
     () => countAssignedOpenOrOverdue(profile, logbookEntries, defs),
     [profile, logbookEntries, defs],
   );
+  const assignedBreakdown = useMemo(
+    () => countAssignedIssueBreakdown(profile, logbookEntries, defs),
+    [profile, logbookEntries, defs],
+  );
   const hasAssigned = useMemo(
     () => logbookEntries.some((e) => isAssignedUnresolvedIssue(profile, e, defs)),
     [logbookEntries, profile, defs],
@@ -80,6 +88,7 @@ export default function StaffHome({
         try {
           sessionStorage.setItem('logbookHighlightEntryId', entryId);
           sessionStorage.setItem('logbookInitialFilter', 'my-assigned');
+          sessionStorage.setItem('logbookOpenResolutionEntryId', entryId);
         } catch {
           /* ignore */
         }
@@ -106,6 +115,23 @@ export default function StaffHome({
             {assignedCount > 0 && <span className="badge warn">{assignedCount}</span>}
           </div>
           <p className="small">{t.staffHome.assignedIssuesHint}</p>
+          <div className="small" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+            <span className="badge">
+              {t.staffHome.assignedOpen}: {assignedBreakdown.open}
+            </span>
+            <span className="badge">
+              {t.staffHome.assignedInProgress}: {assignedBreakdown.inProgress}
+            </span>
+            <span className="badge">
+              {t.staffHome.assignedWaiting}: {assignedBreakdown.waiting}
+            </span>
+            <span className="badge warn">
+              {t.staffHome.assignedCorrection}: {assignedBreakdown.correction}
+            </span>
+            <span className="badge bad">
+              {t.staffHome.assignedOverdue}: {assignedBreakdown.overdue}
+            </span>
+          </div>
           <button style={{ marginTop: 8 }} type="button" onClick={openAssignedIssues}>
             {t.staffHome.openAssignedIssues}
           </button>

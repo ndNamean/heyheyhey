@@ -263,10 +263,12 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
         onOpenLogbookEntry={(entryId) => {
           try {
             sessionStorage.setItem('logbookHighlightEntryId', entryId);
+            sessionStorage.setItem('logbookInitialFilter', 'waiting_approval');
+            sessionStorage.setItem('logbookOpenResolutionEntryId', entryId);
           } catch {
             /* ignore */
           }
-          onOpenLogbook?.('all');
+          onOpenLogbook?.('waiting_approval');
         }}
       />
 

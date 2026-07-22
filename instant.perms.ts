@@ -369,7 +369,7 @@ const rules = {
       onlyAckFields: "request.modifiedFields.all(f, f in ['ackUserIdsJson', 'updatedAt'])",
       canAckUpdate: 'isApproved && onlyAckFields',
       onlyIssueLifecycleFields:
-        "request.modifiedFields.all(f, f in ['status', 'startedAt', 'startedByUserId', 'resolutionNote', 'resolutionSubmittedAt', 'resolutionSubmittedByUserId', 'updatedAt'])",
+        "request.modifiedFields.all(f, f in ['status', 'startedAt', 'startedByUserId', 'resolutionNote', 'resolutionNumber', 'resolutionChecked', 'resolutionSubmittedAt', 'resolutionSubmittedByUserId', 'updatedAt'])",
       canIssueLifecycleUpdate: 'isApproved && onlyIssueLifecycleFields',
       onlyIssueReviewFields:
         "request.modifiedFields.all(f, f in ['status', 'resolvedAt', 'resolvedByUserId', 'reviewedAt', 'reviewedByUserId', 'reviewNote', 'reopenedAt', 'reopenedByUserId', 'reopenReason', 'updatedAt', 'assigneeRole', 'dueAt', 'severity'])",

@@ -278,6 +278,10 @@ const _schema = i.schema({
       status: i.string().indexed().clientRequired(),              // open|in_progress|waiting_approval|resolved
       startedAt: i.string().clientRequired(),
       startedByUserId: i.string().clientRequired(),
+      resolutionProofType: i.string().indexed().clientRequired(), // PROOF_TYPES; default photo for issues
+      resolutionRequirement: i.string().clientRequired(),         // instructions for assignee
+      resolutionChecked: i.boolean().clientRequired(),            // tick completion
+      resolutionNumber: i.string().clientRequired(),              // numeric result (report numberValue style)
       resolutionNote: i.string().clientRequired(),
       resolutionSubmittedAt: i.string().clientRequired(),
       resolutionSubmittedByUserId: i.string().clientRequired(),

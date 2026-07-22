@@ -26,6 +26,19 @@ import {
   resolveLogbookEntryType,
   resolveLogbookIssueStatus,
 } from '../lib/logbook';
+import {
+  PROOF_TYPES,
+  canSubmitResolutionDraft,
+  emptyResolutionDraft,
+  hasCorrectionFeedback,
+  needsMedia,
+  needsNote,
+  needsNumber,
+  needsTick,
+  proofTypeLabel,
+  resolveLogbookProofType,
+  type LogbookResolutionDraft,
+} from '../lib/logbookResolution';
 import { maybeNotifyLogbookDueStates } from '../lib/logbookDueNotify';
 import {
   buildLogbookIssueAssignedNotifications,
@@ -46,6 +59,7 @@ import type {
   LogbookEntry,
   LogbookEntryType,
   Profile,
+  ProofType,
   ReviewEvent,
   Store,
   UploadedMedia,
@@ -57,7 +71,14 @@ interface Props {
   highlightEntryId?: string | null;
 }
 
-type FilterTab = 'all' | 'my-assigned' | 'open' | 'waiting_approval' | 'overdue' | 'resolved';
+type FilterTab =
+  | 'all'
+  | 'my-assigned'
+  | 'open'
+  | 'waiting_approval'
+  | 'overdue'
+  | 'resolved'
+  | 'correction';
 
 function readSession(key: string): string | null {
   try {
@@ -73,6 +94,10 @@ function clearSession(key: string) {
   } catch {
     /* ignore */
   }
+}
+
+function openResolutionSessionKey(): string {
+  return 'logbookOpenResolutionEntryId';
 }
 
 export default function LogbookPage({
@@ -92,7 +117,8 @@ export default function LogbookPage({
       fromSession === 'open' ||
       fromSession === 'waiting_approval' ||
       fromSession === 'overdue' ||
-      fromSession === 'resolved'
+      fromSession === 'resolved' ||
+      fromSession === 'correction'
     ) {
       return fromSession;
     }
@@ -104,6 +130,7 @@ export default function LogbookPage({
   const [overdueOnly, setOverdueOnly] = useState(false);
   const [requiresAckOnly, setRequiresAckOnly] = useState(false);
   const [waitingMyReview, setWaitingMyReview] = useState(false);
+  const [correctionOnly, setCorrectionOnly] = useState(false);
   const [highlightId] = useState<string | null>(
     () => highlightProp || readSession(LOGBOOK_HIGHLIGHT_KEY),
   );
@@ -117,10 +144,18 @@ export default function LogbookPage({
     requiresAck: false,
     assigneeRole: 'staff' as string,
     dueAt: '',
+    resolutionProofType: 'photo' as ProofType,
+    resolutionRequirement: '',
   });
   const [saving, setSaving] = useState(false);
-  const [proofEntryId, setProofEntryId] = useState<string | null>(null);
-  const [resolutionNote, setResolutionNote] = useState('');
+  const [proofEntryId, setProofEntryId] = useState<string | null>(
+    () => readSession(openResolutionSessionKey()),
+  );
+  const [draft, setDraft] = useState<LogbookResolutionDraft>(() => emptyResolutionDraft());
+  const [showCamera, setShowCamera] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const dueNotifyRan = useRef(false);
 
   const { data } = db.useQuery({
@@ -166,6 +201,7 @@ export default function LogbookPage({
         if (assigneeFilter !== 'all' && (e.assigneeRole || '') !== assigneeFilter) return false;
         if (requiresAckOnly && !e.requiresAck) return false;
         if (overdueOnly && !isIssueOverdue(e, now)) return false;
+        if (correctionOnly && !hasCorrectionFeedback(e)) return false;
         if (waitingMyReview) {
           if (
             resolveLogbookIssueStatus(e) !== 'waiting_approval' ||
@@ -191,6 +227,8 @@ export default function LogbookPage({
             return isIssueOverdue(e, now);
           case 'resolved':
             return isLogbookIssue(e) && status === 'resolved';
+          case 'correction':
+            return hasCorrectionFeedback(e);
           default:
             return true;
         }
@@ -208,12 +246,14 @@ export default function LogbookPage({
     requiresAckOnly,
     overdueOnly,
     waitingMyReview,
+    correctionOnly,
     filterTab,
   ]);
 
   useEffect(() => {
     clearSession(LOGBOOK_FILTER_KEY);
     clearSession(LOGBOOK_HIGHLIGHT_KEY);
+    clearSession(openResolutionSessionKey());
   }, []);
 
   useEffect(() => {
@@ -227,7 +267,39 @@ export default function LogbookPage({
     if (!highlightId) return;
     const el = document.getElementById(`logbook-entry-${highlightId}`);
     el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, [highlightId, visibleEntries]);
+    const entry = allEntries.find((e) => e.id === highlightId);
+    if (
+      entry &&
+      canActOnAssignedIssue(profile, entry, defs) &&
+      (resolveLogbookIssueStatus(entry) === 'in_progress' ||
+        resolveLogbookIssueStatus(entry) === 'open') &&
+      hasCorrectionFeedback(entry)
+    ) {
+      openResolutionForm(entry);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open once on highlight
+  }, [highlightId, allEntries.length]);
+
+  function openResolutionForm(entry: LogbookEntry) {
+    setProofEntryId(entry.id);
+    setDraft(emptyResolutionDraft(entry));
+    setShowCamera(false);
+    setSubmitError('');
+    setSuccessMsg('');
+    try {
+      sessionStorage.setItem(openResolutionSessionKey(), entry.id);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function closeResolutionForm() {
+    setProofEntryId(null);
+    setDraft(emptyResolutionDraft());
+    setShowCamera(false);
+    setSubmitError('');
+    clearSession(openResolutionSessionKey());
+  }
 
   if (!pageOpen) {
     return <div className="card">{t.logbook.noPermission}</div>;
@@ -239,6 +311,7 @@ export default function LogbookPage({
       if (!form.storeId) return alert(t.logbook.issueStoreRequired);
       if (!form.assigneeRole) return alert(t.logbook.assigneeRequired);
       if (!form.dueAt) return alert(t.logbook.dueRequired);
+      if (!form.resolutionProofType) return alert(t.logbook.proofTypeRequired);
     }
     if (!canCreate) return alert(t.logbook.noCreatePermission);
     setSaving(true);
@@ -247,7 +320,12 @@ export default function LogbookPage({
       const storeTarget = form.entryType === 'issue' ? form.storeId : form.storeId || '';
       const typeFields =
         form.entryType === 'issue'
-          ? issueCreateFields(form.assigneeRole, new Date(form.dueAt).toISOString())
+          ? issueCreateFields(
+              form.assigneeRole,
+              new Date(form.dueAt).toISOString(),
+              form.resolutionProofType,
+              form.resolutionRequirement,
+            )
           : noteOrAnnouncementFields(form.entryType);
 
       const tx = db.tx.logbookEntries[entryId].update({
@@ -280,6 +358,8 @@ export default function LogbookPage({
           entryType: 'issue' as const,
           isAnnouncement: false,
           status: 'open' as const,
+          resolutionProofType: form.resolutionProofType,
+          resolutionRequirement: form.resolutionRequirement,
         } as LogbookEntry;
         txs.push(...buildLogbookIssueCreatedEvents(entryLike, profile));
         txs.push(
@@ -297,6 +377,8 @@ export default function LogbookPage({
         requiresAck: false,
         assigneeRole: 'staff',
         dueAt: '',
+        resolutionProofType: 'photo',
+        resolutionRequirement: '',
       });
       setShowForm(false);
     } catch (e) {
@@ -333,38 +415,67 @@ export default function LogbookPage({
     ]);
   }
 
-  async function onProofCaptured(entry: LogbookEntry, media: UploadedMedia) {
-    const priorFileId = entry.photo?.id ?? '';
-    const note = resolutionNote.trim();
-    const prevStatus = resolveLogbookIssueStatus(entry) || 'in_progress';
-    const txs: unknown[] = [];
-    if (priorFileId) {
-      txs.push(db.tx.logbookEntries[entry.id].unlink({ photo: priorFileId }));
+  async function submitResolution(entry: LogbookEntry) {
+    const proofType = resolveLogbookProofType(entry);
+    if (!canSubmitResolutionDraft(proofType, draft)) {
+      setSubmitError(t.logbook.resolutionIncomplete);
+      return;
     }
-    txs.push(
-      db.tx.logbookEntries[entry.id].update({
-        status: 'waiting_approval',
-        resolutionNote: note,
-        resolutionSubmittedAt: nowIso(),
-        resolutionSubmittedByUserId: profile.userId,
-        updatedAt: nowIso(),
-      }),
-      db.tx.logbookEntries[entry.id].link({ photo: media.fileId }),
-      buildLogbookResolutionSubmittedEvent(entry, profile, prevStatus, note, priorFileId),
-      ...buildLogbookResolutionSubmittedNotifications(
-        {
-          ...entry,
+    if (needsMedia(proofType) && !draft.media) {
+      setSubmitError(t.logbook.resolutionIncomplete);
+      return;
+    }
+
+    setSubmitting(true);
+    setSubmitError('');
+    try {
+      const priorFileId = entry.photo?.id ?? '';
+      const note = draft.note.trim();
+      const prevStatus = resolveLogbookIssueStatus(entry) || 'in_progress';
+      const txs: unknown[] = [];
+      if (priorFileId && draft.media) {
+        txs.push(db.tx.logbookEntries[entry.id].unlink({ photo: priorFileId }));
+      }
+      txs.push(
+        db.tx.logbookEntries[entry.id].update({
+          status: 'waiting_approval',
           resolutionNote: note,
+          resolutionNumber: draft.numberValue.trim(),
+          resolutionChecked: draft.checked,
+          resolutionSubmittedAt: nowIso(),
           resolutionSubmittedByUserId: profile.userId,
-        },
-        profile,
-        allProfiles,
-        defs,
-      ),
-    );
-    await db.transact(txs as Parameters<typeof db.transact>[0]);
-    setProofEntryId(null);
-    setResolutionNote('');
+          updatedAt: nowIso(),
+        }),
+      );
+      if (draft.media) {
+        txs.push(db.tx.logbookEntries[entry.id].link({ photo: draft.media.fileId }));
+      }
+      txs.push(
+        buildLogbookResolutionSubmittedEvent(entry, profile, prevStatus, note, priorFileId),
+        ...buildLogbookResolutionSubmittedNotifications(
+          {
+            ...entry,
+            resolutionNote: note,
+            resolutionSubmittedByUserId: profile.userId,
+          },
+          profile,
+          allProfiles,
+          defs,
+        ),
+      );
+      await db.transact(txs as Parameters<typeof db.transact>[0]);
+      setSuccessMsg(t.logbook.submitSuccess);
+      closeResolutionForm();
+      setFilterTab('my-assigned');
+      setWaitingMyReview(false);
+      setOverdueOnly(false);
+      setCorrectionOnly(false);
+      setRequiresAckOnly(false);
+    } catch (e) {
+      setSubmitError(e instanceof Error ? e.message : t.logbook.saveFailed);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function approveResolution(entry: LogbookEntry) {
@@ -393,9 +504,9 @@ export default function LogbookPage({
     ]);
   }
 
-  async function rejectResolution(entry: LogbookEntry) {
+  async function requestCorrection(entry: LogbookEntry) {
     if (!canReviewLogbookIssue(profile, entry, defs)) return;
-    const note = prompt(t.logbook.reviewNotePrompt) ?? '';
+    const note = prompt(t.logbook.correctionNotePrompt) ?? '';
     if (!note.trim()) return alert(t.logbook.reviewNoteRequired);
     const now = nowIso();
     await db.transact([
@@ -477,20 +588,33 @@ export default function LogbookPage({
     { id: 'my-assigned', label: t.logbook.myAssigned },
     { id: 'open', label: t.logbook.statusOpen },
     { id: 'waiting_approval', label: t.logbook.statusWaiting },
+    { id: 'correction', label: t.logbook.correctionRequested },
     { id: 'overdue', label: t.logbook.statusOverdue },
     { id: 'resolved', label: t.logbook.statusResolved },
   ];
 
   const proofEntry = proofEntryId
-    ? visibleEntries.find((e) => e.id === proofEntryId) ||
-      allEntries.find((e) => e.id === proofEntryId)
+    ? allEntries.find((e) => e.id === proofEntryId) || null
     : null;
   const proofStore = proofEntry
     ? stores.find((s) => s.id === proofEntry.storeId) || proofEntry.store
     : null;
+  const proofType = proofEntry ? resolveLogbookProofType(proofEntry) : 'photo';
+  const canSubmitDraft = proofEntry
+    ? canSubmitResolutionDraft(proofType, draft)
+    : false;
 
   return (
     <div>
+      {successMsg && (
+        <div className="card" style={{ borderColor: 'var(--success-border, #16a34a)' }}>
+          <p style={{ margin: 0 }}>{successMsg}</p>
+          <button className="secondary" style={{ marginTop: 8 }} type="button" onClick={() => setSuccessMsg('')}>
+            {t.common.cancel}
+          </button>
+        </div>
+      )}
+
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <h1 style={{ margin: 0, flex: 1 }}>{t.logbook.title}</h1>
@@ -587,6 +711,14 @@ export default function LogbookPage({
             />
             {t.logbook.waitingMyReview}
           </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={correctionOnly}
+              onChange={(e) => setCorrectionOnly(e.target.checked)}
+            />
+            {t.logbook.correctionRequested}
+          </label>
         </div>
       </div>
 
@@ -672,6 +804,21 @@ export default function LogbookPage({
                     onChange={(e) => setForm({ ...form, dueAt: e.target.value })}
                   />
                 </label>
+                <label>
+                  {t.logbook.resolutionProofType}
+                  <select
+                    value={form.resolutionProofType}
+                    onChange={(e) =>
+                      setForm({ ...form, resolutionProofType: e.target.value as ProofType })
+                    }
+                  >
+                    {PROOF_TYPES.map((p) => (
+                      <option key={p} value={p}>
+                        {proofTypeLabel(p)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </>
             )}
           </div>
@@ -684,6 +831,17 @@ export default function LogbookPage({
               style={{ marginTop: 4 }}
             />
           </label>
+          {form.entryType === 'issue' && (
+            <label style={{ marginTop: 12, display: 'block' }}>
+              {t.logbook.resolutionRequirement}
+              <textarea
+                value={form.resolutionRequirement}
+                onChange={(e) => setForm({ ...form, resolutionRequirement: e.target.value })}
+                placeholder={t.logbook.resolutionRequirementPlaceholder}
+                style={{ marginTop: 4 }}
+              />
+            </label>
+          )}
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
             <input
               type="checkbox"
@@ -692,42 +850,173 @@ export default function LogbookPage({
             />
             {t.logbook.requiresAck}
           </label>
-          <button style={{ marginTop: 12 }} onClick={addEntry} disabled={saving}>
+          <button style={{ marginTop: 12 }} onClick={() => void addEntry()} disabled={saving}>
             {saving ? t.common.saving : t.logbook.saveEntry}
           </button>
         </div>
       )}
 
-      {proofEntry && proofStore && (
-        <div className="card">
+      {proofEntry && (
+        <div className="card" id="logbook-resolution-panel">
           <h2>{t.logbook.submitResolution}</h2>
-          <label style={{ display: 'block', marginBottom: 8 }}>
-            {t.logbook.resolutionNote}
-            <textarea
-              value={resolutionNote}
-              onChange={(e) => setResolutionNote(e.target.value)}
-              style={{ marginTop: 4 }}
-            />
-          </label>
-          <p className="small">{t.logbook.resolutionProofHint}</p>
-          <TimemarkCamera
-            store={proofStore}
-            itemTitle={`Logbook Issue · ${proofEntry.content.slice(0, 40)}`}
-            reportDate={proofEntry.date}
-            proofContext={{
-              type: 'logbook',
-              logbookEntryId: proofEntry.id,
-              storeId: proofEntry.storeId,
-              content: proofEntry.content,
-            }}
-            profile={profile}
-            proofType="photo"
-            existingMedia={[]}
-            onCapture={(media) => void onProofCaptured(proofEntry, media)}
-          />
-          <button className="secondary" style={{ marginTop: 8 }} onClick={() => setProofEntryId(null)}>
-            {t.common.cancel}
-          </button>
+          <div className="small" style={{ marginBottom: 8 }}>
+            <div>
+              <strong>{t.logbook.resolutionProofType}:</strong> {proofTypeLabel(proofType)}
+            </div>
+            {proofEntry.dueAt && (
+              <div>
+                <strong>{t.logbook.dueAt}:</strong>{' '}
+                {new Date(proofEntry.dueAt).toLocaleString()}
+              </div>
+            )}
+            <div>
+              <strong>{t.logbook.assigneeRole}:</strong> {proofEntry.assigneeRole}
+            </div>
+            <div>
+              <strong>{t.common.severity}:</strong> {proofEntry.severity}
+            </div>
+            {(proofStore || proofEntry.store) && (
+              <div>
+                <strong>{t.common.store}:</strong>{' '}
+                {(proofStore || proofEntry.store)?.code}
+              </div>
+            )}
+          </div>
+          <p style={{ margin: '0 0 8px' }}>{proofEntry.content}</p>
+          {proofEntry.resolutionRequirement?.trim() && (
+            <p className="small" style={{ marginBottom: 12 }}>
+              <strong>{t.logbook.resolutionRequirement}:</strong>{' '}
+              {proofEntry.resolutionRequirement}
+            </p>
+          )}
+          {hasCorrectionFeedback(proofEntry) && (
+            <div className="badge warn" style={{ display: 'block', marginBottom: 12, padding: 8 }}>
+              <strong>{t.logbook.correctionRequested}</strong>
+              <div>{proofEntry.reviewNote}</div>
+            </div>
+          )}
+
+          {needsTick(proofType) && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <input
+                type="checkbox"
+                checked={draft.checked}
+                onChange={(e) => setDraft({ ...draft, checked: e.target.checked })}
+              />
+              {t.logbook.resolutionTick}
+            </label>
+          )}
+
+          {needsNumber(proofType) && (
+            <label style={{ display: 'block', marginBottom: 12 }}>
+              {t.logbook.resolutionNumber} *
+              <input
+                type="number"
+                value={draft.numberValue}
+                onChange={(e) => setDraft({ ...draft, numberValue: e.target.value })}
+                style={{ marginTop: 4 }}
+              />
+            </label>
+          )}
+
+          {(needsNote(proofType) || !needsTick(proofType) || needsMedia(proofType)) && (
+            <label style={{ display: 'block', marginBottom: 12 }}>
+              {needsNote(proofType)
+                ? `${t.logbook.resolutionNoteRequired} *`
+                : t.logbook.resolutionNoteOptional}
+              <textarea
+                value={draft.note}
+                onChange={(e) => setDraft({ ...draft, note: e.target.value })}
+                style={{ marginTop: 4 }}
+              />
+            </label>
+          )}
+
+          {needsMedia(proofType) && proofStore && (
+            <div style={{ marginBottom: 12 }}>
+              <div className="small" style={{ marginBottom: 4 }}>
+                {t.logbook.resolutionProof} *
+              </div>
+              {draft.media ? (
+                <div>
+                  <ProofPhoto
+                    media={{
+                      id: draft.media.fileId,
+                      url: draft.media.url,
+                      fileName: draft.media.fileName,
+                      mimeType: draft.media.mimeType,
+                    }}
+                  />
+                  <p className="small">
+                    {draft.media.capturedAt
+                      ? new Date(draft.media.capturedAt).toLocaleString()
+                      : ''}
+                  </p>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button type="button" className="secondary" onClick={() => setShowCamera(true)}>
+                      {t.camera.retake}
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => setDraft({ ...draft, media: null })}
+                    >
+                      {t.logbook.removeProof}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setShowCamera(true)}>
+                  {t.camera.openCamera}
+                </button>
+              )}
+              {showCamera && (
+                <div style={{ marginTop: 12 }}>
+                  <TimemarkCamera
+                    store={proofStore}
+                    itemTitle={`Logbook Issue · ${proofEntry.content.slice(0, 40)}`}
+                    reportDate={proofEntry.date}
+                    proofContext={{
+                      type: 'logbook',
+                      logbookEntryId: proofEntry.id,
+                      storeId: proofEntry.storeId,
+                      content: proofEntry.content,
+                    }}
+                    profile={profile}
+                    proofType={proofType}
+                    existingMedia={[]}
+                    onCapture={(media: UploadedMedia) => {
+                      setDraft((d) => ({ ...d, media }));
+                      setShowCamera(false);
+                    }}
+                  />
+                  <button
+                    className="secondary"
+                    style={{ marginTop: 8 }}
+                    type="button"
+                    onClick={() => setShowCamera(false)}
+                  >
+                    {t.common.cancel}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {submitError && <p className="small" style={{ color: 'var(--danger, #f87171)' }}>{submitError}</p>}
+
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+            <button
+              type="button"
+              disabled={submitting || !canSubmitDraft}
+              onClick={() => void submitResolution(proofEntry)}
+            >
+              {submitting ? t.common.saving : t.logbook.submitForApproval}
+            </button>
+            <button type="button" className="secondary" onClick={closeResolutionForm} disabled={submitting}>
+              {t.common.cancel}
+            </button>
+          </div>
         </div>
       )}
 
@@ -740,6 +1029,8 @@ export default function LogbookPage({
         const overdue = isIssueOverdue(entry);
         const highlighted = highlightId === entry.id;
         const entryEvents = allEvents.filter((ev) => ev.logbookEntryId === entry.id);
+        const entryProofType = resolveLogbookProofType(entry);
+        const correction = hasCorrectionFeedback(entry);
 
         return (
           <div
@@ -760,6 +1051,7 @@ export default function LogbookPage({
                 <span className={badgeClass(status)}>{statusLabel(t, status)}</span>
               )}
               {overdue && <span className="badge bad">{t.logbook.statusOverdue}</span>}
+              {correction && <span className="badge warn">{t.logbook.correctionRequested}</span>}
               <span
                 className={`badge ${
                   entry.severity === 'critical'
@@ -778,17 +1070,49 @@ export default function LogbookPage({
                   {t.logbook.assigneeRole}: {entry.assigneeRole}
                 </span>
               )}
+              {type === 'issue' && (
+                <span className="small">
+                  {t.logbook.resolutionProofType}: {proofTypeLabel(entryProofType)}
+                </span>
+              )}
             </div>
             <p style={{ margin: '8px 0 0' }}>{entry.content}</p>
+            {entry.resolutionRequirement?.trim() && type === 'issue' && (
+              <p className="small" style={{ margin: '4px 0 0' }}>
+                <strong>{t.logbook.resolutionRequirement}:</strong> {entry.resolutionRequirement}
+              </p>
+            )}
             <p className="small" style={{ margin: '4px 0 0' }}>
               {entry.date} · {entry.createdAt?.slice(11, 16)}
               {entry.dueAt ? ` · ${t.logbook.dueAt}: ${new Date(entry.dueAt).toLocaleString()}` : ''}
             </p>
 
+            {correction && (
+              <div className="badge warn" style={{ display: 'block', marginTop: 8, padding: 8 }}>
+                <strong>{t.logbook.correctionRequested}</strong>
+                <div>{entry.reviewNote}</div>
+              </div>
+            )}
+
             {entry.photo?.url && (
               <div style={{ marginTop: 8 }}>
                 <div className="small">{t.logbook.resolutionProof}</div>
                 <ProofPhoto media={{ id: entry.photo.id, url: entry.photo.url }} />
+              </div>
+            )}
+            {type === 'issue' && (entry.resolutionNote || entry.resolutionNumber || entry.resolutionChecked) && (
+              <div className="small" style={{ marginTop: 8 }}>
+                {entry.resolutionChecked && <div>{t.logbook.resolutionTick}: ✓</div>}
+                {entry.resolutionNumber && (
+                  <div>
+                    {t.logbook.resolutionNumber}: {entry.resolutionNumber}
+                  </div>
+                )}
+                {entry.resolutionNote && (
+                  <div>
+                    {t.logbook.resolutionNoteOptional}: {entry.resolutionNote}
+                  </div>
+                )}
               </div>
             )}
 
@@ -801,21 +1125,21 @@ export default function LogbookPage({
                 )}
                 {canActOnAssignedIssue(profile, entry, defs) &&
                   (status === 'in_progress' || status === 'open') && (
-                    <button type="button" onClick={() => setProofEntryId(entry.id)}>
-                      {t.logbook.submitResolution}
+                    <button type="button" onClick={() => openResolutionForm(entry)}>
+                      {correction ? t.logbook.resubmitResolution : t.logbook.submitResolution}
                     </button>
                   )}
                 {canReviewLogbookIssue(profile, entry, defs) && status === 'waiting_approval' && (
                   <>
                     <button type="button" onClick={() => void approveResolution(entry)}>
-                      {t.common.approve}
+                      {t.logbook.approveResolution}
                     </button>
                     <button
                       type="button"
                       className="secondary"
-                      onClick={() => void rejectResolution(entry)}
+                      onClick={() => void requestCorrection(entry)}
                     >
-                      {t.common.reject}
+                      {t.logbook.requestCorrection}
                     </button>
                   </>
                 )}
@@ -866,7 +1190,7 @@ export default function LogbookPage({
         );
       })}
 
-      {!visibleEntries.length && (
+      {!visibleEntries.length && !proofEntry && (
         <div className="card">
           <p>{t.logbook.noEntries}</p>
         </div>
