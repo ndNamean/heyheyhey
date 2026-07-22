@@ -49,15 +49,17 @@ export async function loadProfileContext(userId) {
   }
 
   const storeIds = (profile.stores ?? []).map((s) => s.id);
+  const roleDefinitions = result.roleDefinitions ?? [];
   // Prefer roleDefinitions-by-key (Capabilities matrix) over a possibly
   // missing/malformed has:one link — matches client RoleDefinitionsContext.
-  const roleDefinition = resolveRoleDefinition(profile, result.roleDefinitions ?? []);
+  const roleDefinition = resolveRoleDefinition(profile, roleDefinitions);
 
   return {
     profileId: profile.id,
     userId: profile.userId,
     role: profile.role,
     roleDefinition: roleDefinition ?? null,
+    roleDefinitions,
     approvalStatus: profile.approvalStatus,
     displayName: profile.displayName ?? '',
     email: profile.email ?? '',

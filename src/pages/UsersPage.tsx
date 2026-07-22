@@ -26,9 +26,9 @@ import {
   canManageUsers,
   canPreApproveAccess,
   canViewRolesPermissions,
-  getOrderedRoles,
 } from '../lib/roles';
-import { ELEVATED_ASSIGN_ROLE_KEYS, OWNER_ROLE_KEY } from '../types';
+import { rolesAssignableBy, storesSelectableBy, canAssignRole } from '../lib/inviteScope';
+import { OWNER_ROLE_KEY } from '../types';
 import { badgeClass, nowIso } from '../lib/utils';
 import type { InvitationAdminRow, Profile, Role, Store } from '../types';
 import {
@@ -87,7 +87,10 @@ function InviteUserForm({
 }) {
   const { t } = useLang();
   const [email, setEmail] = useState('');
-  const [role, setRole] = useState<Role>('staff');
+  const defaultRole = assignableRoles.includes('staff')
+    ? 'staff'
+    : (assignableRoles[0] ?? 'staff');
+  const [role, setRole] = useState<Role>(defaultRole);
   const [storeIds, setStoreIds] = useState<string[]>([]);
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -98,6 +101,17 @@ function InviteUserForm({
   const [emailReason, setEmailReason] = useState('');
 
   const rolesForInvite = assignableRoles;
+
+  useEffect(() => {
+    if (!assignableRoles.includes(role) && assignableRoles.length) {
+      setRole(assignableRoles.includes('staff') ? 'staff' : assignableRoles[0]);
+    }
+  }, [assignableRoles, role]);
+
+  useEffect(() => {
+    const allowed = new Set(stores.map((s) => s.id));
+    setStoreIds((prev) => prev.filter((id) => allowed.has(id)));
+  }, [stores]);
 
   const copyLink = useCallback(async (link: string) => {
     try {
@@ -365,12 +379,19 @@ function ApproveModal({
   onClose: () => void;
 }) {
   const { t } = useLang();
-  const initialRole = assignableRoles.includes(pending.role) ? pending.role : 'staff';
+  const initialRole = assignableRoles.includes(pending.role)
+    ? pending.role
+    : assignableRoles.includes('staff')
+      ? 'staff'
+      : (assignableRoles[0] ?? 'staff');
   const [role, setRole] = useState<Role>(initialRole);
   const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>(() => {
+    const allowed = new Set(stores.map((s) => s.id));
     const fromInvite = parseAccessReviewStoreIds(pending.invitedStoreIdsJson);
-    if (fromInvite.length) return fromInvite;
-    return parseAccessReviewStoreIds(pending.accessReviewStoreIdsJson);
+    const raw = fromInvite.length
+      ? fromInvite
+      : parseAccessReviewStoreIds(pending.accessReviewStoreIdsJson);
+    return raw.filter((id) => allowed.has(id));
   });
   const [saving, setSaving] = useState(false);
 
@@ -860,9 +881,13 @@ export default function UsersPage({ currentProfile }: Props) {
   const isManager = canPreApproveAccess(currentProfile.role, defs);
   const showRolesTab = canViewRolesPermissions(currentProfile.role, defs);
 
-  const allRoleKeys = getOrderedRoles(defs);
-  const assignableRoles = allRoleKeys.filter(
-    (r) => isOwner || !ELEVATED_ASSIGN_ROLE_KEYS.includes(r as (typeof ELEVATED_ASSIGN_ROLE_KEYS)[number]),
+  const assignableRoles = rolesAssignableBy(currentProfile.role, defs);
+  const actorStoreIds = (currentProfile.stores ?? []).map((s) => s.id);
+  const scopedStores = storesSelectableBy(
+    currentProfile.role,
+    actorStoreIds,
+    stores,
+    defs,
   );
 
   if (!canAccessUsersPage(currentProfile.role, defs)) {
@@ -877,7 +902,7 @@ export default function UsersPage({ currentProfile }: Props) {
     : [];
 
   async function updateRole(profile: Profile, role: Role) {
-    if (!isOwner && ELEVATED_ASSIGN_ROLE_KEYS.includes(role as (typeof ELEVATED_ASSIGN_ROLE_KEYS)[number])) {
+    if (!canAssignRole(currentProfile.role, role, defs)) {
       alert(t.users.ownerRoleOnly);
       return;
     }
@@ -1039,7 +1064,7 @@ export default function UsersPage({ currentProfile }: Props) {
       {approvingProfile && (
         <ApproveModal
           pending={approvingProfile}
-          stores={stores}
+          stores={scopedStores}
           currentProfile={currentProfile}
           defs={defs}
           assignableRoles={assignableRoles}
@@ -1050,7 +1075,7 @@ export default function UsersPage({ currentProfile }: Props) {
       {requestManagerProfile && (
         <RequestManagerModal
           target={requestManagerProfile}
-          stores={stores}
+          stores={scopedStores}
           currentProfile={currentProfile}
           allProfiles={profiles}
           onClose={() => setRequestManagerId(null)}
@@ -1090,7 +1115,7 @@ export default function UsersPage({ currentProfile }: Props) {
             <InviteUserForm
               currentProfile={currentProfile}
               assignableRoles={assignableRoles}
-              stores={stores}
+              stores={scopedStores}
               onCreated={() => setInviteRefreshKey((k) => k + 1)}
             />
           </div>
@@ -1175,14 +1200,15 @@ export default function UsersPage({ currentProfile }: Props) {
             </thead>
             <tbody>
               {allProfiles.map((p) => {
-                const canEditRole =
-                  isOwner ||
-                  !ELEVATED_ASSIGN_ROLE_KEYS.includes(
-                    p.role as (typeof ELEVATED_ASSIGN_ROLE_KEYS)[number],
-                  );
+                const canEditRole = canAssignRole(currentProfile.role, p.role, defs);
                 const linkStatus = getRoleLinkStatus(p, defs);
                 const roleDef = getRoleDef(p.role, defs);
                 const linkedKey = p.roleDefinition?.key;
+                const roleOptions = canEditRole
+                  ? assignableRoles.includes(p.role)
+                    ? assignableRoles
+                    : [p.role, ...assignableRoles.filter((r) => r !== p.role)]
+                  : [p.role];
                 return (
                   <tr key={p.id}>
                     <td>
@@ -1206,13 +1232,7 @@ export default function UsersPage({ currentProfile }: Props) {
                         disabled={!canEditRole || roleChangeSaving}
                         style={{ minWidth: 120, fontSize: 13 }}
                       >
-                        {allRoleKeys.filter(
-                          (r) =>
-                            isOwner ||
-                            !ELEVATED_ASSIGN_ROLE_KEYS.includes(
-                              r as (typeof ELEVATED_ASSIGN_ROLE_KEYS)[number],
-                            ),
-                        ).map((r) => (
+                        {roleOptions.map((r) => (
                           <option key={r} value={r}>
                             {r}
                           </option>

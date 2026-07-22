@@ -7,6 +7,7 @@ import { id } from '@instantdb/admin';
 import { getAdminDb, parseBody } from './_lib/export/instant-admin.js';
 import { verifyRequestUser, loadProfileContext } from './_lib/export/auth.js';
 import { roleCanManageUsers } from './_lib/export/role-capabilities.js';
+import { canInviteAsRole, assertInviteStoreIds } from './_lib/export/invite-scope.js';
 import { getAppOrigin } from './_lib/magic-code-email.js';
 import { sendInviteEmail } from './_lib/invite-email.js';
 import {
@@ -17,8 +18,6 @@ import {
   parseStoreIdsJson,
   isExpired,
 } from './_lib/invite-crypto.js';
-
-const OWNER_ONLY_ROLES = new Set(['owner', 'areaManager']);
 
 function normalizeOrigin(raw) {
   const fallback = getAppOrigin();
@@ -107,10 +106,23 @@ async function createInvite(req, res) {
   if (!email || !email.includes('@')) {
     return res.status(400).json({ error: 'Valid email is required' });
   }
-  if (OWNER_ONLY_ROLES.has(role) && ctx.role !== 'owner') {
+
+  const defs = ctx.roleDefinitions ?? [];
+  if (!canInviteAsRole(ctx.role, role, defs)) {
     return res.status(403).json({
-      error: 'Only the owner can invite users as owner or area manager',
+      error: 'Forbidden: cannot invite a role at or above your hierarchy level',
     });
+  }
+
+  const storeErr = assertInviteStoreIds(
+    ctx.role,
+    ctx.storeIds ?? [],
+    storeIds,
+    ctx.roleDefinition,
+    defs,
+  );
+  if (storeErr) {
+    return res.status(403).json({ error: storeErr });
   }
 
   const adminDb = getAdminDb();
