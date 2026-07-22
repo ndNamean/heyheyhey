@@ -894,6 +894,9 @@ export const sectionsEn = {
     resolutionProof: 'Resolution proof',
     resolutionProofHint: 'Capture proof media, then submit for approval.',
     resolutionProofType: 'Resolution requirement',
+    proofLatest: 'Latest',
+    proofPrevious: 'Previous',
+    proofAttempt: 'Attempt {n}',
     resolutionRequirement: 'Resolution instructions',
     resolutionRequirementPlaceholder:
       'Describe exactly what the assignee must submit (e.g. photo of the repaired seal).',
@@ -1957,6 +1960,9 @@ export const sectionsVi = {
     resolutionProof: 'Bằng chứng xử lý',
     resolutionProofHint: 'Chụp minh chứng rồi gửi để phê duyệt.',
     resolutionProofType: 'Yêu cầu xác nhận hoàn thành',
+    proofLatest: 'Mới nhất',
+    proofPrevious: 'Trước đó',
+    proofAttempt: 'Lần {n}',
     resolutionRequirement: 'Hướng dẫn xác nhận hoàn thành',
     resolutionRequirementPlaceholder:
       'Mô tả chính xác những gì người được giao phải nộp (vd. ảnh ron tủ lạnh đã sửa).',

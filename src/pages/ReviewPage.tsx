@@ -29,7 +29,7 @@ import {
   isIssueOverdue,
   isLogbookIssue,
   resolveLogbookIssueStatus,
-  resolveResolutionMedia,
+  resolveResolutionProofs,
   resolveSourceMedia,
 } from '../lib/logbook';
 import {
@@ -69,7 +69,7 @@ export default function ReviewPage({ profile }: Props) {
       responses: { media: { file: {} } },
       store: {},
     },
-    logbookEntries: { store: {}, photo: {}, sourceMedia: {}, resolutionMedia: {} },
+    logbookEntries: { store: {}, photo: {}, sourceMedia: {}, resolutionMedia: {}, resolutionProofHistory: {} },
     profiles: { stores: {} },
     reviewEvents: {},
   });
@@ -303,7 +303,7 @@ export default function ReviewPage({ profile }: Props) {
           const creator = resolveActorDisplay(entry.authorUserId, undefined, allProfiles);
           const entryEvents = allEvents.filter((e) => e.logbookEntryId === entry.id);
           const sourceMedia = resolveSourceMedia(entry);
-          const resolutionMedia = resolveResolutionMedia(entry);
+          const resolutionProofs = resolveResolutionProofs(entry);
           const configState = getIssueConfigurationState(entry);
           return (
             <div className="card" key={entry.id}>
@@ -372,10 +372,36 @@ export default function ReviewPage({ profile }: Props) {
                   ))}
                 </div>
               )}
-              {resolutionMedia?.url && (
+              {resolutionProofs.length > 0 && (
                 <div style={{ marginTop: 8 }}>
                   <div className="small">{t.logbook.resolutionProof}</div>
-                  <ProofPhoto media={{ id: resolutionMedia.id, url: resolutionMedia.url }} />
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 12,
+                      overflowX: 'auto',
+                      paddingBottom: 4,
+                      alignItems: 'flex-start',
+                    }}
+                  >
+                    {resolutionProofs.map((m, idx) => {
+                      const isLatest = idx === resolutionProofs.length - 1;
+                      const label =
+                        resolutionProofs.length === 1
+                          ? t.logbook.proofLatest
+                          : isLatest
+                            ? t.logbook.proofLatest
+                            : t.logbook.proofAttempt.replace('{n}', String(idx + 1));
+                      return (
+                        <div key={m.id} style={{ flex: '0 0 auto', minWidth: 120 }}>
+                          <div className="small" style={{ marginBottom: 4 }}>
+                            {label}
+                          </div>
+                          <ProofPhoto media={{ id: m.id, url: m.url }} />
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
               {entryEvents.length > 0 && (

@@ -63,7 +63,10 @@ export function TimelineStepsList({
           <span className="report-timeline-step-label">{eventLabel(t, step.eventType)}</span>
           {step.actorRole && (
             <span className="small">
-              {t.timeline.by} {step.actorRole}
+              {t.timeline.by}{' '}
+              {step.actorDisplayNameSnapshot?.trim()
+                ? `${step.actorDisplayNameSnapshot.trim()} (${step.actorRole})`
+                : step.actorRole}
             </span>
           )}
           {step.note && <span className="report-timeline-step-note">{step.note}</span>}

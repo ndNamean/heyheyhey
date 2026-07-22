@@ -604,6 +604,8 @@ export interface LogbookEntry {
   photo?: LogbookFileRef;
   sourceMedia?: LogbookFileRef[];
   resolutionMedia?: LogbookFileRef;
+  /** Append-only list of all submitted resolution proofs (including current). */
+  resolutionProofHistory?: LogbookFileRef[];
 }
 
 export type ReviewEventType =

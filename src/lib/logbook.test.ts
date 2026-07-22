@@ -15,6 +15,7 @@ import {
   resolveLogbookEntryType,
   resolveLogbookIssueStatus,
   resolveResolutionMedia,
+  resolveResolutionProofs,
   resolveSourceMedia,
 } from './logbook';
 import {
@@ -99,6 +100,7 @@ function entry(partial: Partial<LogbookEntry>): LogbookEntry {
     photo: partial.photo,
     sourceMedia: partial.sourceMedia,
     resolutionMedia: partial.resolutionMedia,
+    resolutionProofHistory: partial.resolutionProofHistory,
   };
 }
 
@@ -393,6 +395,33 @@ describe('media separation', () => {
     });
     expect(resolveSourceMedia(e)[0]?.id).toBe('s1');
     expect(resolveResolutionMedia(e)?.id).toBe('r1');
+  });
+
+  it('resolveResolutionProofs merges history and current without dupes', () => {
+    const a = { id: 'a', url: 'https://x/a.jpg' };
+    const b = { id: 'b', url: 'https://x/b.jpg' };
+    const withHistory = entry({
+      entryType: 'issue',
+      resolutionSubmittedAt: '2026-07-21T12:00:00.000Z',
+      resolutionProofHistory: [a, b],
+      resolutionMedia: b,
+    });
+    expect(resolveResolutionProofs(withHistory).map((f) => f.id)).toEqual(['a', 'b']);
+
+    const currentOnly = entry({
+      entryType: 'issue',
+      resolutionSubmittedAt: '2026-07-21T12:00:00.000Z',
+      resolutionMedia: b,
+    });
+    expect(resolveResolutionProofs(currentOnly).map((f) => f.id)).toEqual(['b']);
+
+    const historyMissingCurrent = entry({
+      entryType: 'issue',
+      resolutionSubmittedAt: '2026-07-21T12:00:00.000Z',
+      resolutionProofHistory: [a],
+      resolutionMedia: b,
+    });
+    expect(resolveResolutionProofs(historyMissingCurrent).map((f) => f.id)).toEqual(['a', 'b']);
   });
 });
 

@@ -18,6 +18,7 @@ export interface TimelineStep {
   reportResponseId: string;
   statusAfter: string;
   actorRole: string;
+  actorDisplayNameSnapshot?: string;
   note: string;
   source: TimelineStepSource;
 }
@@ -86,6 +87,7 @@ function eventToStep(event: ReviewEvent): TimelineStep {
     reportResponseId: event.reportResponseId,
     statusAfter: event.statusAfter,
     actorRole: event.actorRole,
+    actorDisplayNameSnapshot: event.actorDisplayNameSnapshot,
     note: event.note,
     source: 'event',
   };

@@ -485,6 +485,17 @@ export function resolveResolutionMedia(entry: LogbookEntry): LogbookFileRef | nu
   return null;
 }
 
+/** Ordered proofs for UI: history + current if missing (dedupe by id). */
+export function resolveResolutionProofs(entry: LogbookEntry): LogbookFileRef[] {
+  const history = (entry.resolutionProofHistory ?? []).filter((f) => f?.id);
+  const seen = new Set(history.map((f) => f.id));
+  const current = resolveResolutionMedia(entry);
+  if (current?.id && !seen.has(current.id)) {
+    return [...history, current];
+  }
+  return history.length ? history : current?.id ? [current] : [];
+}
+
 export function logSubmitStepFailure(info: {
   entryId: string;
   actorRole: string;

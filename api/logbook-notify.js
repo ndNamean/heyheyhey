@@ -139,6 +139,7 @@ async function handleSubmitResolution(req, res, adminDb, actor, body) {
         $: { where: { id: entryId } },
         photo: {},
         resolutionMedia: {},
+        resolutionProofHistory: {},
       },
     });
     entry = result.logbookEntries?.[0];
@@ -168,6 +169,11 @@ async function handleSubmitResolution(req, res, adminDb, actor, body) {
 
   const priorResolutionId = entry.resolutionMedia?.id || '';
   const priorPhotoId = entry.photo?.id || '';
+  const historyIds = new Set(
+    (entry.resolutionProofHistory || [])
+      .map((f) => f?.id)
+      .filter(Boolean),
+  );
   const prevStatus = String(entry.status || 'in_progress');
   const createdAt = nowIso();
   const displayName =
@@ -176,6 +182,16 @@ async function handleSubmitResolution(req, res, adminDb, actor, body) {
     actor.userId;
 
   const txs = [];
+
+  // Preserve prior proof in append-only history before replacing the one-slot current.
+  if (priorResolutionId && !historyIds.has(priorResolutionId)) {
+    txs.push(
+      adminDb.tx.logbookEntries[entryId].link({
+        resolutionProofHistory: priorResolutionId,
+      }),
+    );
+    historyIds.add(priorResolutionId);
+  }
 
   if (priorResolutionId) {
     txs.push(
@@ -202,6 +218,13 @@ async function handleSubmitResolution(req, res, adminDb, actor, body) {
   );
 
   if (fileId) {
+    if (!historyIds.has(fileId)) {
+      txs.push(
+        adminDb.tx.logbookEntries[entryId].link({
+          resolutionProofHistory: fileId,
+        }),
+      );
+    }
     txs.push(
       adminDb.tx.logbookEntries[entryId].link({ resolutionMedia: fileId }),
     );

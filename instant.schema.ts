@@ -630,10 +630,16 @@ const _schema = i.schema({
       reverse: { on: '$files', has: 'many', label: 'logbookSourceEntries' },
     },
 
-    // Resolution proof media (one)
+    // Resolution proof media (one) — latest proof only
     logbookEntryResolutionMedia: {
       forward: { on: 'logbookEntries', has: 'one', label: 'resolutionMedia' },
       reverse: { on: '$files', has: 'many', label: 'logbookResolutionEntries' },
+    },
+
+    // All submitted resolution proofs (append-only history)
+    logbookEntryResolutionProofHistory: {
+      forward: { on: 'logbookEntries', has: 'many', label: 'resolutionProofHistory' },
+      reverse: { on: '$files', has: 'many', label: 'logbookResolutionHistoryEntries' },
     },
 
     // ─── Checklist item proposals ────────────────────────────────────────────

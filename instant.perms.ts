@@ -359,6 +359,7 @@ const rules = {
         store: 'isApproved',
         photo: 'isApproved',
         resolutionMedia: 'isApproved',
+        resolutionProofHistory: 'isApproved',
         sourceMedia: 'isApproved',
       },
       unlink: {
@@ -366,6 +367,8 @@ const rules = {
         // Resubmit replaces proof — assignees/reviewers must unlink prior photo
         photo: 'isApproved',
         resolutionMedia: 'isApproved',
+        // Prefer no unlink of history in product logic; rule is for safety only
+        resolutionProofHistory: 'isApproved',
         sourceMedia: 'isApproved',
       },
     },
