@@ -27,7 +27,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   };
 }
 
-/** Stage A — Admin commit (required when resolution media is attached). */
+/** Stage A — Admin commit (via existing /api/logbook-notify; Hobby function limit). */
 export async function postLogbookSubmitResolution(params: {
   entryId: string;
   attemptId: string;
@@ -38,10 +38,11 @@ export async function postLogbookSubmitResolution(params: {
 }): Promise<LogbookSubmitResolutionResult> {
   try {
     const headers = await getAuthHeaders();
-    const resp = await fetch('/api/logbook-submit-resolution', {
+    const resp = await fetch('/api/logbook-notify', {
       method: 'POST',
       headers,
       body: JSON.stringify({
+        type: 'submit_resolution',
         entryId: params.entryId,
         attemptId: params.attemptId,
         note: params.note,

@@ -1,7 +1,9 @@
 /**
- * Vercel Serverless — Logbook Stage B notifications (Admin SDK).
- * Creates inbox rows after client Stage A commit so Staff do not need
- * notifications.create for resolution_submitted.
+ * Vercel Serverless — Logbook Admin SDK actions.
+ * - type submit_resolution: Stage A (status + resolutionMedia + timeline)
+ * - type resolution_submitted | creator_update | issue_recalled: Stage B inbox
+ *
+ * Kept as one function so Hobby stays under the serverless function limit.
  */
 
 import { id } from '@instantdb/admin';
@@ -38,13 +40,27 @@ function hasStoreAccess(profile, storeId) {
   if (!storeId) return false;
   const ids = profileStoreIds(profile);
   if (ids.includes(storeId)) return true;
-  // areaManager / owner / admin often have all-store access via role
   const role = profile.role || '';
   return role === 'owner' || role === 'areaManager' || role === 'admin';
 }
 
 function issueSnippet(entry) {
   return String(entry.content || '').trim().slice(0, 120) || 'Logbook issue';
+}
+
+function isIssue(entry) {
+  return String(entry?.entryType || '') === 'issue';
+}
+
+function canSubmitResolution(actor, entry) {
+  if (!isIssue(entry)) return false;
+  const status = String(entry.status || '');
+  if (status !== 'open' && status !== 'in_progress') return false;
+  if (actor.approvalStatus !== 'approved') return false;
+  if (!entry.storeId || !hasStoreAccess(actor, entry.storeId)) return false;
+  const assignee = String(entry.assigneeRole || '').trim();
+  if (!assignee || actor.role !== assignee) return false;
+  return true;
 }
 
 async function loadRoleDefinitions(adminDb) {
@@ -104,6 +120,136 @@ function getAssigneeRecipients(entry, profiles, actorUserId) {
   return [...recipients];
 }
 
+async function handleSubmitResolution(req, res, adminDb, actor, body) {
+  const entryId = String(body.entryId || '').trim();
+  const attemptId = String(body.attemptId || body.resolutionAttemptId || '').trim();
+  const note = String(body.note || '').trim();
+  const resolutionNumber = String(body.resolutionNumber || '').trim();
+  const resolutionChecked = Boolean(body.resolutionChecked);
+  const fileId = String(body.fileId || '').trim();
+
+  if (!entryId || !attemptId) {
+    return res.status(400).json({ error: 'Missing entryId or attemptId' });
+  }
+
+  let entry;
+  try {
+    const result = await adminDb.query({
+      logbookEntries: {
+        $: { where: { id: entryId } },
+        photo: {},
+        resolutionMedia: {},
+      },
+    });
+    entry = result.logbookEntries?.[0];
+  } catch (e) {
+    return res.status(500).json({
+      error: e instanceof Error ? e.message : 'Failed to load entry',
+    });
+  }
+
+  if (!entry) {
+    return res.status(404).json({ error: 'Entry not found' });
+  }
+
+  if (!canSubmitResolution(actor, entry)) {
+    return res.status(403).json({
+      error: 'Cannot submit resolution for this issue',
+    });
+  }
+
+  if (
+    entry.resolutionAttemptId === attemptId &&
+    entry.status === 'waiting_approval' &&
+    entry.resolutionSubmittedByUserId === actor.userId
+  ) {
+    return res.status(200).json({ ok: true, deduped: true });
+  }
+
+  const priorResolutionId = entry.resolutionMedia?.id || '';
+  const priorPhotoId = entry.photo?.id || '';
+  const prevStatus = String(entry.status || 'in_progress');
+  const createdAt = nowIso();
+  const displayName =
+    actor.displayName?.trim() ||
+    actor.email?.split('@')[0] ||
+    actor.userId;
+
+  const txs = [];
+
+  if (priorResolutionId) {
+    txs.push(
+      adminDb.tx.logbookEntries[entryId].unlink({
+        resolutionMedia: priorResolutionId,
+      }),
+    );
+  }
+  if (priorPhotoId && priorPhotoId === priorResolutionId) {
+    txs.push(adminDb.tx.logbookEntries[entryId].unlink({ photo: priorPhotoId }));
+  }
+
+  txs.push(
+    adminDb.tx.logbookEntries[entryId].update({
+      status: 'waiting_approval',
+      resolutionNote: note,
+      resolutionNumber,
+      resolutionChecked,
+      resolutionSubmittedAt: createdAt,
+      resolutionSubmittedByUserId: actor.userId,
+      resolutionAttemptId: attemptId,
+      updatedAt: createdAt,
+    }),
+  );
+
+  if (fileId) {
+    txs.push(
+      adminDb.tx.logbookEntries[entryId].link({ resolutionMedia: fileId }),
+    );
+  }
+
+  const eventNote = [
+    note,
+    `attempt:${attemptId}`,
+    priorResolutionId ? `priorFileId:${priorResolutionId}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  txs.push(
+    adminDb.tx.reviewEvents[id()].update({
+      reportId: '',
+      reportResponseId: '',
+      storeId: entry.storeId || '',
+      eventType: 'resolution_submitted',
+      itemTitle: String(entry.content || '').slice(0, 80),
+      templateItemId: '',
+      sectionSnapshot: '',
+      categorySnapshot: '',
+      statusAfter: 'waiting_approval',
+      previousStatus: prevStatus,
+      actorUserId: actor.userId,
+      actorRole: actor.role,
+      actorDisplayNameSnapshot: displayName,
+      note: eventNote,
+      feedbackCode: '',
+      feedbackNote: '',
+      createdAt,
+      logbookEntryId: entryId,
+      targetType: 'logbook',
+    }),
+  );
+
+  try {
+    await adminDb.transact(txs);
+  } catch (e) {
+    return res.status(500).json({
+      error: e instanceof Error ? e.message : 'Submit transaction failed',
+    });
+  }
+
+  return res.status(200).json({ ok: true, attemptId });
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -128,8 +274,14 @@ export default async function handler(req, res) {
   }
 
   const body = parseBody(req.body) || {};
-  const entryId = String(body.entryId || '').trim();
   const type = String(body.type || '').trim();
+  const adminDb = getAdminDb();
+
+  if (type === 'submit_resolution') {
+    return handleSubmitResolution(req, res, adminDb, actor, body);
+  }
+
+  const entryId = String(body.entryId || '').trim();
   const attemptId = String(body.attemptId || body.resolutionAttemptId || '').trim();
 
   if (!entryId) {
@@ -142,8 +294,6 @@ export default async function handler(req, res) {
   ) {
     return res.status(400).json({ error: 'Unsupported notification type' });
   }
-
-  const adminDb = getAdminDb();
 
   let entry;
   let profiles;
@@ -191,7 +341,6 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: 'Not the resolution submitter' });
     }
 
-    // Idempotency: skip if we already have a matching notification for this attempt
     try {
       const existing = await adminDb.query({
         notifications: {
