@@ -187,6 +187,13 @@ export default function LogbookPage({
     resolutionProofType: 'photo' as ProofType,
     resolutionRequirement: '',
   });
+  const [changeAssignEntryId, setChangeAssignEntryId] = useState<string | null>(null);
+  const [changeAssignForm, setChangeAssignForm] = useState({
+    assigneeRole: 'staff',
+    dueAt: '',
+    reason: '',
+  });
+  const [changeAssignSaving, setChangeAssignSaving] = useState(false);
   const dueNotifyRan = useRef(false);
 
   const { data } = db.useQuery({
@@ -636,19 +643,26 @@ export default function LogbookPage({
     ]);
   }
 
-  async function changeAssignment(entry: LogbookEntry) {
+  function openChangeAssignment(entry: LogbookEntry) {
     if (!canEditLogbookAssignment(profile, entry, defs)) return;
-    const role =
-      prompt(t.logbook.changeAssigneePrompt, entry.assigneeRole || 'staff')?.trim() || '';
+    setChangeAssignEntryId(entry.id);
+    setChangeAssignForm({
+      assigneeRole: entry.assigneeRole || 'staff',
+      dueAt: entry.dueAt ? entry.dueAt.slice(0, 16) : '',
+      reason: '',
+    });
+  }
+
+  async function submitChangeAssignment(entry: LogbookEntry) {
+    if (!canEditLogbookAssignment(profile, entry, defs)) return;
+    const role = changeAssignForm.assigneeRole.trim();
     if (!role || !LOGBOOK_ASSIGNEE_ROLES.includes(role as (typeof LOGBOOK_ASSIGNEE_ROLES)[number])) {
       return alert(t.logbook.assigneeRequired);
     }
-    const dueLocal = prompt(t.logbook.changeDuePrompt, entry.dueAt?.slice(0, 16) || '')?.trim();
-    if (!dueLocal) return alert(t.logbook.dueRequired);
-    const reason = prompt(t.logbook.changeReasonPrompt) ?? '';
-    if (!reason.trim()) return alert(t.logbook.changeReasonRequired);
+    if (!changeAssignForm.dueAt.trim()) return alert(t.logbook.dueRequired);
+    if (!changeAssignForm.reason.trim()) return alert(t.logbook.changeReasonRequired);
 
-    const dueAt = new Date(dueLocal).toISOString();
+    const dueAt = new Date(changeAssignForm.dueAt).toISOString();
     const prevStatus = resolveLogbookIssueStatus(entry) || 'open';
     let nextStatus = prevStatus;
     if (prevStatus === 'waiting_approval') {
@@ -656,19 +670,28 @@ export default function LogbookPage({
       if (!ok) return;
       nextStatus = 'in_progress';
     }
-    const note = `Role: ${entry.assigneeRole} → ${role}; due: ${entry.dueAt} → ${dueAt}. ${reason.trim()}`;
-
+    const note = `Role: ${entry.assigneeRole} → ${role}; due: ${entry.dueAt} → ${dueAt}. ${changeAssignForm.reason.trim()}`;
     const updated = { ...entry, assigneeRole: role, dueAt, status: nextStatus };
-    await db.transact([
-      db.tx.logbookEntries[entry.id].update({
-        assigneeRole: role,
-        dueAt,
-        status: nextStatus,
-        updatedAt: nowIso(),
-      }),
-      buildLogbookAssignmentChangedEvent(entry, profile, note, nextStatus, prevStatus),
-      ...buildLogbookIssueAssignedNotifications(updated as LogbookEntry, profile, allProfiles, defs),
-    ]);
+
+    setChangeAssignSaving(true);
+    try {
+      await db.transact([
+        db.tx.logbookEntries[entry.id].update({
+          assigneeRole: role,
+          dueAt,
+          status: nextStatus,
+          updatedAt: nowIso(),
+        }),
+        buildLogbookAssignmentChangedEvent(entry, profile, note, nextStatus, prevStatus),
+        ...buildLogbookIssueAssignedNotifications(updated as LogbookEntry, profile, allProfiles, defs),
+      ]);
+      setChangeAssignEntryId(null);
+      setChangeAssignForm({ assigneeRole: 'staff', dueAt: '', reason: '' });
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.logbook.saveFailed);
+    } finally {
+      setChangeAssignSaving(false);
+    }
   }
 
   async function recallIssue(entry: LogbookEntry) {
@@ -1455,6 +1478,69 @@ export default function LogbookPage({
               </div>
             )}
 
+            {changeAssignEntryId === entry.id && (
+              <div style={{ marginTop: 10, padding: 10, border: '1px solid var(--border, #e5e7eb)' }}>
+                <div className="grid two">
+                  <label>
+                    {t.logbook.assigneeRole}
+                    <select
+                      value={changeAssignForm.assigneeRole}
+                      onChange={(e) =>
+                        setChangeAssignForm({ ...changeAssignForm, assigneeRole: e.target.value })
+                      }
+                    >
+                      {LOGBOOK_ASSIGNEE_ROLES.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    {t.logbook.dueAt}
+                    <input
+                      type="datetime-local"
+                      value={changeAssignForm.dueAt}
+                      onChange={(e) =>
+                        setChangeAssignForm({ ...changeAssignForm, dueAt: e.target.value })
+                      }
+                    />
+                  </label>
+                </div>
+                <label style={{ display: 'block', marginTop: 8 }}>
+                  {t.logbook.changeReasonLabel}
+                  <textarea
+                    value={changeAssignForm.reason}
+                    onChange={(e) =>
+                      setChangeAssignForm({ ...changeAssignForm, reason: e.target.value })
+                    }
+                    style={{ marginTop: 4 }}
+                    required
+                  />
+                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                  <button
+                    type="button"
+                    disabled={changeAssignSaving}
+                    onClick={() => void submitChangeAssignment(entry)}
+                  >
+                    {changeAssignSaving ? t.common.saving : t.logbook.saveAssignmentChange}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={changeAssignSaving}
+                    onClick={() => {
+                      setChangeAssignEntryId(null);
+                      setChangeAssignForm({ assigneeRole: 'staff', dueAt: '', reason: '' });
+                    }}
+                  >
+                    {t.common.cancel}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {creatorUpdateEntryId === entry.id && entryStore && (
               <div style={{ marginTop: 10, padding: 10, border: '1px solid var(--border, #e5e7eb)' }}>
                 <label style={{ display: 'block' }}>
@@ -1583,7 +1669,7 @@ export default function LogbookPage({
                   <button
                     type="button"
                     className="secondary"
-                    onClick={() => void changeAssignment(entry)}
+                    onClick={() => openChangeAssignment(entry)}
                   >
                     {t.logbook.changeAssignment}
                   </button>
