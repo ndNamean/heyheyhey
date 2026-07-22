@@ -3,6 +3,7 @@
  */
 
 import { getAdminDb, extractBearerToken } from './instant-admin.js';
+import { resolveRoleDefinition } from './role-capabilities.js';
 
 export async function verifyRequestUser(req) {
   const token = extractBearerToken(req);
@@ -48,9 +49,9 @@ export async function loadProfileContext(userId) {
   }
 
   const storeIds = (profile.stores ?? []).map((s) => s.id);
-  const roleDefinition =
-    profile.roleDefinition ??
-    (result.roleDefinitions ?? []).find((d) => d.key === profile.role && d.active !== false);
+  // Prefer roleDefinitions-by-key (Capabilities matrix) over a possibly
+  // missing/malformed has:one link — matches client RoleDefinitionsContext.
+  const roleDefinition = resolveRoleDefinition(profile, result.roleDefinitions ?? []);
 
   return {
     profileId: profile.id,

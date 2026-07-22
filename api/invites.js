@@ -6,6 +6,7 @@
 import { id } from '@instantdb/admin';
 import { getAdminDb, parseBody } from './_lib/export/instant-admin.js';
 import { verifyRequestUser, loadProfileContext } from './_lib/export/auth.js';
+import { roleCanManageUsers } from './_lib/export/role-capabilities.js';
 import { getAppOrigin } from './_lib/magic-code-email.js';
 import { sendInviteEmail } from './_lib/invite-email.js';
 import {
@@ -18,13 +19,6 @@ import {
 } from './_lib/invite-crypto.js';
 
 const OWNER_ONLY_ROLES = new Set(['owner', 'areaManager']);
-
-function canManageUsers(role, roleDefinition) {
-  if (roleDefinition && typeof roleDefinition.canManageUsers === 'boolean') {
-    return !!roleDefinition.canManageUsers;
-  }
-  return role === 'owner' || role === 'areaManager' || role === 'admin';
-}
 
 function normalizeOrigin(raw) {
   const fallback = getAppOrigin();
@@ -64,7 +58,7 @@ function emptyProfileFields(now) {
 async function requireManager(req) {
   const { userId, email } = await verifyRequestUser(req);
   const ctx = await loadProfileContext(userId);
-  if (!canManageUsers(ctx.role, ctx.roleDefinition)) {
+  if (!roleCanManageUsers(ctx.role, ctx.roleDefinition)) {
     const err = new Error('Forbidden: canManageUsers required');
     err.status = 403;
     throw err;
