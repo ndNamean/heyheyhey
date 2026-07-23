@@ -3,7 +3,8 @@
  * Visibility and action gates are client-side; InstantDB view stays isApproved.
  */
 
-import { rankOf } from './roleResolver';
+import { getRoleDef, rankOf } from './roleResolver';
+import { DEFAULT_ROLE_DEFINITIONS } from './defaultRoleDefinitions';
 import {
   canAccessAllStores,
   canEditMaster,
@@ -45,14 +46,25 @@ export const LOGBOOK_NOTE_AUDIENCE_ROLES: Role[] = [
   'staff',
 ];
 
+/** Stable hierarchy ranks for assignee matrix (ignore corrupted live roleDefinitions.rank). */
+function logbookMatrixRank(role: Role): number {
+  const seed = DEFAULT_ROLE_DEFINITIONS.find((d) => d.key === role);
+  return seed?.rank ?? 999;
+}
+
 /**
  * Assignee roles strictly below the creator's authority.
  * Owner/admin (highest ranks) receive the full candidate pool.
  * Staff/viewer (and any role with no lower candidates) receive [].
+ * Uses default seed ranks so a bad Instant rank cannot expose higher assignees.
  */
 export function eligibleLogbookAssigneeRoles(creatorRole: Role, defs: RoleDefinition[]): Role[] {
-  const creatorRank = rankOf(creatorRole, defs);
-  return LOGBOOK_ASSIGNEE_ROLES.filter((r) => rankOf(r, defs) > creatorRank);
+  const creatorRank = logbookMatrixRank(creatorRole);
+  return LOGBOOK_ASSIGNEE_ROLES.filter((r) => {
+    if (logbookMatrixRank(r) <= creatorRank) return false;
+    const def = getRoleDef(r, defs);
+    return !def || def.active !== false;
+  });
 }
 
 export const LOGBOOK_ISSUE_STATUSES: LogbookIssueStatus[] = [

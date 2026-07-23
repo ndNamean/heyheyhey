@@ -35,6 +35,7 @@ import {
   resolveResolutionProofs,
   resolveSourceMedia,
 } from '../lib/logbook';
+import { profileVisibilityStoreIds, storesSelectableBy } from '../lib/inviteScope';
 import {
   PROOF_TYPES,
   canSubmitResolutionDraft,
@@ -237,6 +238,16 @@ export default function LogbookPage({
     () => eligibleLogbookAssigneeRoles(profile.role, defs),
     [profile.role, defs],
   );
+  const selectableStores = useMemo(
+    () =>
+      storesSelectableBy(
+        profile.role,
+        profileVisibilityStoreIds(profile),
+        stores,
+        defs,
+      ),
+    [profile, stores, defs],
+  );
 
   useEffect(() => {
     if (form.entryType !== 'issue') return;
@@ -245,6 +256,20 @@ export default function LogbookPage({
       setForm((prev) => ({ ...prev, assigneeRole: eligibleAssigneeRoles[0]! }));
     }
   }, [form.entryType, form.assigneeRole, eligibleAssigneeRoles]);
+
+  useEffect(() => {
+    if (!form.storeId) return;
+    if (selectableStores.some((s) => s.id === form.storeId)) return;
+    setForm((prev) => ({ ...prev, storeId: selectableStores[0]?.id || '' }));
+    setShowCreateCamera(false);
+  }, [form.storeId, selectableStores]);
+
+  // Clear list filter store if it is outside actor scope (keep "all")
+  useEffect(() => {
+    if (storeId === 'all') return;
+    if (selectableStores.some((s) => s.id === storeId)) return;
+    setStoreId('all');
+  }, [storeId, selectableStores]);
 
   /** Active proof panel entry — resolved from all entries, ignoring filters. */
   const activeProofEntry = useMemo(() => {
@@ -377,12 +402,17 @@ export default function LogbookPage({
     if (!form.content.trim()) return alert(t.logbook.contentRequired);
     if (form.entryType === 'issue') {
       if (!form.storeId) return alert(t.logbook.issueStoreRequired);
+      if (!selectableStores.some((s) => s.id === form.storeId)) {
+        return alert(t.logbook.storeNotAllowed);
+      }
       if (eligibleAssigneeRoles.length === 0) return alert(t.logbook.noEligibleAssignees);
       if (!form.assigneeRole || !eligibleAssigneeRoles.includes(form.assigneeRole as (typeof eligibleAssigneeRoles)[number])) {
         return alert(t.logbook.assigneeRequired);
       }
       if (!form.dueAt) return alert(t.logbook.dueRequired);
       if (!form.resolutionProofType) return alert(t.logbook.proofTypeRequired);
+    } else if (form.storeId && !selectableStores.some((s) => s.id === form.storeId)) {
+      return alert(t.logbook.storeNotAllowed);
     }
     if (!canCreate) return alert(t.logbook.noCreatePermission);
     setSaving(true);
@@ -931,7 +961,7 @@ export default function LogbookPage({
             {t.common.store}
             <select value={storeId} onChange={(e) => setStoreId(e.target.value)}>
               <option value="all">{t.common.allStores}</option>
-              {stores.map((s) => (
+              {selectableStores.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.code} — {s.name}
                 </option>
@@ -1052,12 +1082,18 @@ export default function LogbookPage({
               {form.entryType === 'issue' ? t.common.store : t.logbook.storeOptional}
               <select
                 value={form.storeId}
-                onChange={(e) => setForm({ ...form, storeId: e.target.value })}
+                onChange={(e) => {
+                  setForm({ ...form, storeId: e.target.value });
+                  setShowCreateCamera(false);
+                }}
               >
                 {form.entryType !== 'issue' && (
                   <option value="">{t.common.allStores}</option>
                 )}
-                {stores.map((s) => (
+                {form.entryType === 'issue' && selectableStores.length === 0 && (
+                  <option value="">{t.logbook.noAssignableStores}</option>
+                )}
+                {selectableStores.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.code} — {s.name}
                   </option>
@@ -1186,15 +1222,30 @@ export default function LogbookPage({
                     type="button"
                     className="secondary"
                     style={{ marginTop: 8 }}
-                    disabled={!form.storeId}
-                    onClick={() => setShowCreateCamera(true)}
+                    onClick={() => {
+                      if (!form.storeId) {
+                        alert(t.logbook.selectStoreForMedia);
+                        return;
+                      }
+                      if (!selectableStores.some((s) => s.id === form.storeId)) {
+                        alert(t.logbook.storeNotAllowed);
+                        return;
+                      }
+                      setShowCreateCamera(true);
+                    }}
                   >
                     {t.logbook.addSourceMedia}
                   </button>
                 ) : (
                   (() => {
-                    const createStore = stores.find((s) => s.id === form.storeId);
-                    if (!createStore) return null;
+                    const createStore = selectableStores.find((s) => s.id === form.storeId);
+                    if (!createStore) {
+                      return (
+                        <p className="small" style={{ color: 'var(--danger, #f87171)', marginTop: 8 }}>
+                          {t.logbook.selectStoreForMedia}
+                        </p>
+                      );
+                    }
                     return (
                       <div style={{ marginTop: 8 }}>
                         <TimemarkCamera
@@ -1209,7 +1260,7 @@ export default function LogbookPage({
                             mediaPurpose: 'source_context',
                           }}
                           profile={profile}
-                          proofType="photo"
+                          proofType={form.resolutionProofType || 'photo'}
                           existingMedia={[]}
                           onCapture={(media: UploadedMedia) => {
                             setCreateSourceMedia((prev) => [...prev, media]);

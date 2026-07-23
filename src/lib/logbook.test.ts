@@ -323,9 +323,24 @@ describe('visibility and actions', () => {
       'hybrid',
       'staff',
     ]);
+    expect(eligibleLogbookAssigneeRoles('subleader', defs)).toEqual(['hybrid', 'staff']);
+    expect(eligibleLogbookAssigneeRoles('leader', defs)).toEqual([
+      'subleader',
+      'hybrid',
+      'staff',
+    ]);
     expect(eligibleLogbookAssigneeRoles('hybrid', defs)).toEqual(['staff']);
     expect(eligibleLogbookAssigneeRoles('staff', defs)).toEqual([]);
     expect(eligibleLogbookAssigneeRoles('viewer', defs)).toEqual([]);
+  });
+
+  it('eligibleLogbookAssigneeRoles ignores corrupted live ranks', () => {
+    const badDefs = defs.map((d) =>
+      d.key === 'subleader' ? { ...d, rank: 0 } : d.key === 'manager' ? { ...d, rank: 9 } : d,
+    );
+    // Even if Instant ranks say subleader is "owner-level", matrix still blocks manager
+    expect(eligibleLogbookAssigneeRoles('subleader', badDefs)).toEqual(['hybrid', 'staff']);
+    expect(eligibleLogbookAssigneeRoles('subleader', badDefs)).not.toContain('manager');
   });
 
   it('assignee can act; higher-rank reviewer can review', () => {
