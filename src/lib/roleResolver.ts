@@ -270,6 +270,7 @@ export function useSeedRoleDefinitions(isOwner: boolean, defs: RoleDefinition[],
 export function typicalApproverRank(submitterRole: Role, defs: RoleDefinition[]): number {
   switch (submitterRole) {
     case 'staff':
+    case 'hybrid':
       return rankOf('manager', defs);
     case 'leader':
     case 'subleader':

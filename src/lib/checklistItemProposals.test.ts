@@ -35,8 +35,9 @@ function profile(partial: Partial<Profile> & Pick<Profile, 'userId' | 'role'>): 
 }
 
 describe('checklist item proposal role defaults', () => {
-  it('allows subleader/leader/manager to propose and blocks staff/viewer', () => {
+  it('allows subleader/leader/manager to propose and blocks staff/hybrid/viewer', () => {
     expect(canProposeTemplateItem('staff')).toBe(false);
+    expect(canProposeTemplateItem('hybrid')).toBe(false);
     expect(canProposeTemplateItem('viewer')).toBe(false);
     expect(canProposeTemplateItem('subleader')).toBe(true);
     expect(canProposeTemplateItem('leader')).toBe(true);

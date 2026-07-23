@@ -433,7 +433,7 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
               onChange={(e) => setIssueAssigneeFilter(e.target.value)}
             >
               <option value="all">{t.common.all}</option>
-              {['staff', 'subleader', 'leader', 'manager'].map((r) => (
+              {['staff', 'hybrid', 'subleader', 'leader', 'manager'].map((r) => (
                 <option key={r} value={r}>
                   {r}
                 </option>

@@ -18,7 +18,7 @@ const _schema = i.schema({
       userId: i.string().unique().indexed(), // mirrors auth $users id
       email: i.string().indexed(),
       displayName: i.string(),
-      role: i.string(),                      // owner|admin|areaManager|manager|leader|subleader|staff|viewer
+      role: i.string(),                      // owner|admin|areaManager|manager|leader|subleader|hybrid|staff|viewer
       approvalStatus: i.string(),            // pending|manager_review|pre_approved|needs_manager_recheck|approved|rejected
       approvedAt: i.string(),
       approvedByEmail: i.string(),

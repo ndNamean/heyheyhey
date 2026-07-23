@@ -194,7 +194,7 @@ export default function ShiftsPage({ profile }: Props) {
                 value={newShift.role}
                 onChange={(e) => setNewShift({ ...newShift, role: e.target.value })}
               >
-                {['staff', 'leader', 'subleader', 'manager'].map((r) => (
+                {['staff', 'hybrid', 'leader', 'subleader', 'manager'].map((r) => (
                   <option key={r} value={r}>
                     {r}
                   </option>

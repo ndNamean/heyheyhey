@@ -208,7 +208,7 @@ export default function TemplatesPage({ profile }: Props) {
         proofType: 'photo',
         required: true,
         assignedRole: 'staff',
-        approverRoles: ['leader', 'subleader', 'manager'],
+        approverRoles: ['leader', 'subleader', 'manager', 'hybrid'],
         weight: 1,
         failureCategory: 'Hygiene',
       },
@@ -652,7 +652,7 @@ export default function TemplatesPage({ profile }: Props) {
                   value={item.assignedRole}
                   onChange={(e) => updateItem(item.id, { assignedRole: e.target.value })}
                 >
-                  {['staff', 'leader', 'subleader', 'manager', 'areaManager', 'admin', 'owner'].map(
+                  {['staff', 'hybrid', 'leader', 'subleader', 'manager', 'areaManager', 'admin', 'owner'].map(
                     (r) => (
                       <option key={r} value={r}>
                         {r}

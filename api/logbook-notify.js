@@ -78,8 +78,9 @@ function rankOf(roleKey, defs) {
     manager: 3,
     leader: 4,
     subleader: 5,
-    staff: 6,
-    viewer: 7,
+    hybrid: 6,
+    staff: 7,
+    viewer: 8,
   };
   return legacy[roleKey] ?? 99;
 }
@@ -87,7 +88,7 @@ function rankOf(roleKey, defs) {
 function canReviewRole(roleKey, defs) {
   const found = defs.find((d) => d.key === roleKey && d.active !== false);
   if (found && typeof found.canReview === 'boolean') return found.canReview;
-  return ['owner', 'admin', 'areaManager', 'manager', 'leader', 'subleader'].includes(roleKey);
+  return ['owner', 'admin', 'areaManager', 'manager', 'leader', 'subleader', 'hybrid'].includes(roleKey);
 }
 
 function getReviewerRecipients(entry, profiles, actorUserId, defs) {

@@ -42,7 +42,7 @@ export interface TemplateItemDraft {
   failureCategory: string;
 }
 
-const DEFAULT_APPROVER_ROLES = ['leader', 'subleader', 'manager'];
+const DEFAULT_APPROVER_ROLES = ['leader', 'subleader', 'manager', 'hybrid'];
 
 export function parseApproverRoles(json: string | undefined): string[] {
   if (!json?.trim()) return [...DEFAULT_APPROVER_ROLES];

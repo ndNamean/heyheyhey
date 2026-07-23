@@ -300,6 +300,29 @@ describe('visibility and actions', () => {
     expect(canReviewLogbookIssue(subleader, leaderIssue, defs)).toBe(false);
     expect(canReviewLogbookIssue(areaManager, leaderIssue, defs)).toBe(true);
   });
+
+  it('hybrid can review staff issues; staff cannot review hybrid', () => {
+    const staffWaiting = entry({
+      entryType: 'issue',
+      status: 'waiting_approval',
+      assigneeRole: 'staff',
+      resolutionSubmittedByUserId: 's1',
+    });
+    const hybridWaiting = entry({
+      entryType: 'issue',
+      status: 'waiting_approval',
+      assigneeRole: 'hybrid',
+      resolutionSubmittedByUserId: 'submitter',
+    });
+    const hybrid = profile({ userId: 'h-reviewer', role: 'hybrid' });
+    const staff = profile({ userId: 's-reviewer', role: 'staff' });
+    const subleader = profile({ userId: 'sl', role: 'subleader' });
+
+    expect(canReviewLogbookIssue(hybrid, staffWaiting, defs)).toBe(true);
+    expect(canReviewLogbookIssue(staff, hybridWaiting, defs)).toBe(false);
+    expect(canReviewLogbookIssue(subleader, hybridWaiting, defs)).toBe(true);
+    expect(canReviewLogbookIssue(hybrid, hybridWaiting, defs)).toBe(false);
+  });
 });
 
 describe('recall and delete', () => {

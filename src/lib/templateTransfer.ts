@@ -36,7 +36,7 @@ export interface ExportedChecklistItem {
   completionTime?: string;
 }
 
-const DEFAULT_APPROVER_ROLES = ['leader', 'subleader', 'manager'];
+const DEFAULT_APPROVER_ROLES = ['leader', 'subleader', 'manager', 'hybrid'];
 
 function parseApproverRolesArray(json: string | undefined): string[] {
   if (!json?.trim()) return [...DEFAULT_APPROVER_ROLES];

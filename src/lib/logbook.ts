@@ -23,7 +23,7 @@ import type {
   RoleDefinition,
 } from '../types';
 
-export const LOGBOOK_ASSIGNEE_ROLES: Role[] = ['staff', 'subleader', 'leader', 'manager'];
+export const LOGBOOK_ASSIGNEE_ROLES: Role[] = ['staff', 'hybrid', 'subleader', 'leader', 'manager'];
 
 export const LOGBOOK_ISSUE_STATUSES: LogbookIssueStatus[] = [
   'open',
@@ -268,8 +268,8 @@ export function canRecallLogbookIssue(
   const status = resolveLogbookIssueStatus(entry);
   if (status === 'recalled' || status === 'resolved') return false;
 
-  // Staff: no recall
-  if (profile.role === 'staff') return false;
+  // Staff / hybrid: no recall
+  if (profile.role === 'staff' || profile.role === 'hybrid') return false;
 
   const elevated =
     isOwner(profile.role) ||
@@ -316,7 +316,7 @@ export function defaultLogbookFilterTab(
   if (!canUseOpsTools(profile.role, defs) && !canReview(profile.role, defs)) {
     return 'my-assigned';
   }
-  if (profile.role === 'staff') return 'my-assigned';
+  if (profile.role === 'staff' || profile.role === 'hybrid') return 'my-assigned';
   if (
     profile.role === 'leader' ||
     profile.role === 'subleader' ||

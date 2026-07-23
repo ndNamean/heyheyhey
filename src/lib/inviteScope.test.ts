@@ -7,6 +7,7 @@ import {
   canViewManagedProfile,
 } from './inviteScope';
 import { defaultDefinitionsAsEntities } from './roleResolver';
+import { canApproveItem, canReview } from './roles';
 import type { Profile, Store } from '../types';
 
 const defs = defaultDefinitionsAsEntities();
@@ -45,6 +46,7 @@ describe('canAssignRole / rolesAssignableBy', () => {
 
   it('lets manager invite only strictly lower ranks', () => {
     expect(canAssignRole('manager', 'staff', defs)).toBe(true);
+    expect(canAssignRole('manager', 'hybrid', defs)).toBe(true);
     expect(canAssignRole('manager', 'leader', defs)).toBe(true);
     expect(canAssignRole('manager', 'manager', defs)).toBe(false);
     expect(canAssignRole('manager', 'areaManager', defs)).toBe(false);
@@ -53,7 +55,30 @@ describe('canAssignRole / rolesAssignableBy', () => {
     expect(keys).not.toContain('manager');
     expect(keys).not.toContain('owner');
     expect(keys).toContain('staff');
+    expect(keys).toContain('hybrid');
     expect(keys).toContain('leader');
+  });
+
+  it('places hybrid rank between subleader and staff', () => {
+    const byKey = Object.fromEntries(defs.map((d) => [d.key, d.rank]));
+    expect(byKey.subleader).toBe(5);
+    expect(byKey.hybrid).toBe(6);
+    expect(byKey.staff).toBe(7);
+    expect(byKey.viewer).toBe(8);
+    expect(byKey.hybrid).toBeGreaterThan(byKey.subleader);
+    expect(byKey.hybrid).toBeLessThan(byKey.staff);
+    expect(canAssignRole('hybrid', 'staff', defs)).toBe(true);
+    expect(canAssignRole('staff', 'hybrid', defs)).toBe(false);
+    expect(canAssignRole('subleader', 'hybrid', defs)).toBe(true);
+  });
+
+  it('lets hybrid review staff submissions like other reviewers', () => {
+    expect(canReview('hybrid', defs)).toBe(true);
+    expect(canReview('staff', defs)).toBe(false);
+    expect(canApproveItem('staff', 'hybrid', [], defs)).toBe(true);
+    expect(canApproveItem('hybrid', 'manager', [], defs)).toBe(true);
+    expect(canApproveItem('hybrid', 'staff', [], defs)).toBe(false);
+    expect(canApproveItem('staff', 'hybrid', ['hybrid'], defs)).toBe(true);
   });
 
   it('blocks areaManager from inviting owner/areaManager via elevated rules', () => {
