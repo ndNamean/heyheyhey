@@ -22,7 +22,6 @@ import {
   canReviewLogbookIssue,
   canSubmitResolutionNow,
   canViewLogbookEntry,
-  defaultLogbookFilterTab,
   eligibleLogbookAssigneeRoles,
   getIssueConfigurationState,
   isIssueOverdue,
@@ -35,6 +34,26 @@ import {
   resolveResolutionProofs,
   resolveSourceMedia,
 } from '../lib/logbook';
+import {
+  LOGBOOK_ACK_OPTIONS,
+  LOGBOOK_LIFECYCLE_OPTIONS,
+  canSeeMyTeamQuickView,
+  clearIncompatibleFiltersOnEntryTypeChange,
+  countActiveDetailedFilters,
+  defaultLogbookQuickView,
+  emptyLogbookFilterState,
+  entryMatchesLogbookFilters,
+  listActiveDetailedFilterChips,
+  parseLogbookInitialFilter,
+  removeDetailedFilterChip,
+  toggleMultiValue,
+  type LogbookAckFilter,
+  type LogbookDateBasedOn,
+  type LogbookFilterChip,
+  type LogbookFilterState,
+  type LogbookLifecycleFilter,
+  type LogbookQuickView,
+} from '../lib/logbookFilters';
 import { profileVisibilityStoreIds, storesSelectableBy } from '../lib/inviteScope';
 import {
   PROOF_TYPES,
@@ -89,15 +108,6 @@ interface Props {
   highlightEntryId?: string | null;
 }
 
-type FilterTab =
-  | 'all'
-  | 'my-assigned'
-  | 'open'
-  | 'waiting_approval'
-  | 'overdue'
-  | 'resolved'
-  | 'correction';
-
 function readSession(key: string): string | null {
   try {
     return sessionStorage.getItem(key);
@@ -118,6 +128,18 @@ function openResolutionSessionKey(): string {
   return 'logbookOpenResolutionEntryId';
 }
 
+function initLogbookFilters(
+  profile: Profile,
+  defs: Parameters<typeof defaultLogbookQuickView>[1],
+  initialFilter?: string,
+): LogbookFilterState {
+  const base = emptyLogbookFilterState(defaultLogbookQuickView(profile, defs));
+  const raw = initialFilter || readSession(LOGBOOK_FILTER_KEY) || '';
+  const parsed = parseLogbookInitialFilter(raw);
+  if (!parsed) return base;
+  return { ...base, ...parsed };
+}
+
 export default function LogbookPage({
   profile,
   initialFilter,
@@ -125,30 +147,13 @@ export default function LogbookPage({
 }: Props) {
   const { t } = useLang();
   const { defs } = useRoleDefinitions();
-  const [storeId, setStoreId] = useState('all');
-  const [date, setDate] = useState('');
-  const [filterTab, setFilterTab] = useState<FilterTab>(() => {
-    const fromSession = (initialFilter || readSession(LOGBOOK_FILTER_KEY) || '') as FilterTab;
-    if (
-      fromSession === 'all' ||
-      fromSession === 'my-assigned' ||
-      fromSession === 'open' ||
-      fromSession === 'waiting_approval' ||
-      fromSession === 'overdue' ||
-      fromSession === 'resolved' ||
-      fromSession === 'correction'
-    ) {
-      return fromSession;
-    }
-    return defaultLogbookFilterTab(profile, defs);
-  });
-  const [entryTypeFilter, setEntryTypeFilter] = useState<'all' | LogbookEntryType>('all');
-  const [severityFilter, setSeverityFilter] = useState('all');
-  const [assigneeFilter, setAssigneeFilter] = useState('all');
-  const [overdueOnly, setOverdueOnly] = useState(false);
-  const [requiresAckOnly, setRequiresAckOnly] = useState(false);
-  const [waitingMyReview, setWaitingMyReview] = useState(false);
-  const [correctionOnly, setCorrectionOnly] = useState(false);
+  const [filters, setFilters] = useState<LogbookFilterState>(() =>
+    initLogbookFilters(profile, defs, initialFilter),
+  );
+  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
+  const [isMobileFilters, setIsMobileFilters] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 720px)').matches : false,
+  );
   const [highlightId] = useState<string | null>(
     () => highlightProp || readSession(LOGBOOK_HIGHLIGHT_KEY),
   );
@@ -267,10 +272,18 @@ export default function LogbookPage({
 
   // Clear list filter store if it is outside actor scope (keep "all")
   useEffect(() => {
-    if (storeId === 'all') return;
-    if (selectableStores.some((s) => s.id === storeId)) return;
-    setStoreId('all');
-  }, [storeId, selectableStores]);
+    if (filters.storeId === 'all') return;
+    if (selectableStores.some((s) => s.id === filters.storeId)) return;
+    setFilters((prev) => ({ ...prev, storeId: 'all' }));
+  }, [filters.storeId, selectableStores]);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 720px)');
+    const onChange = () => setIsMobileFilters(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
 
   /** Active proof panel entry — resolved from all entries, ignoring filters. */
   const activeProofEntry = useMemo(() => {
@@ -278,71 +291,22 @@ export default function LogbookPage({
     return allEntries.find((e) => e.id === proofEntryId) || null;
   }, [allEntries, proofEntryId]);
 
+  const storeById = useMemo(() => {
+    const map = new Map<string, Pick<Store, 'code' | 'name'>>();
+    for (const s of stores) map.set(s.id, s);
+    return map;
+  }, [stores]);
+
   const visibleEntries = useMemo(() => {
     const now = Date.now();
     return allEntries
       .filter((e) => canViewLogbookEntry(profile, e, defs))
       .filter((e) => {
-        // Hide the duplicate issue card while the resolution form is open
         if (proofEntryId && e.id === proofEntryId) return false;
-        if (storeId !== 'all' && e.storeId !== storeId && e.storeId !== '') return false;
-        if (date && e.date !== date) return false;
-        const type = resolveLogbookEntryType(e);
-        if (entryTypeFilter !== 'all' && type !== entryTypeFilter) return false;
-        if (severityFilter !== 'all' && e.severity !== severityFilter) return false;
-        if (assigneeFilter !== 'all' && (e.assigneeRole || '') !== assigneeFilter) return false;
-        if (requiresAckOnly && !e.requiresAck) return false;
-        if (overdueOnly && !isIssueOverdue(e, now)) return false;
-        if (correctionOnly && !hasCorrectionFeedback(e)) return false;
-        if (waitingMyReview) {
-          if (
-            resolveLogbookIssueStatus(e) !== 'waiting_approval' ||
-            !canReviewLogbookIssue(profile, e, defs)
-          ) {
-            return false;
-          }
-        }
-
-        const status = resolveLogbookIssueStatus(e);
-        switch (filterTab) {
-          case 'my-assigned':
-            return (
-              isLogbookIssue(e) &&
-              status !== 'recalled' &&
-              e.assigneeRole === profile.role &&
-              (profile.stores ?? []).some((s) => s.id === e.storeId)
-            );
-          case 'open':
-            return isLogbookIssue(e) && status === 'open';
-          case 'waiting_approval':
-            return isLogbookIssue(e) && status === 'waiting_approval';
-          case 'overdue':
-            return isIssueOverdue(e, now);
-          case 'resolved':
-            return isLogbookIssue(e) && status === 'resolved';
-          case 'correction':
-            return hasCorrectionFeedback(e);
-          default:
-            return true;
-        }
+        return entryMatchesLogbookFilters(e, profile, defs, filters, { now, storeById });
       })
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }, [
-    allEntries,
-    profile,
-    defs,
-    storeId,
-    date,
-    entryTypeFilter,
-    severityFilter,
-    assigneeFilter,
-    requiresAckOnly,
-    overdueOnly,
-    waitingMyReview,
-    correctionOnly,
-    filterTab,
-    proofEntryId,
-  ]);
+  }, [allEntries, profile, defs, filters, proofEntryId, storeById]);
 
   useEffect(() => {
     clearSession(LOGBOOK_FILTER_KEY);
@@ -601,11 +565,7 @@ export default function LogbookPage({
     }
 
     closeResolutionForm();
-    setFilterTab('my-assigned');
-    setWaitingMyReview(false);
-    setOverdueOnly(false);
-    setCorrectionOnly(false);
-    setRequiresAckOnly(false);
+    setFilters((prev) => ({ ...prev, quickView: 'assigned_to_my_role' }));
     setSubmitting(false);
   }
 
@@ -902,15 +862,214 @@ export default function LogbookPage({
     return '';
   }
 
-  const tabs: { id: FilterTab; label: string }[] = [
-    { id: 'all', label: t.common.all },
-    { id: 'my-assigned', label: t.logbook.myAssigned },
-    { id: 'open', label: t.logbook.statusOpen },
-    { id: 'waiting_approval', label: t.logbook.statusWaiting },
-    { id: 'correction', label: t.logbook.correctionRequested },
-    { id: 'overdue', label: t.logbook.statusOverdue },
-    { id: 'resolved', label: t.logbook.statusResolved },
+  const detailedCount = countActiveDetailedFilters(filters);
+  const detailedChips = listActiveDetailedFilterChips(filters);
+  const showIssueMore =
+    filters.entryType === 'all' || filters.entryType === 'issue';
+  const showNoteMore =
+    filters.entryType === 'all' ||
+    filters.entryType === 'note' ||
+    filters.entryType === 'announcement';
+  const showTeamQuickView = canSeeMyTeamQuickView(profile, defs);
+
+  const quickViews: { id: LogbookQuickView; label: string }[] = [
+    { id: 'all_visible', label: t.logbook.quickAllVisible },
+    { id: 'needs_my_action', label: t.logbook.quickNeedsMyAction },
+    { id: 'assigned_to_my_role', label: t.logbook.quickAssignedToMyRole },
+    { id: 'created_by_me', label: t.logbook.quickCreatedByMe },
+    ...(showTeamQuickView
+      ? [{ id: 'my_teams_issues' as const, label: t.logbook.quickMyTeamsIssues }]
+      : []),
   ];
+
+  function lifecycleLabel(value: LogbookLifecycleFilter): string {
+    switch (value) {
+      case 'active':
+        return t.logbook.statusActive;
+      case 'open':
+        return t.logbook.statusOpen;
+      case 'in_progress':
+        return t.logbook.statusInProgress;
+      case 'waiting_approval':
+        return t.logbook.statusWaiting;
+      case 'correction_requested':
+        return t.logbook.correctionRequested;
+      case 'resolved':
+        return t.logbook.statusResolved;
+      case 'recalled':
+        return t.logbook.statusRecalled;
+      case 'overdue':
+        return t.logbook.statusOverdue;
+      default:
+        return value;
+    }
+  }
+
+  function ackLabel(value: LogbookAckFilter): string {
+    if (value === 'requires_ack') return t.logbook.ackRequires;
+    if (value === 'missing_my_ack') return t.logbook.ackMissingMine;
+    return t.logbook.ackByMe;
+  }
+
+  function chipLabel(chip: LogbookFilterChip): string {
+    switch (chip.kind) {
+      case 'lifecycle':
+        return lifecycleLabel(chip.value as LogbookLifecycleFilter);
+      case 'severity':
+        return chip.value;
+      case 'assignee':
+        return chip.value;
+      case 'proof':
+        return proofTypeLabel(chip.value);
+      case 'ack':
+        return ackLabel(chip.value as LogbookAckFilter);
+      case 'dateBasedOn':
+        if (chip.value === 'due') return t.logbook.dateBasedDue;
+        if (chip.value === 'resolved') return t.logbook.dateBasedResolved;
+        return t.logbook.dateBasedCreated;
+      default:
+        return chip.value;
+    }
+  }
+
+  function clearAllFilters() {
+    setFilters(emptyLogbookFilterState('all_visible'));
+  }
+
+  function toggleMoreFilters() {
+    setMoreFiltersOpen((v) => !v);
+  }
+
+  function renderMoreFiltersBody() {
+    return (
+      <>
+        {showIssueMore && (
+          <>
+            {filters.entryType === 'all' && <h3>{t.logbook.issuesHeading}</h3>}
+            <div className="logbook-filter-check-grid" role="group" aria-label={t.logbook.lifecycle}>
+              {LOGBOOK_LIFECYCLE_OPTIONS.map((lc) => (
+                <label key={lc}>
+                  <input
+                    type="checkbox"
+                    checked={filters.issueLifecycles.includes(lc)}
+                    onChange={() =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        issueLifecycles: toggleMultiValue(prev.issueLifecycles, lc),
+                      }))
+                    }
+                  />
+                  {lifecycleLabel(lc)}
+                </label>
+              ))}
+            </div>
+            <label>
+              {t.logbook.assigneeRole}
+              <div className="logbook-filter-check-grid">
+                {LOGBOOK_ASSIGNEE_ROLES.map((r) => (
+                  <label key={r}>
+                    <input
+                      type="checkbox"
+                      checked={filters.assigneeRoles.includes(r)}
+                      onChange={() =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          assigneeRoles: toggleMultiValue(prev.assigneeRoles, r),
+                        }))
+                      }
+                    />
+                    {r}
+                  </label>
+                ))}
+              </div>
+            </label>
+            <label>
+              {t.logbook.proofTypeFilter}
+              <div className="logbook-filter-check-grid">
+                {PROOF_TYPES.map((p) => (
+                  <label key={p}>
+                    <input
+                      type="checkbox"
+                      checked={filters.proofTypes.includes(p)}
+                      onChange={() =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          proofTypes: toggleMultiValue(prev.proofTypes, p),
+                        }))
+                      }
+                    />
+                    {proofTypeLabel(p)}
+                  </label>
+                ))}
+              </div>
+            </label>
+            <label>
+              {t.logbook.dateBasedOn}
+              <select
+                value={filters.dateBasedOn}
+                onChange={(e) =>
+                  setFilters((prev) => ({
+                    ...prev,
+                    dateBasedOn: e.target.value as LogbookDateBasedOn,
+                  }))
+                }
+              >
+                <option value="created">{t.logbook.dateBasedCreated}</option>
+                <option value="due">{t.logbook.dateBasedDue}</option>
+                <option value="resolved">{t.logbook.dateBasedResolved}</option>
+              </select>
+            </label>
+          </>
+        )}
+
+        {(showIssueMore || showNoteMore) && (
+          <label>
+            {t.common.severity}
+            <div className="logbook-filter-check-grid">
+              {['info', 'warning', 'critical'].map((s) => (
+                <label key={s}>
+                  <input
+                    type="checkbox"
+                    checked={filters.severities.includes(s)}
+                    onChange={() =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        severities: toggleMultiValue(prev.severities, s),
+                      }))
+                    }
+                  />
+                  {s}
+                </label>
+              ))}
+            </div>
+          </label>
+        )}
+
+        {showNoteMore && (
+          <>
+            {filters.entryType === 'all' && <h3>{t.logbook.notesHeading}</h3>}
+            <div className="logbook-filter-check-grid" role="group" aria-label={t.logbook.ackStatus}>
+              {LOGBOOK_ACK_OPTIONS.map((a) => (
+                <label key={a}>
+                  <input
+                    type="checkbox"
+                    checked={filters.ackStatuses.includes(a)}
+                    onChange={() =>
+                      setFilters((prev) => ({
+                        ...prev,
+                        ackStatuses: toggleMultiValue(prev.ackStatuses, a),
+                      }))
+                    }
+                  />
+                  {ackLabel(a)}
+                </label>
+              ))}
+            </div>
+          </>
+        )}
+      </>
+    );
+  }
 
   const proofEntry = activeProofEntry;
   const proofStore = proofEntry
@@ -946,21 +1105,39 @@ export default function LogbookPage({
             </button>
           )}
         </div>
-        <div className="tabs" style={{ marginTop: 12, flexWrap: 'wrap' }}>
-          {tabs.map((tab) => (
+
+        <label style={{ display: 'block', marginTop: 12 }}>
+          {t.common.search}
+          <input
+            type="search"
+            value={filters.search}
+            placeholder={t.logbook.searchPlaceholder}
+            onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
+          />
+        </label>
+
+        <div className="logbook-quick-views" role="tablist" aria-label={t.logbook.quickViews}>
+          {quickViews.map((qv) => (
             <button
-              key={tab.id}
-              className={filterTab === tab.id ? 'active' : ''}
-              onClick={() => setFilterTab(tab.id)}
+              key={qv.id}
+              type="button"
+              role="tab"
+              aria-selected={filters.quickView === qv.id}
+              className={filters.quickView === qv.id ? 'active' : ''}
+              onClick={() => setFilters((prev) => ({ ...prev, quickView: qv.id }))}
             >
-              {tab.label}
+              {qv.label}
             </button>
           ))}
         </div>
+
         <div className="grid two" style={{ marginTop: 12 }}>
           <label>
             {t.common.store}
-            <select value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+            <select
+              value={filters.storeId}
+              onChange={(e) => setFilters((prev) => ({ ...prev, storeId: e.target.value }))}
+            >
               <option value="all">{t.common.allStores}</option>
               {selectableStores.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -970,14 +1147,13 @@ export default function LogbookPage({
             </select>
           </label>
           <label>
-            {t.common.date}
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </label>
-          <label>
             {t.logbook.entryType}
             <select
-              value={entryTypeFilter}
-              onChange={(e) => setEntryTypeFilter(e.target.value as 'all' | LogbookEntryType)}
+              value={filters.entryType}
+              onChange={(e) => {
+                const next = e.target.value as 'all' | LogbookEntryType;
+                setFilters((prev) => clearIncompatibleFiltersOnEntryTypeChange(prev, next));
+              }}
             >
               <option value="all">{t.common.all}</option>
               <option value="note">{t.logbook.typeNote}</option>
@@ -986,63 +1162,102 @@ export default function LogbookPage({
             </select>
           </label>
           <label>
-            {t.common.severity}
-            <select value={severityFilter} onChange={(e) => setSeverityFilter(e.target.value)}>
-              <option value="all">{t.common.all}</option>
-              {['info', 'warning', 'critical'].map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+            {t.logbook.dateFrom}
+            <input
+              type="date"
+              value={filters.dateFrom}
+              onChange={(e) => setFilters((prev) => ({ ...prev, dateFrom: e.target.value }))}
+            />
           </label>
           <label>
-            {t.logbook.assigneeRole}
-            <select value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)}>
-              <option value="all">{t.common.all}</option>
-              {LOGBOOK_ASSIGNEE_ROLES.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
+            {t.logbook.dateTo}
+            <input
+              type="date"
+              value={filters.dateTo}
+              onChange={(e) => setFilters((prev) => ({ ...prev, dateTo: e.target.value }))}
+            />
           </label>
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 8 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input
-              type="checkbox"
-              checked={overdueOnly}
-              onChange={(e) => setOverdueOnly(e.target.checked)}
-            />
-            {t.logbook.overdueOnly}
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input
-              type="checkbox"
-              checked={requiresAckOnly}
-              onChange={(e) => setRequiresAckOnly(e.target.checked)}
-            />
-            {t.logbook.requiresAck}
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input
-              type="checkbox"
-              checked={waitingMyReview}
-              onChange={(e) => setWaitingMyReview(e.target.checked)}
-            />
-            {t.logbook.waitingMyReview}
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input
-              type="checkbox"
-              checked={correctionOnly}
-              onChange={(e) => setCorrectionOnly(e.target.checked)}
-            />
-            {t.logbook.correctionRequested}
-          </label>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12, alignItems: 'center' }}>
+          <button type="button" className="secondary" onClick={toggleMoreFilters}>
+            {detailedCount > 0
+              ? t.logbook.moreFiltersCount.replace('{n}', String(detailedCount))
+              : t.logbook.moreFilters}
+          </button>
+          <button type="button" className="secondary" onClick={clearAllFilters}>
+            {t.logbook.clearAllFilters}
+          </button>
         </div>
+
+        {detailedChips.length > 0 && !moreFiltersOpen && (
+          <div className="logbook-filter-chips">
+            {detailedChips.map((chip) => (
+              <span key={chip.id} className="logbook-filter-chip">
+                {chipLabel(chip)}
+                <button
+                  type="button"
+                  aria-label={t.logbook.removeFilter}
+                  onClick={() => setFilters((prev) => removeDetailedFilterChip(prev, chip))}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
+        {moreFiltersOpen && !isMobileFilters && (
+          <div className="logbook-more-filters-panel">{renderMoreFiltersBody()}</div>
+        )}
       </div>
+
+      {moreFiltersOpen && isMobileFilters && (
+        <div
+          className="logbook-more-filters-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t.logbook.moreFilters}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setMoreFiltersOpen(false);
+          }}
+        >
+          <div className="logbook-more-filters-sheet">
+            <div className="logbook-more-filters-sheet-header">
+              <strong>
+                {detailedCount > 0
+                  ? t.logbook.moreFiltersCount.replace('{n}', String(detailedCount))
+                  : t.logbook.moreFilters}
+              </strong>
+              <button type="button" className="secondary" onClick={clearAllFilters}>
+                {t.logbook.clearAllFilters}
+              </button>
+            </div>
+            {detailedChips.length > 0 && (
+              <div className="logbook-filter-chips" style={{ padding: '8px 16px 0' }}>
+                {detailedChips.map((chip) => (
+                  <span key={chip.id} className="logbook-filter-chip">
+                    {chipLabel(chip)}
+                    <button
+                      type="button"
+                      aria-label={t.logbook.removeFilter}
+                      onClick={() => setFilters((prev) => removeDetailedFilterChip(prev, chip))}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="logbook-more-filters-sheet-body">{renderMoreFiltersBody()}</div>
+            <div className="logbook-more-filters-sheet-footer">
+              <button type="button" onClick={() => setMoreFiltersOpen(false)}>
+                {t.logbook.showEntries.replace('{n}', String(visibleEntries.length))}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showForm && canCreate && (
         <div className="card">

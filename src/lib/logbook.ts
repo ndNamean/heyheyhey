@@ -355,20 +355,15 @@ export function canSubmitResolutionNow(
   return status === 'open' || status === 'in_progress';
 }
 
+/** @deprecated Prefer defaultLogbookQuickView from logbookFilters.ts */
 export function defaultLogbookFilterTab(
   profile: Profile,
   defs: RoleDefinition[],
 ): 'all' | 'my-assigned' | 'open' | 'waiting_approval' | 'overdue' | 'resolved' | 'correction' {
+  // Kept for any external callers; mirrors progressive-filter defaults coarsely.
+  if (profile.role === 'staff' || profile.role === 'hybrid') return 'my-assigned';
   if (!canUseOpsTools(profile.role, defs) && !canReview(profile.role, defs)) {
     return 'my-assigned';
-  }
-  if (profile.role === 'staff' || profile.role === 'hybrid') return 'my-assigned';
-  if (
-    profile.role === 'leader' ||
-    profile.role === 'subleader' ||
-    profile.role === 'manager'
-  ) {
-    return 'open';
   }
   return 'all';
 }
