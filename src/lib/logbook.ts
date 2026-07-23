@@ -23,7 +23,37 @@ import type {
   RoleDefinition,
 } from '../types';
 
-export const LOGBOOK_ASSIGNEE_ROLES: Role[] = ['staff', 'hybrid', 'subleader', 'leader', 'manager'];
+/** Candidate assignee roles ordered high → low authority (never owner/admin/viewer). */
+export const LOGBOOK_ASSIGNEE_ROLES: Role[] = [
+  'areaManager',
+  'manager',
+  'leader',
+  'subleader',
+  'hybrid',
+  'staff',
+];
+
+/** Roles that may see notes / announcements (Owner → Staff; exclude viewer). */
+export const LOGBOOK_NOTE_AUDIENCE_ROLES: Role[] = [
+  'owner',
+  'admin',
+  'areaManager',
+  'manager',
+  'leader',
+  'subleader',
+  'hybrid',
+  'staff',
+];
+
+/**
+ * Assignee roles strictly below the creator's authority.
+ * Owner/admin (highest ranks) receive the full candidate pool.
+ * Staff/viewer (and any role with no lower candidates) receive [].
+ */
+export function eligibleLogbookAssigneeRoles(creatorRole: Role, defs: RoleDefinition[]): Role[] {
+  const creatorRank = rankOf(creatorRole, defs);
+  return LOGBOOK_ASSIGNEE_ROLES.filter((r) => rankOf(r, defs) > creatorRank);
+}
 
 export const LOGBOOK_ISSUE_STATUSES: LogbookIssueStatus[] = [
   'open',
@@ -127,6 +157,7 @@ export function canOpenLogbook(
   assignedIssueExists: boolean,
 ): boolean {
   if (canUseOpsTools(profile.role, defs)) return true;
+  if (canReview(profile.role, defs)) return true;
   return assignedIssueExists;
 }
 
@@ -158,13 +189,16 @@ export function canViewLogbookEntry(
     return profileMatchesAssignee(profile, entry, defs);
   }
 
-  if (!ops) return false;
+  // Notes / announcements: Owner → Staff in store scope; never viewer
+  if (profile.role === 'viewer') return false;
+  if (profile.approvalStatus !== 'approved') return false;
+  if (!LOGBOOK_NOTE_AUDIENCE_ROLES.includes(profile.role)) return false;
 
   if (!entry.storeId) {
-    // Blank-store announcements/notes visible to ops-tools users
+    // Blank store = all stores in that audience
     return true;
   }
-  return allStores || storeIds.includes(entry.storeId);
+  return userCanAccessStore(profile.role, storeIds, entry.storeId, defs);
 }
 
 export function canActOnAssignedIssue(

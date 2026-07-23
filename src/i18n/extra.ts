@@ -855,8 +855,9 @@ export const sectionsEn = {
   },
   logbook: {
     title: 'Logbook',
-    noPermission: 'You need ops tools access or an assigned issue to view the logbook.',
+    noPermission: 'You need review access, ops tools, or an assigned issue to view the logbook.',
     noCreatePermission: 'You do not have permission to create logbook entries.',
+    noEligibleAssignees: 'Your role cannot assign Issues (no lower roles available).',
     addEntry: '+ Add entry',
     newEntry: 'New logbook entry',
     contentRequired: 'Content is required',
@@ -1930,8 +1931,9 @@ export const sectionsVi = {
   },
   logbook: {
     title: 'Nhật ký ca',
-    noPermission: 'Bạn cần quyền công cụ vận hành hoặc vấn đề được giao để xem nhật ký.',
+    noPermission: 'Bạn cần quyền duyệt, công cụ vận hành, hoặc vấn đề được giao để xem nhật ký.',
     noCreatePermission: 'Bạn không có quyền tạo mục nhật ký.',
+    noEligibleAssignees: 'Vai trò của bạn không thể giao Issue (không còn vai trò thấp hơn).',
     addEntry: '+ Thêm mục',
     newEntry: 'Mục nhật ký mới',
     contentRequired: 'Cần nội dung',

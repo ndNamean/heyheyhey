@@ -23,6 +23,7 @@ import {
   canSubmitResolutionNow,
   canViewLogbookEntry,
   defaultLogbookFilterTab,
+  eligibleLogbookAssigneeRoles,
   getIssueConfigurationState,
   isIssueOverdue,
   isLogbookIssue,
@@ -163,6 +164,9 @@ export default function LogbookPage({
     resolutionProofType: 'photo' as ProofType,
     resolutionRequirement: '',
   });
+  const [createSourceMedia, setCreateSourceMedia] = useState<UploadedMedia[]>([]);
+  const [showCreateCamera, setShowCreateCamera] = useState(false);
+  const [draftCreateEntryId, setDraftCreateEntryId] = useState(() => id());
   const [saving, setSaving] = useState(false);
   const [proofEntryId, setProofEntryId] = useState<string | null>(
     () => readSession(openResolutionSessionKey()),
@@ -229,6 +233,18 @@ export default function LogbookPage({
 
   const canCreate = canReview(profile.role, defs);
   const pageOpen = canOpenLogbook(profile, defs, assignedIssueExists);
+  const eligibleAssigneeRoles = useMemo(
+    () => eligibleLogbookAssigneeRoles(profile.role, defs),
+    [profile.role, defs],
+  );
+
+  useEffect(() => {
+    if (form.entryType !== 'issue') return;
+    if (eligibleAssigneeRoles.length === 0) return;
+    if (!eligibleAssigneeRoles.includes(form.assigneeRole as (typeof eligibleAssigneeRoles)[number])) {
+      setForm((prev) => ({ ...prev, assigneeRole: eligibleAssigneeRoles[0]! }));
+    }
+  }, [form.entryType, form.assigneeRole, eligibleAssigneeRoles]);
 
   /** Active proof panel entry — resolved from all entries, ignoring filters. */
   const activeProofEntry = useMemo(() => {
@@ -361,14 +377,17 @@ export default function LogbookPage({
     if (!form.content.trim()) return alert(t.logbook.contentRequired);
     if (form.entryType === 'issue') {
       if (!form.storeId) return alert(t.logbook.issueStoreRequired);
-      if (!form.assigneeRole) return alert(t.logbook.assigneeRequired);
+      if (eligibleAssigneeRoles.length === 0) return alert(t.logbook.noEligibleAssignees);
+      if (!form.assigneeRole || !eligibleAssigneeRoles.includes(form.assigneeRole as (typeof eligibleAssigneeRoles)[number])) {
+        return alert(t.logbook.assigneeRequired);
+      }
       if (!form.dueAt) return alert(t.logbook.dueRequired);
       if (!form.resolutionProofType) return alert(t.logbook.proofTypeRequired);
     }
     if (!canCreate) return alert(t.logbook.noCreatePermission);
     setSaving(true);
     try {
-      const entryId = id();
+      const entryId = form.entryType === 'issue' ? draftCreateEntryId : id();
       const storeTarget = form.entryType === 'issue' ? form.storeId : form.storeId || '';
       const typeFields =
         form.entryType === 'issue'
@@ -400,6 +419,9 @@ export default function LogbookPage({
       }
 
       if (form.entryType === 'issue') {
+        for (const media of createSourceMedia) {
+          txs.push(db.tx.logbookEntries[entryId].link({ sourceMedia: media.fileId }));
+        }
         const entryLike = {
           id: entryId,
           storeId: storeTarget,
@@ -427,11 +449,14 @@ export default function LogbookPage({
         content: '',
         severity: 'info',
         requiresAck: false,
-        assigneeRole: 'staff',
+        assigneeRole: eligibleAssigneeRoles[0] || 'staff',
         dueAt: '',
         resolutionProofType: 'photo',
         resolutionRequirement: '',
       });
+      setCreateSourceMedia([]);
+      setShowCreateCamera(false);
+      setDraftCreateEntryId(id());
       setShowForm(false);
     } catch (e) {
       alert(e instanceof Error ? e.message : t.logbook.saveFailed);
@@ -645,9 +670,13 @@ export default function LogbookPage({
 
   function openChangeAssignment(entry: LogbookEntry) {
     if (!canEditLogbookAssignment(profile, entry, defs)) return;
+    const current = (entry.assigneeRole || '').trim();
+    const defaultRole = eligibleAssigneeRoles.includes(current as (typeof eligibleAssigneeRoles)[number])
+      ? current
+      : eligibleAssigneeRoles[0] || '';
     setChangeAssignEntryId(entry.id);
     setChangeAssignForm({
-      assigneeRole: entry.assigneeRole || 'staff',
+      assigneeRole: defaultRole,
       dueAt: entry.dueAt ? entry.dueAt.slice(0, 16) : '',
       reason: '',
     });
@@ -656,7 +685,7 @@ export default function LogbookPage({
   async function submitChangeAssignment(entry: LogbookEntry) {
     if (!canEditLogbookAssignment(profile, entry, defs)) return;
     const role = changeAssignForm.assigneeRole.trim();
-    if (!role || !LOGBOOK_ASSIGNEE_ROLES.includes(role as (typeof LOGBOOK_ASSIGNEE_ROLES)[number])) {
+    if (!role || !eligibleAssigneeRoles.includes(role as (typeof eligibleAssigneeRoles)[number])) {
       return alert(t.logbook.assigneeRequired);
     }
     if (!changeAssignForm.dueAt.trim()) return alert(t.logbook.dueRequired);
@@ -686,7 +715,11 @@ export default function LogbookPage({
         ...buildLogbookIssueAssignedNotifications(updated as LogbookEntry, profile, allProfiles, defs),
       ]);
       setChangeAssignEntryId(null);
-      setChangeAssignForm({ assigneeRole: 'staff', dueAt: '', reason: '' });
+      setChangeAssignForm({
+        assigneeRole: eligibleAssigneeRoles[0] || '',
+        dueAt: '',
+        reason: '',
+      });
     } catch (e) {
       alert(e instanceof Error ? e.message : t.logbook.saveFailed);
     } finally {
@@ -737,9 +770,13 @@ export default function LogbookPage({
   }
 
   function openSetup(entry: LogbookEntry) {
+    const current = (entry.assigneeRole || '').trim();
+    const defaultRole = eligibleAssigneeRoles.includes(current as (typeof eligibleAssigneeRoles)[number])
+      ? current
+      : eligibleAssigneeRoles[0] || '';
     setSetupEntryId(entry.id);
     setSetupForm({
-      assigneeRole: entry.assigneeRole || 'staff',
+      assigneeRole: defaultRole,
       dueAt: entry.dueAt ? entry.dueAt.slice(0, 16) : '',
       resolutionProofType: (resolveLogbookProofType(entry) || 'photo') as ProofType,
       resolutionRequirement: entry.resolutionRequirement || '',
@@ -748,7 +785,12 @@ export default function LogbookPage({
 
   async function saveSetup(entry: LogbookEntry) {
     if (!canEditLogbookAssignment(profile, entry, defs)) return;
-    if (!setupForm.assigneeRole) return alert(t.logbook.assigneeRequired);
+    if (
+      !setupForm.assigneeRole ||
+      !eligibleAssigneeRoles.includes(setupForm.assigneeRole as (typeof eligibleAssigneeRoles)[number])
+    ) {
+      return alert(t.logbook.assigneeRequired);
+    }
     if (!setupForm.dueAt) return alert(t.logbook.dueRequired);
     const dueAt = new Date(setupForm.dueAt).toISOString();
     const prevStatus = resolveLogbookIssueStatus(entry) || 'open';
@@ -978,13 +1020,31 @@ export default function LogbookPage({
             {t.logbook.entryType}
             <select
               value={form.entryType}
-              onChange={(e) =>
-                setForm({ ...form, entryType: e.target.value as LogbookEntryType })
-              }
+              onChange={(e) => {
+                const next = e.target.value as LogbookEntryType;
+                if (next === 'issue' && eligibleAssigneeRoles.length === 0) {
+                  alert(t.logbook.noEligibleAssignees);
+                  return;
+                }
+                setForm({
+                  ...form,
+                  entryType: next,
+                  assigneeRole:
+                    next === 'issue'
+                      ? eligibleAssigneeRoles[0] || form.assigneeRole
+                      : form.assigneeRole,
+                });
+                if (next !== 'issue') {
+                  setCreateSourceMedia([]);
+                  setShowCreateCamera(false);
+                }
+              }}
             >
               <option value="note">{t.logbook.typeNote}</option>
               <option value="announcement">{t.logbook.typeAnnouncement}</option>
-              <option value="issue">{t.logbook.typeIssue}</option>
+              <option value="issue" disabled={eligibleAssigneeRoles.length === 0}>
+                {t.logbook.typeIssue}
+              </option>
             </select>
           </label>
           <div className="grid two" style={{ marginTop: 12 }}>
@@ -1038,7 +1098,7 @@ export default function LogbookPage({
                     value={form.assigneeRole}
                     onChange={(e) => setForm({ ...form, assigneeRole: e.target.value })}
                   >
-                    {LOGBOOK_ASSIGNEE_ROLES.map((r) => (
+                    {eligibleAssigneeRoles.map((r) => (
                       <option key={r} value={r}>
                         {r}
                       </option>
@@ -1081,15 +1141,95 @@ export default function LogbookPage({
             />
           </label>
           {form.entryType === 'issue' && (
-            <label style={{ marginTop: 12, display: 'block' }}>
-              {t.logbook.resolutionRequirement}
-              <textarea
-                value={form.resolutionRequirement}
-                onChange={(e) => setForm({ ...form, resolutionRequirement: e.target.value })}
-                placeholder={t.logbook.resolutionRequirementPlaceholder}
-                style={{ marginTop: 4 }}
-              />
-            </label>
+            <>
+              <label style={{ marginTop: 12, display: 'block' }}>
+                {t.logbook.resolutionRequirement}
+                <textarea
+                  value={form.resolutionRequirement}
+                  onChange={(e) => setForm({ ...form, resolutionRequirement: e.target.value })}
+                  placeholder={t.logbook.resolutionRequirementPlaceholder}
+                  style={{ marginTop: 4 }}
+                />
+              </label>
+              <div style={{ marginTop: 12 }}>
+                <div className="small">{t.logbook.sourceMedia}</div>
+                {createSourceMedia.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                    {createSourceMedia.map((media) => (
+                      <div key={media.fileId} style={{ minWidth: 120 }}>
+                        <ProofPhoto
+                          media={{
+                            id: media.fileId,
+                            url: media.url,
+                            fileName: media.fileName,
+                            mimeType: media.mimeType,
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="secondary"
+                          style={{ marginTop: 6 }}
+                          onClick={() =>
+                            setCreateSourceMedia((prev) =>
+                              prev.filter((m) => m.fileId !== media.fileId),
+                            )
+                          }
+                        >
+                          {t.logbook.removeProof}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {!showCreateCamera ? (
+                  <button
+                    type="button"
+                    className="secondary"
+                    style={{ marginTop: 8 }}
+                    disabled={!form.storeId}
+                    onClick={() => setShowCreateCamera(true)}
+                  >
+                    {t.logbook.addSourceMedia}
+                  </button>
+                ) : (
+                  (() => {
+                    const createStore = stores.find((s) => s.id === form.storeId);
+                    if (!createStore) return null;
+                    return (
+                      <div style={{ marginTop: 8 }}>
+                        <TimemarkCamera
+                          store={createStore}
+                          itemTitle={`Logbook Issue · ${(form.content || 'new').slice(0, 40)}`}
+                          reportDate={todayYmd()}
+                          proofContext={{
+                            type: 'logbook',
+                            logbookEntryId: draftCreateEntryId,
+                            storeId: form.storeId,
+                            content: form.content || 'New issue',
+                            mediaPurpose: 'source_context',
+                          }}
+                          profile={profile}
+                          proofType="photo"
+                          existingMedia={[]}
+                          onCapture={(media: UploadedMedia) => {
+                            setCreateSourceMedia((prev) => [...prev, media]);
+                            setShowCreateCamera(false);
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="secondary"
+                          style={{ marginTop: 8 }}
+                          onClick={() => setShowCreateCamera(false)}
+                        >
+                          {t.common.cancel}
+                        </button>
+                      </div>
+                    );
+                  })()
+                )}
+              </div>
+            </>
           )}
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
             <input
@@ -1346,7 +1486,7 @@ export default function LogbookPage({
                       value={setupForm.assigneeRole}
                       onChange={(e) => setSetupForm({ ...setupForm, assigneeRole: e.target.value })}
                     >
-                      {LOGBOOK_ASSIGNEE_ROLES.map((r) => (
+                      {eligibleAssigneeRoles.map((r) => (
                         <option key={r} value={r}>
                           {r}
                         </option>
@@ -1489,7 +1629,7 @@ export default function LogbookPage({
                         setChangeAssignForm({ ...changeAssignForm, assigneeRole: e.target.value })
                       }
                     >
-                      {LOGBOOK_ASSIGNEE_ROLES.map((r) => (
+                      {eligibleAssigneeRoles.map((r) => (
                         <option key={r} value={r}>
                           {r}
                         </option>
@@ -1532,7 +1672,11 @@ export default function LogbookPage({
                     disabled={changeAssignSaving}
                     onClick={() => {
                       setChangeAssignEntryId(null);
-                      setChangeAssignForm({ assigneeRole: 'staff', dueAt: '', reason: '' });
+                      setChangeAssignForm({
+                        assigneeRole: eligibleAssigneeRoles[0] || '',
+                        dueAt: '',
+                        reason: '',
+                      });
                     }}
                   >
                     {t.common.cancel}

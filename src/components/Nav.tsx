@@ -7,7 +7,7 @@ import {
   canScheduleShifts,
   canUseOpsTools,
 } from '../lib/roles';
-import { isLogbookIssue, resolveLogbookIssueStatus } from '../lib/logbook';
+import { canOpenLogbook, isLogbookIssue, resolveLogbookIssueStatus } from '../lib/logbook';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import LanguageSelector from './LanguageSelector';
@@ -28,22 +28,25 @@ interface NavProps {
   onOpenLogbook?: () => void;
 }
 
-export function DesktopNav({ page, setPage, profile, onOpenLogbook }: NavProps) {
-  const { t } = useLang();
-  const { defs } = useRoleDefinitions();
-
+function useAssignedIssueExists(profile: Profile): boolean {
   const { data: logbookData } = db.useQuery({
     logbookEntries: {},
   });
-  const assignedIssueExists = ((logbookData?.logbookEntries ?? []) as LogbookEntry[]).some(
+  return ((logbookData?.logbookEntries ?? []) as LogbookEntry[]).some(
     (e) =>
       isLogbookIssue(e) &&
       resolveLogbookIssueStatus(e) !== 'resolved' &&
+      resolveLogbookIssueStatus(e) !== 'recalled' &&
       e.assigneeRole === profile.role &&
       (profile.stores ?? []).some((s) => s.id === e.storeId),
   );
+}
 
-  const showLogbook = canUseOpsTools(profile.role, defs) || assignedIssueExists;
+export function DesktopNav({ page, setPage, profile, onOpenLogbook }: NavProps) {
+  const { t } = useLang();
+  const { defs } = useRoleDefinitions();
+  const assignedIssueExists = useAssignedIssueExists(profile);
+  const showLogbook = canOpenLogbook(profile, defs, assignedIssueExists);
 
   const links: { id: Page; label: string }[] = [
     { id: 'home',    label: t.nav.dashboard },
@@ -111,16 +114,22 @@ export function DesktopNav({ page, setPage, profile, onOpenLogbook }: NavProps) 
   );
 }
 
-export function MobileNav({ page, setPage, profile }: NavProps) {
+export function MobileNav({ page, setPage, profile, onOpenLogbook }: NavProps) {
   const { t } = useLang();
+  const { defs } = useRoleDefinitions();
   const unreadCount = useUnreadNotificationCount(profile.userId);
+  const assignedIssueExists = useAssignedIssueExists(profile);
+  const showLogbook = canOpenLogbook(profile, defs, assignedIssueExists);
 
   const tabs: { id: Page; label: string }[] = [
     { id: 'home',    label: t.nav.dashboard },
     { id: 'submit',  label: t.nav.submit },
     { id: 'review',  label: t.nav.review },
-    { id: 'profile', label: t.nav.profile },
   ];
+  if (showLogbook) {
+    tabs.push({ id: 'logbook', label: t.nav.logbook });
+  }
+  tabs.push({ id: 'profile', label: t.nav.profile });
 
   return (
     <>
@@ -132,7 +141,10 @@ export function MobileNav({ page, setPage, profile }: NavProps) {
         <button
           key={tab.id}
           className={page === tab.id ? 'active' : ''}
-          onClick={() => setPage(tab.id)}
+          onClick={() => {
+            if (tab.id === 'logbook' && onOpenLogbook) onOpenLogbook();
+            else setPage(tab.id);
+          }}
         >
           <span className="nav-tab-label">
             {tab.id === 'profile' ? (

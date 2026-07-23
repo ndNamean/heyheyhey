@@ -199,7 +199,7 @@ export default function AppShell({ profile }: Props) {
       <main className="page">
         <DesktopNav page={page} setPage={setPage} profile={profile} onOpenLogbook={() => goLogbook()} />
         {renderPage()}
-        <MobileNav page={page} setPage={setPage} profile={profile} />
+        <MobileNav page={page} setPage={setPage} profile={profile} onOpenLogbook={() => goLogbook()} />
       </main>
     </div>
   );

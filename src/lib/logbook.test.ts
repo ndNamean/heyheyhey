@@ -7,6 +7,7 @@ import {
   canReviewLogbookIssue,
   canSubmitResolutionNow,
   canViewLogbookEntry,
+  eligibleLogbookAssigneeRoles,
   getIssueConfigurationState,
   isIssueDueSoon,
   isIssueOverdue,
@@ -217,13 +218,34 @@ describe('visibility and actions', () => {
     storeId: 'store-a',
   });
 
-  it('staff sees only assigned issues at their stores', () => {
+  it('staff sees assigned issues and store-scoped notes; not other-store issues', () => {
     const staff = profile({ userId: 's1', role: 'staff' });
     expect(canViewLogbookEntry(staff, issue, defs)).toBe(true);
     expect(
       canViewLogbookEntry(
         staff,
         entry({ entryType: 'note', isAnnouncement: false, storeId: 'store-a' }),
+        defs,
+      ),
+    ).toBe(true);
+    expect(
+      canViewLogbookEntry(
+        staff,
+        entry({ entryType: 'note', isAnnouncement: false, storeId: '' }),
+        defs,
+      ),
+    ).toBe(true);
+    expect(
+      canViewLogbookEntry(
+        staff,
+        entry({ entryType: 'announcement', isAnnouncement: true, storeId: 'store-a' }),
+        defs,
+      ),
+    ).toBe(true);
+    expect(
+      canViewLogbookEntry(
+        staff,
+        entry({ entryType: 'note', storeId: 'other' }),
         defs,
       ),
     ).toBe(false);
@@ -233,6 +255,37 @@ describe('visibility and actions', () => {
         entry({ ...issue, storeId: 'other', assigneeRole: 'staff' }),
         defs,
       ),
+    ).toBe(false);
+  });
+
+  it('viewer never sees notes or announcements', () => {
+    const viewer = profile({ userId: 'v1', role: 'viewer' });
+    expect(
+      canViewLogbookEntry(
+        viewer,
+        entry({ entryType: 'note', storeId: 'store-a' }),
+        defs,
+      ),
+    ).toBe(false);
+    expect(
+      canViewLogbookEntry(
+        viewer,
+        entry({ entryType: 'announcement', isAnnouncement: true, storeId: '' }),
+        defs,
+      ),
+    ).toBe(false);
+  });
+
+  it('hybrid sees all-store and assigned-store notes', () => {
+    const hybrid = profile({ userId: 'h1', role: 'hybrid' });
+    expect(
+      canViewLogbookEntry(hybrid, entry({ entryType: 'note', storeId: '' }), defs),
+    ).toBe(true);
+    expect(
+      canViewLogbookEntry(hybrid, entry({ entryType: 'note', storeId: 'store-a' }), defs),
+    ).toBe(true);
+    expect(
+      canViewLogbookEntry(hybrid, entry({ entryType: 'note', storeId: 'other' }), defs),
     ).toBe(false);
   });
 
@@ -247,11 +300,32 @@ describe('visibility and actions', () => {
     ).toBe(true);
   });
 
-  it('canOpenLogbook for ops or assigned issues', () => {
+  it('canOpenLogbook for ops, reviewers, or assigned issues', () => {
     const staff = profile({ userId: 's1', role: 'staff' });
     expect(canOpenLogbook(staff, defs, false)).toBe(false);
     expect(canOpenLogbook(staff, defs, true)).toBe(true);
     expect(canOpenLogbook(profile({ userId: 'l1', role: 'leader' }), defs, false)).toBe(true);
+    expect(canOpenLogbook(profile({ userId: 'h1', role: 'hybrid' }), defs, false)).toBe(true);
+  });
+
+  it('eligibleLogbookAssigneeRoles filters strictly lower roles', () => {
+    expect(eligibleLogbookAssigneeRoles('owner', defs)).toEqual([
+      'areaManager',
+      'manager',
+      'leader',
+      'subleader',
+      'hybrid',
+      'staff',
+    ]);
+    expect(eligibleLogbookAssigneeRoles('manager', defs)).toEqual([
+      'leader',
+      'subleader',
+      'hybrid',
+      'staff',
+    ]);
+    expect(eligibleLogbookAssigneeRoles('hybrid', defs)).toEqual(['staff']);
+    expect(eligibleLogbookAssigneeRoles('staff', defs)).toEqual([]);
+    expect(eligibleLogbookAssigneeRoles('viewer', defs)).toEqual([]);
   });
 
   it('assignee can act; higher-rank reviewer can review', () => {
