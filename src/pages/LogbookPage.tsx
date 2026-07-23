@@ -199,6 +199,7 @@ export default function LogbookPage({
     reason: '',
   });
   const [changeAssignSaving, setChangeAssignSaving] = useState(false);
+  const [resolvedDetailOpenIds, setResolvedDetailOpenIds] = useState<Record<string, boolean>>({});
   const dueNotifyRan = useRef(false);
 
   const { data } = db.useQuery({
@@ -1613,6 +1614,64 @@ export default function LogbookPage({
               </div>
             )}
 
+            {status === 'resolved' && (
+              <div style={{ marginTop: 8 }}>
+                {entry.resolvedAt && (
+                  <p className="small" style={{ margin: '0 0 4px' }}>
+                    {new Date(entry.resolvedAt).toLocaleString()}
+                  </p>
+                )}
+                {(() => {
+                  const approvedEv = [...entryEvents]
+                    .reverse()
+                    .find((ev) => ev.eventType === 'resolution_approved');
+                  const reviewer =
+                    allProfiles.find((p) => p.userId === entry.reviewedByUserId) || null;
+                  const name =
+                    (approvedEv?.actorDisplayNameSnapshot || '').trim() ||
+                    reviewer?.displayName?.trim() ||
+                    reviewer?.email?.split('@')[0] ||
+                    '';
+                  const role =
+                    (approvedEv?.actorRole || '').trim() || reviewer?.role || '';
+                  const byLine = [name, role ? `(${role})` : ''].filter(Boolean).join(' ');
+                  return (
+                    <p className="small" style={{ margin: 0 }}>
+                      <strong>{t.timeline.resolutionApproved}</strong>
+                      {byLine ? (
+                        <>
+                          {' '}
+                          {t.timeline.by} {byLine}
+                        </>
+                      ) : null}
+                    </p>
+                  );
+                })()}
+                {entry.reviewNote?.trim() && (
+                  <p className="small" style={{ margin: '4px 0 0' }}>
+                    {entry.reviewNote.trim()}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  className="secondary"
+                  style={{ marginTop: 8, fontSize: 12, padding: '6px 10px', minHeight: 32 }}
+                  onClick={() =>
+                    setResolvedDetailOpenIds((prev) => ({
+                      ...prev,
+                      [entry.id]: !prev[entry.id],
+                    }))
+                  }
+                >
+                  {resolvedDetailOpenIds[entry.id]
+                    ? t.dashboard.hideDetails
+                    : t.dashboard.showDetails}
+                </button>
+              </div>
+            )}
+
+            {(status !== 'resolved' || resolvedDetailOpenIds[entry.id]) && (
+              <>
             {sourceMedia.length > 0 && (
               <div style={{ marginTop: 8 }}>
                 <div className="small">{t.logbook.sourceMedia}</div>
@@ -1918,6 +1977,8 @@ export default function LogbookPage({
               <div style={{ marginTop: 10 }}>
                 <LogbookTimeline entry={entry} events={entryEvents} />
               </div>
+            )}
+              </>
             )}
           </div>
         );
