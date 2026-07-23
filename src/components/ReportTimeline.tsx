@@ -241,7 +241,7 @@ export function ReportTimelineLeadCell({
 export function LogbookTimeline({
   entry,
   events = [],
-  defaultExpanded = true,
+  defaultExpanded = false,
 }: {
   entry: LogbookEntry;
   events?: ReviewEvent[];
