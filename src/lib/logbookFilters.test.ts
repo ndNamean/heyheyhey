@@ -247,15 +247,16 @@ describe('logbookFilters', () => {
     expect(toIssue.issueLifecycles).toEqual(['open', 'overdue']);
   });
 
-  it('chip count matches detailed filters only', () => {
+  it('chip count includes store, entry type, and date range', () => {
     const filters = emptyLogbookFilterState();
     filters.search = 'leak';
     filters.storeId = 'store-a';
     filters.issueLifecycles = ['active', 'overdue'];
     filters.severities = ['critical'];
     filters.dateBasedOn = 'due';
-    expect(countActiveDetailedFilters(filters)).toBe(4);
-    expect(listActiveDetailedFilterChips(filters)).toHaveLength(4);
+    // store + 2 lifecycles + severity + dateBasedOn = 5 (search is not a detailed chip)
+    expect(countActiveDetailedFilters(filters)).toBe(5);
+    expect(listActiveDetailedFilterChips(filters)).toHaveLength(5);
   });
 
   it('OR within field and AND across fields', () => {

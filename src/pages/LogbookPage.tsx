@@ -913,6 +913,20 @@ export default function LogbookPage({
 
   function chipLabel(chip: LogbookFilterChip): string {
     switch (chip.kind) {
+      case 'store': {
+        if (chip.value === 'all') return t.common.allStores;
+        const store = selectableStores.find((s) => s.id === chip.value);
+        return store ? `${store.code} — ${store.name}` : chip.value;
+      }
+      case 'entryType':
+        if (chip.value === 'note') return t.logbook.typeNote;
+        if (chip.value === 'announcement') return t.logbook.typeAnnouncement;
+        if (chip.value === 'issue') return t.logbook.typeIssue;
+        return t.common.all;
+      case 'dateFrom':
+        return `${t.logbook.dateFrom}: ${chip.value}`;
+      case 'dateTo':
+        return `${t.logbook.dateTo}: ${chip.value}`;
       case 'lifecycle':
         return lifecycleLabel(chip.value as LogbookLifecycleFilter);
       case 'severity':
@@ -943,6 +957,54 @@ export default function LogbookPage({
   function renderMoreFiltersBody() {
     return (
       <>
+        <div className="grid two" style={{ marginBottom: 12 }}>
+          <label>
+            {t.common.store}
+            <select
+              value={filters.storeId}
+              onChange={(e) => setFilters((prev) => ({ ...prev, storeId: e.target.value }))}
+            >
+              <option value="all">{t.common.allStores}</option>
+              {selectableStores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.code} — {s.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {t.logbook.entryType}
+            <select
+              value={filters.entryType}
+              onChange={(e) => {
+                const next = e.target.value as 'all' | LogbookEntryType;
+                setFilters((prev) => clearIncompatibleFiltersOnEntryTypeChange(prev, next));
+              }}
+            >
+              <option value="all">{t.common.all}</option>
+              <option value="note">{t.logbook.typeNote}</option>
+              <option value="announcement">{t.logbook.typeAnnouncement}</option>
+              <option value="issue">{t.logbook.typeIssue}</option>
+            </select>
+          </label>
+          <label>
+            {t.logbook.dateFrom}
+            <input
+              type="date"
+              value={filters.dateFrom}
+              onChange={(e) => setFilters((prev) => ({ ...prev, dateFrom: e.target.value }))}
+            />
+          </label>
+          <label>
+            {t.logbook.dateTo}
+            <input
+              type="date"
+              value={filters.dateTo}
+              onChange={(e) => setFilters((prev) => ({ ...prev, dateTo: e.target.value }))}
+            />
+          </label>
+        </div>
+
         {showIssueMore && (
           <>
             {filters.entryType === 'all' && <h3>{t.logbook.issuesHeading}</h3>}
@@ -1129,54 +1191,6 @@ export default function LogbookPage({
               {qv.label}
             </button>
           ))}
-        </div>
-
-        <div className="grid two" style={{ marginTop: 12 }}>
-          <label>
-            {t.common.store}
-            <select
-              value={filters.storeId}
-              onChange={(e) => setFilters((prev) => ({ ...prev, storeId: e.target.value }))}
-            >
-              <option value="all">{t.common.allStores}</option>
-              {selectableStores.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.code} — {s.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {t.logbook.entryType}
-            <select
-              value={filters.entryType}
-              onChange={(e) => {
-                const next = e.target.value as 'all' | LogbookEntryType;
-                setFilters((prev) => clearIncompatibleFiltersOnEntryTypeChange(prev, next));
-              }}
-            >
-              <option value="all">{t.common.all}</option>
-              <option value="note">{t.logbook.typeNote}</option>
-              <option value="announcement">{t.logbook.typeAnnouncement}</option>
-              <option value="issue">{t.logbook.typeIssue}</option>
-            </select>
-          </label>
-          <label>
-            {t.logbook.dateFrom}
-            <input
-              type="date"
-              value={filters.dateFrom}
-              onChange={(e) => setFilters((prev) => ({ ...prev, dateFrom: e.target.value }))}
-            />
-          </label>
-          <label>
-            {t.logbook.dateTo}
-            <input
-              type="date"
-              value={filters.dateTo}
-              onChange={(e) => setFilters((prev) => ({ ...prev, dateTo: e.target.value }))}
-            />
-          </label>
         </div>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12, alignItems: 'center' }}>

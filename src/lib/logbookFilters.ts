@@ -63,7 +63,17 @@ export interface LogbookFilterState {
 
 export type LogbookFilterChip = {
   id: string;
-  kind: 'lifecycle' | 'severity' | 'assignee' | 'proof' | 'ack' | 'dateBasedOn';
+  kind:
+    | 'store'
+    | 'entryType'
+    | 'dateFrom'
+    | 'dateTo'
+    | 'lifecycle'
+    | 'severity'
+    | 'assignee'
+    | 'proof'
+    | 'ack'
+    | 'dateBasedOn';
   value: string;
 };
 
@@ -166,6 +176,10 @@ export function parseLogbookInitialFilter(
 
 export function countActiveDetailedFilters(filters: LogbookFilterState): number {
   let n = 0;
+  if (filters.storeId !== 'all') n += 1;
+  if (filters.entryType !== 'all') n += 1;
+  if (filters.dateFrom) n += 1;
+  if (filters.dateTo) n += 1;
   n += filters.issueLifecycles.length;
   n += filters.severities.length;
   n += filters.assigneeRoles.length;
@@ -179,6 +193,22 @@ export function listActiveDetailedFilterChips(
   filters: LogbookFilterState,
 ): LogbookFilterChip[] {
   const chips: LogbookFilterChip[] = [];
+  if (filters.storeId !== 'all') {
+    chips.push({ id: `store:${filters.storeId}`, kind: 'store', value: filters.storeId });
+  }
+  if (filters.entryType !== 'all') {
+    chips.push({
+      id: `entryType:${filters.entryType}`,
+      kind: 'entryType',
+      value: filters.entryType,
+    });
+  }
+  if (filters.dateFrom) {
+    chips.push({ id: `dateFrom:${filters.dateFrom}`, kind: 'dateFrom', value: filters.dateFrom });
+  }
+  if (filters.dateTo) {
+    chips.push({ id: `dateTo:${filters.dateTo}`, kind: 'dateTo', value: filters.dateTo });
+  }
   for (const value of filters.issueLifecycles) {
     chips.push({ id: `lifecycle:${value}`, kind: 'lifecycle', value });
   }
@@ -209,6 +239,14 @@ export function removeDetailedFilterChip(
   chip: LogbookFilterChip,
 ): LogbookFilterState {
   switch (chip.kind) {
+    case 'store':
+      return { ...filters, storeId: 'all' };
+    case 'entryType':
+      return clearIncompatibleFiltersOnEntryTypeChange(filters, 'all');
+    case 'dateFrom':
+      return { ...filters, dateFrom: '' };
+    case 'dateTo':
+      return { ...filters, dateTo: '' };
     case 'lifecycle':
       return {
         ...filters,
