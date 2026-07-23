@@ -963,6 +963,25 @@ export default function UsersPage({ currentProfile }: Props) {
     ]);
   }
 
+  async function deleteUserAccess(profile: Profile) {
+    if (!isOwner) return;
+    if (profile.id === currentProfile.id) {
+      alert(t.users.deleteSelfBlocked);
+      return;
+    }
+    if (profile.role === OWNER_ROLE_KEY) {
+      alert(t.users.deleteOwnerBlocked);
+      return;
+    }
+    const msg = t.users.deleteConfirm.replace('{name}', profile.name || profile.email);
+    if (!confirm(msg)) return;
+    try {
+      await rejectAccess(profile);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.errors.saveFailed);
+    }
+  }
+
   async function preApproveAccess(profile: Profile) {
     const now = nowIso();
     await db.transact([
@@ -1308,7 +1327,19 @@ export default function UsersPage({ currentProfile }: Props) {
 
                     <td>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {p.approvalStatus !== 'rejected' && (
+                        {p.approvalStatus !== 'rejected' &&
+                          isOwner &&
+                          p.id !== currentProfile.id &&
+                          p.role !== OWNER_ROLE_KEY && (
+                          <button
+                            className="danger"
+                            style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
+                            onClick={() => deleteUserAccess(p)}
+                          >
+                            {t.common.delete}
+                          </button>
+                        )}
+                        {p.approvalStatus !== 'rejected' && !isOwner && (
                           <button
                             className="danger"
                             style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}

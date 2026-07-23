@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
-import { canEditMaster, failureCategoryOptions, PROOF_TYPES } from '../lib/roles';
+import { canEditMaster, failureCategoryOptions, isOwner, PROOF_TYPES } from '../lib/roles';
 import { nowIso, todayYmd } from '../lib/utils';
 import {
   createTemplate,
+  deleteTemplate,
   templateItemToDraft,
   updateTemplate,
   type TemplateItemDraft,
@@ -114,10 +115,18 @@ export default function TemplatesPage({ profile }: Props) {
 
   const { data } = db.useQuery({
     stores: {},
-    templates: { items: {}, stores: {}, scheduleVersions: {} },
+    templates: {
+      items: { responses: {} },
+      stores: {},
+      scheduleVersions: {},
+      reports: {},
+      slots: {},
+      checklistItemProposals: {},
+    },
   });
   const stores: Store[] = (data?.stores ?? []) as Store[];
   const templates: Template[] = (data?.templates ?? []) as Template[];
+  const ownerCanDelete = isOwner(profile.role);
 
   const isEditMode = editingTemplateId !== null;
 
@@ -374,6 +383,20 @@ export default function TemplatesPage({ profile }: Props) {
     await db.transact(db.tx.templates[template.id].update({ active: true, updatedAt: nowIso() }));
     if (editingTemplateId === template.id) {
       setEditingTemplateActive(true);
+    }
+  }
+
+  async function removeTemplate(template: Template) {
+    if (!ownerCanDelete) return;
+    const msg = t.templates.deleteConfirm.replace('{name}', template.name);
+    if (!confirm(msg)) return;
+    try {
+      await deleteTemplate(template);
+      if (editingTemplateId === template.id) {
+        resetForm();
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.templates.deleteFailed);
     }
   }
 
@@ -755,6 +778,15 @@ export default function TemplatesPage({ profile }: Props) {
                         onClick={() => activate(tmpl)}
                       >
                         {t.templates.activate}
+                      </button>
+                    )}
+                    {ownerCanDelete && (
+                      <button
+                        className="danger"
+                        style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
+                        onClick={() => removeTemplate(tmpl)}
+                      >
+                        {t.common.delete}
                       </button>
                     )}
                   </div>

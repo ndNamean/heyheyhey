@@ -456,7 +456,8 @@ const rules = {
         sourceReport: 'canProposeTemplateItem',
       },
       unlink: {
-        template: 'false',
+        // Owner may unlink when permanently deleting a template; proposal keeps templateId snapshot.
+        template: 'isOwner',
         requester: 'false',
         sourceStore: 'false',
         sourceReport: 'false',

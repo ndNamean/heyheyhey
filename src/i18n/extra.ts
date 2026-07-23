@@ -540,6 +540,9 @@ export const sectionsEn = {
     activate: 'Activate',
     activateConfirm:
       'Activate "{name}"? Staff will be able to use this template for new submissions again.',
+    deleteConfirm:
+      'Permanently delete "{name}"? Checklist items and schedule data will be removed. Existing submitted reports are kept.',
+    deleteFailed: 'Failed to delete template.',
     creating: 'Creating...',
     editTemplate: 'Edit template',
     createTemplate: 'Create template',
@@ -702,6 +705,10 @@ export const sectionsEn = {
     sendCode: 'Send code',
     couldNotSendCode: 'Could not send code. Try again.',
     revoke: 'Revoke',
+    deleteConfirm:
+      'Remove access for "{name}"? They will no longer be able to sign in until approved again.',
+    deleteSelfBlocked: 'You cannot delete your own account.',
+    deleteOwnerBlocked: 'Owner accounts cannot be deleted.',
     emailAddress: 'Email address',
     requested: 'Requested',
     noOtherUsers: 'No other users yet. Use "Invite user" above to get started.',
@@ -1608,6 +1615,9 @@ export const sectionsVi = {
     activate: 'Kích hoạt',
     activateConfirm:
       'Kích hoạt "{name}"? Nhân viên có thể dùng mẫu này cho các lần nộp báo cáo mới.',
+    deleteConfirm:
+      'Xóa vĩnh viễn "{name}"? Các mục checklist và dữ liệu lịch sẽ bị gỡ. Báo cáo đã nộp vẫn được giữ.',
+    deleteFailed: 'Không thể xóa mẫu.',
     creating: 'Đang tạo...',
     editTemplate: 'Sửa mẫu',
     createTemplate: 'Tạo mẫu',
@@ -1770,6 +1780,10 @@ export const sectionsVi = {
     sendCode: 'Gửi mã',
     couldNotSendCode: 'Không thể gửi mã. Thử lại.',
     revoke: 'Thu hồi',
+    deleteConfirm:
+      'Thu hồi quyền truy cập của "{name}"? Họ sẽ không đăng nhập được cho đến khi được phê duyệt lại.',
+    deleteSelfBlocked: 'Bạn không thể xóa tài khoản của chính mình.',
+    deleteOwnerBlocked: 'Không thể xóa tài khoản chủ sở hữu.',
     emailAddress: 'Địa chỉ email',
     requested: 'Yêu cầu',
     noOtherUsers: 'Chưa có người dùng khác. Dùng "Mời người dùng" ở trên để bắt đầu.',

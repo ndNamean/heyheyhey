@@ -9,7 +9,25 @@ import {
   type TemplateSchedule,
 } from './templateSchedule';
 import { nowIso } from './utils';
-import type { TemplateItem } from '../types';
+import type {
+  ChecklistItemProposal,
+  Report,
+  ReportResponse,
+  Store,
+  Template,
+  TemplateItem,
+  TemplateScheduleVersion,
+} from '../types';
+
+/** Template with relations needed for a safe hard-delete cascade. */
+export type TemplateForDelete = Template & {
+  items?: Array<TemplateItem & { responses?: ReportResponse[] }>;
+  stores?: Store[];
+  scheduleVersions?: TemplateScheduleVersion[];
+  reports?: Report[];
+  slots?: Array<{ id: string }>;
+  checklistItemProposals?: ChecklistItemProposal[];
+};
 
 export interface TemplateItemDraft {
   id: string;
@@ -283,4 +301,52 @@ export async function updateTemplate(params: UpdateTemplateParams): Promise<void
     ...itemDeleteTxs,
     ...versionTxs,
   ] as any[]);
+}
+
+/**
+ * Permanently delete a template and related checklist/schedule data.
+ * Historical reports are kept (unlinked); denormalized templateName remains on them.
+ */
+export async function deleteTemplate(template: TemplateForDelete): Promise<void> {
+  const templateId = template.id;
+  const items = template.items ?? [];
+  const scheduleVersions = template.scheduleVersions ?? [];
+  const stores = template.stores ?? [];
+  const reports = template.reports ?? [];
+  const slots = template.slots ?? [];
+  const proposals = template.checklistItemProposals ?? [];
+
+  const txs: unknown[] = [];
+
+  for (const item of items) {
+    for (const response of item.responses ?? []) {
+      txs.push(db.tx.reportResponses[response.id].unlink({ templateItem: item.id }));
+    }
+    txs.push(db.tx.templateItems[item.id].delete());
+  }
+
+  for (const version of scheduleVersions) {
+    txs.push(db.tx.templateScheduleVersions[version.id].delete());
+  }
+
+  for (const slot of slots) {
+    txs.push(db.tx.reportSlots[slot.id].delete());
+  }
+
+  for (const store of stores) {
+    txs.push(db.tx.templates[templateId].unlink({ stores: store.id }));
+  }
+
+  for (const report of reports) {
+    txs.push(db.tx.reports[report.id].unlink({ template: templateId }));
+  }
+
+  for (const proposal of proposals) {
+    txs.push(db.tx.checklistItemProposals[proposal.id].unlink({ template: templateId }));
+  }
+
+  txs.push(db.tx.templates[templateId].delete());
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await db.transact(txs as any[]);
 }
