@@ -38,6 +38,7 @@ import {
   resendInvitation,
   revokeInvitation,
 } from '../lib/inviteClient';
+import { removeUserFromSystem } from '../lib/removeUserClient';
 
 interface Props {
   currentProfile: Profile;
@@ -880,6 +881,7 @@ export default function UsersPage({ currentProfile }: Props) {
     role: Role;
   } | null>(null);
   const [roleChangeSaving, setRoleChangeSaving] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   const { data } = db.useQuery({
     profiles: { stores: {}, roleDefinition: {} },
@@ -978,12 +980,39 @@ export default function UsersPage({ currentProfile }: Props) {
       alert(t.users.deleteOwnerBlocked);
       return;
     }
-    const msg = t.users.deleteConfirm.replace('{name}', profile.name || profile.email);
+    const msg = t.users.deleteConfirm.replace('{name}', profile.displayName || profile.email);
     if (!confirm(msg)) return;
     try {
       await rejectAccess(profile);
     } catch (e) {
       alert(e instanceof Error ? e.message : t.errors.saveFailed);
+    }
+  }
+
+  async function removeFromSystem(profile: Profile) {
+    if (!isOwner) return;
+    if (profile.id === currentProfile.id) {
+      alert(t.users.deleteSelfBlocked);
+      return;
+    }
+    if (profile.role === OWNER_ROLE_KEY) {
+      alert(t.users.deleteOwnerBlocked);
+      return;
+    }
+    if (profile.approvalStatus !== 'rejected') return;
+    const msg = t.users.removeFromSystemConfirm.replace(
+      '{name}',
+      profile.displayName || profile.email,
+    );
+    if (!confirm(msg)) return;
+    setRemovingId(profile.id);
+    try {
+      await removeUserFromSystem(profile.id);
+      alert(t.users.removeFromSystemSuccess);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.users.removeFromSystemFailed);
+    } finally {
+      setRemovingId(null);
     }
   }
 
@@ -1359,7 +1388,7 @@ export default function UsersPage({ currentProfile }: Props) {
                             style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
                             onClick={() => deleteUserAccess(p)}
                           >
-                            {t.common.delete}
+                            {t.users.revokeAccess}
                           </button>
                         )}
                         {canFinalApprove && p.approvalStatus !== 'rejected' && !isOwner && (
@@ -1378,6 +1407,21 @@ export default function UsersPage({ currentProfile }: Props) {
                             onClick={() => setApprovingId(p.id)}
                           >
                             {t.common.approve}
+                          </button>
+                        )}
+                        {isOwner &&
+                          p.approvalStatus === 'rejected' &&
+                          p.id !== currentProfile.id &&
+                          p.role !== OWNER_ROLE_KEY && (
+                          <button
+                            className="danger"
+                            style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
+                            onClick={() => removeFromSystem(p)}
+                            disabled={removingId === p.id}
+                          >
+                            {removingId === p.id
+                              ? t.users.removingFromSystem
+                              : t.users.removeFromSystem}
                           </button>
                         )}
                         {canManage && (

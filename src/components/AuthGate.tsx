@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { id } from '@instantdb/react';
 import { db } from '../db';
-import { nowIso } from '../lib/utils';
 import { useLang } from '../i18n';
 import { BACK_PRIORITY, useNativeBack } from '../lib/nativeBack';
 import LanguageSelector from './LanguageSelector';
@@ -41,11 +39,10 @@ function TicketShell({ children }: { children: React.ReactNode }) {
 function LoginScreen() {
   const { t } = useLang();
   // Parse invite params from URL once on mount
-  const { inviteEmail, inviteRole, inviteCode } = useMemo(() => {
+  const { inviteEmail, inviteCode } = useMemo(() => {
     const p = new URLSearchParams(window.location.search);
     return {
       inviteEmail: p.get('invite') ? decodeURIComponent(p.get('invite')!) : '',
-      inviteRole:  p.get('role')   ? decodeURIComponent(p.get('role')!)   : 'staff',
       inviteCode:  p.get('code')   ? decodeURIComponent(p.get('code')!)   : '',
     };
   }, []);
@@ -62,9 +59,6 @@ function LoginScreen() {
     if (!inviteEmail || autoSentRef.current) return;
     autoSentRef.current = true;
 
-    // Persist intended role so the profile-creation effect can pick it up
-    if (inviteRole) sessionStorage.setItem('inviteRole', inviteRole);
-
     // Clean up URL parameters without reloading the page
     const url = new URL(window.location.href);
     url.searchParams.delete('invite');
@@ -78,7 +72,7 @@ function LoginScreen() {
       // Link carries the code (set via InstantDB email template) — auto-verify directly
       db.auth
         .signInWithMagicCode({ email: inviteEmail, code: inviteCode })
-        .catch((e: unknown) => {
+        .catch(() => {
           // Code expired or wrong — fall back to send a fresh code
           setError('');
           setCode('');
@@ -273,63 +267,33 @@ function RejectedScreen({ email }: { email: string }) {
   );
 }
 
+// ─── No profile (invite required) ────────────────────────────────────────────
+
+function NeedInvitationScreen({ email }: { email: string }) {
+  const { t } = useLang();
+  return (
+    <TicketShell>
+      <h2 className="ticket-section-title">{t.auth.needInvitationTitle}</h2>
+      <p style={{ marginBottom: 8 }}><strong>{email}</strong></p>
+      <p className="small" style={{ marginBottom: 24 }}>{t.auth.needInvitationBody}</p>
+      <button className="secondary" style={{ width: '100%' }} onClick={() => db.auth.signOut()}>
+        {t.auth.signOut}
+      </button>
+    </TicketShell>
+  );
+}
+
 // ─── Main gate ───────────────────────────────────────────────────────────────
 
 export default function AuthGate({ children }: Props) {
   const { t } = useLang();
   const { isLoading: authLoading, user, error: authError } = db.useAuth();
-  const creatingRef = useRef(false);
 
   const { data: profileData, isLoading: profileLoading } = db.useQuery(
     user
       ? { profiles: { $: { where: { userId: user.id } }, stores: {} } }
       : null,
   );
-
-  const { data: roleDefData } = db.useQuery(user ? { roleDefinitions: {} } : null);
-
-  useEffect(() => {
-    if (!user || !profileData || profileData.profiles.length > 0 || creatingRef.current) return;
-    creatingRef.current = true;
-
-    // Read intended role stored in sessionStorage by the invite flow
-    const storedRole = sessionStorage.getItem('inviteRole') ?? 'staff';
-    sessionStorage.removeItem('inviteRole');
-
-    const profileId = id();
-    const roleDefs = roleDefData?.roleDefinitions ?? [];
-    const roleDef = roleDefs.find((d: { key: string }) => d.key === storedRole);
-
-    const profileTx = db.tx.profiles[profileId]
-      .update({
-        userId: user.id,
-        email: user.email ?? '',
-        displayName: (user.email ?? '').split('@')[0],
-        role: storedRole,
-        approvalStatus: 'pending',
-        approvedAt: '',
-        approvedByEmail: '',
-        accessReviewStoreIdsJson: '[]',
-        accessReviewNote: '',
-        preApprovedByUserId: '',
-        preApprovedByEmail: '',
-        preApprovedAt: '',
-        accessReviewRequestedByEmail: '',
-        accessReviewRequestedAt: '',
-        invitedStoreIdsJson: '[]',
-        cameraOptionsJson: '{"weatherEnabled":true,"logoEnabled":true}',
-        avatarUrl: '',
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
-      })
-      .link({ '$user': user.id });
-
-    const txs = roleDef
-      ? [profileTx.link({ roleDefinition: roleDef.id })]
-      : [profileTx];
-
-    db.transact(txs).catch(() => { creatingRef.current = false; });
-  }, [user, profileData, roleDefData]);
 
   if (authLoading || (user && profileLoading)) {
     return <div className="loading-screen">{t.common.loading}</div>;
@@ -356,7 +320,7 @@ export default function AuthGate({ children }: Props) {
   }
 
   if (!profileData || profileData.profiles.length === 0) {
-    return <div className="loading-screen">{t.auth.settingUpAccount}</div>;
+    return <NeedInvitationScreen email={user.email ?? ''} />;
   }
 
   const profile = profileData.profiles[0] as Profile;

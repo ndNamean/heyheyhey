@@ -705,10 +705,17 @@ export const sectionsEn = {
     sendCode: 'Send code',
     couldNotSendCode: 'Could not send code. Try again.',
     revoke: 'Revoke',
+    revokeAccess: 'Revoke access',
     deleteConfirm:
-      'Remove access for "{name}"? They will no longer be able to sign in until approved again.',
+      'Revoke access for "{name}"? They will be marked Rejected and remain in All Users. You can Approve later to restore access.',
     deleteSelfBlocked: 'You cannot delete your own account.',
     deleteOwnerBlocked: 'Owner accounts cannot be deleted.',
+    removeFromSystem: 'Remove from system',
+    removeFromSystemConfirm:
+      'Permanently remove "{name}" from the system? They will leave All Users and cannot be restored with Approve. A new invitation will be required. Historical reports and records are kept.',
+    removeFromSystemSuccess: 'User removed from the system.',
+    removeFromSystemFailed: 'Failed to remove user from the system.',
+    removingFromSystem: 'Removing…',
     emailAddress: 'Email address',
     requested: 'Requested',
     noOtherUsers: 'No other users yet. Use "Invite user" above to get started.',
@@ -1150,6 +1157,9 @@ export const sectionsEn = {
   auth: {
     errorTitle: 'Error',
     settingUpAccount: 'Setting up your account…',
+    needInvitationTitle: 'Invitation required',
+    needInvitationBody:
+      'Your account is not set up in this app yet. Ask an administrator to send you an invitation, then open the invite link to continue.',
   },
   invite: {
     landingSubtitle: 'Invitation',
@@ -1816,10 +1826,17 @@ export const sectionsVi = {
     sendCode: 'Gửi mã',
     couldNotSendCode: 'Không thể gửi mã. Thử lại.',
     revoke: 'Thu hồi',
+    revokeAccess: 'Thu hồi quyền truy cập',
     deleteConfirm:
-      'Thu hồi quyền truy cập của "{name}"? Họ sẽ không đăng nhập được cho đến khi được phê duyệt lại.',
+      'Thu hồi quyền truy cập của "{name}"? Họ sẽ bị đánh dấu Từ chối và vẫn còn trong Tất cả người dùng. Bạn có thể Phê duyệt sau để khôi phục.',
     deleteSelfBlocked: 'Bạn không thể xóa tài khoản của chính mình.',
     deleteOwnerBlocked: 'Không thể xóa tài khoản chủ sở hữu.',
+    removeFromSystem: 'Xóa khỏi hệ thống',
+    removeFromSystemConfirm:
+      'Xóa vĩnh viễn "{name}" khỏi hệ thống? Họ sẽ biến mất khỏi Tất cả người dùng và không thể khôi phục bằng Phê duyệt. Cần lời mời mới. Báo cáo và dữ liệu lịch sử được giữ lại.',
+    removeFromSystemSuccess: 'Đã xóa người dùng khỏi hệ thống.',
+    removeFromSystemFailed: 'Không xóa được người dùng khỏi hệ thống.',
+    removingFromSystem: 'Đang xóa…',
     emailAddress: 'Địa chỉ email',
     requested: 'Yêu cầu',
     noOtherUsers: 'Chưa có người dùng khác. Dùng "Mời người dùng" ở trên để bắt đầu.',
@@ -2261,6 +2278,9 @@ export const sectionsVi = {
   auth: {
     errorTitle: 'Lỗi',
     settingUpAccount: 'Đang thiết lập tài khoản…',
+    needInvitationTitle: 'Cần lời mời',
+    needInvitationBody:
+      'Tài khoản của bạn chưa được thiết lập trong ứng dụng. Nhờ quản trị viên gửi lời mời, rồi mở liên kết lời mời để tiếp tục.',
   },
   invite: {
     landingSubtitle: 'Lời mời',
