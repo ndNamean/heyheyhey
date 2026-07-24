@@ -3865,3 +3865,26 @@ body.wizard-active .page {
   width: 100%;
 }
 
+.logbook-assignee-anyone {
+  transition: color 0.15s ease, text-shadow 0.15s ease, box-shadow 0.15s ease;
+}
+
+.logbook-assignee-anyone.is-active {
+  color: var(--accent);
+  text-shadow: 0 0 10px var(--accent-soft);
+  box-shadow: 0 0 12px var(--accent-soft);
+}
+
+.logbook-assignee-person {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4px 6px;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.logbook-assignee-person.is-selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  box-shadow: 0 0 12px var(--accent-soft);
+}
+

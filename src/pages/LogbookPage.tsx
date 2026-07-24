@@ -1567,7 +1567,10 @@ export default function LogbookPage({
               <div className="small" style={{ marginBottom: 6 }}>
                 {t.logbook.specificPeopleOptional}
               </div>
-              <div className="small" style={{ marginBottom: 8, opacity: 0.85 }}>
+              <div
+                className={`small logbook-assignee-anyone${form.assigneeUserIds.length === 0 ? ' is-active' : ''}`}
+                style={{ marginBottom: 8, opacity: 0.85 }}
+              >
                 {form.assigneeUserIds.length === 0
                   ? t.logbook.anyoneWithRoleAtStore
                   : t.logbook.peopleSelected.replace(
@@ -1594,6 +1597,7 @@ export default function LogbookPage({
                   {createEligibleUsers.map((p) => (
                     <label
                       key={p.userId}
+                      className={`logbook-assignee-person${form.assigneeUserIds.includes(p.userId) ? ' is-selected' : ''}`}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -2051,7 +2055,10 @@ export default function LogbookPage({
                       <div className="small" style={{ marginBottom: 6 }}>
                         {t.logbook.specificPeopleOptional}
                       </div>
-                      <div className="small" style={{ marginBottom: 8, opacity: 0.85 }}>
+                      <div
+                        className={`small logbook-assignee-anyone${setupForm.assigneeUserIds.length === 0 ? ' is-active' : ''}`}
+                        style={{ marginBottom: 8, opacity: 0.85 }}
+                      >
                         {setupForm.assigneeUserIds.length === 0
                           ? t.logbook.anyoneWithRoleAtStore
                           : t.logbook.peopleSelected.replace(
@@ -2076,6 +2083,7 @@ export default function LogbookPage({
                           {setupUsers.map((p) => (
                             <label
                               key={p.userId}
+                              className={`logbook-assignee-person${setupForm.assigneeUserIds.includes(p.userId) ? ' is-selected' : ''}`}
                               style={{
                                 display: 'flex',
                                 alignItems: 'center',
@@ -2316,7 +2324,10 @@ export default function LogbookPage({
                       <div className="small" style={{ marginBottom: 6 }}>
                         {t.logbook.specificPeopleOptional}
                       </div>
-                      <div className="small" style={{ marginBottom: 8, opacity: 0.85 }}>
+                      <div
+                        className={`small logbook-assignee-anyone${changeAssignForm.assigneeUserIds.length === 0 ? ' is-active' : ''}`}
+                        style={{ marginBottom: 8, opacity: 0.85 }}
+                      >
                         {changeAssignForm.assigneeUserIds.length === 0
                           ? t.logbook.anyoneWithRoleAtStore
                           : t.logbook.peopleSelected.replace(
@@ -2341,6 +2352,7 @@ export default function LogbookPage({
                           {changeUsers.map((p) => (
                             <label
                               key={p.userId}
+                              className={`logbook-assignee-person${changeAssignForm.assigneeUserIds.includes(p.userId) ? ' is-selected' : ''}`}
                               style={{
                                 display: 'flex',
                                 alignItems: 'center',
