@@ -23,6 +23,7 @@ import {
 } from '../lib/notifications';
 import {
   canAccessUsersPage,
+  canFinalApproveAccess,
   canManageUsers,
   canPreApproveAccess,
   canViewRolesPermissions,
@@ -646,7 +647,7 @@ function AccessRequestMeta({
 function AccessRequestCard({
   profile,
   stores,
-  isAdmin,
+  canFinalApprove,
   onApprove,
   onRequestManager,
   onCheckAgain,
@@ -656,7 +657,8 @@ function AccessRequestCard({
 }: {
   profile: Profile;
   stores: Store[];
-  isAdmin: boolean;
+  /** Owner / admin / areaManager — Instant allows full approve. */
+  canFinalApprove: boolean;
   onApprove?: () => void;
   onRequestManager?: () => void;
   onCheckAgain?: () => void;
@@ -666,6 +668,9 @@ function AccessRequestCard({
 }) {
   const { t } = useLang();
   const statusClass = accessStatusBadgeClass(profile.approvalStatus);
+  const inManagerHandoff =
+    profile.approvalStatus === 'manager_review' ||
+    profile.approvalStatus === 'needs_manager_recheck';
 
   return (
     <div className="card">
@@ -683,7 +688,7 @@ function AccessRequestCard({
       </div>
 
       <div className="capture-actions" style={{ marginTop: 12 }}>
-        {isAdmin && profile.approvalStatus === 'pending' && (
+        {canFinalApprove && profile.approvalStatus === 'pending' && (
           <>
             <button className="danger" onClick={onReject}>
               {t.common.reject}
@@ -697,20 +702,18 @@ function AccessRequestCard({
           </>
         )}
 
-        {isAdmin &&
-          (profile.approvalStatus === 'manager_review' ||
-            profile.approvalStatus === 'needs_manager_recheck') && (
-            <>
-              <button className="danger" onClick={onReject}>
-                {t.common.reject}
-              </button>
-              <button className="success" onClick={onApprove}>
-                {t.users.approveNow}
-              </button>
-            </>
-          )}
+        {canFinalApprove && inManagerHandoff && (
+          <>
+            <button className="danger" onClick={onReject}>
+              {t.common.reject}
+            </button>
+            <button className="success" onClick={onApprove}>
+              {t.users.approveNow}
+            </button>
+          </>
+        )}
 
-        {isAdmin && profile.approvalStatus === 'pre_approved' && (
+        {canFinalApprove && profile.approvalStatus === 'pre_approved' && (
           <>
             <button className="danger" onClick={onReject}>
               {t.common.reject}
@@ -724,7 +727,7 @@ function AccessRequestCard({
           </>
         )}
 
-        {!isAdmin && onPreApprove && onFlag && (
+        {!canFinalApprove && inManagerHandoff && onPreApprove && onFlag && (
           <>
             <button className="secondary" onClick={onFlag}>
               {t.users.flagRequest}
@@ -887,8 +890,9 @@ export default function UsersPage({ currentProfile }: Props) {
   const stores: Store[] = (data?.stores ?? []) as Store[];
 
   const isOwner = currentProfile.role === OWNER_ROLE_KEY;
-  const isAdmin = canManageUsers(currentProfile.role, defs);
-  const isManager = canPreApproveAccess(currentProfile.role, defs);
+  const canManage = canManageUsers(currentProfile.role, defs);
+  const canFinalApprove = canFinalApproveAccess(currentProfile.role);
+  const canPreApprove = canPreApproveAccess(currentProfile.role, defs);
   const showRolesTab = canViewRolesPermissions(currentProfile.role, defs);
 
   const assignableRoles = rolesAssignableBy(currentProfile.role, defs);
@@ -911,12 +915,13 @@ export default function UsersPage({ currentProfile }: Props) {
     defs,
     { excludeProfileId: currentProfile.id },
   );
-  const accessQueueProfiles = managedProfiles.filter((p) => isAccessPending(p.approvalStatus));
+  // Final approvers see full pending queue; managers only see handoffs to them.
+  const accessQueueProfiles = canFinalApprove
+    ? managedProfiles.filter((p) => isAccessPending(p.approvalStatus))
+    : managedProfiles.filter((p) => managerCanReviewAccess(currentProfile, p));
   const allProfiles = managedProfiles;
 
-  const managerQueueProfiles = isManager
-    ? accessQueueProfiles.filter((p) => managerCanReviewAccess(currentProfile, p))
-    : [];
+  const managerQueueProfiles = accessQueueProfiles;
 
   async function updateRole(profile: Profile, role: Role) {
     if (!canAssignRole(currentProfile.role, role, defs)) {
@@ -1030,7 +1035,7 @@ export default function UsersPage({ currentProfile }: Props) {
   const checkAgainProfile = checkAgainId ? profiles.find((p) => p.id === checkAgainId) : null;
   const flagProfile = flagId ? profiles.find((p) => p.id === flagId) : null;
 
-  if (isManager && !isAdmin) {
+  if (canPreApprove && !canManage && !canFinalApprove) {
     return (
       <div>
         <div className="card">
@@ -1048,7 +1053,7 @@ export default function UsersPage({ currentProfile }: Props) {
               key={p.id}
               profile={p}
               stores={scopedStores}
-              isAdmin={false}
+              canFinalApprove={false}
               onPreApprove={() => preApproveAccess(p)}
               onFlag={() => setFlagId(p.id)}
             />
@@ -1128,6 +1133,17 @@ export default function UsersPage({ currentProfile }: Props) {
         />
       )}
 
+      {flagProfile && (
+        <NoteActionModal
+          title={t.users.flagTitle}
+          hint={t.users.flagHint}
+          confirmLabel={t.users.flagRequest}
+          noteRequired
+          onClose={() => setFlagId(null)}
+          onConfirm={(note) => flagAccess(flagProfile, note)}
+        />
+      )}
+
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
           <h1 style={{ margin: 0, flex: 1 }}>{t.users.title}</h1>
@@ -1136,16 +1152,18 @@ export default function UsersPage({ currentProfile }: Props) {
               {accessQueueProfiles.length} {t.users.accessQueue.toLowerCase()}
             </span>
           )}
-          <button
-            className={showInvite ? 'secondary' : 'btn-gold'}
-            style={{ fontSize: 13, padding: '8px 16px', minHeight: 36 }}
-            onClick={() => setShowInvite((v) => !v)}
-          >
-            {showInvite ? t.common.cancel : t.users.inviteUser}
-          </button>
+          {canManage && (
+            <button
+              className={showInvite ? 'secondary' : 'btn-gold'}
+              style={{ fontSize: 13, padding: '8px 16px', minHeight: 36 }}
+              onClick={() => setShowInvite((v) => !v)}
+            >
+              {showInvite ? t.common.cancel : t.users.inviteUser}
+            </button>
+          )}
         </div>
 
-        {showInvite && (
+        {canManage && showInvite && (
           <div className="panel-inset" style={{ marginBottom: 16 }}>
             <h3 style={{ margin: '0 0 4px', fontSize: 15 }}>{t.users.sendSignInCodeTitle}</h3>
             <InviteUserForm
@@ -1170,12 +1188,14 @@ export default function UsersPage({ currentProfile }: Props) {
           >
             {t.users.allUsers} ({allProfiles.length})
           </button>
-          <button
-            className={tab === 'invites' ? 'active' : ''}
-            onClick={() => setTab('invites')}
-          >
-            {t.invite.adminTab}
-          </button>
+          {canManage && (
+            <button
+              className={tab === 'invites' ? 'active' : ''}
+              onClick={() => setTab('invites')}
+            >
+              {t.invite.adminTab}
+            </button>
+          )}
           {showRolesTab && (
             <button
               className={tab === 'roles' ? 'active' : ''}
@@ -1187,7 +1207,7 @@ export default function UsersPage({ currentProfile }: Props) {
         </div>
       </div>
 
-      {tab === 'invites' && (
+      {tab === 'invites' && canManage && (
         <InvitationsAdminPanel refreshKey={inviteRefreshKey} />
       )}
 
@@ -1211,11 +1231,13 @@ export default function UsersPage({ currentProfile }: Props) {
                 key={p.id}
                 profile={p}
                 stores={scopedStores}
-                isAdmin
+                canFinalApprove={canFinalApprove}
                 onApprove={() => setApprovingId(p.id)}
                 onRequestManager={() => setRequestManagerId(p.id)}
                 onCheckAgain={() => setCheckAgainId(p.id)}
                 onReject={() => rejectAccess(p)}
+                onPreApprove={() => preApproveAccess(p)}
+                onFlag={() => setFlagId(p.id)}
               />
             ))
           )}
@@ -1236,7 +1258,8 @@ export default function UsersPage({ currentProfile }: Props) {
             </thead>
             <tbody>
               {allProfiles.map((p) => {
-                const canEditRole = canAssignRole(currentProfile.role, p.role, defs);
+                const canEditRole =
+                  canFinalApprove && canAssignRole(currentProfile.role, p.role, defs);
                 const linkStatus = getRoleLinkStatus(p, defs);
                 const roleDef = getRoleDef(p.role, defs);
                 const linkedKey = p.roleDefinition?.key;
@@ -1321,7 +1344,7 @@ export default function UsersPage({ currentProfile }: Props) {
                       <StoresAssignControl
                         profile={p}
                         allStores={scopedStores}
-                        canEdit={isAdmin}
+                        canEdit={canFinalApprove}
                       />
                     </td>
 
@@ -1339,7 +1362,7 @@ export default function UsersPage({ currentProfile }: Props) {
                             {t.common.delete}
                           </button>
                         )}
-                        {p.approvalStatus !== 'rejected' && !isOwner && (
+                        {canFinalApprove && p.approvalStatus !== 'rejected' && !isOwner && (
                           <button
                             className="danger"
                             style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
@@ -1348,7 +1371,7 @@ export default function UsersPage({ currentProfile }: Props) {
                             {t.users.revoke}
                           </button>
                         )}
-                        {p.approvalStatus !== 'approved' && (
+                        {canFinalApprove && p.approvalStatus !== 'approved' && (
                           <button
                             className="success"
                             style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
@@ -1357,21 +1380,23 @@ export default function UsersPage({ currentProfile }: Props) {
                             {t.common.approve}
                           </button>
                         )}
-                        <button
-                          className="secondary"
-                          style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
-                          onClick={async () => {
-                            try {
-                              await db.auth.sendMagicCode({ email: p.email });
-                              alert(`${t.users.codeSent} ${p.email}`);
-                            } catch {
-                              alert(t.users.codeSendFailed);
-                            }
-                          }}
-                          title={t.users.sendSignInCodeTitle}
-                        >
-                          {t.users.sendCode}
-                        </button>
+                        {canManage && (
+                          <button
+                            className="secondary"
+                            style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
+                            onClick={async () => {
+                              try {
+                                await db.auth.sendMagicCode({ email: p.email });
+                                alert(`${t.users.codeSent} ${p.email}`);
+                              } catch {
+                                alert(t.users.codeSendFailed);
+                              }
+                            }}
+                            title={t.users.sendSignInCodeTitle}
+                          >
+                            {t.users.sendCode}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

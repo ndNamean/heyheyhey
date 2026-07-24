@@ -76,8 +76,15 @@ const rules = {
       isManager: "'manager' in auth.ref('$user.profile.role')",
       isAdmin: 'isOwner || isAreaManager || isAdminRole',
       onlyDisplayName: "request.modifiedFields.all(f, f in ['displayName', 'cameraOptionsJson', 'updatedAt'])",
+      // Managers may only pre-approve / flag — never final-approve or assign stores.
+      onlyManagerReviewFields:
+        "request.modifiedFields.all(f, f in ['approvalStatus', 'accessReviewNote', 'preApprovedByUserId', 'preApprovedByEmail', 'preApprovedAt', 'updatedAt'])",
+      managerReviewFromStatus:
+        "data.approvalStatus == 'manager_review' || data.approvalStatus == 'needs_manager_recheck' || data.approvalStatus == 'pending'",
+      managerReviewToStatus:
+        "!('approvalStatus' in request.modifiedFields) || newData.approvalStatus == 'pre_approved' || newData.approvalStatus == 'pending'",
       managerAccessReview:
-        "isManager && request.modifiedFields.all(f, f in ['approvalStatus', 'accessReviewNote', 'preApprovedByUserId', 'preApprovedByEmail', 'preApprovedAt', 'updatedAt']) && (data.approvalStatus == 'pre_approved' || data.approvalStatus == 'pending')",
+        'isManager && onlyManagerReviewFields && managerReviewFromStatus && managerReviewToStatus',
     },
   },
 

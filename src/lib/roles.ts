@@ -51,6 +51,14 @@ export function canPreApproveAccess(role: Role, defs?: RoleDefinition[]): boolea
   return capability(role, defsOrDefault(defs), 'canPreApproveAccess');
 }
 
+/**
+ * Final access approve / reject / request-manager — matches Instant `profiles`
+ * isAdmin (owner | admin | areaManager). Managers may only pre-approve.
+ */
+export function canFinalApproveAccess(role: Role): boolean {
+  return isOwner(role) || isAreaManagerTier(role);
+}
+
 export function canAccessUsersPage(role: Role, defs?: RoleDefinition[]): boolean {
   return canManageUsers(role, defs) || canPreApproveAccess(role, defs);
 }
