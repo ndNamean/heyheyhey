@@ -1,6 +1,6 @@
 /**
  * Pure guards for owner hard-remove of a rejected profile.
- * Used by api/remove-user.js; kept free of Instant deps for unit tests.
+ * Used by api/invites.js action=remove-user; kept free of Instant deps for unit tests.
  */
 
 const OWNER_ROLE = 'owner';

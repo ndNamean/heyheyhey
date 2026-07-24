@@ -1,6 +1,6 @@
 /**
  * Opaque-token invitations API.
- * Actions: create | validate | accept | resend | revoke | list
+ * Actions: create | validate | accept | resend | revoke | list | remove-user
  */
 
 import { id } from '@instantdb/admin';
@@ -18,6 +18,7 @@ import {
   parseStoreIdsJson,
   isExpired,
 } from './_lib/invite-crypto.js';
+import { validateRemoveUserTarget } from './_lib/remove-user-guards.js';
 
 function normalizeOrigin(raw) {
   const fallback = getAppOrigin();
@@ -500,6 +501,54 @@ async function listInvites(req, res) {
   return res.status(200).json({ ok: true, invitations: rows, counts });
 }
 
+async function collectAvatarFiles(adminDb, userId) {
+  const priorExts = ['png', 'jpg', 'webp'];
+  const files = [];
+  for (const ext of priorExts) {
+    const pathTry = `profile-avatars/${userId}/avatar.${ext}`;
+    const filesResult = await adminDb.query({
+      $files: { $: { where: { path: pathTry } } },
+    });
+    if (filesResult?.$files?.[0]) files.push(filesResult.$files[0]);
+  }
+  return files;
+}
+
+/** Owner-only hard removal of a rejected profile (Hobby: folded into invites to avoid a 13th function). */
+async function removeUser(req, res) {
+  const { userId } = await verifyRequestUser(req);
+  const actor = await loadProfileContext(userId);
+
+  const body = parseBody(req.body) || {};
+  const profileId = String(body.profileId || '').trim();
+  if (!profileId) {
+    return res.status(400).json({ error: 'Missing profileId' });
+  }
+
+  const adminDb = getAdminDb();
+  const result = await adminDb.query({
+    profiles: { $: { where: { id: profileId } } },
+  });
+  const target = result.profiles?.[0] ?? null;
+
+  const guard = validateRemoveUserTarget({
+    actorRole: actor.role,
+    actorUserId: actor.userId,
+    target,
+  });
+  if (!guard.ok) {
+    return res.status(guard.status).json({ error: guard.error });
+  }
+
+  const avatarFiles = await collectAvatarFiles(adminDb, target.userId);
+  await adminDb.transact([
+    adminDb.tx.profiles[target.id].delete(),
+    ...avatarFiles.map((f) => adminDb.tx.$files[f.id].delete()),
+  ]);
+
+  return res.status(200).json({ ok: true });
+}
+
 export default async function handler(req, res) {
   const action = String(req.query?.action || req.body?.action || '').trim();
 
@@ -521,6 +570,9 @@ export default async function handler(req, res) {
     }
     if (req.method === 'POST' && action === 'revoke') {
       return await revokeInvite(req, res);
+    }
+    if (req.method === 'POST' && action === 'remove-user') {
+      return await removeUser(req, res);
     }
 
     return res.status(400).json({ error: 'Unknown action' });

@@ -32,7 +32,7 @@ async function parseJson(resp: Response) {
 /** Owner-only hard removal of a rejected profile via trusted Admin API. */
 export async function removeUserFromSystem(profileId: string) {
   const headers = await authHeaders();
-  const resp = await fetch('/api/remove-user', {
+  const resp = await fetch('/api/invites?action=remove-user', {
     method: 'POST',
     headers,
     body: JSON.stringify({ profileId }),
