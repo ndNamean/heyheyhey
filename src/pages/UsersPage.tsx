@@ -26,12 +26,28 @@ import {
   canFinalApproveAccess,
   canManageUsers,
   canPreApproveAccess,
+  canRequestUserChanges,
   canViewRolesPermissions,
 } from '../lib/roles';
 import { rolesAssignableBy, storesSelectableBy, canAssignRole, filterManagedProfiles } from '../lib/inviteScope';
+import {
+  canActorCancel,
+  canActorFinalApprove,
+  canActorFirstApprove,
+  canRequestChangeFor,
+  cancelUserChangeRequest,
+  createDeleteRequest,
+  createRoleChangeRequest,
+  elevatedApproveUserChangeRequest,
+  filterUserChangeRequestsForViewer,
+  finalApproveUserChangeRequest,
+  firstApproveUserChangeRequest,
+  OPEN_USER_CHANGE_STATUSES,
+  rejectUserChangeRequest,
+} from '../lib/userChangeRequests';
 import { OWNER_ROLE_KEY } from '../types';
 import { badgeClass, nowIso } from '../lib/utils';
-import type { InvitationAdminRow, Profile, Role, Store } from '../types';
+import type { InvitationAdminRow, Profile, Role, Store, UserChangeRequest } from '../types';
 import {
   createInvitation,
   listInvitations,
@@ -866,10 +882,163 @@ function InvitationsAdminPanel({ refreshKey }: { refreshKey: number }) {
   );
 }
 
+function RequestRoleChangeModal({
+  target,
+  assignableRoles,
+  currentProfile,
+  defs,
+  profiles,
+  onClose,
+}: {
+  target: Profile;
+  assignableRoles: Role[];
+  currentProfile: Profile;
+  defs: import('../types').RoleDefinition[];
+  profiles: Profile[];
+  onClose: () => void;
+}) {
+  const { t } = useLang();
+  const defaultRole = assignableRoles.includes('staff')
+    ? 'staff'
+    : (assignableRoles[0] ?? 'staff');
+  const [toRole, setToRole] = useState<Role>(
+    assignableRoles.includes(target.role)
+      ? (assignableRoles.find((r) => r !== target.role) ?? defaultRole)
+      : defaultRole,
+  );
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function submit() {
+    setSaving(true);
+    try {
+      await createRoleChangeRequest({
+        actor: currentProfile,
+        target,
+        toRole,
+        note,
+        defs,
+        profiles,
+      });
+      alert(t.users.requestSubmitted);
+      onClose();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.users.requestFailed);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ModalShell title={t.users.requestRoleChangeTitle} onClose={onClose}>
+      <p className="small">{t.users.requestRoleChangeHint}</p>
+      <p>
+        <strong>{target.displayName || target.email}</strong>
+      </p>
+      <p className="small">{target.email}</p>
+      <label style={{ marginTop: 12, display: 'block' }}>
+        {t.users.newRole}
+        <select
+          value={toRole}
+          onChange={(e) => setToRole(e.target.value as Role)}
+          style={{ marginTop: 4 }}
+        >
+          {assignableRoles
+            .filter((r) => r !== target.role)
+            .map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+        </select>
+      </label>
+      <label style={{ marginTop: 12, display: 'block' }}>
+        {t.users.reviewNote}
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          style={{ marginTop: 4, minHeight: 72 }}
+        />
+      </label>
+      <div className="capture-actions" style={{ marginTop: 20 }}>
+        <button className="secondary" onClick={onClose} disabled={saving}>
+          {t.common.cancel}
+        </button>
+        <button onClick={submit} disabled={saving || !assignableRoles.some((r) => r !== target.role)}>
+          {saving ? t.common.saving : t.users.requestRoleChange}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function RequestDeleteModal({
+  target,
+  currentProfile,
+  defs,
+  profiles,
+  onClose,
+}: {
+  target: Profile;
+  currentProfile: Profile;
+  defs: import('../types').RoleDefinition[];
+  profiles: Profile[];
+  onClose: () => void;
+}) {
+  const { t } = useLang();
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  async function submit() {
+    setSaving(true);
+    try {
+      await createDeleteRequest({
+        actor: currentProfile,
+        target,
+        note,
+        defs,
+        profiles,
+      });
+      alert(t.users.requestSubmitted);
+      onClose();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.users.requestFailed);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ModalShell title={t.users.requestDeleteTitle} onClose={onClose}>
+      <p className="small">{t.users.requestDeleteHint}</p>
+      <p>
+        <strong>{target.displayName || target.email}</strong>
+      </p>
+      <p className="small">{target.email}</p>
+      <label style={{ marginTop: 12, display: 'block' }}>
+        {t.users.reviewNote}
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          style={{ marginTop: 4, minHeight: 72 }}
+        />
+      </label>
+      <div className="capture-actions" style={{ marginTop: 20 }}>
+        <button className="secondary" onClick={onClose} disabled={saving}>
+          {t.common.cancel}
+        </button>
+        <button className="danger" onClick={submit} disabled={saving}>
+          {saving ? t.common.saving : t.users.requestDelete}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
 export default function UsersPage({ currentProfile }: Props) {
   const { t } = useLang();
   const { defs } = useRoleDefinitions();
-  const [tab, setTab] = useState<'pending' | 'all' | 'invites' | 'roles'>('pending');
+  const [tab, setTab] = useState<'pending' | 'all' | 'invites' | 'roles' | 'requests'>('pending');
   const [inviteRefreshKey, setInviteRefreshKey] = useState(0);
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [requestManagerId, setRequestManagerId] = useState<string | null>(null);
@@ -882,20 +1051,28 @@ export default function UsersPage({ currentProfile }: Props) {
   } | null>(null);
   const [roleChangeSaving, setRoleChangeSaving] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [requestRoleTargetId, setRequestRoleTargetId] = useState<string | null>(null);
+  const [requestDeleteTargetId, setRequestDeleteTargetId] = useState<string | null>(null);
+  const [busyRequestId, setBusyRequestId] = useState<string | null>(null);
 
   const { data } = db.useQuery({
     profiles: { stores: {}, roleDefinition: {} },
     stores: {},
+    userChangeRequests: { requester: {}, target: {} },
   });
 
   const profiles: Profile[] = (data?.profiles ?? []) as Profile[];
   const stores: Store[] = (data?.stores ?? []) as Store[];
+  const allChangeRequests: UserChangeRequest[] = (data?.userChangeRequests ??
+    []) as UserChangeRequest[];
 
   const isOwner = currentProfile.role === OWNER_ROLE_KEY;
   const canManage = canManageUsers(currentProfile.role, defs);
   const canFinalApprove = canFinalApproveAccess(currentProfile.role);
   const canPreApprove = canPreApproveAccess(currentProfile.role, defs);
+  const canRequest = canRequestUserChanges(currentProfile.role, defs);
   const showRolesTab = canViewRolesPermissions(currentProfile.role, defs);
+  const requestOnlyShell = canRequest && !canManage;
 
   const assignableRoles = rolesAssignableBy(currentProfile.role, defs);
   const actorStoreIds = (currentProfile.stores ?? []).map((s) => s.id);
@@ -922,6 +1099,10 @@ export default function UsersPage({ currentProfile }: Props) {
     ? managedProfiles.filter((p) => isAccessPending(p.approvalStatus))
     : managedProfiles.filter((p) => managerCanReviewAccess(currentProfile, p));
   const allProfiles = managedProfiles;
+  const changeRequests = filterUserChangeRequestsForViewer(allChangeRequests, currentProfile);
+  const openChangeRequests = changeRequests.filter((r) =>
+    OPEN_USER_CHANGE_STATUSES.includes(r.status as (typeof OPEN_USER_CHANGE_STATUSES)[number]),
+  );
 
   const managerQueueProfiles = accessQueueProfiles;
 
@@ -1063,8 +1244,31 @@ export default function UsersPage({ currentProfile }: Props) {
     : null;
   const checkAgainProfile = checkAgainId ? profiles.find((p) => p.id === checkAgainId) : null;
   const flagProfile = flagId ? profiles.find((p) => p.id === flagId) : null;
+  const requestRoleTarget = requestRoleTargetId
+    ? profiles.find((p) => p.id === requestRoleTargetId)
+    : null;
+  const requestDeleteTarget = requestDeleteTargetId
+    ? profiles.find((p) => p.id === requestDeleteTargetId)
+    : null;
 
-  if (canPreApprove && !canManage && !canFinalApprove) {
+  async function runRequestAction(requestId: string, fn: () => Promise<void>) {
+    setBusyRequestId(requestId);
+    try {
+      await fn();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.users.approveRequestFailed);
+    } finally {
+      setBusyRequestId(null);
+    }
+  }
+
+  function changeRequestStatusLabel(status: string): string {
+    const map = t.users.changeRequestStatus as Record<string, string>;
+    return map[status] || status;
+  }
+
+  // Managers with only pre-approve (no request flag) keep the handoff-only view.
+  if (canPreApprove && !canManage && !canFinalApprove && !canRequest) {
     return (
       <div>
         <div className="card">
@@ -1102,6 +1306,16 @@ export default function UsersPage({ currentProfile }: Props) {
       </div>
     );
   }
+
+  const showAccessQueueTab = canManage || canFinalApprove || (canPreApprove && canRequest);
+  const effectiveTab =
+    tab === 'pending' && !showAccessQueueTab
+      ? 'all'
+      : tab === 'invites' && !canManage
+        ? 'all'
+        : tab === 'roles' && !showRolesTab
+          ? 'all'
+          : tab;
 
   return (
     <div>
@@ -1173,12 +1387,38 @@ export default function UsersPage({ currentProfile }: Props) {
         />
       )}
 
+      {requestRoleTarget && (
+        <RequestRoleChangeModal
+          target={requestRoleTarget}
+          assignableRoles={assignableRoles}
+          currentProfile={currentProfile}
+          defs={defs}
+          profiles={profiles}
+          onClose={() => setRequestRoleTargetId(null)}
+        />
+      )}
+
+      {requestDeleteTarget && (
+        <RequestDeleteModal
+          target={requestDeleteTarget}
+          currentProfile={currentProfile}
+          defs={defs}
+          profiles={profiles}
+          onClose={() => setRequestDeleteTargetId(null)}
+        />
+      )}
+
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
           <h1 style={{ margin: 0, flex: 1 }}>{t.users.title}</h1>
-          {accessQueueProfiles.length > 0 && (
+          {showAccessQueueTab && accessQueueProfiles.length > 0 && (
             <span className="badge warn">
               {accessQueueProfiles.length} {t.users.accessQueue.toLowerCase()}
+            </span>
+          )}
+          {openChangeRequests.length > 0 && (canRequest || canFinalApprove) && (
+            <span className="badge warn">
+              {openChangeRequests.length} {t.users.changeRequestsTab.toLowerCase()}
             </span>
           )}
           {canManage && (
@@ -1205,21 +1445,31 @@ export default function UsersPage({ currentProfile }: Props) {
         )}
 
         <div className="tabs" style={{ marginBottom: 0 }}>
+          {showAccessQueueTab && (
+            <button
+              className={effectiveTab === 'pending' ? 'active' : ''}
+              onClick={() => setTab('pending')}
+            >
+              {t.users.accessQueue} ({accessQueueProfiles.length})
+            </button>
+          )}
           <button
-            className={tab === 'pending' ? 'active' : ''}
-            onClick={() => setTab('pending')}
-          >
-            {t.users.accessQueue} ({accessQueueProfiles.length})
-          </button>
-          <button
-            className={tab === 'all' ? 'active' : ''}
+            className={effectiveTab === 'all' ? 'active' : ''}
             onClick={() => setTab('all')}
           >
             {t.users.allUsers} ({allProfiles.length})
           </button>
+          {(canRequest || canFinalApprove) && (
+            <button
+              className={effectiveTab === 'requests' ? 'active' : ''}
+              onClick={() => setTab('requests')}
+            >
+              {t.users.changeRequestsTab} ({openChangeRequests.length})
+            </button>
+          )}
           {canManage && (
             <button
-              className={tab === 'invites' ? 'active' : ''}
+              className={effectiveTab === 'invites' ? 'active' : ''}
               onClick={() => setTab('invites')}
             >
               {t.invite.adminTab}
@@ -1227,7 +1477,7 @@ export default function UsersPage({ currentProfile }: Props) {
           )}
           {showRolesTab && (
             <button
-              className={tab === 'roles' ? 'active' : ''}
+              className={effectiveTab === 'roles' ? 'active' : ''}
               onClick={() => setTab('roles')}
             >
               {t.users.rolesPermissions.tab}
@@ -1236,11 +1486,11 @@ export default function UsersPage({ currentProfile }: Props) {
         </div>
       </div>
 
-      {tab === 'invites' && canManage && (
+      {effectiveTab === 'invites' && canManage && (
         <InvitationsAdminPanel refreshKey={inviteRefreshKey} />
       )}
 
-      {tab === 'roles' && showRolesTab && (
+      {effectiveTab === 'roles' && showRolesTab && (
         <RolesPermissionsPanel
           currentProfile={currentProfile}
           allProfiles={managedProfiles}
@@ -1248,7 +1498,7 @@ export default function UsersPage({ currentProfile }: Props) {
         />
       )}
 
-      {tab === 'pending' && (
+      {effectiveTab === 'pending' && showAccessQueueTab && (
         <>
           {accessQueueProfiles.length === 0 ? (
             <div className="card">
@@ -1273,7 +1523,177 @@ export default function UsersPage({ currentProfile }: Props) {
         </>
       )}
 
-      {tab === 'all' && (
+      {effectiveTab === 'requests' && (canRequest || canFinalApprove) && (
+        <div>
+          {changeRequests.length === 0 ? (
+            <div className="card">
+              <p className="small">{t.users.noChangeRequests}</p>
+            </div>
+          ) : (
+            changeRequests.map((req) => {
+              const target =
+                profiles.find((p) => p.userId === req.targetUserId) || req.target;
+              const canFirst = canActorFirstApprove(currentProfile, req);
+              const canFinal = canActorFinalApprove(currentProfile, req);
+              const canElevated =
+                canFinalApprove &&
+                OPEN_USER_CHANGE_STATUSES.includes(
+                  req.status as (typeof OPEN_USER_CHANGE_STATUSES)[number],
+                ) &&
+                currentProfile.userId !== req.requestedByUserId;
+              const canCancelReq = canActorCancel(currentProfile, req);
+              const busy = busyRequestId === req.id;
+              return (
+                <div className="card" key={req.id} style={{ marginBottom: 12 }}>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <strong>
+                          {req.type === 'delete'
+                            ? t.users.changeRequestTypeDelete
+                            : t.users.changeRequestTypeRole}
+                        </strong>
+                        <span className="badge warn">{changeRequestStatusLabel(req.status)}</span>
+                      </div>
+                      <p className="small" style={{ margin: '8px 0 0' }}>
+                        {t.users.changeRequestTarget}:{' '}
+                        <strong>{target?.displayName || req.targetEmail}</strong> ({req.targetEmail})
+                      </p>
+                      {req.type === 'role_change' && (
+                        <p className="small" style={{ margin: '4px 0 0' }}>
+                          {t.users.changeRequestFromTo
+                            .replace('{from}', req.fromRole)
+                            .replace('{to}', req.toRole)}
+                        </p>
+                      )}
+                      {req.type === 'delete' && (
+                        <p className="small" style={{ margin: '4px 0 0' }}>
+                          {req.fromRole}
+                        </p>
+                      )}
+                      <p className="small" style={{ margin: '4px 0 0' }}>
+                        {t.users.changeRequestRequester}: {req.requestedByUserId}
+                      </p>
+                      {req.note ? (
+                        <p className="small" style={{ margin: '4px 0 0' }}>
+                          {t.users.reviewNote}: {req.note}
+                        </p>
+                      ) : null}
+                      {req.rejectionReason ? (
+                        <p className="small text-danger" style={{ margin: '4px 0 0' }}>
+                          {req.rejectionReason}
+                        </p>
+                      ) : null}
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {canFirst && (
+                        <button
+                          className="success"
+                          style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
+                          disabled={busy}
+                          onClick={() =>
+                            void runRequestAction(req.id, () =>
+                              firstApproveUserChangeRequest({
+                                request: req,
+                                actor: currentProfile,
+                                note: '',
+                                profiles,
+                              }),
+                            )
+                          }
+                        >
+                          {t.users.firstApprove}
+                        </button>
+                      )}
+                      {canFinal && target && (
+                        <button
+                          className="success"
+                          style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
+                          disabled={busy}
+                          onClick={() =>
+                            void runRequestAction(req.id, () =>
+                              finalApproveUserChangeRequest({
+                                request: req,
+                                actor: currentProfile,
+                                target,
+                                defs,
+                                note: '',
+                                profiles,
+                              }),
+                            )
+                          }
+                        >
+                          {t.users.finalApprove}
+                        </button>
+                      )}
+                      {canElevated && !canFinal && target && (
+                        <button
+                          className="success"
+                          style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
+                          disabled={busy}
+                          onClick={() =>
+                            void runRequestAction(req.id, () =>
+                              elevatedApproveUserChangeRequest({
+                                request: req,
+                                actor: currentProfile,
+                                target,
+                                defs,
+                                note: '',
+                              }),
+                            )
+                          }
+                        >
+                          {t.users.finalApprove}
+                        </button>
+                      )}
+                      {(canFirst || canFinal || canElevated) && (
+                        <button
+                          className="danger"
+                          style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
+                          disabled={busy}
+                          onClick={() => {
+                            const reason = window.prompt(t.users.rejectReasonRequired) || '';
+                            if (!reason.trim()) return;
+                            void runRequestAction(req.id, () =>
+                              rejectUserChangeRequest({
+                                request: req,
+                                actor: currentProfile,
+                                reason,
+                              }),
+                            );
+                          }}
+                        >
+                          {t.users.rejectRequest}
+                        </button>
+                      )}
+                      {canCancelReq && (
+                        <button
+                          className="secondary"
+                          style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
+                          disabled={busy}
+                          onClick={() =>
+                            void runRequestAction(req.id, () =>
+                              cancelUserChangeRequest({
+                                request: req,
+                                actor: currentProfile,
+                                defs,
+                              }),
+                            )
+                          }
+                        >
+                          {t.users.cancelRequest}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {effectiveTab === 'all' && (
         <div className="card table-wrap">
           <table>
             <thead>
@@ -1297,6 +1717,8 @@ export default function UsersPage({ currentProfile }: Props) {
                     ? assignableRoles
                     : [p.role, ...assignableRoles.filter((r) => r !== p.role)]
                   : [p.role];
+                const showRequestActions =
+                  canRequest && canRequestChangeFor(currentProfile, p, defs);
                 return (
                   <tr key={p.id}>
                     <td>
@@ -1310,57 +1732,68 @@ export default function UsersPage({ currentProfile }: Props) {
                     </td>
 
                     <td>
-                      <select
-                        value={p.role}
-                        onChange={(e) => {
-                          const nextRole = e.target.value as Role;
-                          if (nextRole === p.role) return;
-                          setPendingRoleChange({ profile: p, role: nextRole });
-                        }}
-                        disabled={!canEditRole || roleChangeSaving}
-                        style={{ minWidth: 120, fontSize: 13 }}
-                      >
-                        {roleOptions.map((r) => (
-                          <option key={r} value={r}>
-                            {r}
-                          </option>
-                        ))}
-                      </select>
-                      <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        {linkStatus === 'ok' && roleDef && (
-                          <span className="small" style={{ color: '#94A3B8' }}>
-                            {t.users.roleLinkOk}: {roleDef.label}
-                          </span>
-                        )}
-                        {linkStatus === 'missing_link' && (
-                          <span className="badge warn" style={{ width: 'fit-content' }}>
-                            {t.users.roleLinkMissing}
-                          </span>
-                        )}
-                        {linkStatus === 'wrong_key' && (
-                          <span className="badge warn" style={{ width: 'fit-content' }}>
-                            {t.users.roleLinkMismatch
-                              .replace('{linked}', linkedKey || p.roleDefinition?.id || '?')
-                              .replace('{role}', p.role)}
-                          </span>
-                        )}
-                        {linkStatus === 'unknown_role' && (
-                          <span className="badge bad" style={{ width: 'fit-content' }}>
-                            {t.users.roleLinkUnknown.replace('{role}', p.role)}
-                          </span>
-                        )}
-                        {isOwner && linkStatus !== 'ok' && (
-                          <button
-                            type="button"
-                            className="secondary"
-                            style={{ fontSize: 11, padding: '4px 8px', minHeight: 26, width: 'fit-content' }}
-                            onClick={() => fixRoleLink(p)}
+                      {canEditRole ? (
+                        <>
+                          <select
+                            value={p.role}
+                            onChange={(e) => {
+                              const nextRole = e.target.value as Role;
+                              if (nextRole === p.role) return;
+                              setPendingRoleChange({ profile: p, role: nextRole });
+                            }}
                             disabled={roleChangeSaving}
+                            style={{ minWidth: 120, fontSize: 13 }}
                           >
-                            {t.users.fixRoleLink}
-                          </button>
-                        )}
-                      </div>
+                            {roleOptions.map((r) => (
+                              <option key={r} value={r}>
+                                {r}
+                              </option>
+                            ))}
+                          </select>
+                          <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                            {linkStatus === 'ok' && roleDef && (
+                              <span className="small" style={{ color: '#94A3B8' }}>
+                                {t.users.roleLinkOk}: {roleDef.label}
+                              </span>
+                            )}
+                            {linkStatus === 'missing_link' && (
+                              <span className="badge warn" style={{ width: 'fit-content' }}>
+                                {t.users.roleLinkMissing}
+                              </span>
+                            )}
+                            {linkStatus === 'wrong_key' && (
+                              <span className="badge warn" style={{ width: 'fit-content' }}>
+                                {t.users.roleLinkMismatch
+                                  .replace('{linked}', linkedKey || p.roleDefinition?.id || '?')
+                                  .replace('{role}', p.role)}
+                              </span>
+                            )}
+                            {linkStatus === 'unknown_role' && (
+                              <span className="badge bad" style={{ width: 'fit-content' }}>
+                                {t.users.roleLinkUnknown.replace('{role}', p.role)}
+                              </span>
+                            )}
+                            {isOwner && linkStatus !== 'ok' && (
+                              <button
+                                type="button"
+                                className="secondary"
+                                style={{
+                                  fontSize: 11,
+                                  padding: '4px 8px',
+                                  minHeight: 26,
+                                  width: 'fit-content',
+                                }}
+                                onClick={() => fixRoleLink(p)}
+                                disabled={roleChangeSaving}
+                              >
+                                {t.users.fixRoleLink}
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <span style={{ fontSize: 13 }}>{p.role}</span>
+                      )}
                     </td>
 
                     <td>
@@ -1379,6 +1812,24 @@ export default function UsersPage({ currentProfile }: Props) {
 
                     <td>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {showRequestActions && (
+                          <>
+                            <button
+                              className="secondary"
+                              style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
+                              onClick={() => setRequestRoleTargetId(p.id)}
+                            >
+                              {t.users.requestRoleChange}
+                            </button>
+                            <button
+                              className="danger"
+                              style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
+                              onClick={() => setRequestDeleteTargetId(p.id)}
+                            >
+                              {t.users.requestDelete}
+                            </button>
+                          </>
+                        )}
                         {p.approvalStatus !== 'rejected' &&
                           isOwner &&
                           p.id !== currentProfile.id &&
@@ -1449,7 +1900,7 @@ export default function UsersPage({ currentProfile }: Props) {
               {!allProfiles.length && (
                 <tr>
                   <td colSpan={5} style={{ textAlign: 'center', padding: 24 }}>
-                    {t.users.noOtherUsers}
+                    {requestOnlyShell ? t.users.emptyScopedUsers : t.users.noOtherUsers}
                   </td>
                 </tr>
               )}

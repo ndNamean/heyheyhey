@@ -24,6 +24,7 @@ export const DEFAULT_ROLE_DEFINITIONS: RoleDefinitionSeed[] = [
     canFirstApproveTemplateItemProposal: true,
     canFinalApproveTemplateItemProposal: true,
     canPublishTemplateItemProposal: true,
+    canRequestUserChanges: false,
     approvesSubmitterRolesJson: '[]',
   },
   {
@@ -48,6 +49,7 @@ export const DEFAULT_ROLE_DEFINITIONS: RoleDefinitionSeed[] = [
     canFirstApproveTemplateItemProposal: true,
     canFinalApproveTemplateItemProposal: true,
     canPublishTemplateItemProposal: true,
+    canRequestUserChanges: false,
     approvesSubmitterRolesJson: '["leader","subleader","manager"]',
   },
   {
@@ -72,6 +74,7 @@ export const DEFAULT_ROLE_DEFINITIONS: RoleDefinitionSeed[] = [
     canFirstApproveTemplateItemProposal: true,
     canFinalApproveTemplateItemProposal: true,
     canPublishTemplateItemProposal: true,
+    canRequestUserChanges: false,
     approvesSubmitterRolesJson: '["leader","subleader","manager"]',
   },
   {
@@ -96,6 +99,7 @@ export const DEFAULT_ROLE_DEFINITIONS: RoleDefinitionSeed[] = [
     canFirstApproveTemplateItemProposal: true,
     canFinalApproveTemplateItemProposal: false,
     canPublishTemplateItemProposal: false,
+    canRequestUserChanges: true,
     approvesSubmitterRolesJson: '["staff","hybrid"]',
   },
   {
@@ -120,6 +124,7 @@ export const DEFAULT_ROLE_DEFINITIONS: RoleDefinitionSeed[] = [
     canFirstApproveTemplateItemProposal: false,
     canFinalApproveTemplateItemProposal: false,
     canPublishTemplateItemProposal: false,
+    canRequestUserChanges: true,
     approvesSubmitterRolesJson: '["staff","hybrid"]',
   },
   {
@@ -144,6 +149,7 @@ export const DEFAULT_ROLE_DEFINITIONS: RoleDefinitionSeed[] = [
     canFirstApproveTemplateItemProposal: false,
     canFinalApproveTemplateItemProposal: false,
     canPublishTemplateItemProposal: false,
+    canRequestUserChanges: false,
     approvesSubmitterRolesJson: '["staff","hybrid"]',
   },
   {
@@ -168,6 +174,7 @@ export const DEFAULT_ROLE_DEFINITIONS: RoleDefinitionSeed[] = [
     canFirstApproveTemplateItemProposal: false,
     canFinalApproveTemplateItemProposal: false,
     canPublishTemplateItemProposal: false,
+    canRequestUserChanges: false,
     approvesSubmitterRolesJson: '["staff"]',
   },
   {
@@ -192,6 +199,7 @@ export const DEFAULT_ROLE_DEFINITIONS: RoleDefinitionSeed[] = [
     canFirstApproveTemplateItemProposal: false,
     canFinalApproveTemplateItemProposal: false,
     canPublishTemplateItemProposal: false,
+    canRequestUserChanges: false,
     approvesSubmitterRolesJson: '[]',
   },
   {
@@ -216,6 +224,7 @@ export const DEFAULT_ROLE_DEFINITIONS: RoleDefinitionSeed[] = [
     canFirstApproveTemplateItemProposal: false,
     canFinalApproveTemplateItemProposal: false,
     canPublishTemplateItemProposal: false,
+    canRequestUserChanges: false,
     approvesSubmitterRolesJson: '[]',
   },
 ];

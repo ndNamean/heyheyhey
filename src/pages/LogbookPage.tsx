@@ -88,6 +88,7 @@ import {
   buildLogbookIssueAssignedNotifications,
   buildLogbookIssueRecalledNotifications,
   buildLogbookIssueReopenedNotifications,
+  buildLogbookNoteAnnouncementNotifications,
   buildLogbookResolutionDecisionNotifications,
 } from '../lib/notifications';
 import {
@@ -539,6 +540,25 @@ export default function LogbookPage({
         txs.push(...buildLogbookIssueCreatedEvents(entryLike, profile));
         txs.push(
           ...buildLogbookIssueAssignedNotifications(entryLike, profile, allProfiles, defs),
+        );
+      } else {
+        const entryLike = {
+          id: entryId,
+          storeId: storeTarget,
+          content: form.content.trim(),
+          severity: form.severity as LogbookEntry['severity'],
+          entryType: form.entryType,
+          isAnnouncement: form.entryType === 'announcement',
+          requiresAck: form.requiresAck,
+          ackUserIdsJson: '[]',
+          authorUserId: profile.userId,
+          date: ymdInTimeZone(now, createdTimezone),
+          shift: form.shift,
+          createdAt,
+          updatedAt: createdAt,
+        } as LogbookEntry;
+        txs.push(
+          ...buildLogbookNoteAnnouncementNotifications(entryLike, profile, allProfiles, defs),
         );
       }
 

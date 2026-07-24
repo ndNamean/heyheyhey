@@ -449,6 +449,30 @@ const _schema = i.schema({
       createdAt: i.string(),
     }),
 
+    // ─── User change requests (role change / soft-delete approvals) ──────────
+    userChangeRequests: i.entity({
+      type: i.string().indexed(),
+      status: i.string().indexed(),
+      targetUserId: i.string().indexed(),
+      targetEmail: i.string(),
+      fromRole: i.string(),
+      toRole: i.string(),
+      storeIdsJson: i.string(),
+      note: i.string(),
+      requestedByUserId: i.string().indexed(),
+      firstApproverUserIdsJson: i.string(),
+      firstApproverUserId: i.string(),
+      firstApproverAt: i.string(),
+      firstApproverNote: i.string(),
+      finalApproverUserIdsJson: i.string(),
+      finalApproverUserId: i.string(),
+      finalApproverAt: i.string(),
+      finalApproverNote: i.string(),
+      rejectionReason: i.string(),
+      createdAt: i.string(),
+      updatedAt: i.string(),
+    }),
+
     roleDefinitions: i.entity({
       key: i.string().unique().indexed(),
       label: i.string(),
@@ -471,6 +495,7 @@ const _schema = i.schema({
       canFirstApproveTemplateItemProposal: i.boolean().optional(),
       canFinalApproveTemplateItemProposal: i.boolean().optional(),
       canPublishTemplateItemProposal: i.boolean().optional(),
+      canRequestUserChanges: i.boolean().optional(),
       approvesSubmitterRolesJson: i.string(),
       createdAt: i.string(),
       updatedAt: i.string(),
@@ -670,6 +695,16 @@ const _schema = i.schema({
     checklistItemProposalEventProposal: {
       forward: { on: 'checklistItemProposalEvents', has: 'one', label: 'proposal' },
       reverse: { on: 'checklistItemProposals', has: 'many', label: 'events' },
+    },
+
+    // ─── User change requests ────────────────────────────────────────────────
+    userChangeRequestRequester: {
+      forward: { on: 'userChangeRequests', has: 'one', label: 'requester' },
+      reverse: { on: 'profiles', has: 'many', label: 'userChangeRequests' },
+    },
+    userChangeRequestTarget: {
+      forward: { on: 'userChangeRequests', has: 'one', label: 'target' },
+      reverse: { on: 'profiles', has: 'many', label: 'targetedUserChangeRequests' },
     },
   },
 });

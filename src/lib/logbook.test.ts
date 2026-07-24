@@ -10,11 +10,15 @@ import {
   eligibleAssigneeUsers,
   eligibleLogbookAssigneeRoles,
   getIssueConfigurationState,
+  hasMyLogbookAck,
   isIssueDueSoon,
   isIssueOverdue,
   isLogbookIssue,
   isPristineLogbookIssue,
+  isStaffOrHybrid,
+  listNotesAnnouncementsForHome,
   parseAssigneeUserIds,
+  parseLogbookAckUserIds,
   profileMatchesAssignee,
   resolveLogbookEntryType,
   resolveLogbookIssueStatus,
@@ -22,8 +26,13 @@ import {
   resolveResolutionProofs,
   resolveSourceMedia,
   serializeAssigneeUserIds,
+  splitNotesAnnouncementsForHome,
 } from './logbook';
-import { getLogbookAssigneeRecipients } from './notifications';
+import {
+  buildLogbookNoteAnnouncementNotifications,
+  getLogbookAssigneeRecipients,
+  getNoteAnnouncementRecipients,
+} from './notifications';
 import {
   computeLogbookIssueMetrics,
   countLogbookIssues,
@@ -791,5 +800,155 @@ describe('logbook metrics', () => {
     expect(metrics.onTimeResolutionRate).toBe(100);
     expect(metrics.avgResolutionDurationMs).toBeGreaterThan(0);
     expect(resolveLogbookIssueStatus(filtered[0]!)).toBe('open');
+  });
+});
+
+describe('notes & announcements home helpers', () => {
+  const staff = profile({ userId: 'staff-1', role: 'staff' });
+  const hybrid = profile({ userId: 'hybrid-1', role: 'hybrid' });
+  const manager = profile({ userId: 'mgr-1', role: 'manager' });
+  const subleader = profile({ userId: 'sub-1', role: 'subleader' });
+  const staffOtherStore = profile({
+    userId: 'staff-other',
+    role: 'staff',
+    stores: [{ ...storeA, id: 'store-b', code: 'STB', name: 'Store B' }],
+  });
+  const author = profile({ userId: 'author-1', role: 'manager' });
+
+  it('isStaffOrHybrid only for staff and hybrid', () => {
+    expect(isStaffOrHybrid('staff')).toBe(true);
+    expect(isStaffOrHybrid('hybrid')).toBe(true);
+    expect(isStaffOrHybrid('subleader')).toBe(false);
+    expect(isStaffOrHybrid('manager')).toBe(false);
+  });
+
+  it('lists requiresAck notes/announcements pending-first then by createdAt desc', () => {
+    const entries = [
+      entry({
+        id: 'acked-old',
+        entryType: 'note',
+        requiresAck: true,
+        ackUserIdsJson: JSON.stringify([staff.userId]),
+        createdAt: '2026-07-20T10:00:00.000Z',
+      }),
+      entry({
+        id: 'pending-new',
+        entryType: 'announcement',
+        requiresAck: true,
+        ackUserIdsJson: '[]',
+        createdAt: '2026-07-22T10:00:00.000Z',
+      }),
+      entry({
+        id: 'pending-old',
+        entryType: 'note',
+        requiresAck: true,
+        ackUserIdsJson: '[]',
+        createdAt: '2026-07-21T10:00:00.000Z',
+      }),
+      entry({
+        id: 'no-ack',
+        entryType: 'note',
+        requiresAck: false,
+        createdAt: '2026-07-23T10:00:00.000Z',
+      }),
+      entry({
+        id: 'issue',
+        entryType: 'issue',
+        requiresAck: true,
+        assigneeRole: 'staff',
+        createdAt: '2026-07-23T11:00:00.000Z',
+      }),
+    ];
+
+    const listed = listNotesAnnouncementsForHome(staff, entries, defs);
+    expect(listed.map((e) => e.id)).toEqual(['pending-new', 'pending-old', 'acked-old']);
+
+    const { pending, acknowledgedByMe } = splitNotesAnnouncementsForHome(staff, entries, defs);
+    expect(pending.map((e) => e.id)).toEqual(['pending-new', 'pending-old']);
+    expect(acknowledgedByMe.map((e) => e.id)).toEqual(['acked-old']);
+  });
+
+  it('acknowledge JSON helper appends user id once', () => {
+    expect(parseLogbookAckUserIds('[]')).toEqual([]);
+    expect(hasMyLogbookAck(entry({ ackUserIdsJson: '[]' }), staff.userId)).toBe(false);
+    const current = parseLogbookAckUserIds('[]');
+    expect(current.includes(staff.userId)).toBe(false);
+    const updated = JSON.stringify([...current, staff.userId]);
+    expect(parseLogbookAckUserIds(updated)).toEqual([staff.userId]);
+    expect(hasMyLogbookAck(entry({ ackUserIdsJson: updated }), staff.userId)).toBe(true);
+  });
+
+  it('getNoteAnnouncementRecipients is staff/hybrid only, store-scoped, excludes actor', () => {
+    const note = entry({
+      id: 'n1',
+      entryType: 'note',
+      storeId: 'store-a',
+      requiresAck: true,
+      authorUserId: author.userId,
+    });
+    const profiles = [staff, hybrid, manager, subleader, staffOtherStore, author];
+
+    expect(getNoteAnnouncementRecipients(note, profiles, author.userId, defs).sort()).toEqual([
+      'hybrid-1',
+      'staff-1',
+    ]);
+
+    // Actor excluded even if staff
+    expect(
+      getNoteAnnouncementRecipients(note, profiles, staff.userId, defs).sort(),
+    ).toEqual(['hybrid-1']);
+
+    // Blank store = all stores audience → staff at other store included
+    const allStoresNote = entry({
+      id: 'n2',
+      entryType: 'announcement',
+      storeId: '',
+      requiresAck: true,
+      authorUserId: author.userId,
+    });
+    expect(
+      getNoteAnnouncementRecipients(allStoresNote, profiles, author.userId, defs).sort(),
+    ).toEqual(['hybrid-1', 'staff-1', 'staff-other']);
+  });
+
+  it('buildLogbookNoteAnnouncementNotifications skips when no requiresAck or no recipients', () => {
+    const noAck = entry({
+      entryType: 'note',
+      requiresAck: false,
+      authorUserId: author.userId,
+    });
+    expect(
+      buildLogbookNoteAnnouncementNotifications(noAck, author, [staff, hybrid], defs),
+    ).toEqual([]);
+
+    const note = entry({
+      entryType: 'note',
+      requiresAck: true,
+      storeId: 'store-b',
+      authorUserId: author.userId,
+    });
+    // staff/hybrid only have store-a → no recipients
+    expect(
+      buildLogbookNoteAnnouncementNotifications(note, author, [staff, hybrid, manager], defs),
+    ).toEqual([]);
+  });
+
+  it('buildLogbookNoteAnnouncementNotifications creates txs for staff/hybrid recipients', () => {
+    const note = entry({
+      id: 'note-tx',
+      entryType: 'announcement',
+      requiresAck: true,
+      storeId: 'store-a',
+      authorUserId: author.userId,
+      content: 'All hands meeting',
+      severity: 'warning',
+    });
+    const txs = buildLogbookNoteAnnouncementNotifications(
+      note,
+      author,
+      [staff, hybrid, manager, subleader],
+      defs,
+    );
+    expect(txs).toHaveLength(2);
   });
 });

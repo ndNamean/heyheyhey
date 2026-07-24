@@ -518,6 +518,68 @@ export function countAssignedOpenOrOverdue(
   }).length;
 }
 
+/** Staff and Hybrid — home notes card + note/announcement inbox recipients. */
+export function isStaffOrHybrid(role: Role): boolean {
+  return role === 'staff' || role === 'hybrid';
+}
+
+export function parseLogbookAckUserIds(raw: string | undefined | null): string[] {
+  if (raw == null || String(raw).trim() === '') return [];
+  try {
+    const parsed = JSON.parse(String(raw)) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((id): id is string => typeof id === 'string' && id.trim() !== '');
+  } catch {
+    return [];
+  }
+}
+
+export function hasMyLogbookAck(
+  entry: Pick<LogbookEntry, 'ackUserIdsJson'>,
+  userId: string,
+): boolean {
+  return parseLogbookAckUserIds(entry.ackUserIdsJson).includes(userId);
+}
+
+/**
+ * Store-scoped notes/announcements with requiresAck that the profile can see.
+ * Pending (missing my ack) first, then createdAt desc.
+ */
+export function listNotesAnnouncementsForHome(
+  profile: Profile,
+  entries: LogbookEntry[],
+  defs: RoleDefinition[],
+): LogbookEntry[] {
+  return entries
+    .filter((e) => {
+      if (!e.requiresAck) return false;
+      const type = resolveLogbookEntryType(e);
+      if (type !== 'note' && type !== 'announcement') return false;
+      return canViewLogbookEntry(profile, e, defs);
+    })
+    .sort((a, b) => {
+      const aPending = !hasMyLogbookAck(a, profile.userId);
+      const bPending = !hasMyLogbookAck(b, profile.userId);
+      if (aPending !== bPending) return aPending ? -1 : 1;
+      return (b.createdAt ?? '').localeCompare(a.createdAt ?? '');
+    });
+}
+
+export function splitNotesAnnouncementsForHome(
+  profile: Profile,
+  entries: LogbookEntry[],
+  defs: RoleDefinition[],
+): { pending: LogbookEntry[]; acknowledgedByMe: LogbookEntry[] } {
+  const list = listNotesAnnouncementsForHome(profile, entries, defs);
+  const pending: LogbookEntry[] = [];
+  const acknowledgedByMe: LogbookEntry[] = [];
+  for (const e of list) {
+    if (hasMyLogbookAck(e, profile.userId)) acknowledgedByMe.push(e);
+    else pending.push(e);
+  }
+  return { pending, acknowledgedByMe };
+}
+
 export type AssignedIssueCounters = {
   open: number;
   inProgress: number;

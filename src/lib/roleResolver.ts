@@ -71,6 +71,7 @@ export function capability(
     | 'canFirstApproveTemplateItemProposal'
     | 'canFinalApproveTemplateItemProposal'
     | 'canPublishTemplateItemProposal'
+    | 'canRequestUserChanges'
   >,
 ): boolean {
   return getRoleDef(role, defs)?.[flag] ?? false;
@@ -141,6 +142,7 @@ export function buildEnsureSystemRoleTransactions(defs: RoleDefinition[]) {
         existing.canFirstApproveTemplateItemProposal !== seed.canFirstApproveTemplateItemProposal ||
         existing.canFinalApproveTemplateItemProposal !== seed.canFinalApproveTemplateItemProposal ||
         existing.canPublishTemplateItemProposal !== seed.canPublishTemplateItemProposal ||
+        existing.canRequestUserChanges !== seed.canRequestUserChanges ||
         existing.approvesSubmitterRolesJson !== seed.approvesSubmitterRolesJson;
 
       if (needsUpgrade) {
@@ -168,6 +170,9 @@ export function buildEnsureSystemRoleTransactions(defs: RoleDefinition[]) {
     }
     if (existing.canPublishTemplateItemProposal !== seed.canPublishTemplateItemProposal) {
       rankPatch.canPublishTemplateItemProposal = seed.canPublishTemplateItemProposal;
+    }
+    if (existing.canRequestUserChanges !== seed.canRequestUserChanges) {
+      rankPatch.canRequestUserChanges = seed.canRequestUserChanges;
     }
     if (Object.keys(rankPatch).length) {
       txs.push(

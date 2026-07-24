@@ -4,7 +4,10 @@ import { useLang } from '../i18n';
 import { statusLabel } from '../lib/i18nUtils';
 import { badgeClass, nowIso } from '../lib/utils';
 import { formatIsoToLocalTime } from '../lib/proofTime';
-import { isLogbookNotificationType } from '../lib/notifications';
+import {
+  isLogbookNotificationType,
+  isNoteAnnouncementNotificationType,
+} from '../lib/notifications';
 import ReportTimeline from './ReportTimeline';
 import type { Notification, Report, ReviewEvent } from '../types';
 
@@ -12,7 +15,7 @@ interface Props {
   userId: string;
   title?: string;
   limit?: number;
-  onOpenLogbookEntry?: (entryId: string) => void;
+  onOpenLogbookEntry?: (entryId: string, type?: string) => void;
 }
 
 export default function FeedbackInbox({
@@ -83,7 +86,7 @@ export default function FeedbackInbox({
   function handleClick(n: Notification) {
     void markRead(n);
     if (isLogbookNotificationType(n.type) && n.reportId && onOpenLogbookEntry) {
-      onOpenLogbookEntry(n.reportId);
+      onOpenLogbookEntry(n.reportId, n.type);
     }
   }
 
@@ -132,7 +135,11 @@ export default function FeedbackInbox({
                 </div>
               )}
               {isLogbook && onOpenLogbookEntry && n.reportId && (
-                <div className="feedback-item-actor">{t.logbook.openInLogbook}</div>
+                <div className="feedback-item-actor">
+                  {isNoteAnnouncementNotificationType(n.type)
+                    ? t.staffHome.openNoteOnHome
+                    : t.logbook.openInLogbook}
+                </div>
               )}
               {n.reportId && report && (
                 <div className="feedback-item-timeline" onClick={(e) => e.stopPropagation()}>

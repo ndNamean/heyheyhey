@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { db } from '../db';
 import FeedbackInbox from '../components/FeedbackInbox';
 import MyReportsPanel from '../components/MyReportsPanel';
+import NotesAnnouncementsCard from '../components/NotesAnnouncementsCard';
 import ReportReviewStatusPanel from '../components/ReportReviewStatusPanel';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
@@ -16,6 +17,7 @@ import {
   countAssignedOpenOrOverdue,
   isAssignedUnresolvedIssue,
 } from '../lib/logbook';
+import { isNoteAnnouncementNotificationType } from '../lib/notifications';
 import type { Page } from '../components/Nav';
 import type { LogbookEntry, Profile } from '../types';
 
@@ -41,6 +43,7 @@ export default function StaffHome({
   const { t } = useLang();
   const { defs } = useRoleDefinitions();
   const today = new Date().toISOString().slice(0, 10);
+  const [highlightNoteId, setHighlightNoteId] = useState<string | null>(null);
 
   const { data } = db.useQuery({
     reportSlots: {
@@ -52,7 +55,7 @@ export default function StaffHome({
       },
       store: {},
     },
-    logbookEntries: {},
+    logbookEntries: { store: {} },
   });
 
   const slots = data?.reportSlots ?? [];
@@ -81,19 +84,29 @@ export default function StaffHome({
     else setPage('logbook');
   }
 
+  const clearHighlightNote = useCallback(() => {
+    setHighlightNoteId(null);
+  }, []);
+
+  function handleOpenLogbookEntry(entryId: string, type?: string) {
+    if (type && isNoteAnnouncementNotificationType(type)) {
+      setHighlightNoteId(entryId);
+      return;
+    }
+    try {
+      sessionStorage.setItem('logbookHighlightEntryId', entryId);
+      sessionStorage.setItem('logbookInitialFilter', 'my-assigned');
+      sessionStorage.setItem('logbookOpenResolutionEntryId', entryId);
+    } catch {
+      /* ignore */
+    }
+    setPage('logbook');
+  }
+
   return (
     <div>
       <MyReportsPanel profile={profile} onFixReport={onFixReport} />
-      <FeedbackInbox userId={profile.userId} onOpenLogbookEntry={(entryId) => {
-        try {
-          sessionStorage.setItem('logbookHighlightEntryId', entryId);
-          sessionStorage.setItem('logbookInitialFilter', 'my-assigned');
-          sessionStorage.setItem('logbookOpenResolutionEntryId', entryId);
-        } catch {
-          /* ignore */
-        }
-        setPage('logbook');
-      }} />
+      <FeedbackInbox userId={profile.userId} onOpenLogbookEntry={handleOpenLogbookEntry} />
 
       {canReview(profile.role, defs) && !canEditMaster(profile.role, defs) && (
         <ReportReviewStatusPanel profile={profile} />
@@ -107,6 +120,13 @@ export default function StaffHome({
           {t.staffHome.role}: <span className="badge">{profile.role}</span>
         </p>
       </div>
+
+      <NotesAnnouncementsCard
+        profile={profile}
+        entries={logbookEntries}
+        highlightEntryId={highlightNoteId}
+        onHighlightConsumed={clearHighlightNote}
+      />
 
       {(hasAssigned || assignedCount > 0) && (
         <div className="card">

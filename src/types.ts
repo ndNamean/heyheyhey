@@ -35,6 +35,7 @@ export interface RoleDefinitionSeed {
   canFirstApproveTemplateItemProposal?: boolean;
   canFinalApproveTemplateItemProposal?: boolean;
   canPublishTemplateItemProposal?: boolean;
+  canRequestUserChanges?: boolean;
   approvesSubmitterRolesJson: string;
 }
 
@@ -313,6 +314,41 @@ export type ChecklistItemProposalEventType =
   | 'proposal_published'
   | 'proposal_cancelled'
   | 'approvers_assigned';
+
+export type UserChangeRequestType = 'role_change' | 'delete';
+
+export type UserChangeRequestStatus =
+  | 'pending_first_approval'
+  | 'pending_final_approval'
+  | 'approved'
+  | 'rejected'
+  | 'cancelled';
+
+export interface UserChangeRequest {
+  id: string;
+  type: UserChangeRequestType | string;
+  status: UserChangeRequestStatus | string;
+  targetUserId: string;
+  targetEmail: string;
+  fromRole: string;
+  toRole: string;
+  storeIdsJson: string;
+  note: string;
+  requestedByUserId: string;
+  firstApproverUserIdsJson: string;
+  firstApproverUserId: string;
+  firstApproverAt: string;
+  firstApproverNote: string;
+  finalApproverUserIdsJson: string;
+  finalApproverUserId: string;
+  finalApproverAt: string;
+  finalApproverNote: string;
+  rejectionReason: string;
+  createdAt: string;
+  updatedAt: string;
+  requester?: Profile;
+  target?: Profile;
+}
 
 export interface ChecklistItemProposal {
   id: string;
@@ -670,6 +706,10 @@ export type NotificationType =
   | 'checklist_item_proposal_rejected'
   | 'checklist_item_proposal_approved'
   | 'checklist_item_proposal_published'
+  | 'user_change_requested'
+  | 'user_change_first_approved'
+  | 'user_change_finalized'
+  | 'user_change_rejected'
   | 'logbook_issue_assigned'
   | 'logbook_issue_due_soon'
   | 'logbook_issue_overdue'
@@ -677,7 +717,9 @@ export type NotificationType =
   | 'logbook_resolution_approved'
   | 'logbook_resolution_rejected'
   | 'logbook_resolution_correction_requested'
-  | 'logbook_issue_reopened';
+  | 'logbook_issue_reopened'
+  | 'logbook_note_created'
+  | 'logbook_announcement_created';
 
 export interface Notification {
   id: string;

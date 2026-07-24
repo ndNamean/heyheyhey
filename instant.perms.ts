@@ -24,6 +24,9 @@ const LEGACY_BIND = {
   canFirstApproveTemplateItemProposal: 'isApproved && (isManager || isAreaManagerTier || isOwner)',
   canFinalApproveTemplateItemProposal: 'isApproved && (isAreaManagerTier || isOwner)',
   canPublishTemplateItemProposal: 'isOwner || isAreaManagerTier',
+  // Leader only (not subleader); managers request user changes too.
+  canRequestUserChanges:
+    "isApproved && (isManager || 'leader' in auth.ref('$user.profile.role'))",
 };
 
 const rules = {
@@ -513,6 +516,35 @@ const rules = {
       },
     },
     bind: { ...LEGACY_BIND },
+  },
+
+  // ── User change requests ──────────────────────────────────────────────────
+  userChangeRequests: {
+    allow: {
+      view: 'isApproved',
+      create:
+        "canRequestUserChanges && data.requestedByUserId == auth.id && (data.status == 'pending_first_approval' || data.status == 'pending_final_approval')",
+      update: 'canUpdateOwnRequest || canFirstApproveUserChange || canFinalApproveUserChange',
+      delete: 'false',
+      link: {
+        requester: 'canRequestUserChanges',
+        target: 'canRequestUserChanges',
+      },
+      unlink: {
+        requester: 'false',
+        target: 'false',
+      },
+    },
+    bind: {
+      ...LEGACY_BIND,
+      isRequester: 'auth.id != null && data.requestedByUserId == auth.id',
+      canUpdateOwnRequest:
+        "isRequester && (data.status == 'pending_first_approval' || data.status == 'pending_final_approval' || data.status == 'cancelled')",
+      canFirstApproveUserChange:
+        "isApproved && isManager && data.status == 'pending_first_approval'",
+      canFinalApproveUserChange:
+        "canManageUsers && (data.status == 'pending_first_approval' || data.status == 'pending_final_approval' || data.status == 'approved' || data.status == 'rejected')",
+    },
   },
 } satisfies InstantRules;
 

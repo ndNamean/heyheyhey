@@ -16,7 +16,13 @@ import {
   userCanAccessStore,
 } from './roles';
 import { rankOf } from './roleResolver';
-import { parseAssigneeUserIds, resolveLogbookIssueStatus } from './logbook';
+import {
+  canViewLogbookEntry,
+  isStaffOrHybrid,
+  parseAssigneeUserIds,
+  resolveLogbookEntryType,
+  resolveLogbookIssueStatus,
+} from './logbook';
 import { nowIso } from './utils';
 import {
   adminsForAccessNotify,
@@ -338,6 +344,169 @@ export function buildAccessFinalizedNotification(
       actor,
     ),
   ];
+}
+
+type UserChangeNotifType =
+  | 'user_change_requested'
+  | 'user_change_first_approved'
+  | 'user_change_finalized'
+  | 'user_change_rejected';
+
+function buildUserChangeNotificationTx(
+  recipientUserId: string,
+  type: UserChangeNotifType,
+  title: string,
+  body: string,
+  actor: Profile,
+  requestId: string,
+  actionStatus: string,
+) {
+  return db.tx.notifications[id()].update({
+    recipientUserId,
+    type,
+    title,
+    body,
+    reportId: requestId,
+    reportResponseId: '',
+    storeId: '',
+    itemTitle: '',
+    completionPercent: 0,
+    compliancePercent: 0,
+    actionStatus,
+    actorUserId: actor.userId,
+    actorRole: actor.role,
+    readAt: '',
+    createdAt: nowIso(),
+  });
+}
+
+function uniqueRecipientIds(ids: string[], excludeUserId?: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const uid of ids) {
+    if (!uid || uid === excludeUserId || seen.has(uid)) continue;
+    seen.add(uid);
+    out.push(uid);
+  }
+  return out;
+}
+
+export function buildUserChangeRequestedNotifications(params: {
+  requestId: string;
+  type: 'role_change' | 'delete' | string;
+  target: Profile;
+  toRole: string;
+  actor: Profile;
+  recipientUserIds: string[];
+  status: string;
+  note?: string;
+}) {
+  const { requestId, type, target, toRole, actor, recipientUserIds, status, note } = params;
+  const action =
+    type === 'delete'
+      ? `delete access for ${target.displayName || target.email}`
+      : `change ${target.displayName || target.email} from ${target.role} to ${toRole}`;
+  const body = [
+    `${actor.displayName || actor.email} (${actor.role}) requested to ${action}.`,
+    note?.trim() ? `Note: ${note.trim()}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return uniqueRecipientIds(recipientUserIds, actor.userId).map((uid) =>
+    buildUserChangeNotificationTx(
+      uid,
+      'user_change_requested',
+      type === 'delete' ? 'User delete requested' : 'User role change requested',
+      body,
+      actor,
+      requestId,
+      status,
+    ),
+  );
+}
+
+export function buildUserChangeFirstApprovedNotifications(params: {
+  request: { id: string; requestedByUserId: string; type: string; targetEmail: string; fromRole: string; toRole: string };
+  actor: Profile;
+  recipientUserIds: string[];
+  note?: string;
+}) {
+  const { request, actor, recipientUserIds, note } = params;
+  const body = [
+    `First approval by ${actor.role} (${actor.displayName || actor.email}).`,
+    `Request: ${request.type} for ${request.targetEmail} (${request.fromRole}${request.toRole ? ` → ${request.toRole}` : ''}).`,
+    note?.trim() ? `Note: ${note.trim()}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return uniqueRecipientIds(recipientUserIds, actor.userId).map((uid) =>
+    buildUserChangeNotificationTx(
+      uid,
+      'user_change_first_approved',
+      'User change passed first approval',
+      body,
+      actor,
+      request.id,
+      'pending_final_approval',
+    ),
+  );
+}
+
+export function buildUserChangeFinalizedNotifications(params: {
+  request: { id: string; requestedByUserId: string; type: string; targetEmail: string; fromRole: string; toRole: string };
+  actor: Profile;
+  target: Profile;
+  note?: string;
+}) {
+  const { request, actor, target, note } = params;
+  const body = [
+    `Finalized by ${actor.role} (${actor.displayName || actor.email}).`,
+    request.type === 'delete'
+      ? `Access revoked for ${target.displayName || target.email}.`
+      : `Role changed ${request.fromRole} → ${request.toRole} for ${target.displayName || target.email}.`,
+    note?.trim() ? `Note: ${note.trim()}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return uniqueRecipientIds([request.requestedByUserId, target.userId], actor.userId).map((uid) =>
+    buildUserChangeNotificationTx(
+      uid,
+      'user_change_finalized',
+      'User change approved',
+      body,
+      actor,
+      request.id,
+      'approved',
+    ),
+  );
+}
+
+export function buildUserChangeRejectedNotifications(params: {
+  request: { id: string; requestedByUserId: string; type: string; targetEmail: string };
+  actor: Profile;
+  reason: string;
+}) {
+  const { request, actor, reason } = params;
+  const body = [
+    `Rejected by ${actor.role} (${actor.displayName || actor.email}).`,
+    `Request: ${request.type} for ${request.targetEmail}.`,
+    `Reason: ${reason.trim()}`,
+  ].join('\n');
+
+  return uniqueRecipientIds([request.requestedByUserId], actor.userId).map((uid) =>
+    buildUserChangeNotificationTx(
+      uid,
+      'user_change_rejected',
+      'User change rejected',
+      body,
+      actor,
+      request.id,
+      'rejected',
+    ),
+  );
 }
 
 function emptyLogbookNotifFields(storeId: string, entryId: string, actionStatus: string) {
@@ -679,6 +848,63 @@ export function buildLogbookIssueRecalledNotifications(
       actor,
       entry,
       'recalled',
+    ),
+  );
+}
+
+/** Approved staff/hybrid who can see the note/announcement; excludes actor. */
+export function getNoteAnnouncementRecipients(
+  entry: LogbookEntry,
+  profiles: Profile[],
+  actorId: string,
+  defs: RoleDefinition[],
+): string[] {
+  const recipients = new Set<string>();
+  for (const p of profiles) {
+    if (p.userId === actorId) continue;
+    if (p.approvalStatus !== 'approved') continue;
+    if (!isStaffOrHybrid(p.role)) continue;
+    if (!canViewLogbookEntry(p, entry, defs)) continue;
+    recipients.add(p.userId);
+  }
+  return [...recipients];
+}
+
+export function isNoteAnnouncementNotificationType(type: string): boolean {
+  return type === 'logbook_note_created' || type === 'logbook_announcement_created';
+}
+
+export function buildLogbookNoteAnnouncementNotifications(
+  entry: LogbookEntry,
+  actor: Profile,
+  allProfiles: Profile[],
+  defs: RoleDefinition[],
+) {
+  if (!entry.requiresAck) return [];
+  const type = resolveLogbookEntryType(entry);
+  if (type !== 'note' && type !== 'announcement') return [];
+
+  const recipients = getNoteAnnouncementRecipients(entry, allProfiles, actor.userId, defs);
+  const notifType =
+    type === 'announcement' ? 'logbook_announcement_created' : 'logbook_note_created';
+  const title =
+    type === 'announcement' ? 'New Logbook announcement' : 'New Logbook note';
+  const kindLabel = type === 'announcement' ? 'Announcement' : 'Note';
+  const body = [
+    title,
+    `${kindLabel}: ${issueSnippet(entry)}`,
+    `Severity: ${entry.severity}`,
+  ].join('\n');
+
+  return recipients.map((uid) =>
+    buildLogbookNotificationTx(
+      uid,
+      notifType,
+      title,
+      body,
+      actor,
+      entry,
+      type,
     ),
   );
 }

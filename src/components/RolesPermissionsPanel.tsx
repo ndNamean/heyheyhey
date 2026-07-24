@@ -30,6 +30,7 @@ type CapabilityKey = keyof Pick<
   | 'canFirstApproveTemplateItemProposal'
   | 'canFinalApproveTemplateItemProposal'
   | 'canPublishTemplateItemProposal'
+  | 'canRequestUserChanges'
 >;
 
 const CAPABILITY_KEYS: CapabilityKey[] = [
@@ -49,6 +50,7 @@ const CAPABILITY_KEYS: CapabilityKey[] = [
   'canFirstApproveTemplateItemProposal',
   'canFinalApproveTemplateItemProposal',
   'canPublishTemplateItemProposal',
+  'canRequestUserChanges',
 ];
 
 interface Props {
