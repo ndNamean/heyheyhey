@@ -188,7 +188,7 @@ export default function LogbookPage({
     shift: 'AM',
     content: '',
     severity: 'info',
-    requiresAck: false,
+    requiresAck: true,
     assigneeRole: 'staff' as string,
     assigneeUserIds: [] as string[],
     dueAt: '',
@@ -549,7 +549,7 @@ export default function LogbookPage({
         shift: 'AM',
         content: '',
         severity: 'info',
-        requiresAck: false,
+        requiresAck: true,
         assigneeRole: eligibleAssigneeRoles[0] || 'staff',
         assigneeUserIds: [],
         dueAt: '',
@@ -1748,9 +1748,10 @@ export default function LogbookPage({
               </div>
             </>
           )}
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+          <label className="ui-checkbox-label" style={{ marginTop: 8 }}>
             <input
               type="checkbox"
+              className="ui-checkbox"
               checked={form.requiresAck}
               onChange={(e) => setForm({ ...form, requiresAck: e.target.checked })}
             />
