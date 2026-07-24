@@ -52,6 +52,17 @@ function isIssue(entry) {
   return String(entry?.entryType || '') === 'issue';
 }
 
+function parseAssigneeUserIds(raw) {
+  if (raw == null || String(raw).trim() === '') return [];
+  try {
+    const parsed = JSON.parse(String(raw));
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((id) => typeof id === 'string' && id.trim() !== '');
+  } catch {
+    return [];
+  }
+}
+
 function canSubmitResolution(actor, entry) {
   if (!isIssue(entry)) return false;
   const status = String(entry.status || '');
@@ -60,6 +71,8 @@ function canSubmitResolution(actor, entry) {
   if (!entry.storeId || !hasStoreAccess(actor, entry.storeId)) return false;
   const assignee = String(entry.assigneeRole || '').trim();
   if (!assignee || actor.role !== assignee) return false;
+  const assigneeIds = parseAssigneeUserIds(entry.assigneeUserIdsJson);
+  if (assigneeIds.length > 0 && !assigneeIds.includes(actor.userId)) return false;
   return true;
 }
 
@@ -110,12 +123,14 @@ function getReviewerRecipients(entry, profiles, actorUserId, defs) {
 function getAssigneeRecipients(entry, profiles, actorUserId) {
   const role = entry.assigneeRole || '';
   if (!entry.storeId || !role) return [];
+  const assigneeIds = parseAssigneeUserIds(entry.assigneeUserIdsJson);
   const recipients = new Set();
   for (const p of profiles) {
     if (actorUserId && p.userId === actorUserId) continue;
     if (p.approvalStatus !== 'approved') continue;
     if (p.role !== role) continue;
     if (!hasStoreAccess(p, entry.storeId)) continue;
+    if (assigneeIds.length > 0 && !assigneeIds.includes(p.userId)) continue;
     recipients.add(p.userId);
   }
   return [...recipients];

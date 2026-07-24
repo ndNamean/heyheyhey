@@ -16,7 +16,7 @@ import {
   userCanAccessStore,
 } from './roles';
 import { rankOf } from './roleResolver';
-import { resolveLogbookIssueStatus } from './logbook';
+import { parseAssigneeUserIds, resolveLogbookIssueStatus } from './logbook';
 import { nowIso } from './utils';
 import {
   adminsForAccessNotify,
@@ -357,18 +357,20 @@ function profileHasStore(p: Profile, storeId: string, defs?: RoleDefinition[]): 
 }
 
 export function getLogbookAssigneeRecipients(
-  entry: Pick<LogbookEntry, 'storeId' | 'assigneeRole'>,
+  entry: Pick<LogbookEntry, 'storeId' | 'assigneeRole' | 'assigneeUserIdsJson'>,
   allProfiles: Profile[],
   actorUserId?: string,
   defs?: RoleDefinition[],
 ): string[] {
   const role = entry.assigneeRole ?? '';
   if (!entry.storeId || !role) return [];
+  const assigneeIds = parseAssigneeUserIds(entry.assigneeUserIdsJson);
   const recipients = new Set<string>();
   for (const p of allProfiles) {
     if (p.approvalStatus !== 'approved') continue;
     if (p.role !== role) continue;
     if (!profileHasStore(p, entry.storeId, defs)) continue;
+    if (assigneeIds.length > 0 && !assigneeIds.includes(p.userId)) continue;
     if (actorUserId && p.userId === actorUserId) continue;
     recipients.add(p.userId);
   }

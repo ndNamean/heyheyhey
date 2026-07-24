@@ -7,7 +7,10 @@ import {
   canScheduleShifts,
   canUseOpsTools,
 } from '../lib/roles';
-import { canOpenLogbook, isLogbookIssue, resolveLogbookIssueStatus } from '../lib/logbook';
+import {
+  canOpenLogbook,
+  isAssignedUnresolvedIssue,
+} from '../lib/logbook';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import LanguageSelector from './LanguageSelector';
@@ -29,16 +32,12 @@ interface NavProps {
 }
 
 function useAssignedIssueExists(profile: Profile): boolean {
+  const { defs } = useRoleDefinitions();
   const { data: logbookData } = db.useQuery({
     logbookEntries: {},
   });
-  return ((logbookData?.logbookEntries ?? []) as LogbookEntry[]).some(
-    (e) =>
-      isLogbookIssue(e) &&
-      resolveLogbookIssueStatus(e) !== 'resolved' &&
-      resolveLogbookIssueStatus(e) !== 'recalled' &&
-      e.assigneeRole === profile.role &&
-      (profile.stores ?? []).some((s) => s.id === e.storeId),
+  return ((logbookData?.logbookEntries ?? []) as LogbookEntry[]).some((e) =>
+    isAssignedUnresolvedIssue(profile, e, defs),
   );
 }
 

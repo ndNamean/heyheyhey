@@ -271,9 +271,13 @@ const _schema = i.schema({
       ackUserIdsJson: i.string(),         // JSON array of user IDs who acknowledged
       createdAt: i.string(),
       updatedAt: i.string(),
+      // IANA timezone at create (GPS → store → device); '' = legacy
+      createdTimezone: i.string().clientRequired(),
       // Issue lifecycle (additive; '' / missing = legacy note/announcement)
       entryType: i.string().indexed().clientRequired(),           // note|announcement|issue
       assigneeRole: i.string().indexed().clientRequired(),
+      // JSON array of specific assignee user IDs; '[]' = anyone with assigneeRole at store
+      assigneeUserIdsJson: i.string().clientRequired(),
       dueAt: i.string().indexed().clientRequired(),
       status: i.string().indexed().clientRequired(),              // open|in_progress|waiting_approval|resolved|recalled
       startedAt: i.string().clientRequired(),

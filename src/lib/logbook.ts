@@ -173,14 +173,59 @@ export function canOpenLogbook(
   return assignedIssueExists;
 }
 
+/** Parse assigneeUserIdsJson; invalid / missing → empty (= role-wide). */
+export function parseAssigneeUserIds(raw: string | undefined | null): string[] {
+  if (raw == null || String(raw).trim() === '') return [];
+  try {
+    const parsed = JSON.parse(String(raw)) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((id): id is string => typeof id === 'string' && id.trim() !== '');
+  } catch {
+    return [];
+  }
+}
+
+export function serializeAssigneeUserIds(userIds: string[]): string {
+  const unique = [...new Set(userIds.map((id) => id.trim()).filter(Boolean))];
+  return JSON.stringify(unique);
+}
+
 export function profileMatchesAssignee(
   profile: Profile,
-  entry: Pick<LogbookEntry, 'storeId' | 'assigneeRole'>,
+  entry: Pick<LogbookEntry, 'storeId' | 'assigneeRole' | 'assigneeUserIdsJson'>,
   defs?: RoleDefinition[],
 ): boolean {
   if (!entry.storeId || !entry.assigneeRole) return false;
   if (profile.role !== entry.assigneeRole) return false;
-  return userCanAccessStore(profile.role, profileStoreIds(profile), entry.storeId, defs);
+  if (!userCanAccessStore(profile.role, profileStoreIds(profile), entry.storeId, defs)) {
+    return false;
+  }
+  const assigneeIds = parseAssigneeUserIds(entry.assigneeUserIdsJson);
+  if (assigneeIds.length === 0) return true;
+  return assigneeIds.includes(profile.userId);
+}
+
+/** Approved profiles with role + store access, sorted by displayName. */
+export function eligibleAssigneeUsers(
+  storeId: string,
+  assigneeRole: string,
+  allProfiles: Profile[],
+  defs?: RoleDefinition[],
+): Profile[] {
+  if (!storeId || !assigneeRole) return [];
+  return allProfiles
+    .filter((p) => {
+      if (p.approvalStatus !== 'approved') return false;
+      if (p.role !== assigneeRole) return false;
+      return userCanAccessStore(p.role, profileStoreIds(p), storeId, defs);
+    })
+    .sort((a, b) =>
+      (a.displayName || a.email || a.userId).localeCompare(
+        b.displayName || b.email || b.userId,
+        undefined,
+        { sensitivity: 'base' },
+      ),
+    );
 }
 
 export function canViewLogbookEntry(
@@ -372,6 +417,7 @@ export function emptyLogbookIssueFields() {
   return {
     entryType: '' as string,
     assigneeRole: '',
+    assigneeUserIdsJson: '[]',
     dueAt: '',
     status: '',
     startedAt: '',
@@ -405,11 +451,13 @@ export function issueCreateFields(
   dueAt: string,
   resolutionProofType: string,
   resolutionRequirement: string,
+  assigneeUserIds: string[] = [],
 ) {
   return {
     entryType: 'issue' as const,
     isAnnouncement: false,
     assigneeRole,
+    assigneeUserIdsJson: serializeAssigneeUserIds(assigneeUserIds),
     dueAt,
     status: 'open' as const,
     startedAt: '',

@@ -8,6 +8,11 @@ import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import { canReview } from '../lib/roles';
 import { nowIso, todayYmd, badgeClass } from '../lib/utils';
+import {
+  formatLogbookEntryStamp,
+  resolveCaptureTimezone,
+  ymdInTimeZone,
+} from '../lib/proofTime';
 import { statusLabel } from '../lib/i18nUtils';
 import {
   LOGBOOK_ASSIGNEE_ROLES,
@@ -22,17 +27,21 @@ import {
   canReviewLogbookIssue,
   canSubmitResolutionNow,
   canViewLogbookEntry,
+  eligibleAssigneeUsers,
   eligibleLogbookAssigneeRoles,
   getIssueConfigurationState,
+  isAssignedUnresolvedIssue,
   isIssueOverdue,
   isLogbookIssue,
   issueCreateFields,
   logSubmitStepFailure,
   noteOrAnnouncementFields,
+  parseAssigneeUserIds,
   resolveLogbookEntryType,
   resolveLogbookIssueStatus,
   resolveResolutionProofs,
   resolveSourceMedia,
+  serializeAssigneeUserIds,
 } from '../lib/logbook';
 import {
   LOGBOOK_ACK_OPTIONS,
@@ -124,6 +133,21 @@ function clearSession(key: string) {
   }
 }
 
+/** One-shot device GPS for logbook create timezone; null on deny/timeout/unavailable. */
+function getDeviceGpsOnce(): Promise<{ lat: number; lng: number } | null> {
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    return Promise.resolve(null);
+  }
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (pos) =>
+        resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => resolve(null),
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 },
+    );
+  });
+}
+
 function openResolutionSessionKey(): string {
   return 'logbookOpenResolutionEntryId';
 }
@@ -166,6 +190,7 @@ export default function LogbookPage({
     severity: 'info',
     requiresAck: false,
     assigneeRole: 'staff' as string,
+    assigneeUserIds: [] as string[],
     dueAt: '',
     resolutionProofType: 'photo' as ProofType,
     resolutionRequirement: '',
@@ -193,6 +218,7 @@ export default function LogbookPage({
   const [setupEntryId, setSetupEntryId] = useState<string | null>(null);
   const [setupForm, setSetupForm] = useState({
     assigneeRole: 'staff',
+    assigneeUserIds: [] as string[],
     dueAt: '',
     resolutionProofType: 'photo' as ProofType,
     resolutionRequirement: '',
@@ -200,6 +226,7 @@ export default function LogbookPage({
   const [changeAssignEntryId, setChangeAssignEntryId] = useState<string | null>(null);
   const [changeAssignForm, setChangeAssignForm] = useState({
     assigneeRole: 'staff',
+    assigneeUserIds: [] as string[],
     dueAt: '',
     reason: '',
   });
@@ -226,17 +253,51 @@ export default function LogbookPage({
   const allEvents: ReviewEvent[] = (data?.reviewEvents ?? []) as ReviewEvent[];
 
   const assignedIssueExists = useMemo(
-    () =>
-      allEntries.some(
-        (e) =>
-          isLogbookIssue(e) &&
-          resolveLogbookIssueStatus(e) !== 'resolved' &&
-          resolveLogbookIssueStatus(e) !== 'recalled' &&
-          e.assigneeRole === profile.role &&
-          (profile.stores ?? []).some((s) => s.id === e.storeId),
-      ),
-    [allEntries, profile],
+    () => allEntries.some((e) => isAssignedUnresolvedIssue(profile, e, defs)),
+    [allEntries, profile, defs],
   );
+
+  const createEligibleUsers = useMemo(
+    () =>
+      form.entryType === 'issue'
+        ? eligibleAssigneeUsers(form.storeId, form.assigneeRole, allProfiles, defs)
+        : [],
+    [form.entryType, form.storeId, form.assigneeRole, allProfiles, defs],
+  );
+
+  const profileNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of allProfiles) {
+      map.set(p.userId, p.displayName || p.email || p.userId);
+    }
+    return map;
+  }, [allProfiles]);
+
+  function assigneeSummaryLabel(entry: LogbookEntry): string {
+    const role = entry.assigneeRole || '—';
+    const ids = parseAssigneeUserIds(entry.assigneeUserIdsJson);
+    if (ids.length === 0) return role;
+    const names = ids.map((uid) => profileNameById.get(uid) || uid);
+    return `${names.join(', ')} (${role})`;
+  }
+
+  function toggleAssigneeUserId(selected: string[], userId: string): string[] {
+    return selected.includes(userId)
+      ? selected.filter((id) => id !== userId)
+      : [...selected, userId];
+  }
+
+  function pruneAssigneeUserIds(
+    selected: string[],
+    storeId: string,
+    assigneeRole: string,
+  ): string[] {
+    if (!storeId || !assigneeRole || selected.length === 0) return [];
+    const eligible = new Set(
+      eligibleAssigneeUsers(storeId, assigneeRole, allProfiles, defs).map((p) => p.userId),
+    );
+    return selected.filter((id) => eligible.has(id));
+  }
 
   const canCreate = canReview(profile.role, defs);
   const pageOpen = canOpenLogbook(profile, defs, assignedIssueExists);
@@ -259,14 +320,40 @@ export default function LogbookPage({
     if (form.entryType !== 'issue') return;
     if (eligibleAssigneeRoles.length === 0) return;
     if (!eligibleAssigneeRoles.includes(form.assigneeRole as (typeof eligibleAssigneeRoles)[number])) {
-      setForm((prev) => ({ ...prev, assigneeRole: eligibleAssigneeRoles[0]! }));
+      setForm((prev) => ({
+        ...prev,
+        assigneeRole: eligibleAssigneeRoles[0]!,
+        assigneeUserIds: [],
+      }));
     }
   }, [form.entryType, form.assigneeRole, eligibleAssigneeRoles]);
 
   useEffect(() => {
+    if (form.entryType !== 'issue') return;
+    setForm((prev) => {
+      const nextIds = pruneAssigneeUserIds(prev.assigneeUserIds, prev.storeId, prev.assigneeRole);
+      if (
+        nextIds.length === prev.assigneeUserIds.length &&
+        nextIds.every((id, i) => id === prev.assigneeUserIds[i])
+      ) {
+        return prev;
+      }
+      return { ...prev, assigneeUserIds: nextIds };
+    });
+  }, [form.entryType, form.storeId, form.assigneeRole, allProfiles, defs]);
+
+  useEffect(() => {
     if (!form.storeId) return;
     if (selectableStores.some((s) => s.id === form.storeId)) return;
-    setForm((prev) => ({ ...prev, storeId: selectableStores[0]?.id || '' }));
+    setForm((prev) => ({
+      ...prev,
+      storeId: selectableStores[0]?.id || '',
+      assigneeUserIds: pruneAssigneeUserIds(
+        prev.assigneeUserIds,
+        selectableStores[0]?.id || '',
+        prev.assigneeRole,
+      ),
+    }));
     setShowCreateCamera(false);
   }, [form.storeId, selectableStores]);
 
@@ -391,20 +478,38 @@ export default function LogbookPage({
               new Date(form.dueAt).toISOString(),
               form.resolutionProofType,
               form.resolutionRequirement,
+              form.assigneeUserIds,
             )
           : noteOrAnnouncementFields(form.entryType);
+
+      const gps = await getDeviceGpsOnce();
+      const selectedStore =
+        storeTarget
+          ? stores.find((s) => s.id === storeTarget) ||
+            selectableStores.find((s) => s.id === storeTarget)
+          : undefined;
+      const storeCoords =
+        selectedStore &&
+        Number.isFinite(selectedStore.lat) &&
+        Number.isFinite(selectedStore.lng)
+          ? { lat: selectedStore.lat, lng: selectedStore.lng }
+          : null;
+      const createdTimezone = resolveCaptureTimezone(gps ?? storeCoords);
+      const now = new Date();
+      const createdAt = now.toISOString();
 
       const tx = db.tx.logbookEntries[entryId].update({
         storeId: storeTarget,
         authorUserId: profile.userId,
-        date: todayYmd(),
+        date: ymdInTimeZone(now, createdTimezone),
         shift: form.shift,
         content: form.content.trim(),
         severity: form.severity,
         requiresAck: form.requiresAck,
         ackUserIdsJson: '[]',
-        createdAt: nowIso(),
-        updatedAt: nowIso(),
+        createdAt,
+        updatedAt: createdAt,
+        createdTimezone,
         ...typeFields,
       });
 
@@ -422,6 +527,7 @@ export default function LogbookPage({
           storeId: storeTarget,
           content: form.content.trim(),
           assigneeRole: form.assigneeRole,
+          assigneeUserIdsJson: serializeAssigneeUserIds(form.assigneeUserIds),
           dueAt: new Date(form.dueAt).toISOString(),
           severity: form.severity as LogbookEntry['severity'],
           entryType: 'issue' as const,
@@ -445,6 +551,7 @@ export default function LogbookPage({
         severity: 'info',
         requiresAck: false,
         assigneeRole: eligibleAssigneeRoles[0] || 'staff',
+        assigneeUserIds: [],
         dueAt: '',
         resolutionProofType: 'photo',
         resolutionRequirement: '',
@@ -665,9 +772,15 @@ export default function LogbookPage({
     const defaultRole = eligibleAssigneeRoles.includes(current as (typeof eligibleAssigneeRoles)[number])
       ? current
       : eligibleAssigneeRoles[0] || '';
+    const selectedIds = pruneAssigneeUserIds(
+      parseAssigneeUserIds(entry.assigneeUserIdsJson),
+      entry.storeId,
+      defaultRole,
+    );
     setChangeAssignEntryId(entry.id);
     setChangeAssignForm({
       assigneeRole: defaultRole,
+      assigneeUserIds: selectedIds,
       dueAt: entry.dueAt ? entry.dueAt.slice(0, 16) : '',
       reason: '',
     });
@@ -683,6 +796,12 @@ export default function LogbookPage({
     if (!changeAssignForm.reason.trim()) return alert(t.logbook.changeReasonRequired);
 
     const dueAt = new Date(changeAssignForm.dueAt).toISOString();
+    const assigneeUserIds = pruneAssigneeUserIds(
+      changeAssignForm.assigneeUserIds,
+      entry.storeId,
+      role,
+    );
+    const assigneeUserIdsJson = serializeAssigneeUserIds(assigneeUserIds);
     const prevStatus = resolveLogbookIssueStatus(entry) || 'open';
     let nextStatus = prevStatus;
     if (prevStatus === 'waiting_approval') {
@@ -690,14 +809,25 @@ export default function LogbookPage({
       if (!ok) return;
       nextStatus = 'in_progress';
     }
-    const note = `Role: ${entry.assigneeRole} → ${role}; due: ${entry.dueAt} → ${dueAt}. ${changeAssignForm.reason.trim()}`;
-    const updated = { ...entry, assigneeRole: role, dueAt, status: nextStatus };
+    const peopleNote =
+      assigneeUserIds.length === 0
+        ? 'anyone with role'
+        : assigneeUserIds.map((uid) => profileNameById.get(uid) || uid).join(', ');
+    const note = `Role: ${entry.assigneeRole} → ${role}; people: ${peopleNote}; due: ${entry.dueAt} → ${dueAt}. ${changeAssignForm.reason.trim()}`;
+    const updated = {
+      ...entry,
+      assigneeRole: role,
+      assigneeUserIdsJson,
+      dueAt,
+      status: nextStatus,
+    };
 
     setChangeAssignSaving(true);
     try {
       await db.transact([
         db.tx.logbookEntries[entry.id].update({
           assigneeRole: role,
+          assigneeUserIdsJson,
           dueAt,
           status: nextStatus,
           updatedAt: nowIso(),
@@ -708,6 +838,7 @@ export default function LogbookPage({
       setChangeAssignEntryId(null);
       setChangeAssignForm({
         assigneeRole: eligibleAssigneeRoles[0] || '',
+        assigneeUserIds: [],
         dueAt: '',
         reason: '',
       });
@@ -765,9 +896,15 @@ export default function LogbookPage({
     const defaultRole = eligibleAssigneeRoles.includes(current as (typeof eligibleAssigneeRoles)[number])
       ? current
       : eligibleAssigneeRoles[0] || '';
+    const selectedIds = pruneAssigneeUserIds(
+      parseAssigneeUserIds(entry.assigneeUserIdsJson),
+      entry.storeId,
+      defaultRole,
+    );
     setSetupEntryId(entry.id);
     setSetupForm({
       assigneeRole: defaultRole,
+      assigneeUserIds: selectedIds,
       dueAt: entry.dueAt ? entry.dueAt.slice(0, 16) : '',
       resolutionProofType: (resolveLogbookProofType(entry) || 'photo') as ProofType,
       resolutionRequirement: entry.resolutionRequirement || '',
@@ -784,10 +921,21 @@ export default function LogbookPage({
     }
     if (!setupForm.dueAt) return alert(t.logbook.dueRequired);
     const dueAt = new Date(setupForm.dueAt).toISOString();
+    const assigneeUserIds = pruneAssigneeUserIds(
+      setupForm.assigneeUserIds,
+      entry.storeId,
+      setupForm.assigneeRole,
+    );
+    const assigneeUserIdsJson = serializeAssigneeUserIds(assigneeUserIds);
+    const peopleNote =
+      assigneeUserIds.length === 0
+        ? 'anyone with role'
+        : assigneeUserIds.map((uid) => profileNameById.get(uid) || uid).join(', ');
     const prevStatus = resolveLogbookIssueStatus(entry) || 'open';
     await db.transact([
       db.tx.logbookEntries[entry.id].update({
         assigneeRole: setupForm.assigneeRole,
+        assigneeUserIdsJson,
         dueAt,
         resolutionProofType: setupForm.resolutionProofType || 'photo',
         resolutionRequirement: setupForm.resolutionRequirement.trim(),
@@ -796,7 +944,7 @@ export default function LogbookPage({
       buildLogbookAssignmentChangedEvent(
         entry,
         profile,
-        `Complete setup: role=${setupForm.assigneeRole}; due=${dueAt}`,
+        `Complete setup: role=${setupForm.assigneeRole}; people=${peopleNote}; due=${dueAt}`,
         prevStatus,
         prevStatus,
       ),
@@ -804,6 +952,7 @@ export default function LogbookPage({
         {
           ...entry,
           assigneeRole: setupForm.assigneeRole,
+          assigneeUserIdsJson,
           dueAt,
           resolutionProofType: setupForm.resolutionProofType,
           resolutionRequirement: setupForm.resolutionRequirement,
@@ -1293,6 +1442,7 @@ export default function LogbookPage({
                     next === 'issue'
                       ? eligibleAssigneeRoles[0] || form.assigneeRole
                       : form.assigneeRole,
+                  assigneeUserIds: next === 'issue' ? [] : form.assigneeUserIds,
                 });
                 if (next !== 'issue') {
                   setCreateSourceMedia([]);
@@ -1313,7 +1463,16 @@ export default function LogbookPage({
               <select
                 value={form.storeId}
                 onChange={(e) => {
-                  setForm({ ...form, storeId: e.target.value });
+                  const storeId = e.target.value;
+                  setForm({
+                    ...form,
+                    storeId,
+                    assigneeUserIds: pruneAssigneeUserIds(
+                      form.assigneeUserIds,
+                      storeId,
+                      form.assigneeRole,
+                    ),
+                  });
                   setShowCreateCamera(false);
                 }}
               >
@@ -1362,7 +1521,13 @@ export default function LogbookPage({
                   {t.logbook.assigneeRole}
                   <select
                     value={form.assigneeRole}
-                    onChange={(e) => setForm({ ...form, assigneeRole: e.target.value })}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        assigneeRole: e.target.value,
+                        assigneeUserIds: [],
+                      })
+                    }
                   >
                     {eligibleAssigneeRoles.map((r) => (
                       <option key={r} value={r}>
@@ -1397,6 +1562,73 @@ export default function LogbookPage({
               </>
             )}
           </div>
+          {form.entryType === 'issue' && (
+            <div style={{ marginTop: 12 }}>
+              <div className="small" style={{ marginBottom: 6 }}>
+                {t.logbook.specificPeopleOptional}
+              </div>
+              <div className="small" style={{ marginBottom: 8, opacity: 0.85 }}>
+                {form.assigneeUserIds.length === 0
+                  ? t.logbook.anyoneWithRoleAtStore
+                  : t.logbook.peopleSelected.replace(
+                      '{n}',
+                      String(form.assigneeUserIds.length),
+                    )}
+              </div>
+              {!form.storeId ? (
+                <div className="small">{t.logbook.issueStoreRequired}</div>
+              ) : createEligibleUsers.length === 0 ? (
+                <div className="small">{t.logbook.noEligiblePeople}</div>
+              ) : (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6,
+                    maxHeight: 180,
+                    overflowY: 'auto',
+                    padding: '8px 10px',
+                    border: '1px solid var(--border, #e5e7eb)',
+                  }}
+                >
+                  {createEligibleUsers.map((p) => (
+                    <label
+                      key={p.userId}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        margin: 0,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={form.assigneeUserIds.includes(p.userId)}
+                        onChange={() =>
+                          setForm({
+                            ...form,
+                            assigneeUserIds: toggleAssigneeUserId(
+                              form.assigneeUserIds,
+                              p.userId,
+                            ),
+                          })
+                        }
+                      />
+                      <span>
+                        {p.displayName || p.email || p.userId}
+                        {p.email && p.displayName ? (
+                          <span className="small" style={{ marginLeft: 6, opacity: 0.7 }}>
+                            {p.email}
+                          </span>
+                        ) : null}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           <label style={{ marginTop: 12, display: 'block' }}>
             {t.common.content}
             <textarea
@@ -1735,7 +1967,7 @@ export default function LogbookPage({
               {entryStore && <span className="small">{entryStore.code}</span>}
               {type === 'issue' && entry.assigneeRole && (
                 <span className="small">
-                  {t.logbook.assigneeRole}: {entry.assigneeRole}
+                  {t.logbook.assignedLabel}: {assigneeSummaryLabel(entry)}
                 </span>
               )}
               {type === 'issue' && (
@@ -1765,7 +1997,13 @@ export default function LogbookPage({
                     {t.logbook.assigneeRole}
                     <select
                       value={setupForm.assigneeRole}
-                      onChange={(e) => setSetupForm({ ...setupForm, assigneeRole: e.target.value })}
+                      onChange={(e) =>
+                        setSetupForm({
+                          ...setupForm,
+                          assigneeRole: e.target.value,
+                          assigneeUserIds: [],
+                        })
+                      }
                     >
                       {eligibleAssigneeRoles.map((r) => (
                         <option key={r} value={r}>
@@ -1801,6 +2039,72 @@ export default function LogbookPage({
                     </select>
                   </label>
                 </div>
+                {(() => {
+                  const setupUsers = eligibleAssigneeUsers(
+                    entry.storeId,
+                    setupForm.assigneeRole,
+                    allProfiles,
+                    defs,
+                  );
+                  return (
+                    <div style={{ marginTop: 10 }}>
+                      <div className="small" style={{ marginBottom: 6 }}>
+                        {t.logbook.specificPeopleOptional}
+                      </div>
+                      <div className="small" style={{ marginBottom: 8, opacity: 0.85 }}>
+                        {setupForm.assigneeUserIds.length === 0
+                          ? t.logbook.anyoneWithRoleAtStore
+                          : t.logbook.peopleSelected.replace(
+                              '{n}',
+                              String(setupForm.assigneeUserIds.length),
+                            )}
+                      </div>
+                      {setupUsers.length === 0 ? (
+                        <div className="small">{t.logbook.noEligiblePeople}</div>
+                      ) : (
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 6,
+                            maxHeight: 180,
+                            overflowY: 'auto',
+                            padding: '8px 10px',
+                            border: '1px solid var(--border, #e5e7eb)',
+                          }}
+                        >
+                          {setupUsers.map((p) => (
+                            <label
+                              key={p.userId}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                margin: 0,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={setupForm.assigneeUserIds.includes(p.userId)}
+                                onChange={() =>
+                                  setSetupForm({
+                                    ...setupForm,
+                                    assigneeUserIds: toggleAssigneeUserId(
+                                      setupForm.assigneeUserIds,
+                                      p.userId,
+                                    ),
+                                  })
+                                }
+                              />
+                              <span>{p.displayName || p.email || p.userId}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 <label style={{ display: 'block', marginTop: 8 }}>
                   {t.logbook.resolutionRequirement}
                   <textarea
@@ -1828,7 +2132,17 @@ export default function LogbookPage({
               </p>
             )}
             <p className="small" style={{ margin: '4px 0 0' }}>
-              {entry.date} · {entry.createdAt?.slice(11, 16)}
+              {formatLogbookEntryStamp(
+                entry.createdAt,
+                entry.createdTimezone?.trim() ||
+                  resolveCaptureTimezone(
+                    entryStore &&
+                      Number.isFinite(entryStore.lat) &&
+                      Number.isFinite(entryStore.lng)
+                      ? { lat: entryStore.lat, lng: entryStore.lng }
+                      : null,
+                  ),
+              )}
               {entry.dueAt
                 ? ` · ${t.logbook.dueAt}: ${new Date(entry.dueAt).toLocaleString()}`
                 : type === 'issue'
@@ -1965,7 +2279,11 @@ export default function LogbookPage({
                     <select
                       value={changeAssignForm.assigneeRole}
                       onChange={(e) =>
-                        setChangeAssignForm({ ...changeAssignForm, assigneeRole: e.target.value })
+                        setChangeAssignForm({
+                          ...changeAssignForm,
+                          assigneeRole: e.target.value,
+                          assigneeUserIds: [],
+                        })
                       }
                     >
                       {eligibleAssigneeRoles.map((r) => (
@@ -1986,6 +2304,72 @@ export default function LogbookPage({
                     />
                   </label>
                 </div>
+                {(() => {
+                  const changeUsers = eligibleAssigneeUsers(
+                    entry.storeId,
+                    changeAssignForm.assigneeRole,
+                    allProfiles,
+                    defs,
+                  );
+                  return (
+                    <div style={{ marginTop: 10 }}>
+                      <div className="small" style={{ marginBottom: 6 }}>
+                        {t.logbook.specificPeopleOptional}
+                      </div>
+                      <div className="small" style={{ marginBottom: 8, opacity: 0.85 }}>
+                        {changeAssignForm.assigneeUserIds.length === 0
+                          ? t.logbook.anyoneWithRoleAtStore
+                          : t.logbook.peopleSelected.replace(
+                              '{n}',
+                              String(changeAssignForm.assigneeUserIds.length),
+                            )}
+                      </div>
+                      {changeUsers.length === 0 ? (
+                        <div className="small">{t.logbook.noEligiblePeople}</div>
+                      ) : (
+                        <div
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 6,
+                            maxHeight: 180,
+                            overflowY: 'auto',
+                            padding: '8px 10px',
+                            border: '1px solid var(--border, #e5e7eb)',
+                          }}
+                        >
+                          {changeUsers.map((p) => (
+                            <label
+                              key={p.userId}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                margin: 0,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={changeAssignForm.assigneeUserIds.includes(p.userId)}
+                                onChange={() =>
+                                  setChangeAssignForm({
+                                    ...changeAssignForm,
+                                    assigneeUserIds: toggleAssigneeUserId(
+                                      changeAssignForm.assigneeUserIds,
+                                      p.userId,
+                                    ),
+                                  })
+                                }
+                              />
+                              <span>{p.displayName || p.email || p.userId}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 <label style={{ display: 'block', marginTop: 8 }}>
                   {t.logbook.changeReasonLabel}
                   <textarea
@@ -2013,6 +2397,7 @@ export default function LogbookPage({
                       setChangeAssignEntryId(null);
                       setChangeAssignForm({
                         assigneeRole: eligibleAssigneeRoles[0] || '',
+                        assigneeUserIds: [],
                         dueAt: '',
                         reason: '',
                       });

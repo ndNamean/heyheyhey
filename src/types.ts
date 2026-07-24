@@ -572,8 +572,12 @@ export interface LogbookEntry {
   ackUserIdsJson: string;
   createdAt: string;
   updatedAt: string;
+  /** IANA timezone at create; missing/empty = legacy entry */
+  createdTimezone?: string;
   entryType?: LogbookEntryType | string;
   assigneeRole?: Role | string;
+  /** JSON array of specific assignee user IDs; '[]' / missing = role-wide at store */
+  assigneeUserIdsJson?: string;
   dueAt?: string;
   status?: LogbookIssueStatus | string;
   startedAt?: string;

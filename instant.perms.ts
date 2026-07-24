@@ -391,7 +391,7 @@ const rules = {
         "request.modifiedFields.all(f, f in ['status', 'startedAt', 'startedByUserId', 'resolutionNote', 'resolutionNumber', 'resolutionChecked', 'resolutionSubmittedAt', 'resolutionSubmittedByUserId', 'resolutionAttemptId', 'updatedAt'])",
       canIssueLifecycleUpdate: 'isApproved && onlyIssueLifecycleFields',
       onlyIssueReviewFields:
-        "request.modifiedFields.all(f, f in ['status', 'resolvedAt', 'resolvedByUserId', 'reviewedAt', 'reviewedByUserId', 'reviewNote', 'reopenedAt', 'reopenedByUserId', 'reopenReason', 'recalledAt', 'recalledByUserId', 'recallReason', 'updatedAt', 'assigneeRole', 'dueAt', 'severity', 'resolutionRequirement', 'resolutionProofType'])",
+        "request.modifiedFields.all(f, f in ['status', 'resolvedAt', 'resolvedByUserId', 'reviewedAt', 'reviewedByUserId', 'reviewNote', 'reopenedAt', 'reopenedByUserId', 'reopenReason', 'recalledAt', 'recalledByUserId', 'recallReason', 'updatedAt', 'assigneeRole', 'assigneeUserIdsJson', 'dueAt', 'severity', 'resolutionRequirement', 'resolutionProofType'])",
       canIssueReviewUpdate: 'canReview && onlyIssueReviewFields',
       onlyDueStampFields:
         "request.modifiedFields.all(f, f in ['dueSoonNotifiedAt', 'overdueNotifiedAt', 'updatedAt'])",

@@ -89,6 +89,45 @@ export function formatIsoToLocalTime(
   });
 }
 
+/** Local calendar date (YYYY-MM-DD) for `at` in the given IANA timezone. */
+export function ymdInTimeZone(at: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(at);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+/** Logbook card stamp: "YYYY-MM-DD · HH:MM" in the capture timezone. */
+export function formatLogbookEntryStamp(
+  createdAt?: string,
+  timeZone?: string,
+): string {
+  if (!createdAt?.trim()) return '';
+
+  const at = new Date(createdAt);
+  if (Number.isNaN(at.getTime())) {
+    return createdAt.slice(0, 16).replace('T', ' ');
+  }
+
+  const tz =
+    timeZone?.trim() ||
+    Intl.DateTimeFormat().resolvedOptions().timeZone ||
+    'UTC';
+  const ymd = ymdInTimeZone(at, tz);
+  const hm = at.toLocaleTimeString(PROOF_TIME_LOCALE, {
+    timeZone: tz,
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  return `${ymd} · ${hm}`;
+}
+
 export function buildProofTimeFields(
   at: Date,
   gps: { lat: number; lng: number } | null,

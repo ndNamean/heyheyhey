@@ -7,18 +7,23 @@ import {
   canReviewLogbookIssue,
   canSubmitResolutionNow,
   canViewLogbookEntry,
+  eligibleAssigneeUsers,
   eligibleLogbookAssigneeRoles,
   getIssueConfigurationState,
   isIssueDueSoon,
   isIssueOverdue,
   isLogbookIssue,
   isPristineLogbookIssue,
+  parseAssigneeUserIds,
+  profileMatchesAssignee,
   resolveLogbookEntryType,
   resolveLogbookIssueStatus,
   resolveResolutionMedia,
   resolveResolutionProofs,
   resolveSourceMedia,
+  serializeAssigneeUserIds,
 } from './logbook';
+import { getLogbookAssigneeRecipients } from './notifications';
 import {
   computeLogbookIssueMetrics,
   countLogbookIssues,
@@ -81,6 +86,7 @@ function entry(partial: Partial<LogbookEntry>): LogbookEntry {
     updatedAt: partial.updatedAt ?? '2026-07-21T08:00:00.000Z',
     entryType: partial.entryType,
     assigneeRole: partial.assigneeRole,
+    assigneeUserIdsJson: partial.assigneeUserIdsJson,
     dueAt: partial.dueAt,
     status: partial.status,
     startedAt: partial.startedAt,
@@ -639,6 +645,96 @@ describe('resolution proof types', () => {
     });
     expect(canViewLogbookEntry(staff, waiting, defs)).toBe(true);
     expect(canActOnAssignedIssue(staff, waiting, defs)).toBe(true);
+  });
+});
+
+describe('assignee user multi-select', () => {
+  const staffA = profile({ userId: 's1', role: 'staff', displayName: 'Ada' });
+  const staffB = profile({ userId: 's2', role: 'staff', displayName: 'Bob' });
+  const staffOtherStore = profile({
+    userId: 's3',
+    role: 'staff',
+    displayName: 'Cara',
+    stores: [{ ...storeA, id: 'store-b', code: 'STB', name: 'Store B' }],
+  });
+  const manager = profile({ userId: 'm1', role: 'manager', displayName: 'Mgr' });
+
+  it('parse/serialize assignee user ids round-trip and treat empty as role-wide', () => {
+    expect(parseAssigneeUserIds(undefined)).toEqual([]);
+    expect(parseAssigneeUserIds('[]')).toEqual([]);
+    expect(parseAssigneeUserIds('not-json')).toEqual([]);
+    expect(serializeAssigneeUserIds(['s2', 's1', 's1', ''])).toBe('["s2","s1"]');
+    expect(parseAssigneeUserIds(serializeAssigneeUserIds(['s1', 's2']))).toEqual(['s1', 's2']);
+  });
+
+  it('role-wide match when assigneeUserIdsJson empty; narrows when set', () => {
+    const roleWide = entry({
+      entryType: 'issue',
+      assigneeRole: 'staff',
+      storeId: 'store-a',
+      assigneeUserIdsJson: '[]',
+    });
+    expect(profileMatchesAssignee(staffA, roleWide, defs)).toBe(true);
+    expect(profileMatchesAssignee(staffB, roleWide, defs)).toBe(true);
+    expect(profileMatchesAssignee(staffOtherStore, roleWide, defs)).toBe(false);
+    expect(profileMatchesAssignee(manager, roleWide, defs)).toBe(false);
+
+    const oneUser = entry({
+      ...roleWide,
+      assigneeUserIdsJson: serializeAssigneeUserIds(['s1']),
+    });
+    expect(profileMatchesAssignee(staffA, oneUser, defs)).toBe(true);
+    expect(profileMatchesAssignee(staffB, oneUser, defs)).toBe(false);
+    expect(canActOnAssignedIssue(staffA, { ...oneUser, status: 'open' }, defs)).toBe(true);
+    expect(canActOnAssignedIssue(staffB, { ...oneUser, status: 'open' }, defs)).toBe(false);
+
+    const multi = entry({
+      ...roleWide,
+      assigneeUserIdsJson: serializeAssigneeUserIds(['s1', 's2']),
+    });
+    expect(profileMatchesAssignee(staffA, multi, defs)).toBe(true);
+    expect(profileMatchesAssignee(staffB, multi, defs)).toBe(true);
+  });
+
+  it('getLogbookAssigneeRecipients respects multi-user set', () => {
+    const profiles = [staffA, staffB, staffOtherStore, manager];
+    const roleWide = entry({
+      entryType: 'issue',
+      assigneeRole: 'staff',
+      storeId: 'store-a',
+      assigneeUserIdsJson: '[]',
+    });
+    expect(getLogbookAssigneeRecipients(roleWide, profiles, undefined, defs).sort()).toEqual([
+      's1',
+      's2',
+    ]);
+
+    const oneUser = {
+      ...roleWide,
+      assigneeUserIdsJson: serializeAssigneeUserIds(['s2']),
+    };
+    expect(getLogbookAssigneeRecipients(oneUser, profiles, undefined, defs)).toEqual(['s2']);
+
+    const multi = {
+      ...roleWide,
+      assigneeUserIdsJson: serializeAssigneeUserIds(['s1', 's2', 's3']),
+    };
+    // s3 has role but wrong store — excluded
+    expect(getLogbookAssigneeRecipients(multi, profiles, undefined, defs).sort()).toEqual([
+      's1',
+      's2',
+    ]);
+  });
+
+  it('eligibleAssigneeUsers lists approved role+store people sorted by name', () => {
+    const pending = profile({
+      userId: 's9',
+      role: 'staff',
+      displayName: 'Zed',
+      approvalStatus: 'pending',
+    });
+    const list = eligibleAssigneeUsers('store-a', 'staff', [staffB, staffA, pending, manager], defs);
+    expect(list.map((p) => p.userId)).toEqual(['s1', 's2']);
   });
 });
 

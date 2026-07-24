@@ -482,7 +482,26 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
                     <td>{e.content.slice(0, 60)}</td>
                     <td>{store?.code ?? e.storeId}</td>
                     <td>{e.severity}</td>
-                    <td>{e.assigneeRole || '—'}</td>
+                    <td>
+                      {(() => {
+                        const role = e.assigneeRole || '—';
+                        let ids: string[] = [];
+                        try {
+                          const parsed = JSON.parse(e.assigneeUserIdsJson || '[]') as unknown;
+                          if (Array.isArray(parsed)) {
+                            ids = parsed.filter((id): id is string => typeof id === 'string');
+                          }
+                        } catch {
+                          ids = [];
+                        }
+                        if (ids.length === 0) return role;
+                        const names = ids.map((uid) => {
+                          const p = (profiles as Profile[]).find((x) => x.userId === uid);
+                          return p?.displayName || p?.email || uid;
+                        });
+                        return `${names.join(', ')} (${role})`;
+                      })()}
+                    </td>
                     <td className="small">
                       {e.dueAt ? new Date(e.dueAt).toLocaleString() : '—'}
                     </td>
