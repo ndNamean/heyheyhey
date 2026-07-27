@@ -8,9 +8,17 @@ interface Props {
   profiles: Profile[];
 }
 
+const HOST_OPEN_CLASS = 'ack-details-host-open';
+
+function closestHost(el: HTMLElement | null): HTMLElement | null {
+  if (!el) return null;
+  return el.closest('.card, .item-card') as HTMLElement | null;
+}
+
 export default function AckDetailsDropdown({ ackUserIdsJson, profiles }: Props) {
   const { t } = useLang();
   const detailsRef = useRef<HTMLDetailsElement>(null);
+  const hostRef = useRef<HTMLElement | null>(null);
 
   const ackCount = useMemo(
     () => parseLogbookAckUserIds(ackUserIdsJson).length,
@@ -21,11 +29,20 @@ export default function AckDetailsDropdown({ ackUserIdsJson, profiles }: Props) 
     [ackUserIdsJson, profiles],
   );
 
+  function setHostOpen(open: boolean) {
+    const host = hostRef.current ?? closestHost(detailsRef.current);
+    hostRef.current = host;
+    if (!host) return;
+    host.classList.toggle(HOST_OPEN_CLASS, open);
+  }
+
   useEffect(() => {
+    hostRef.current = closestHost(detailsRef.current);
     function close() {
       if (detailsRef.current) detailsRef.current.open = false;
+      setHostOpen(false);
     }
-    function handleClickOutside(e: MouseEvent) {
+    function handlePointerDown(e: PointerEvent) {
       if (detailsRef.current && !detailsRef.current.contains(e.target as Node)) {
         close();
       }
@@ -33,18 +50,26 @@ export default function AckDetailsDropdown({ ackUserIdsJson, profiles }: Props) 
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') close();
     }
-    document.addEventListener('click', handleClickOutside);
+    // pointerdown avoids racing the summary click that opens <details>
+    document.addEventListener('pointerdown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.removeEventListener('click', handleClickOutside);
+      document.removeEventListener('pointerdown', handlePointerDown);
       document.removeEventListener('keydown', handleKeyDown);
+      setHostOpen(false);
     };
   }, []);
 
   const countLabel = `${ackCount} ${ackCount !== 1 ? t.logbook.acks : t.logbook.ack}`;
 
   return (
-    <details ref={detailsRef} className="ack-details">
+    <details
+      ref={detailsRef}
+      className="ack-details"
+      onToggle={(e) => {
+        setHostOpen((e.target as HTMLDetailsElement).open);
+      }}
+    >
       <summary className="ack-details-trigger small" aria-haspopup="listbox">
         <span>{countLabel}</span>
         <span className="ack-details-chevron" aria-hidden>

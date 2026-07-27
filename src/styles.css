@@ -3889,11 +3889,24 @@ body.wizard-active .page {
 }
 
 /* ── Ack details dropdown ─────────────────────────────────────────────────── */
+/* Elevate the host card so the panel paints above following sibling cards. */
+.card.ack-details-host-open,
+.item-card.ack-details-host-open {
+  position: relative;
+  z-index: 40;
+  overflow: visible;
+}
+
 .ack-details {
   position: relative;
   display: inline-block;
   margin-left: 8px;
   vertical-align: middle;
+  z-index: 1;
+}
+
+.ack-details[open] {
+  z-index: 50;
 }
 
 .ack-details-trigger {
@@ -3907,6 +3920,10 @@ body.wizard-active .page {
 
 .ack-details-trigger::-webkit-details-marker {
   display: none;
+}
+
+.ack-details-trigger::marker {
+  content: '';
 }
 
 .ack-details-chevron {
@@ -3925,6 +3942,7 @@ body.wizard-active .page {
   max-width: min(280px, 90vw);
   max-height: 220px;
   overflow-y: auto;
+  z-index: 60;
 }
 
 .ack-details-title {
