@@ -541,6 +541,38 @@ export function hasMyLogbookAck(
   return parseLogbookAckUserIds(entry.ackUserIdsJson).includes(userId);
 }
 
+export type LogbookAckPerson = {
+  userId: string;
+  displayName: string;
+  role: Role;
+};
+
+/**
+ * Resolve ack user IDs to display rows (ack order preserved; unknown IDs skipped).
+ * Label: displayName.trim() || email local-part || userId.
+ */
+export function resolveLogbookAckPeople(
+  entry: Pick<LogbookEntry, 'ackUserIdsJson'>,
+  profiles: Profile[],
+): LogbookAckPerson[] {
+  const ids = parseLogbookAckUserIds(entry.ackUserIdsJson);
+  if (!ids.length) return [];
+  const byUserId = new Map(profiles.map((p) => [p.userId, p]));
+  const people: LogbookAckPerson[] = [];
+  for (const userId of ids) {
+    const p = byUserId.get(userId);
+    if (!p) continue;
+    const trimmed = (p.displayName ?? '').trim();
+    const emailLocal = (p.email ?? '').split('@')[0]?.trim() || '';
+    people.push({
+      userId,
+      displayName: trimmed || emailLocal || userId,
+      role: p.role,
+    });
+  }
+  return people;
+}
+
 /**
  * Store-scoped notes/announcements with requiresAck that the profile can see.
  * Pending (missing my ack) first, then createdAt desc.

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import AckDetailsDropdown from './AckDetailsDropdown';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
@@ -27,6 +28,11 @@ export default function NotesAnnouncementsCard({
   const { t } = useLang();
   const { defs } = useRoleDefinitions();
   const [historyOpen, setHistoryOpen] = useState(false);
+
+  const { data: profilesData } = db.useQuery({
+    profiles: { stores: {} },
+  });
+  const allProfiles = (profilesData?.profiles ?? []) as Profile[];
 
   const { pending, acknowledgedByMe } = useMemo(
     () => splitNotesAnnouncementsForHome(profile, entries, defs),
@@ -65,7 +71,6 @@ export default function NotesAnnouncementsCard({
   }
 
   function renderEntry(entry: LogbookEntry, acked: boolean) {
-    const ackIds = parseLogbookAckUserIds(entry.ackUserIdsJson);
     const type = resolveLogbookEntryType(entry);
     const highlighted = highlightEntryId === entry.id;
     const entryStore = entry.store;
@@ -119,9 +124,10 @@ export default function NotesAnnouncementsCard({
               {t.common.acknowledge}
             </button>
           )}
-          <span className="small" style={{ marginLeft: 8 }}>
-            {ackIds.length} {ackIds.length !== 1 ? t.logbook.acks : t.logbook.ack}
-          </span>
+          <AckDetailsDropdown
+            ackUserIdsJson={entry.ackUserIdsJson}
+            profiles={allProfiles}
+          />
         </div>
       </div>
     );

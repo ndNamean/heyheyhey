@@ -3,6 +3,7 @@ import { id } from '@instantdb/react';
 import { db } from '../db';
 import TimemarkCamera from '../components/TimemarkCamera';
 import ProofPhoto from '../components/ProofPhoto';
+import AckDetailsDropdown from '../components/AckDetailsDropdown';
 import { LogbookTimeline } from '../components/ReportTimeline';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
@@ -2614,9 +2615,10 @@ export default function LogbookPage({
                     {t.common.acknowledge}
                   </button>
                 )}
-                <span className="small" style={{ marginLeft: 8 }}>
-                  {ackIds.length} {ackIds.length !== 1 ? t.logbook.acks : t.logbook.ack}
-                </span>
+                <AckDetailsDropdown
+                  ackUserIdsJson={entry.ackUserIdsJson}
+                  profiles={allProfiles}
+                />
               </div>
             )}
 

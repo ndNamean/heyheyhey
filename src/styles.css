@@ -3888,3 +3888,79 @@ body.wizard-active .page {
   box-shadow: 0 0 12px var(--accent-soft);
 }
 
+/* ── Ack details dropdown ─────────────────────────────────────────────────── */
+.ack-details {
+  position: relative;
+  display: inline-block;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.ack-details-trigger {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  user-select: none;
+}
+
+.ack-details-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.ack-details-chevron {
+  display: inline-block;
+  font-size: 10px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.ack-details[open] > .ack-details-trigger .ack-details-chevron {
+  transform: rotate(180deg);
+}
+
+.ack-details-panel {
+  min-width: 220px;
+  max-width: min(280px, 90vw);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.ack-details-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 4px 8px 8px;
+}
+
+.ack-details-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
+.ack-details-name {
+  font-size: 13px;
+  color: var(--text-primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ack-details-role {
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.ack-details-empty {
+  padding: 4px 8px 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+

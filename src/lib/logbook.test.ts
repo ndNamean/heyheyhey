@@ -20,6 +20,7 @@ import {
   parseAssigneeUserIds,
   parseLogbookAckUserIds,
   profileMatchesAssignee,
+  resolveLogbookAckPeople,
   resolveLogbookEntryType,
   resolveLogbookIssueStatus,
   resolveResolutionMedia,
@@ -876,6 +877,43 @@ describe('notes & announcements home helpers', () => {
     const updated = JSON.stringify([...current, staff.userId]);
     expect(parseLogbookAckUserIds(updated)).toEqual([staff.userId]);
     expect(hasMyLogbookAck(entry({ ackUserIdsJson: updated }), staff.userId)).toBe(true);
+  });
+
+  it('resolveLogbookAckPeople preserves order, skips unknown, falls back labels', () => {
+    const alex = profile({
+      userId: 'u-alex',
+      role: 'staff',
+      displayName: '  Alex Nguyen  ',
+      email: 'alex@test.com',
+    });
+    const mai = profile({
+      userId: 'u-mai',
+      role: 'hybrid',
+      displayName: '   ',
+      email: 'mai.tran@test.com',
+    });
+    const noEmail = profile({
+      userId: 'u-bare',
+      role: 'manager',
+      displayName: '',
+      email: '',
+    });
+
+    expect(
+      resolveLogbookAckPeople(entry({ ackUserIdsJson: '[]' }), [alex, mai]),
+    ).toEqual([]);
+
+    const people = resolveLogbookAckPeople(
+      entry({
+        ackUserIdsJson: JSON.stringify(['u-mai', 'missing', 'u-alex', 'u-bare']),
+      }),
+      [alex, mai, noEmail],
+    );
+    expect(people).toEqual([
+      { userId: 'u-mai', displayName: 'mai.tran', role: 'hybrid' },
+      { userId: 'u-alex', displayName: 'Alex Nguyen', role: 'staff' },
+      { userId: 'u-bare', displayName: 'u-bare', role: 'manager' },
+    ]);
   });
 
   it('getNoteAnnouncementRecipients is staff/hybrid only, store-scoped, excludes actor', () => {
