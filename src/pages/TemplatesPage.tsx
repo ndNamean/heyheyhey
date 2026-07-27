@@ -39,11 +39,12 @@ interface Props {
 
 const WEEKDAY_ORDER = [...ALL_DAYS_OF_WEEK];
 
+/** Lowest privilege → highest (matches role ranks: staff 7 … owner 0). */
 const ASSIGNABLE_ROLES = [
   'staff',
   'hybrid',
-  'leader',
   'subleader',
+  'leader',
   'manager',
   'areaManager',
   'admin',
