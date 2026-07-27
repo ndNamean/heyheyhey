@@ -3938,7 +3938,7 @@ body.wizard-active .page {
 }
 
 .ack-details-panel {
-  min-width: 220px;
+  min-width: 240px;
   max-width: min(280px, 90vw);
   max-height: 220px;
   overflow-y: auto;
@@ -3968,6 +3968,11 @@ body.wizard-active .page {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ack-details-stores {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .ack-details-role {

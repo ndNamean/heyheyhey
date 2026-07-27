@@ -910,9 +910,101 @@ describe('notes & announcements home helpers', () => {
       [alex, mai, noEmail],
     );
     expect(people).toEqual([
-      { userId: 'u-mai', displayName: 'mai.tran', role: 'hybrid' },
-      { userId: 'u-alex', displayName: 'Alex Nguyen', role: 'staff' },
-      { userId: 'u-bare', displayName: 'u-bare', role: 'manager' },
+      {
+        userId: 'u-mai',
+        displayName: 'mai.tran',
+        role: 'hybrid',
+        storeCodesLabel: 'TKC',
+        allStores: false,
+      },
+      {
+        userId: 'u-alex',
+        displayName: 'Alex Nguyen',
+        role: 'staff',
+        storeCodesLabel: 'TKC',
+        allStores: false,
+      },
+      {
+        userId: 'u-bare',
+        displayName: 'u-bare',
+        role: 'manager',
+        storeCodesLabel: 'TKC',
+        allStores: false,
+      },
+    ]);
+  });
+
+  it('resolveLogbookAckPeople joins store codes and flags allStores', () => {
+    const withStores = profile({
+      userId: 'u-multi',
+      role: 'staff',
+      displayName: 'Multi',
+      stores: [
+        { ...storeA, id: 's1', code: 'OHCM', name: 'HCM' },
+        { ...storeA, id: 's2', code: '', name: 'Saigon' },
+        { ...storeA, id: 's3', code: 'SGN', name: 'SGN Store' },
+      ],
+    });
+    const ownerNoStores = profile({
+      userId: 'u-owner',
+      role: 'owner',
+      displayName: 'Ops',
+      stores: [],
+    });
+    const staffNoStores = profile({
+      userId: 'u-staff-empty',
+      role: 'staff',
+      displayName: 'Lonely',
+      stores: [],
+    });
+    const ownerWithStores = profile({
+      userId: 'u-owner-stores',
+      role: 'owner',
+      displayName: 'Owner Local',
+      stores: [{ ...storeA, code: 'OHCM', name: 'HCM' }],
+    });
+
+    const people = resolveLogbookAckPeople(
+      entry({
+        ackUserIdsJson: JSON.stringify([
+          'u-multi',
+          'u-owner',
+          'u-staff-empty',
+          'u-owner-stores',
+        ]),
+      }),
+      [withStores, ownerNoStores, staffNoStores, ownerWithStores],
+      defs,
+    );
+    expect(people).toEqual([
+      {
+        userId: 'u-multi',
+        displayName: 'Multi',
+        role: 'staff',
+        storeCodesLabel: 'OHCM, Saigon, SGN',
+        allStores: false,
+      },
+      {
+        userId: 'u-owner',
+        displayName: 'Ops',
+        role: 'owner',
+        storeCodesLabel: '',
+        allStores: true,
+      },
+      {
+        userId: 'u-staff-empty',
+        displayName: 'Lonely',
+        role: 'staff',
+        storeCodesLabel: '',
+        allStores: false,
+      },
+      {
+        userId: 'u-owner-stores',
+        displayName: 'Owner Local',
+        role: 'owner',
+        storeCodesLabel: 'OHCM',
+        allStores: false,
+      },
     ]);
   });
 

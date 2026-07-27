@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
+import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import { useLang } from '../i18n';
 import { parseLogbookAckUserIds, resolveLogbookAckPeople } from '../lib/logbook';
 import type { Profile } from '../types';
@@ -17,6 +18,7 @@ function closestHost(el: HTMLElement | null): HTMLElement | null {
 
 export default function AckDetailsDropdown({ ackUserIdsJson, profiles }: Props) {
   const { t } = useLang();
+  const { defs } = useRoleDefinitions();
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const hostRef = useRef<HTMLElement | null>(null);
 
@@ -25,8 +27,8 @@ export default function AckDetailsDropdown({ ackUserIdsJson, profiles }: Props) 
     [ackUserIdsJson],
   );
   const people = useMemo(
-    () => resolveLogbookAckPeople({ ackUserIdsJson }, profiles),
-    [ackUserIdsJson, profiles],
+    () => resolveLogbookAckPeople({ ackUserIdsJson }, profiles, defs),
+    [ackUserIdsJson, profiles, defs],
   );
 
   function setHostOpen(open: boolean) {
@@ -83,7 +85,15 @@ export default function AckDetailsDropdown({ ackUserIdsJson, profiles }: Props) 
         ) : (
           people.map((person) => (
             <div key={person.userId} className="ack-details-row" role="listitem">
-              <span className="ack-details-name">{person.displayName}</span>
+              <span className="ack-details-name">
+                {person.displayName}
+                {(person.storeCodesLabel || person.allStores) && (
+                  <span className="ack-details-stores">
+                    {' · '}
+                    {person.allStores ? t.logbook.ackAllStores : person.storeCodesLabel}
+                  </span>
+                )}
+              </span>
               <span className="ack-details-role">{person.role}</span>
             </div>
           ))

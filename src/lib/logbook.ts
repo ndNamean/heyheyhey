@@ -545,6 +545,10 @@ export type LogbookAckPerson = {
   userId: string;
   displayName: string;
   role: Role;
+  /** Joined store codes (or names) from linked stores; empty when none. */
+  storeCodesLabel: string;
+  /** True when no linked stores and role can access all stores. */
+  allStores: boolean;
 };
 
 /**
@@ -554,6 +558,7 @@ export type LogbookAckPerson = {
 export function resolveLogbookAckPeople(
   entry: Pick<LogbookEntry, 'ackUserIdsJson'>,
   profiles: Profile[],
+  defs?: RoleDefinition[],
 ): LogbookAckPerson[] {
   const ids = parseLogbookAckUserIds(entry.ackUserIdsJson);
   if (!ids.length) return [];
@@ -564,10 +569,16 @@ export function resolveLogbookAckPeople(
     if (!p) continue;
     const trimmed = (p.displayName ?? '').trim();
     const emailLocal = (p.email ?? '').split('@')[0]?.trim() || '';
+    const storeCodesLabel = (p.stores ?? [])
+      .map((s) => (s.code || s.name || '').trim())
+      .filter(Boolean)
+      .join(', ');
     people.push({
       userId,
       displayName: trimmed || emailLocal || userId,
       role: p.role,
+      storeCodesLabel,
+      allStores: !storeCodesLabel && canAccessAllStores(p.role, defs),
     });
   }
   return people;
