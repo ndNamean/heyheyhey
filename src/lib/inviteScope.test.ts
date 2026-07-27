@@ -81,6 +81,27 @@ describe('canAssignRole / rolesAssignableBy', () => {
     expect(canApproveItem('staff', 'hybrid', ['hybrid'], defs)).toBe(true);
   });
 
+  it('only higher-ranked roles can approve (rank + matrix, not per-item list)', () => {
+    // leader (rank 4) cannot approve manager (rank 3) even if in item approverRoles
+    expect(canApproveItem('manager', 'leader', ['leader'], defs)).toBe(false);
+    // subleader (rank 5) cannot approve manager (rank 3)
+    expect(canApproveItem('manager', 'subleader', ['subleader'], defs)).toBe(false);
+    // peer manager cannot approve peer manager
+    expect(canApproveItem('manager', 'manager', ['manager'], defs)).toBe(false);
+    // areaManager (rank 2) CAN approve manager via matrix
+    expect(canApproveItem('manager', 'areaManager', [], defs)).toBe(true);
+    // admin (rank 1) CAN approve manager via matrix
+    expect(canApproveItem('manager', 'admin', [], defs)).toBe(true);
+    // owner always
+    expect(canApproveItem('manager', 'owner', [], defs)).toBe(true);
+    // staff (rank 7) cannot approve hybrid (rank 6)
+    expect(canApproveItem('hybrid', 'staff', ['staff'], defs)).toBe(false);
+    // leader (rank 4) cannot approve subleader (rank 5) — not in default matrix
+    expect(canApproveItem('subleader', 'leader', [], defs)).toBe(false);
+    // manager (rank 3) CAN approve staff (rank 7) via matrix
+    expect(canApproveItem('staff', 'manager', [], defs)).toBe(true);
+  });
+
   it('blocks areaManager from inviting owner/areaManager via elevated rules', () => {
     expect(canAssignRole('areaManager', 'owner', defs)).toBe(false);
     expect(canAssignRole('areaManager', 'areaManager', defs)).toBe(false);

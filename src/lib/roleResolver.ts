@@ -306,14 +306,15 @@ export function supervisorRolesToNotify(submitterRole: Role, defs: RoleDefinitio
 export function canApproveItem(
   submittedByRole: Role,
   approverRole: Role,
-  approverRoles: Role[],
+  _approverRoles: Role[],
   defs: RoleDefinition[],
 ): boolean {
   if (approverRole === 'owner') return true;
-  if (approverRoles.includes(approverRole)) return true;
 
   const approverDef = getRoleDef(approverRole, defs);
   if (!approverDef?.canReview) return false;
+
+  if (rankOf(approverRole, defs) >= rankOf(submittedByRole, defs)) return false;
 
   const allowed = parseApprovesSubmitterRoles(approverDef.approvesSubmitterRolesJson);
   return allowed.includes(submittedByRole);
