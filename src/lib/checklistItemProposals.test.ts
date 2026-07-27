@@ -6,10 +6,12 @@ import {
   canPublishTemplateItemProposal,
 } from './roles';
 import {
+  assignedRolesFromProposal,
   computeChecklistItemProposalMetrics,
   findSimilarChecklistItemsAndProposals,
   normalizeComparableText,
   resolveChecklistItemProposalApprovers,
+  resolveProposalAssignedRoles,
   canActorElevatedFullApprove,
   canActorFinalApprove,
   canActorFirstApprove,
@@ -33,6 +35,88 @@ function profile(partial: Partial<Profile> & Pick<Profile, 'userId' | 'role'>): 
     stores: partial.stores ?? [{ id: 'store-1', code: 'S1', name: 'Store 1', address: '', area: '', lat: 0, lng: 0, geofenceRadiusM: 0, active: true, createdAt: '', updatedAt: '' }],
   };
 }
+
+describe('proposal assigned roles', () => {
+  it('resolves multi-role, All, and legacy single role from form fields', () => {
+    expect(resolveProposalAssignedRoles({ assignedRoles: ['staff', 'hybrid'] })).toEqual([
+      'staff',
+      'hybrid',
+    ]);
+    expect(resolveProposalAssignedRoles({ assignedRoles: ['*'] })).toEqual(['*']);
+    expect(resolveProposalAssignedRoles({ assignedRole: 'leader' })).toEqual(['leader']);
+    expect(resolveProposalAssignedRoles({})).toEqual([]);
+  });
+
+  it('reads assigned roles from proposedItemJson with legacy fallback', () => {
+    const base: ChecklistItemProposal = {
+      id: 'p1',
+      templateId: 't1',
+      templateNameSnapshot: 'Daily',
+      templateVersionSnapshot: '',
+      sourceStoreId: 'store-1',
+      affectedStoreIdsJson: '[]',
+      requestedByUserId: 'u-sub',
+      requesterNameSnapshot: 'Sub',
+      requesterRoleSnapshot: 'subleader',
+      requesterStoreId: 'store-1',
+      section: 'A',
+      title: 'Item',
+      requirement: 'Req',
+      reason: 'Why',
+      proofType: 'tick',
+      assignedRole: 'staff',
+      failureCategory: 'Hygiene',
+      required: true,
+      completionTime: '',
+      sourceReportId: '',
+      supportingEvidenceJson: '',
+      proposedItemJson: '',
+      status: 'pending_first_approval',
+      firstApproverUserIdsJson: '[]',
+      firstApproverRole: 'manager',
+      firstApproverUserId: '',
+      firstApprovedAt: '',
+      firstApprovalComment: '',
+      finalApproverUserIdsJson: '[]',
+      finalApproverRole: 'areaManager',
+      finalApproverUserId: '',
+      finalApprovedAt: '',
+      finalApprovalComment: '',
+      rejectedByUserId: '',
+      rejectedAt: '',
+      rejectionReason: '',
+      publishedAt: '',
+      publishedByUserId: '',
+      resultingTemplateItemId: '',
+      similarityWarningJson: '[]',
+      duplicateOverrideReason: '',
+      createdAt: '',
+      updatedAt: '',
+    };
+
+    expect(
+      assignedRolesFromProposal({
+        ...base,
+        proposedItemJson: JSON.stringify({ assignedRoles: ['leader', 'manager'] }),
+      }),
+    ).toEqual(['leader', 'manager']);
+
+    expect(
+      assignedRolesFromProposal({
+        ...base,
+        proposedItemJson: JSON.stringify({ assignedRolesJson: '["*"]', assignedRole: '*' }),
+      }),
+    ).toEqual(['*']);
+
+    expect(
+      assignedRolesFromProposal({
+        ...base,
+        assignedRole: 'hybrid',
+        proposedItemJson: '',
+      }),
+    ).toEqual(['hybrid']);
+  });
+});
 
 describe('checklist item proposal role defaults', () => {
   it('allows subleader/leader/manager to propose and blocks staff/hybrid/viewer', () => {

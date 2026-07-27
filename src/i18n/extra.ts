@@ -540,6 +540,10 @@ export const sectionsEn = {
     addItem: 'Add item',
     proofType: 'Proof type',
     assignedRole: 'Assigned role',
+    assignedRoles: 'Assigned roles',
+    allStoreMembers: 'All store members',
+    assignedRolesRequired:
+      'Each checklist item needs at least one assigned role, or All store members.',
     failureCategory: 'Failure category',
     storesAssigned: 'Stores',
     noTemplates: 'No templates yet.',
@@ -1702,6 +1706,10 @@ export const sectionsVi = {
     addItem: 'Thêm mục',
     proofType: 'Loại minh chứng',
     assignedRole: 'Vai trò được gán',
+    assignedRoles: 'Vai trò được gán',
+    allStoreMembers: 'Tất cả thành viên cửa hàng',
+    assignedRolesRequired:
+      'Mỗi mục checklist cần ít nhất một vai trò được gán, hoặc Tất cả thành viên cửa hàng.',
     failureCategory: 'Danh mục lỗi',
     storesAssigned: 'Cửa hàng',
     noTemplates: 'Chưa có mẫu nào.',

@@ -285,6 +285,7 @@ export interface TemplateItem {
   proofType: ProofType;
   required: boolean;
   assignedRole: Role;
+  assignedRolesJson?: string;
   approverRolesJson: string;
   weight: number;
   failureCategory: string;
@@ -465,6 +466,7 @@ export interface ReportResponse {
   proofType: ProofType;
   required: boolean;
   assignedRole: Role;
+  assignedRolesJson?: string;
   approverRolesJson: string;
   weight: number;
   failureCategory: string;

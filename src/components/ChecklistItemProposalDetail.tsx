@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import {
+  assignedRolesFromProposal,
   canActorEditProposal,
   canActorElevatedFullApprove,
   canActorFinalApprove,
@@ -18,6 +19,7 @@ import {
   requestChangesChecklistItemProposal,
   submitChecklistItemProposal,
 } from '../lib/checklistItemProposals';
+import { isAllAssignedRoles } from '../lib/templatePersistence';
 import { badgeClass } from '../lib/utils';
 import type {
   ChecklistItemProposal,
@@ -50,6 +52,10 @@ export default function ChecklistItemProposalDetail({
   const events = [...((proposal.events ?? []) as ChecklistItemProposalEvent[])].sort((a, b) =>
     a.createdAt.localeCompare(b.createdAt),
   );
+  const assignedRoles = assignedRolesFromProposal(proposal);
+  const assignedRolesLabel = isAllAssignedRoles(assignedRoles)
+    ? t.templates.allStoreMembers
+    : assignedRoles.join(', ');
 
   function statusLabel(status: string): string {
     return (cp.statuses as Record<string, string>)[status] ?? status;
@@ -100,7 +106,7 @@ export default function ChecklistItemProposalDetail({
           {proposal.reason}
         </p>
         <p className="small">
-          {cp.proofType}: {proposal.proofType} · {cp.assignedRole}: {proposal.assignedRole} ·{' '}
+          {cp.proofType}: {proposal.proofType} · {t.templates.assignedRoles}: {assignedRolesLabel} ·{' '}
           {cp.failureCategory}: {proposal.failureCategory} ·{' '}
           {proposal.required ? cp.required : cp.optional}
           {proposal.completionTime ? ` · ${cp.completionTime}: ${proposal.completionTime}` : ''}

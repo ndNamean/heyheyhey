@@ -5,8 +5,10 @@ import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import { canEditMaster, failureCategoryOptions, isOwner, PROOF_TYPES } from '../lib/roles';
 import { nowIso, todayYmd } from '../lib/utils';
 import {
+  ALL_ASSIGNED_ROLES_SENTINEL,
   createTemplate,
   deleteTemplate,
+  isAllAssignedRoles,
   templateItemToDraft,
   updateTemplate,
   type TemplateItemDraft,
@@ -36,6 +38,17 @@ interface Props {
 }
 
 const WEEKDAY_ORDER = [...ALL_DAYS_OF_WEEK];
+
+const ASSIGNABLE_ROLES = [
+  'staff',
+  'hybrid',
+  'leader',
+  'subleader',
+  'manager',
+  'areaManager',
+  'admin',
+  'owner',
+] as const;
 
 function emptyScheduleForm() {
   return {
@@ -207,7 +220,7 @@ export default function TemplatesPage({ profile }: Props) {
         requirement: '',
         proofType: 'photo',
         required: true,
-        assignedRole: 'staff',
+        assignedRoles: ['staff'],
         approverRoles: ['leader', 'subleader', 'manager', 'hybrid'],
         weight: 1,
         failureCategory: 'Hygiene',
@@ -217,6 +230,26 @@ export default function TemplatesPage({ profile }: Props) {
 
   function updateItem(itemId: string, patch: Partial<TemplateItemDraft>) {
     setItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, ...patch } : i)));
+  }
+
+  function setAllStoreMembers(itemId: string, enabled: boolean) {
+    updateItem(itemId, {
+      assignedRoles: enabled ? [ALL_ASSIGNED_ROLES_SENTINEL] : ['staff'],
+    });
+  }
+
+  function toggleAssignedRole(itemId: string, role: string) {
+    setItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== itemId) return item;
+        if (isAllAssignedRoles(item.assignedRoles)) return item;
+        const has = item.assignedRoles.includes(role);
+        const assignedRoles = has
+          ? item.assignedRoles.filter((r) => r !== role)
+          : [...item.assignedRoles, role];
+        return { ...item, assignedRoles };
+      }),
+    );
   }
 
   function removeItem(itemId: string) {
@@ -358,6 +391,13 @@ export default function TemplatesPage({ profile }: Props) {
     if (saving) return;
     if (!name.trim()) return alert(t.templates.nameRequired);
     if (!items.length) return alert(t.templates.itemRequired);
+    if (
+      items.some(
+        (item) => !isAllAssignedRoles(item.assignedRoles) && item.assignedRoles.length === 0,
+      )
+    ) {
+      return alert(t.templates.assignedRolesRequired);
+    }
     setSaving(true);
     try {
       if (isEditMode) await saveEdit();
@@ -647,21 +687,6 @@ export default function TemplatesPage({ profile }: Props) {
                 ))}
               </select>
               <label>
-                {t.templates.assignedRole}
-                <select
-                  value={item.assignedRole}
-                  onChange={(e) => updateItem(item.id, { assignedRole: e.target.value })}
-                >
-                  {['staff', 'hybrid', 'leader', 'subleader', 'manager', 'areaManager', 'admin', 'owner'].map(
-                    (r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ),
-                  )}
-                </select>
-              </label>
-              <label>
                 {t.templates.failureCategory}
                 <select
                   value={item.failureCategory}
@@ -689,6 +714,37 @@ export default function TemplatesPage({ profile }: Props) {
                   )}
                 </label>
               )}
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <div className="small" style={{ marginBottom: 6 }}>
+                {t.templates.assignedRoles}
+              </div>
+              <label className="ui-checkbox-label">
+                <input
+                  type="checkbox"
+                  className="ui-checkbox"
+                  checked={isAllAssignedRoles(item.assignedRoles)}
+                  onChange={(e) => setAllStoreMembers(item.id, e.target.checked)}
+                />
+                {t.templates.allStoreMembers}
+              </label>
+              <div className="template-schedule-days" style={{ marginTop: 6 }}>
+                {ASSIGNABLE_ROLES.map((role) => {
+                  const allSelected = isAllAssignedRoles(item.assignedRoles);
+                  return (
+                    <label key={role} className="ui-checkbox-label">
+                      <input
+                        type="checkbox"
+                        className="ui-checkbox"
+                        checked={allSelected ? false : item.assignedRoles.includes(role)}
+                        disabled={allSelected}
+                        onChange={() => toggleAssignedRole(item.id, role)}
+                      />
+                      {role}
+                    </label>
+                  );
+                })}
+              </div>
             </div>
             <label className="ui-checkbox-label" style={{ marginTop: 8 }}>
               <input

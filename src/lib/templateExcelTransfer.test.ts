@@ -13,7 +13,8 @@ import {
   spreadsheetScheduleFromJson,
   validateSpreadsheetSchedule,
 } from './templateSchedule';
-import type { Template } from '../types';
+import { normalizedItemToDraft, validateImportFile } from './templateValidation';
+import type { Store, Template } from '../types';
 
 function makeMinimalWorkbook(opts: {
   scheduleEnabled?: boolean;
@@ -27,6 +28,7 @@ function makeMinimalWorkbook(opts: {
   includeCompletionTimeColumn?: boolean;
   completionTimes?: string[];
   legacyScheduleDays?: string;
+  assignedRoleCell?: string;
 }): ArrayBuffer {
   const enabled = opts.scheduleEnabled ?? false;
 
@@ -73,7 +75,7 @@ function makeMinimalWorkbook(opts: {
     'Wash thoroughly',
     'photo',
     'TRUE',
-    'staff',
+    opts.assignedRoleCell ?? 'staff',
     'leader,manager',
     '1',
     'Hygiene',
@@ -294,6 +296,245 @@ describe('parseExcelTemplateImport', () => {
   });
 });
 
+describe('parseExcelTemplateImport assigned roles', () => {
+  it('imports a legacy single Assigned Role cell', () => {
+    const root = parseExcelTemplateImport(makeMinimalWorkbook({ assignedRoleCell: 'leader' }));
+    expect(root.items[0].assignedRole).toBe('leader');
+    expect(root.items[0].assignedRoles).toEqual(['leader']);
+  });
+
+  it('imports comma-separated Assigned Role cells as multi-role', () => {
+    const root = parseExcelTemplateImport(
+      makeMinimalWorkbook({ assignedRoleCell: 'staff, hybrid, leader' }),
+    );
+    expect(root.items[0].assignedRoles).toEqual(['staff', 'hybrid', 'leader']);
+    expect(root.items[0].assignedRole).toBe('staff');
+  });
+
+  it('imports * and all as All store members', () => {
+    const star = parseExcelTemplateImport(makeMinimalWorkbook({ assignedRoleCell: '*' }));
+    expect(star.items[0].assignedRoles).toEqual(['*']);
+    expect(star.items[0].assignedRole).toBe('*');
+
+    const all = parseExcelTemplateImport(makeMinimalWorkbook({ assignedRoleCell: 'all' }));
+    expect(all.items[0].assignedRoles).toEqual(['*']);
+    expect(all.items[0].assignedRole).toBe('*');
+  });
+});
+
+function assignedRolesExportTemplate(): Template {
+  return {
+    id: 't1',
+    name: 'Export Me',
+    reportType: 'Daily Hygiene',
+    scheduleJson: JSON.stringify({ version: 2, enabled: false }),
+    active: true,
+    createdByUserId: 'u1',
+    createdAt: '',
+    updatedAt: '',
+    items: [
+      {
+        id: 'i1',
+        section: 'A',
+        title: 'Multi',
+        requirement: 'Do it',
+        proofType: 'tick',
+        required: true,
+        assignedRole: 'staff',
+        assignedRolesJson: '["staff","leader"]',
+        approverRolesJson: '["leader"]',
+        weight: 1,
+        failureCategory: 'Hygiene',
+        sortOrder: 0,
+      },
+      {
+        id: 'i2',
+        section: 'A',
+        title: 'All members',
+        requirement: 'Do it',
+        proofType: 'tick',
+        required: true,
+        assignedRole: '*',
+        assignedRolesJson: '["*"]',
+        approverRolesJson: '["leader"]',
+        weight: 1,
+        failureCategory: 'Hygiene',
+        sortOrder: 1,
+      },
+      {
+        id: 'i3',
+        section: 'A',
+        title: 'Legacy only',
+        requirement: 'Do it',
+        proofType: 'tick',
+        required: true,
+        assignedRole: 'manager',
+        approverRolesJson: '["leader"]',
+        weight: 1,
+        failureCategory: 'Hygiene',
+        sortOrder: 2,
+      },
+    ],
+    stores: [],
+  };
+}
+
+/** Mirror formatAssignedRolesCell used by Excel export. */
+function formatAssignedRolesCellForTest(roles: string[]): string {
+  return roles.includes('*') ? '*' : roles.join(',');
+}
+
+describe('buildExportPayload assigned roles', () => {
+  it('exports assignedRoles array and legacy assignedRole primary', () => {
+    const payload = buildExportPayload(assignedRolesExportTemplate());
+    expect(payload.items[0].assignedRoles).toEqual(['staff', 'leader']);
+    expect(payload.items[0].assignedRole).toBe('staff');
+    expect(payload.items[1].assignedRoles).toEqual(['*']);
+    expect(payload.items[1].assignedRole).toBe('*');
+    expect(payload.items[2].assignedRoles).toEqual(['manager']);
+    expect(payload.items[2].assignedRole).toBe('manager');
+  });
+
+  it('round-trips multi, All, and legacy assigned roles through JSON export → validate', () => {
+    const stores: Store[] = [
+      {
+        id: 's1',
+        code: 'S1',
+        name: 'Store 1',
+        address: '',
+        area: '',
+        lat: 0,
+        lng: 0,
+        geofenceRadiusM: 100,
+        active: true,
+        createdAt: '',
+        updatedAt: '',
+      },
+    ];
+    const payload = buildExportPayload(assignedRolesExportTemplate());
+    const result = validateImportFile(
+      {
+        schema: payload.schema,
+        version: payload.version,
+        template: payload.template,
+        storeCodes: ['S1'],
+        items: payload.items,
+      },
+      stores,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.normalized?.items.map((i) => i.assignedRoles)).toEqual([
+      ['staff', 'leader'],
+      ['*'],
+      ['manager'],
+    ]);
+    expect(result.normalized?.items.map((i) => i.assignedRole)).toEqual([
+      'staff',
+      '*',
+      'manager',
+    ]);
+  });
+
+  it('round-trips multi, All, and legacy assigned roles through Excel cell format → import', () => {
+    const payload = buildExportPayload(assignedRolesExportTemplate());
+    for (const item of payload.items) {
+      const cell = formatAssignedRolesCellForTest(item.assignedRoles);
+      const root = parseExcelTemplateImport(makeMinimalWorkbook({ assignedRoleCell: cell }));
+      expect(root.items[0].assignedRoles).toEqual(item.assignedRoles);
+      expect(root.items[0].assignedRole).toBe(item.assignedRole);
+    }
+  });
+});
+
+describe('validateImportFile assigned roles', () => {
+  const stores: Store[] = [
+    {
+      id: 's1',
+      code: 'S1',
+      name: 'Store 1',
+      address: '',
+      area: '',
+      lat: 0,
+      lng: 0,
+      geofenceRadiusM: 100,
+      active: true,
+      createdAt: '',
+      updatedAt: '',
+    },
+  ];
+
+  function baseRoot(item: Record<string, unknown>) {
+    return {
+      schema: TEMPLATE_SCHEMA,
+      version: TEMPLATE_VERSION,
+      template: {
+        name: 'Import',
+        reportType: 'Daily Hygiene',
+        scheduleJson: JSON.stringify({ version: 2, enabled: false }),
+        active: true,
+      },
+      storeCodes: ['S1'],
+      items: [item],
+    };
+  }
+
+  it('accepts assignedRoles array and keeps assignedRole primary on drafts', () => {
+    const result = validateImportFile(
+      baseRoot({
+        section: 'A',
+        title: 'T',
+        requirement: 'R',
+        proofType: 'tick',
+        required: true,
+        assignedRoles: ['hybrid', 'staff'],
+        approverRoles: ['leader'],
+        weight: 1,
+        failureCategory: 'Hygiene',
+        sortOrder: 0,
+      }),
+      stores,
+    );
+    expect(result.ok).toBe(true);
+    expect(result.normalized?.items[0].assignedRoles).toEqual(['hybrid', 'staff']);
+    expect(result.normalized?.items[0].assignedRole).toBe('hybrid');
+    const draft = normalizedItemToDraft(result.normalized!.items[0], 'd1');
+    expect(draft.assignedRoles).toEqual(['hybrid', 'staff']);
+  });
+
+  it('accepts legacy assignedRole and * / all sentinels', () => {
+    const legacy = validateImportFile(
+      baseRoot({
+        section: 'A',
+        title: 'T',
+        requirement: 'R',
+        proofType: 'tick',
+        required: true,
+        assignedRole: 'staff',
+        approverRoles: ['leader'],
+      }),
+      stores,
+    );
+    expect(legacy.ok).toBe(true);
+    expect(legacy.normalized?.items[0].assignedRoles).toEqual(['staff']);
+
+    const all = validateImportFile(
+      baseRoot({
+        section: 'A',
+        title: 'T',
+        requirement: 'R',
+        proofType: 'tick',
+        required: true,
+        assignedRoles: ['all'],
+        approverRoles: ['leader'],
+      }),
+      stores,
+    );
+    expect(all.ok).toBe(true);
+    expect(all.normalized?.items[0].assignedRoles).toEqual(['*']);
+    expect(all.normalized?.items[0].assignedRole).toBe('*');
+  });
+});
+
 describe('buildExportPayload completion times', () => {
   it('includes item completion times from scheduleJson', () => {
     const template: Template = {
@@ -332,6 +573,7 @@ describe('buildExportPayload completion times', () => {
     };
     const payload = buildExportPayload(template);
     expect(payload.items[0].completionTime).toBe('22:00');
+    expect(payload.items[0].assignedRoles).toEqual(['staff']);
     const fields = spreadsheetScheduleFromJson(payload.template.scheduleJson);
     expect(fields.scheduleType).toBe('Monthly');
     expect(fields.monthlyDay).toBe('Last');

@@ -95,6 +95,7 @@ const _schema = i.schema({
       proofType: i.string(),               // tick|photo|video|number|note|photo_note|photo_number|video_note
       required: i.boolean(),
       assignedRole: i.string(),
+      assignedRolesJson: i.string(),       // JSON array of role strings (or ["*"] for all)
       approverRolesJson: i.string(),       // JSON array of role strings
       weight: i.number(),
       failureCategory: i.string(),
@@ -130,6 +131,7 @@ const _schema = i.schema({
       proofType: i.string(),
       required: i.boolean(),
       assignedRole: i.string(),
+      assignedRolesJson: i.string(),       // JSON array of role strings (or ["*"] for all)
       approverRolesJson: i.string(),
       weight: i.number(),
       failureCategory: i.string(),

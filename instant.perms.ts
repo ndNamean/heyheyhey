@@ -238,7 +238,7 @@ const rules = {
       onlyResubmitFields:
         "request.modifiedFields.all(f, f in ['ticked', 'numberValue', 'note', 'status', 'rejectionReason', 'feedbackCode', 'feedbackNote', 'submittedAt', 'updatedAt', 'approvedByUserId', 'approvedAt'])",
       onlyResponseSubmitFields:
-        "request.modifiedFields.all(f, f in ['reportId', 'templateItemId', 'section', 'title', 'proofType', 'required', 'assignedRole', 'approverRolesJson', 'weight', 'failureCategory', 'ticked', 'numberValue', 'note', 'status', 'rejectionReason', 'feedbackCode', 'feedbackNote', 'submittedByUserId', 'submittedByRole', 'submittedAt', 'approvedByUserId', 'approvedAt', 'updatedAt', 'scheduleOccurrenceKey', 'scheduledDueAt', 'firstCompletedAt', 'scheduleVersionId'])",
+        "request.modifiedFields.all(f, f in ['reportId', 'templateItemId', 'section', 'title', 'proofType', 'required', 'assignedRole', 'assignedRolesJson', 'approverRolesJson', 'weight', 'failureCategory', 'ticked', 'numberValue', 'note', 'status', 'rejectionReason', 'feedbackCode', 'feedbackNote', 'submittedByUserId', 'submittedByRole', 'submittedAt', 'approvedByUserId', 'approvedAt', 'updatedAt', 'scheduleOccurrenceKey', 'scheduledDueAt', 'firstCompletedAt', 'scheduleVersionId'])",
       canResubmitCorrection: 'isResponseSubmitter && isCorrectable && onlyResubmitFields',
       canSubmitterSubmitResponse: 'isApproved && onlyResponseSubmitFields',
     },

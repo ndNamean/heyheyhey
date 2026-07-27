@@ -1,5 +1,10 @@
 import type { Store, Template, TemplateItem } from '../types';
 import { completionTimeForItem } from './templateSchedule';
+import {
+  parseAssignedRoles,
+  parseApproverRoles,
+  toAssignedRolePrimary,
+} from './templatePersistence';
 
 export const TEMPLATE_SCHEMA = 'hey-pelo.checklist-template' as const;
 export const TEMPLATE_VERSION = 1 as const;
@@ -27,25 +32,16 @@ export interface ExportedChecklistItem {
   requirement: string;
   proofType: string;
   required: boolean;
+  /** Primary/legacy single role (`*` when All store members). */
   assignedRole: string;
+  /** Full assignee list; `["*"]` means All store members. */
+  assignedRoles: string[];
   approverRoles: string[];
   weight: number;
   failureCategory: string;
   sortOrder: number;
   /** HH:mm completion deadline when template schedule is enabled */
   completionTime?: string;
-}
-
-const DEFAULT_APPROVER_ROLES = ['leader', 'subleader', 'manager', 'hybrid'];
-
-function parseApproverRolesArray(json: string | undefined): string[] {
-  if (!json?.trim()) return [...DEFAULT_APPROVER_ROLES];
-  try {
-    const parsed = JSON.parse(json);
-    return Array.isArray(parsed) && parsed.length ? parsed : [...DEFAULT_APPROVER_ROLES];
-  } catch {
-    return [...DEFAULT_APPROVER_ROLES];
-  }
 }
 
 export function slugifyTemplateName(name: string): string {
@@ -85,6 +81,7 @@ export function buildExportPayload(template: Template): ChecklistTemplateExport 
     storeCodes,
     items: templateItems.map((item) => {
       const completionTime = completionTimeForItem(template.scheduleJson, item.id);
+      const assignedRoles = parseAssignedRoles(item.assignedRolesJson, item.assignedRole);
       return {
         sourceItemId: item.id,
         section: item.section,
@@ -92,8 +89,9 @@ export function buildExportPayload(template: Template): ChecklistTemplateExport 
         requirement: item.requirement,
         proofType: item.proofType,
         required: item.required,
-        assignedRole: item.assignedRole,
-        approverRoles: parseApproverRolesArray(item.approverRolesJson),
+        assignedRole: toAssignedRolePrimary(assignedRoles),
+        assignedRoles,
+        approverRoles: parseApproverRoles(item.approverRolesJson),
         weight: item.weight,
         failureCategory: item.failureCategory,
         sortOrder: item.sortOrder ?? 0,

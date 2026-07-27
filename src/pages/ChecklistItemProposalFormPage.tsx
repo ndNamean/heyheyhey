@@ -15,6 +15,10 @@ import {
   findSimilarChecklistItemsAndProposals,
   type ProposalItemFields,
 } from '../lib/checklistItemProposals';
+import {
+  ALL_ASSIGNED_ROLES_SENTINEL,
+  isAllAssignedRoles,
+} from '../lib/templatePersistence';
 import { parseTemplateSchedule } from '../lib/templateSchedule';
 import type { ChecklistItemProposal, Profile, Store, Template, TemplateItem } from '../types';
 
@@ -71,7 +75,7 @@ export default function ChecklistItemProposalFormPage({
   const [requirement, setRequirement] = useState('');
   const [reason, setReason] = useState('');
   const [proofType, setProofType] = useState<string>(PROOF_TYPES[0]);
-  const [assignedRole, setAssignedRole] = useState('staff');
+  const [assignedRoles, setAssignedRoles] = useState<string[]>(['staff']);
   const [failureCategory, setFailureCategory] = useState<string>(FAILURE_CATEGORIES[0]);
   const [required, setRequired] = useState(true);
   const [completionTime, setCompletionTime] = useState('09:00');
@@ -116,7 +120,7 @@ export default function ChecklistItemProposalFormPage({
       requirement,
       reason,
       proofType,
-      assignedRole,
+      assignedRoles,
       failureCategory,
       required,
       completionTime: scheduleEnabled ? completionTime : '',
@@ -124,6 +128,27 @@ export default function ChecklistItemProposalFormPage({
       sourceReportId: prefill?.sourceReportId ?? '',
       duplicateOverrideReason,
     };
+  }
+
+  function setAllStoreMembers(checked: boolean) {
+    if (checked) {
+      setAssignedRoles([ALL_ASSIGNED_ROLES_SENTINEL]);
+      return;
+    }
+    setAssignedRoles((prev) =>
+      isAllAssignedRoles(prev) || !prev.length ? ['staff'] : prev,
+    );
+  }
+
+  function toggleAssignedRole(role: string, checked: boolean) {
+    setAssignedRoles((prev) => {
+      const withoutAll = prev.filter((r) => r !== ALL_ASSIGNED_ROLES_SENTINEL);
+      if (checked) {
+        return withoutAll.includes(role) ? withoutAll : [...withoutAll, role];
+      }
+      const next = withoutAll.filter((r) => r !== role);
+      return next.length ? next : ['staff'];
+    });
   }
 
   async function save(submitNow: boolean) {
@@ -213,28 +238,53 @@ export default function ChecklistItemProposalFormPage({
           <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} />
         </label>
 
-        <div className="grid two">
-          <label>
-            {cp.proofType}
-            <select value={proofType} onChange={(e) => setProofType(e.target.value)}>
-              {PROOF_TYPES.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
+        <label>
+          {cp.proofType}
+          <select value={proofType} onChange={(e) => setProofType(e.target.value)}>
+            {PROOF_TYPES.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <fieldset style={{ border: 'none', padding: 0, margin: '12px 0 0' }}>
+          <legend style={{ fontWeight: 600, marginBottom: 6 }}>
+            {t.templates.assignedRoles}
+          </legend>
+          <label className="ui-checkbox-label">
+            <input
+              type="checkbox"
+              className="ui-checkbox"
+              checked={isAllAssignedRoles(assignedRoles)}
+              onChange={(e) => setAllStoreMembers(e.target.checked)}
+            />
+            {t.templates.allStoreMembers}
           </label>
-          <label>
-            {cp.assignedRole}
-            <select value={assignedRole} onChange={(e) => setAssignedRole(e.target.value)}>
-              {roles.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+          <div
+            className="grid two"
+            style={{
+              marginTop: 8,
+              opacity: isAllAssignedRoles(assignedRoles) ? 0.5 : 1,
+              pointerEvents: isAllAssignedRoles(assignedRoles) ? 'none' : 'auto',
+            }}
+          >
+            {roles.map((r) => (
+              <label key={r} className="ui-checkbox-label">
+                <input
+                  type="checkbox"
+                  className="ui-checkbox"
+                  checked={
+                    !isAllAssignedRoles(assignedRoles) && assignedRoles.includes(r)
+                  }
+                  onChange={(e) => toggleAssignedRole(r, e.target.checked)}
+                />
+                {r}
+              </label>
+            ))}
+          </div>
+        </fieldset>
 
         <div className="grid two">
           <label>

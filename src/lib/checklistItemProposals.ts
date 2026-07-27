@@ -10,7 +10,12 @@ import {
   normalizeFailureCategory,
   userCanAccessStore,
 } from './roles';
-import { itemPayload, type TemplateItemDraft } from './templatePersistence';
+import {
+  itemPayload,
+  parseAssignedRoles,
+  toAssignedRolePrimary,
+  type TemplateItemDraft,
+} from './templatePersistence';
 import {
   parseTemplateSchedule,
   serializeTemplateSchedule,
@@ -63,13 +68,75 @@ export interface ProposalItemFields {
   requirement: string;
   reason: string;
   proofType: string;
-  assignedRole: string;
+  /** Legacy single role; used when `assignedRoles` is absent. */
+  assignedRole?: string;
+  /** Preferred multi-role assignees; use `['*']` for all store members. */
+  assignedRoles?: string[];
   failureCategory: string;
   required: boolean;
   completionTime: string;
   supportingEvidenceJson?: string;
   sourceReportId?: string;
   duplicateOverrideReason?: string;
+}
+
+/** Normalize proposal fields to an assigned-roles array (multi or All). */
+export function resolveProposalAssignedRoles(
+  fields: Pick<ProposalItemFields, 'assignedRole' | 'assignedRoles'>,
+): string[] {
+  if (Array.isArray(fields.assignedRoles) && fields.assignedRoles.length) {
+    return fields.assignedRoles.map(String);
+  }
+  if (fields.assignedRole?.trim()) return [fields.assignedRole.trim()];
+  return [];
+}
+
+/**
+ * Read assigned roles from a stored proposal (proposedItemJson preferred, else legacy assignedRole).
+ */
+export function assignedRolesFromProposal(proposal: ChecklistItemProposal): string[] {
+  try {
+    const parsed = JSON.parse(proposal.proposedItemJson || '{}') as {
+      assignedRoles?: unknown;
+      assignedRolesJson?: unknown;
+      assignedRole?: unknown;
+    };
+    if (Array.isArray(parsed.assignedRoles) && parsed.assignedRoles.length) {
+      return parsed.assignedRoles.map(String);
+    }
+    if (typeof parsed.assignedRolesJson === 'string') {
+      return parseAssignedRoles(
+        parsed.assignedRolesJson,
+        typeof parsed.assignedRole === 'string' ? parsed.assignedRole : proposal.assignedRole,
+      );
+    }
+    if (typeof parsed.assignedRole === 'string' && parsed.assignedRole.trim()) {
+      return parseAssignedRoles(undefined, parsed.assignedRole);
+    }
+  } catch {
+    // fall through
+  }
+  return parseAssignedRoles(undefined, proposal.assignedRole);
+}
+
+function proposedItemSnapshot(
+  fields: ProposalItemFields,
+  assignedRoles: string[],
+  failureCategory: string,
+) {
+  const assignedRole = toAssignedRolePrimary(assignedRoles);
+  return {
+    section: fields.section.trim(),
+    title: fields.title.trim(),
+    requirement: fields.requirement.trim(),
+    proofType: fields.proofType,
+    required: fields.required,
+    assignedRole,
+    assignedRoles,
+    assignedRolesJson: JSON.stringify(assignedRoles),
+    failureCategory,
+    completionTime: fields.completionTime.trim(),
+  };
 }
 
 function approvedProfiles(profiles: Profile[]): Profile[] {
@@ -239,7 +306,10 @@ export function validateProposalItemFields(
   if (!fields.requirement.trim()) throw new Error('Requirement is required.');
   if (!fields.reason.trim()) throw new Error('Reason is required.');
   if (!fields.proofType.trim()) throw new Error('Proof type is required.');
-  if (!fields.assignedRole.trim()) throw new Error('Assigned role is required.');
+  const assignedRoles = resolveProposalAssignedRoles(fields);
+  if (!assignedRoles.length) {
+    throw new Error('At least one assigned role or All store members is required.');
+  }
   if (!fields.failureCategory.trim()) throw new Error('Failure category is required.');
   if (scheduleEnabled && !fields.completionTime.trim()) {
     throw new Error('Completion time is required when the template schedule is enabled.');
@@ -446,16 +516,8 @@ export async function createChecklistItemProposal(
   const now = nowIso();
   const status: ChecklistItemProposalStatus = submitNow ? 'pending_first_approval' : 'draft';
   const failureCategory = normalizeFailureCategory(fields.failureCategory);
-  const proposedItem = {
-    section: fields.section.trim(),
-    title: fields.title.trim(),
-    requirement: fields.requirement.trim(),
-    proofType: fields.proofType,
-    required: fields.required,
-    assignedRole: fields.assignedRole,
-    failureCategory,
-    completionTime: fields.completionTime.trim(),
-  };
+  const assignedRoles = resolveProposalAssignedRoles(fields);
+  const proposedItem = proposedItemSnapshot(fields, assignedRoles, failureCategory);
 
   const txs: unknown[] = [
     db.tx.checklistItemProposals[proposalId]
@@ -582,6 +644,7 @@ export async function submitChecklistItemProposal(params: {
     reason: proposal.reason,
     proofType: proposal.proofType,
     assignedRole: proposal.assignedRole,
+    assignedRoles: assignedRolesFromProposal(proposal),
     failureCategory: proposal.failureCategory,
     required: proposal.required,
     completionTime: proposal.completionTime,
@@ -615,29 +678,23 @@ export async function submitChecklistItemProposal(params: {
   const toStatus: ChecklistItemProposalStatus = 'pending_first_approval';
   const now = nowIso();
   const wasChanges = fromStatus === 'changes_requested';
+  const failureCategory = normalizeFailureCategory(nextFields.failureCategory);
+  const assignedRoles = resolveProposalAssignedRoles(nextFields);
+  const proposedItem = proposedItemSnapshot(nextFields, assignedRoles, failureCategory);
 
   await transactAll([
     db.tx.checklistItemProposals[proposal.id].update({
-      section: nextFields.section.trim(),
-      title: nextFields.title.trim(),
-      requirement: nextFields.requirement.trim(),
+      section: proposedItem.section,
+      title: proposedItem.title,
+      requirement: proposedItem.requirement,
       reason: nextFields.reason.trim(),
-      proofType: nextFields.proofType,
-      assignedRole: nextFields.assignedRole,
-      failureCategory: normalizeFailureCategory(nextFields.failureCategory),
-      required: nextFields.required,
-      completionTime: nextFields.completionTime.trim(),
+      proofType: proposedItem.proofType,
+      assignedRole: proposedItem.assignedRole,
+      failureCategory: proposedItem.failureCategory,
+      required: proposedItem.required,
+      completionTime: proposedItem.completionTime,
       supportingEvidenceJson: nextFields.supportingEvidenceJson?.trim() || '',
-      proposedItemJson: JSON.stringify({
-        section: nextFields.section.trim(),
-        title: nextFields.title.trim(),
-        requirement: nextFields.requirement.trim(),
-        proofType: nextFields.proofType,
-        required: nextFields.required,
-        assignedRole: nextFields.assignedRole,
-        failureCategory: normalizeFailureCategory(nextFields.failureCategory),
-        completionTime: nextFields.completionTime.trim(),
-      }),
+      proposedItemJson: JSON.stringify(proposedItem),
       status: toStatus,
       firstApproverUserIdsJson: JSON.stringify(routing.firstApproverUserIds),
       firstApproverRole: routing.firstApproverRole,
@@ -1077,7 +1134,7 @@ export async function publishApprovedChecklistItemProposal(params: {
     requirement: proposal.requirement,
     proofType: proposal.proofType,
     required: proposal.required,
-    assignedRole: proposal.assignedRole,
+    assignedRoles: assignedRolesFromProposal(proposal),
     approverRoles: ['leader', 'subleader', 'manager'],
     weight: 1,
     failureCategory: normalizeFailureCategory(proposal.failureCategory),

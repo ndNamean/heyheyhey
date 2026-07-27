@@ -6,7 +6,12 @@ import {
   type ExportedChecklistItem,
   type ParsedImportRoot,
 } from './templateTransfer';
-import type { TemplateItemDraft } from './templatePersistence';
+import {
+  ALL_ASSIGNED_ROLES_SENTINEL,
+  isAllAssignedRoles,
+  toAssignedRolePrimary,
+  type TemplateItemDraft,
+} from './templatePersistence';
 import { isValidDueTime } from './templateSchedule';
 
 export type ValidationSeverity = 'error' | 'warning';
@@ -27,7 +32,10 @@ export interface NormalizedImportItem {
   requirement: string;
   proofType: string;
   required: boolean;
+  /** Primary/legacy single role (`*` when All store members). */
   assignedRole: string;
+  /** Full assignee list; `["*"]` means All store members. */
+  assignedRoles: string[];
   approverRoles: string[];
   weight: number;
   failureCategory: string;
@@ -65,6 +73,17 @@ export interface ValidateImportOptions {
 const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 const PROOF_TYPE_SET = new Set<string>(PROOF_TYPES);
 const ROLE_SET = new Set<string>(ROLES);
+
+/** Normalize a role token; accepts `*` / `all` as All store members. */
+function normalizeAssignedRoleToken(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (trimmed === ALL_ASSIGNED_ROLES_SENTINEL || trimmed.toLowerCase() === 'all') {
+    return ALL_ASSIGNED_ROLES_SENTINEL;
+  }
+  if (ROLE_SET.has(trimmed)) return trimmed;
+  return null;
+}
 
 function pushIssue(
   issues: ValidationIssue[],
@@ -226,17 +245,89 @@ function validateItem(
     return null;
   }
 
-  const assignedRole = readString(raw, 'assignedRole', `items[${index}].assignedRole`, errors);
-  if (assignedRole && !ROLE_SET.has(assignedRole)) {
+  let assignedRoles: string[] = [];
+  const hasAssignedRoles = 'assignedRoles' in raw;
+  const hasAssignedRole = 'assignedRole' in raw;
+
+  if (hasAssignedRoles) {
+    if (!Array.isArray(raw.assignedRoles)) {
+      pushIssue(
+        errors,
+        `items[${index}].assignedRoles`,
+        'assignedRoles must be an array.',
+        'error',
+        index,
+      );
+      return null;
+    }
+    const seenRoles = new Set<string>();
+    for (let r = 0; r < raw.assignedRoles.length; r++) {
+      const entry = raw.assignedRoles[r];
+      if (typeof entry !== 'string') {
+        pushIssue(
+          errors,
+          `items[${index}].assignedRoles[${r}]`,
+          `Invalid assigned role "${String(entry)}".`,
+          'error',
+          index,
+        );
+        return null;
+      }
+      const normalized = normalizeAssignedRoleToken(entry);
+      if (!normalized) {
+        pushIssue(
+          errors,
+          `items[${index}].assignedRoles[${r}]`,
+          `Invalid assigned role "${entry}".`,
+          'error',
+          index,
+        );
+        return null;
+      }
+      if (!seenRoles.has(normalized)) {
+        seenRoles.add(normalized);
+        assignedRoles.push(normalized);
+      }
+    }
+  }
+
+  if (!assignedRoles.length && hasAssignedRole) {
+    if (typeof raw.assignedRole !== 'string') {
+      pushIssue(errors, `items[${index}].assignedRole`, 'assignedRole must be a string.', 'error', index);
+      return null;
+    }
+    if (raw.assignedRole.trim()) {
+      const normalized = normalizeAssignedRoleToken(raw.assignedRole);
+      if (!normalized) {
+        pushIssue(
+          errors,
+          `items[${index}].assignedRole`,
+          `Invalid assigned role "${raw.assignedRole}".`,
+          'error',
+          index,
+        );
+        return null;
+      }
+      assignedRoles = [normalized];
+    }
+  }
+
+  if (!assignedRoles.length) {
     pushIssue(
       errors,
-      `items[${index}].assignedRole`,
-      `Invalid assigned role "${assignedRole}".`,
+      hasAssignedRoles ? `items[${index}].assignedRoles` : `items[${index}].assignedRole`,
+      'At least one assigned role is required (or "*" / "all" for All store members).',
       'error',
       index,
     );
     return null;
   }
+
+  if (isAllAssignedRoles(assignedRoles)) {
+    assignedRoles = [ALL_ASSIGNED_ROLES_SENTINEL];
+  }
+
+  const assignedRole = toAssignedRolePrimary(assignedRoles);
 
   if (typeof raw.required !== 'boolean') {
     pushIssue(errors, `items[${index}].required`, 'required must be a boolean.', 'error', index);
@@ -315,7 +406,7 @@ function validateItem(
     sourceItemId = raw.sourceItemId.trim();
   }
 
-  if (!section || !title || !requirement || !proofType || !assignedRole) return null;
+  if (!section || !title || !requirement || !proofType) return null;
 
   let completionTime: string | undefined;
   if ('completionTime' in raw && raw.completionTime != null && raw.completionTime !== '') {
@@ -340,6 +431,7 @@ function validateItem(
     proofType,
     required: raw.required,
     assignedRole,
+    assignedRoles,
     approverRoles,
     weight,
     failureCategory,
@@ -475,7 +567,7 @@ export function normalizedItemToDraft(item: NormalizedImportItem, draftId: strin
     requirement: item.requirement,
     proofType: item.proofType,
     required: item.required,
-    assignedRole: item.assignedRole,
+    assignedRoles: [...item.assignedRoles],
     approverRoles: [...item.approverRoles],
     weight: item.weight,
     failureCategory: item.failureCategory,

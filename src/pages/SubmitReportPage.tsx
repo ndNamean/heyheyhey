@@ -22,6 +22,11 @@ import {
   parseTemplateSchedule,
   resolveActiveScheduleVersion,
 } from '../lib/templateSchedule';
+import {
+  itemVisibleToRole,
+  parseAssignedRoles,
+  toAssignedRolePrimary,
+} from '../lib/templatePersistence';
 import { BACK_PRIORITY, useNativeBack } from '../lib/nativeBack';
 import TimemarkCamera from '../components/TimemarkCamera';
 import type {
@@ -139,7 +144,7 @@ export default function SubmitReportPage({
 
     const roleFiltered = seesAllTemplateItems(profile.role, defs)
       ? sorted
-      : sorted.filter((i) => i.assignedRole === profile.role);
+      : sorted.filter((i) => itemVisibleToRole(i, profile.role));
 
     if (!pinnedItemIds) return roleFiltered;
     const pinned = new Set(pinnedItemIds);
@@ -163,7 +168,7 @@ export default function SubmitReportPage({
       const sorted = [...items].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
       const roleFiltered = seesAllTemplateItems(profile.role, defs)
         ? sorted
-        : sorted.filter((i) => i.assignedRole === profile.role);
+        : sorted.filter((i) => itemVisibleToRole(i, profile.role));
       return roleFiltered.map((i) => i.id);
     });
   }, [templateId, selectedTemplate, correctionMode, profile.role, defs]);
@@ -364,6 +369,7 @@ export default function SubmitReportPage({
 
       const responseItems = visibleItems.map((item) => {
         const r = responses[item.id] ?? EMPTY_RESPONSE;
+        const assignedRoles = parseAssignedRoles(item.assignedRolesJson, item.assignedRole);
         const base = {
           id: id(),
           templateItemId: item.id,
@@ -371,7 +377,8 @@ export default function SubmitReportPage({
           title: item.title,
           proofType: item.proofType,
           required: item.required,
-          assignedRole: item.assignedRole,
+          assignedRole: toAssignedRolePrimary(assignedRoles),
+          assignedRolesJson: JSON.stringify(assignedRoles),
           approverRolesJson: item.approverRolesJson,
           weight: item.weight,
           failureCategory: item.failureCategory,
@@ -461,6 +468,7 @@ export default function SubmitReportPage({
             proofType: resp.proofType,
             required: resp.required,
             assignedRole: resp.assignedRole,
+            assignedRolesJson: resp.assignedRolesJson,
             approverRolesJson: resp.approverRolesJson,
             weight: resp.weight,
             failureCategory: resp.failureCategory,

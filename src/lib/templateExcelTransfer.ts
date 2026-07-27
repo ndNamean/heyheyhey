@@ -18,6 +18,11 @@ import {
   type ExportedChecklistItem,
   type ParsedImportRoot,
 } from './templateTransfer';
+import {
+  ALL_ASSIGNED_ROLES_SENTINEL,
+  isAllAssignedRoles,
+  toAssignedRolePrimary,
+} from './templatePersistence';
 import type { Store, Template } from '../types';
 
 const SHEET_README = 'README';
@@ -187,6 +192,29 @@ function buildTemplateRows(payload: ChecklistTemplateExport): string[][] {
   ];
 }
 
+function formatAssignedRolesCell(roles: string[]): string {
+  if (isAllAssignedRoles(roles)) return ALL_ASSIGNED_ROLES_SENTINEL;
+  return roles.join(',');
+}
+
+/** Parse Assigned Role cell: comma-separated roles, or `*` / `all` for All store members. */
+function parseAssignedRolesCell(raw: string): string[] {
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+  const lower = trimmed.toLowerCase();
+  if (lower === ALL_ASSIGNED_ROLES_SENTINEL || lower === 'all') {
+    return [ALL_ASSIGNED_ROLES_SENTINEL];
+  }
+  const parts = trimmed
+    .split(',')
+    .map((role) => role.trim())
+    .filter(Boolean);
+  if (parts.some((p) => p === ALL_ASSIGNED_ROLES_SENTINEL || p.toLowerCase() === 'all')) {
+    return [ALL_ASSIGNED_ROLES_SENTINEL];
+  }
+  return parts;
+}
+
 function buildItemsRows(items: ExportedChecklistItem[]): string[][] {
   const rows: string[][] = [ITEM_HEADERS.slice()];
   for (const item of items) {
@@ -198,7 +226,7 @@ function buildItemsRows(items: ExportedChecklistItem[]): string[][] {
       item.requirement,
       item.proofType,
       booleanToSpreadsheet(item.required),
-      item.assignedRole,
+      formatAssignedRolesCell(item.assignedRoles),
       item.approverRoles.join(','),
       String(item.weight),
       item.failureCategory,
@@ -226,6 +254,8 @@ function buildAllowedValuesRows(reportTypes: string[]): string[][] {
   const rows: string[][] = [['Category', 'Value']];
   for (const p of PROOF_TYPES) rows.push(['Proof Type', p]);
   for (const r of ROLES) rows.push(['Role', r]);
+  rows.push(['Role', ALL_ASSIGNED_ROLES_SENTINEL]);
+  rows.push(['Role', 'all']);
   rows.push(['Boolean', 'TRUE']);
   rows.push(['Boolean', 'FALSE']);
   for (const rt of reportTypes) rows.push(['Report Type', rt]);
@@ -490,6 +520,9 @@ export function parseExcelTemplateImport(buffer: ArrayBuffer): ParsedImportRoot 
     const weight = parseInteger(row[9] ?? '', SHEET_ITEMS, rowNum, 'Weight', errors);
     const sortOrder = parseInteger(row[11] ?? '', SHEET_ITEMS, rowNum, 'Sort Order', errors);
 
+    const assignedRoles = parseAssignedRolesCell(row[7] ?? '');
+    const assignedRole = assignedRoles.length ? toAssignedRolePrimary(assignedRoles) : '';
+
     const approverRoles = (row[8] ?? '')
       .split(',')
       .map((role) => role.trim())
@@ -519,7 +552,8 @@ export function parseExcelTemplateImport(buffer: ArrayBuffer): ParsedImportRoot 
         requirement: requirement.trim(),
         proofType: row[5] ?? '',
         required: requiredResult.value,
-        assignedRole: row[7] ?? '',
+        assignedRole,
+        assignedRoles,
         approverRoles,
         weight,
         failureCategory: row[10] ?? '',

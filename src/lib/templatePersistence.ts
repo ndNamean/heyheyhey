@@ -36,13 +36,17 @@ export interface TemplateItemDraft {
   requirement: string;
   proofType: string;
   required: boolean;
-  assignedRole: string;
+  assignedRoles: string[];
   approverRoles: string[];
   weight: number;
   failureCategory: string;
 }
 
 const DEFAULT_APPROVER_ROLES = ['leader', 'subleader', 'manager', 'hybrid'];
+const DEFAULT_ASSIGNED_ROLE = 'staff';
+
+/** Sentinel role meaning the item is visible to every store-member role. */
+export const ALL_ASSIGNED_ROLES_SENTINEL = '*';
 
 export function parseApproverRoles(json: string | undefined): string[] {
   if (!json?.trim()) return [...DEFAULT_APPROVER_ROLES];
@@ -54,6 +58,64 @@ export function parseApproverRoles(json: string | undefined): string[] {
   }
 }
 
+/**
+ * Read assigned roles from JSON (preferred) or legacy single `assignedRole`.
+ * Empty / invalid JSON falls back to `[assignedRole]` when set, else `['staff']`.
+ */
+export function parseAssignedRoles(
+  assignedRolesJson: string | undefined,
+  assignedRole?: string | null,
+): string[] {
+  if (assignedRolesJson?.trim()) {
+    try {
+      const parsed = JSON.parse(assignedRolesJson);
+      if (Array.isArray(parsed) && parsed.length) {
+        return parsed.map(String);
+      }
+    } catch {
+      // fall through to legacy
+    }
+  }
+  if (assignedRole?.trim()) return [assignedRole.trim()];
+  return [DEFAULT_ASSIGNED_ROLE];
+}
+
+export function isAllAssignedRoles(roles: string[]): boolean {
+  return roles.includes(ALL_ASSIGNED_ROLES_SENTINEL);
+}
+
+type AssignedRolesSource =
+  | string[]
+  | {
+      assignedRolesJson?: string | null;
+      assignedRole?: string | null;
+      assignedRoles?: string[];
+    };
+
+function resolveAssignedRoles(rolesOrItem: AssignedRolesSource): string[] {
+  if (Array.isArray(rolesOrItem)) return rolesOrItem;
+  if (Array.isArray(rolesOrItem.assignedRoles) && rolesOrItem.assignedRoles.length) {
+    return rolesOrItem.assignedRoles;
+  }
+  return parseAssignedRoles(
+    rolesOrItem.assignedRolesJson ?? undefined,
+    rolesOrItem.assignedRole,
+  );
+}
+
+/** True when the role may see the item (`*` or explicit membership). */
+export function itemVisibleToRole(rolesOrItem: AssignedRolesSource, role: string): boolean {
+  const roles = resolveAssignedRoles(rolesOrItem);
+  return isAllAssignedRoles(roles) || roles.includes(role);
+}
+
+/** Primary/legacy single role for writers: `*` when All, else first role or `staff`. */
+export function toAssignedRolePrimary(roles: string[]): string {
+  if (isAllAssignedRoles(roles)) return ALL_ASSIGNED_ROLES_SENTINEL;
+  const first = roles.find((r) => r.trim());
+  return first?.trim() || DEFAULT_ASSIGNED_ROLE;
+}
+
 export function templateItemToDraft(item: TemplateItem): TemplateItemDraft {
   return {
     id: item.id,
@@ -62,7 +124,7 @@ export function templateItemToDraft(item: TemplateItem): TemplateItemDraft {
     requirement: item.requirement,
     proofType: item.proofType,
     required: item.required,
-    assignedRole: item.assignedRole,
+    assignedRoles: parseAssignedRoles(item.assignedRolesJson, item.assignedRole),
     approverRoles: parseApproverRoles(item.approverRolesJson),
     weight: item.weight,
     failureCategory: normalizeFailureCategory(item.failureCategory),
@@ -70,13 +132,17 @@ export function templateItemToDraft(item: TemplateItem): TemplateItemDraft {
 }
 
 export function itemPayload(item: TemplateItemDraft, sortOrder: number) {
+  const assignedRoles = item.assignedRoles.length
+    ? item.assignedRoles
+    : [DEFAULT_ASSIGNED_ROLE];
   return {
     section: item.section,
     title: item.title,
     requirement: item.requirement,
     proofType: item.proofType,
     required: item.required,
-    assignedRole: item.assignedRole,
+    assignedRole: toAssignedRolePrimary(assignedRoles),
+    assignedRolesJson: JSON.stringify(assignedRoles),
     approverRolesJson: JSON.stringify(item.approverRoles),
     weight: item.weight,
     failureCategory: item.failureCategory,
