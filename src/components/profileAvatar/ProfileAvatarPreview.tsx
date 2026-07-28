@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { BACK_PRIORITY, useNativeBack } from '../../lib/nativeBack';
 import type { Profile } from '../../types';
@@ -7,6 +8,11 @@ import ProfileAvatar from './ProfileAvatar';
 interface Props {
   profile: Pick<Profile, 'displayName' | 'email' | 'avatarUrl'>;
   size?: number;
+  previewEnabled?: boolean;
+  desktopHoverPreview?: boolean;
+  mobileTapPreview?: boolean;
+  onTriggerClick?: (event: MouseEvent<HTMLButtonElement>) => void;
+  className?: string;
 }
 
 type Placement = {
@@ -89,7 +95,15 @@ function getPlacement(anchorRect: DOMRect): Placement {
   };
 }
 
-export default function ProfileAvatarPreview({ profile, size = 34 }: Props) {
+export default function ProfileAvatarPreview({
+  profile,
+  size = 34,
+  previewEnabled = false,
+  desktopHoverPreview = true,
+  mobileTapPreview = true,
+  onTriggerClick,
+  className,
+}: Props) {
   const previewId = useMemo(() => `profile-avatar-preview-${++idCounter}`, []);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -105,7 +119,7 @@ export default function ProfileAvatarPreview({ profile, size = 34 }: Props) {
 
   const avatarUrl = profile.avatarUrl?.trim() || '';
   const hasAvatar = !!avatarUrl;
-  const previewDisabled = !hasAvatar || !!failedUrls[avatarUrl];
+  const previewDisabled = !previewEnabled || !hasAvatar || !!failedUrls[avatarUrl];
   const effectiveProfile = previewDisabled ? { ...profile, avatarUrl: '' } : profile;
   const name = getName(profile);
   const triggerLabel = `View profile photo for ${name}`;
@@ -172,6 +186,21 @@ export default function ProfileAvatarPreview({ profile, size = 34 }: Props) {
   }, [isDesktopOpen, isMobileOpen]);
 
   useEffect(() => {
+    if (!isDesktopOpen && !isMobileOpen) return;
+    const close = () => {
+      setIsDesktopOpen(false);
+      setIsMobileOpen(false);
+      if (activePreviewId === previewId) activePreviewId = null;
+    };
+    window.addEventListener('popstate', close);
+    window.addEventListener('hashchange', close);
+    return () => {
+      window.removeEventListener('popstate', close);
+      window.removeEventListener('hashchange', close);
+    };
+  }, [isDesktopOpen, isMobileOpen, previewId]);
+
+  useEffect(() => {
     return () => {
       if (openTimerRef.current) window.clearTimeout(openTimerRef.current);
       if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current);
@@ -180,8 +209,7 @@ export default function ProfileAvatarPreview({ profile, size = 34 }: Props) {
 
   useEffect(() => {
     if (!isMobileOpen) return;
-    const focusTarget = modalRef.current?.querySelector<HTMLElement>('[data-close-button]');
-    focusTarget?.focus();
+    modalRef.current?.focus();
   }, [isMobileOpen]);
 
   useEffect(() => {
@@ -256,6 +284,13 @@ export default function ProfileAvatarPreview({ profile, size = 34 }: Props) {
     restoreFocusRef.current = true;
   }
 
+  function closeAllPreviews() {
+    clearTimers();
+    setIsDesktopOpen(false);
+    setIsMobileOpen(false);
+    if (activePreviewId === previewId) activePreviewId = null;
+  }
+
   function onPreviewImageError() {
     if (!avatarUrl) return;
     setFailedUrls((prev) => (prev[avatarUrl] ? prev : { ...prev, [avatarUrl]: true }));
@@ -309,6 +344,11 @@ export default function ProfileAvatarPreview({ profile, size = 34 }: Props) {
           aria-label={imageAlt}
           tabIndex={-1}
           onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              closeMobile();
+              return;
+            }
             if (event.key !== 'Tab') return;
             const roots = modalRef.current;
             if (!roots) return;
@@ -328,14 +368,6 @@ export default function ProfileAvatarPreview({ profile, size = 34 }: Props) {
             }
           }}
         >
-          <button
-            type="button"
-            className="secondary profile-avatar-preview-close"
-            onClick={closeMobile}
-            data-close-button
-          >
-            Close
-          </button>
           <div className="profile-avatar-preview-modal-image-wrap">
             <img src={avatarUrl} alt={imageAlt} onError={onPreviewImageError} />
           </div>
@@ -350,15 +382,27 @@ export default function ProfileAvatarPreview({ profile, size = 34 }: Props) {
       <button
         type="button"
         ref={triggerRef}
-        className="profile-avatar-preview-trigger"
+        className={className ? `profile-avatar-preview-trigger ${className}` : 'profile-avatar-preview-trigger'}
         aria-label={triggerLabel}
         aria-haspopup={isDesktopFinePointer ? 'true' : 'dialog'}
         aria-expanded={anyOpen}
-        onMouseEnter={isDesktopFinePointer ? queueOpenDesktop : undefined}
-        onMouseLeave={isDesktopFinePointer ? queueCloseDesktop : undefined}
-        onFocus={isDesktopFinePointer ? queueOpenDesktop : undefined}
+        onMouseEnter={
+          isDesktopFinePointer && desktopHoverPreview
+            ? queueOpenDesktop
+            : undefined
+        }
+        onMouseLeave={
+          isDesktopFinePointer && desktopHoverPreview
+            ? queueCloseDesktop
+            : undefined
+        }
+        onFocus={
+          isDesktopFinePointer && desktopHoverPreview
+            ? queueOpenDesktop
+            : undefined
+        }
         onBlur={
-          isDesktopFinePointer
+          isDesktopFinePointer && desktopHoverPreview
             ? (event) => {
               const next = event.relatedTarget as Node | null;
               if (
@@ -371,7 +415,16 @@ export default function ProfileAvatarPreview({ profile, size = 34 }: Props) {
             }
             : undefined
         }
-        onClick={isDesktopFinePointer ? undefined : openMobile}
+        onClick={(event) => {
+          if (onTriggerClick) {
+            closeAllPreviews();
+            onTriggerClick(event);
+            return;
+          }
+          if (!isDesktopFinePointer && mobileTapPreview) {
+            openMobile();
+          }
+        }}
       >
         <ProfileAvatar profile={effectiveProfile} size={size} />
       </button>

@@ -15,6 +15,7 @@ import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import LanguageSelector from './LanguageSelector';
 import ProfileAvatar from './profileAvatar/ProfileAvatar';
+import ProfileAvatarPreview from './profileAvatar/ProfileAvatarPreview';
 import { useUnreadNotificationCount } from './FeedbackInbox';
 import type { LogbookEntry, Profile } from '../types';
 
@@ -95,14 +96,15 @@ export function DesktopNav({ page, setPage, profile, onOpenLogbook }: NavProps) 
 
       <div style={{ flex: 1 }} />
 
-      <button
-        type="button"
+      <ProfileAvatarPreview
+        profile={profile}
+        size={32}
+        previewEnabled
+        desktopHoverPreview
+        mobileTapPreview={false}
         className={`nav-profile-btn${page === 'profile' ? ' active' : ''}`}
-        onClick={() => setPage('profile')}
-        aria-label={t.nav.profile}
-      >
-        <ProfileAvatar profile={profile} size={32} />
-      </button>
+        onTriggerClick={() => setPage('profile')}
+      />
 
       <LanguageSelector />
 

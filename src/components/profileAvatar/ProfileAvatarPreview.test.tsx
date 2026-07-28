@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import ProfileAvatarPreview from './ProfileAvatarPreview';
@@ -46,6 +45,7 @@ describe('ProfileAvatarPreview', () => {
     render(
       <ProfileAvatarPreview
         profile={{ displayName: 'Alice', email: 'alice@example.com', avatarUrl: 'https://cdn/a.png' }}
+        previewEnabled
       />,
     );
 
@@ -77,9 +77,11 @@ describe('ProfileAvatarPreview', () => {
       <>
         <ProfileAvatarPreview
           profile={{ displayName: 'Alpha', email: 'alpha@example.com', avatarUrl: 'https://cdn/a.png' }}
+          previewEnabled
         />
         <ProfileAvatarPreview
           profile={{ displayName: 'Beta', email: 'beta@example.com', avatarUrl: 'https://cdn/b.png' }}
+          previewEnabled
         />
       </>,
     );
@@ -99,13 +101,14 @@ describe('ProfileAvatarPreview', () => {
     render(
       <ProfileAvatarPreview
         profile={{ displayName: 'Mina', email: 'mina@example.com', avatarUrl: 'https://cdn/m.png' }}
+        previewEnabled
       />,
     );
 
     fireEvent.click(getTrigger('Mina'));
     expect(screen.getByRole('dialog', { name: 'Profile photo of Mina' })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Profile photo of Mina' }), { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: 'Profile photo of Mina' })).toBeNull();
 
     fireEvent.click(getTrigger('Mina'));
@@ -133,6 +136,7 @@ describe('ProfileAvatarPreview', () => {
     render(
       <ProfileAvatarPreview
         profile={{ displayName: 'Broken', email: 'broken@example.com', avatarUrl: 'https://cdn/broken.png' }}
+        previewEnabled
       />,
     );
 
@@ -153,6 +157,7 @@ describe('ProfileAvatarPreview', () => {
       <div>
         <ProfileAvatarPreview
           profile={{ displayName: 'Row User', email: 'row@example.com', avatarUrl: 'https://cdn/row.png' }}
+          previewEnabled
         />
         <button type="button" onClick={onRowAction}>
           Revoke
@@ -166,5 +171,96 @@ describe('ProfileAvatarPreview', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Revoke' }));
     expect(onRowAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays non-interactive unless explicitly enabled', () => {
+    setMatchMedia(true);
+    render(
+      <ProfileAvatarPreview
+        profile={{ displayName: 'Opt In', email: 'optin@example.com', avatarUrl: 'https://cdn/optin.png' }}
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'View profile photo for Opt In' })).toBeNull();
+  });
+
+  it('preserves click handler and does not open mobile modal when disabled', () => {
+    setMatchMedia(false);
+    const onTriggerClick = vi.fn();
+    render(
+      <ProfileAvatarPreview
+        profile={{ displayName: 'Nav User', email: 'nav@example.com', avatarUrl: 'https://cdn/nav.png' }}
+        previewEnabled
+        mobileTapPreview={false}
+        onTriggerClick={onTriggerClick}
+      />,
+    );
+
+    fireEvent.click(getTrigger('Nav User'));
+    expect(onTriggerClick).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog', { name: 'Profile photo of Nav User' })).toBeNull();
+  });
+
+  it('supports desktop hover preview while keeping nav click-to-profile behavior', () => {
+    setMatchMedia(true);
+    const onTriggerClick = vi.fn();
+    render(
+      <ProfileAvatarPreview
+        profile={{ displayName: 'Desktop Nav', email: 'desktop-nav@example.com', avatarUrl: 'https://cdn/desktop-nav.png' }}
+        previewEnabled
+        desktopHoverPreview
+        mobileTapPreview={false}
+        onTriggerClick={onTriggerClick}
+      />,
+    );
+
+    const trigger = getTrigger('Desktop Nav');
+    fireEvent.mouseEnter(trigger);
+    advance(250);
+    expect(screen.getByAltText('Profile photo of Desktop Nav')).toBeTruthy();
+
+    fireEvent.click(trigger);
+    expect(onTriggerClick).toHaveBeenCalledTimes(1);
+    expect(screen.queryByAltText('Profile photo of Desktop Nav')).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Profile photo of Desktop Nav' })).toBeNull();
+  });
+
+  it('keeps mobile nav tap unchanged with no modal preview', () => {
+    setMatchMedia(false);
+    const onTriggerClick = vi.fn();
+    render(
+      <ProfileAvatarPreview
+        profile={{ displayName: 'Mobile Nav', email: 'mobile-nav@example.com', avatarUrl: 'https://cdn/mobile-nav.png' }}
+        previewEnabled
+        mobileTapPreview={false}
+        onTriggerClick={onTriggerClick}
+      />,
+    );
+
+    fireEvent.click(getTrigger('Mobile Nav'));
+    expect(onTriggerClick).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('dialog', { name: 'Profile photo of Mobile Nav' })).toBeNull();
+    expect(screen.queryByAltText('Profile photo of Mobile Nav')).toBeNull();
+  });
+
+  it('stays non-interactive when desktop and mobile preview are both disabled', () => {
+    setMatchMedia(true);
+    render(
+      <ProfileAvatarPreview
+        profile={{ displayName: 'Disabled Modes', email: 'disabled-modes@example.com', avatarUrl: 'https://cdn/disabled.png' }}
+        previewEnabled
+        desktopHoverPreview={false}
+        mobileTapPreview={false}
+      />,
+    );
+
+    const trigger = getTrigger('Disabled Modes');
+    fireEvent.mouseEnter(trigger);
+    fireEvent.focus(trigger);
+    advance(400);
+    expect(screen.queryByAltText('Profile photo of Disabled Modes')).toBeNull();
+
+    fireEvent.click(trigger);
+    expect(screen.queryByRole('dialog', { name: 'Profile photo of Disabled Modes' })).toBeNull();
   });
 });

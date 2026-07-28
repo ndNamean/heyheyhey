@@ -3542,7 +3542,7 @@ body.wizard-active .page {
   width: 100%;
   height: 100%;
   display: block;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .profile-avatar-preview-modal-scrim {
@@ -3590,7 +3590,7 @@ body.wizard-active .page {
 .profile-avatar-preview-modal-image-wrap img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
 }
 

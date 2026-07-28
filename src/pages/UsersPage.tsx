@@ -1724,7 +1724,13 @@ export default function UsersPage({ currentProfile }: Props) {
                   <tr key={p.id}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <ProfileAvatarPreview profile={p} size={34} />
+                        <ProfileAvatarPreview
+                          profile={p}
+                          size={34}
+                          previewEnabled
+                          desktopHoverPreview
+                          mobileTapPreview
+                        />
                         <div>
                           <strong style={{ fontSize: 14 }}>{p.displayName || '—'}</strong>
                           <div className="small">{p.email}</div>
