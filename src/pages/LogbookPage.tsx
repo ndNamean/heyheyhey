@@ -345,6 +345,23 @@ export default function LogbookPage({
   }, [form.entryType, form.storeId, form.assigneeRole, allProfiles, defs]);
 
   useEffect(() => {
+    // Issues require a real store. Empty id is valid for note/announcement ("all stores")
+    // but leaves a stale UI when switching to issue (browser shows first option, state stays '').
+    if (form.entryType === 'issue' && !form.storeId) {
+      const fallback = selectableStores[0]?.id || '';
+      if (!fallback) return;
+      setForm((prev) => ({
+        ...prev,
+        storeId: fallback,
+        assigneeUserIds: pruneAssigneeUserIds(
+          prev.assigneeUserIds,
+          fallback,
+          prev.assigneeRole,
+        ),
+      }));
+      setShowCreateCamera(false);
+      return;
+    }
     if (!form.storeId) return;
     if (selectableStores.some((s) => s.id === form.storeId)) return;
     setForm((prev) => ({
@@ -357,7 +374,7 @@ export default function LogbookPage({
       ),
     }));
     setShowCreateCamera(false);
-  }, [form.storeId, selectableStores]);
+  }, [form.entryType, form.storeId, selectableStores]);
 
   // Clear list filter store if it is outside actor scope (keep "all")
   useEffect(() => {
@@ -1456,9 +1473,14 @@ export default function LogbookPage({
                   alert(t.logbook.noEligibleAssignees);
                   return;
                 }
+                const nextStoreId =
+                  next === 'issue' && !form.storeId
+                    ? selectableStores[0]?.id || ''
+                    : form.storeId;
                 setForm({
                   ...form,
                   entryType: next,
+                  storeId: nextStoreId,
                   assigneeRole:
                     next === 'issue'
                       ? eligibleAssigneeRoles[0] || form.assigneeRole
