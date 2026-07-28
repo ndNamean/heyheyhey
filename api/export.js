@@ -45,6 +45,39 @@ function verifyCronSecret(req) {
   return token === `Bearer ${cronSecret}`;
 }
 
+// api/_lib/export/role-capabilities.js
+var DEFAULT_CAPS = {
+  owner: { canExportDashboard: true, canExportReviewStatus: false },
+  admin: { canExportDashboard: true, canExportReviewStatus: false },
+  areaManager: { canExportDashboard: true, canExportReviewStatus: false },
+  manager: { canExportDashboard: false, canExportReviewStatus: true },
+  leader: { canExportDashboard: false, canExportReviewStatus: true },
+  subleader: { canExportDashboard: false, canExportReviewStatus: true },
+  staff: { canExportDashboard: false, canExportReviewStatus: false },
+  viewer: { canExportDashboard: false, canExportReviewStatus: false }
+};
+function unwrapLinkedEntity(raw) {
+  if (!raw) return null;
+  if (Array.isArray(raw)) return raw[0] ?? null;
+  return raw;
+}
+function resolveRoleDefinition(profile, allDefs) {
+  const defs = allDefs ?? [];
+  const byKey = defs.find((d) => d.key === profile.role && d.active !== false) ?? null;
+  if (byKey) return byKey;
+  return unwrapLinkedEntity(profile?.roleDefinition);
+}
+function getRoleCapabilities(role, roleDefinition) {
+  const def = unwrapLinkedEntity(roleDefinition) ?? roleDefinition;
+  if (def) {
+    return {
+      canExportDashboard: !!def.canExportDashboard,
+      canExportReviewStatus: !!def.canExportReviewStatus
+    };
+  }
+  return DEFAULT_CAPS[role] ?? { canExportDashboard: false, canExportReviewStatus: false };
+}
+
 // api/_lib/export/auth.js
 async function verifyRequestUser(req) {
   const token = extractBearerToken(req);
@@ -84,12 +117,14 @@ async function loadProfileContext(userId) {
     throw err;
   }
   const storeIds = (profile.stores ?? []).map((s) => s.id);
-  const roleDefinition = profile.roleDefinition ?? (result.roleDefinitions ?? []).find((d) => d.key === profile.role && d.active !== false);
+  const roleDefinitions = result.roleDefinitions ?? [];
+  const roleDefinition = resolveRoleDefinition(profile, roleDefinitions);
   return {
     profileId: profile.id,
     userId: profile.userId,
     role: profile.role,
     roleDefinition: roleDefinition ?? null,
+    roleDefinitions,
     approvalStatus: profile.approvalStatus,
     displayName: profile.displayName ?? "",
     email: profile.email ?? "",
@@ -101,27 +136,6 @@ async function authenticateExportRequest(req) {
   const { userId, email } = await verifyRequestUser(req);
   const ctx = await loadProfileContext(userId);
   return { ...ctx, email };
-}
-
-// api/_lib/export/role-capabilities.js
-var DEFAULT_CAPS = {
-  owner: { canExportDashboard: true, canExportReviewStatus: false },
-  admin: { canExportDashboard: true, canExportReviewStatus: false },
-  areaManager: { canExportDashboard: true, canExportReviewStatus: false },
-  manager: { canExportDashboard: false, canExportReviewStatus: true },
-  leader: { canExportDashboard: false, canExportReviewStatus: true },
-  subleader: { canExportDashboard: false, canExportReviewStatus: true },
-  staff: { canExportDashboard: false, canExportReviewStatus: false },
-  viewer: { canExportDashboard: false, canExportReviewStatus: false }
-};
-function getRoleCapabilities(role, roleDefinition) {
-  if (roleDefinition) {
-    return {
-      canExportDashboard: !!roleDefinition.canExportDashboard,
-      canExportReviewStatus: !!roleDefinition.canExportReviewStatus
-    };
-  }
-  return DEFAULT_CAPS[role] ?? { canExportDashboard: false, canExportReviewStatus: false };
 }
 
 // api/_lib/export/rbac.js

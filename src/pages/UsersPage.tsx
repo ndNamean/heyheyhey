@@ -6,6 +6,7 @@ import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import RolesPermissionsPanel from '../components/RolesPermissionsPanel';
 import StorePicker from '../components/StorePicker';
 import ProfileAvatar from '../components/profileAvatar/ProfileAvatar';
+import ProfileAvatarPreview from '../components/profileAvatar/ProfileAvatarPreview';
 import { statusLabel } from '../lib/i18nUtils';
 import {
   accessStatusBadgeClass,
@@ -1723,7 +1724,7 @@ export default function UsersPage({ currentProfile }: Props) {
                   <tr key={p.id}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <ProfileAvatar profile={p} size={34} />
+                        <ProfileAvatarPreview profile={p} size={34} />
                         <div>
                           <strong style={{ fontSize: 14 }}>{p.displayName || '—'}</strong>
                           <div className="small">{p.email}</div>

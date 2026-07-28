@@ -3,7 +3,7 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
   },
   define: {
     'import.meta.env.VITE_INSTANT_APP_ID': JSON.stringify('vitest-test-app-id'),
