@@ -5,7 +5,7 @@ import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import RolesPermissionsPanel from '../components/RolesPermissionsPanel';
 import StorePicker from '../components/StorePicker';
-import ProfileAvatar from '../components/profileAvatar/ProfileAvatar';
+import IdentityWithAvatar from '../components/profileAvatar/IdentityWithAvatar';
 import ProfileAvatarPreview from '../components/profileAvatar/ProfileAvatarPreview';
 import { statusLabel } from '../lib/i18nUtils';
 import {
@@ -451,7 +451,9 @@ function ApproveModal({
   return (
     <ModalShell title={t.users.approveAccess} onClose={onClose}>
       <p>
-        <strong>{pending.displayName || pending.email}</strong>
+        <IdentityWithAvatar profile={pending}>
+          <strong>{pending.displayName || pending.email}</strong>
+        </IdentityWithAvatar>
       </p>
       <p className="small">{pending.email}</p>
 
@@ -542,7 +544,9 @@ function RequestManagerModal({
     <ModalShell title={t.users.requestManagerTitle} onClose={onClose}>
       <p className="small">{t.users.requestManagerHint}</p>
       <p>
-        <strong>{target.displayName || target.email}</strong>
+        <IdentityWithAvatar profile={target}>
+          <strong>{target.displayName || target.email}</strong>
+        </IdentityWithAvatar>
       </p>
       <p className="small">{target.email}</p>
 
@@ -693,7 +697,13 @@ function AccessRequestCard({
   return (
     <div className="card">
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <ProfileAvatar profile={profile} size={40} />
+        <ProfileAvatarPreview
+          profile={profile}
+          size={40}
+          previewEnabled
+          desktopHoverPreview
+          mobileTapPreview
+        />
         <div style={{ flex: 1 }}>
           <strong>{profile.displayName || profile.email}</strong>
           <div className="small">{profile.email}</div>
@@ -934,7 +944,9 @@ function RequestRoleChangeModal({
     <ModalShell title={t.users.requestRoleChangeTitle} onClose={onClose}>
       <p className="small">{t.users.requestRoleChangeHint}</p>
       <p>
-        <strong>{target.displayName || target.email}</strong>
+        <IdentityWithAvatar profile={target}>
+          <strong>{target.displayName || target.email}</strong>
+        </IdentityWithAvatar>
       </p>
       <p className="small">{target.email}</p>
       <label style={{ marginTop: 12, display: 'block' }}>
@@ -1013,7 +1025,9 @@ function RequestDeleteModal({
     <ModalShell title={t.users.requestDeleteTitle} onClose={onClose}>
       <p className="small">{t.users.requestDeleteHint}</p>
       <p>
-        <strong>{target.displayName || target.email}</strong>
+        <IdentityWithAvatar profile={target}>
+          <strong>{target.displayName || target.email}</strong>
+        </IdentityWithAvatar>
       </p>
       <p className="small">{target.email}</p>
       <label style={{ marginTop: 12, display: 'block' }}>

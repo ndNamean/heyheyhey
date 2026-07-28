@@ -10,6 +10,7 @@ import {
 import { formatDurationMs } from '../lib/reviewTimeline';
 import { badgeClass } from '../lib/utils';
 import ReportTimeline from './ReportTimeline';
+import IdentityWithAvatar from './profileAvatar/IdentityWithAvatar';
 import type { ExportFormat, Profile, Report, ReviewEvent } from '../types';
 
 interface Props {
@@ -135,6 +136,9 @@ export default function ReportReviewStatusPanel({ profile }: Props) {
           {rows.map((row) => {
             const expanded = expandedReportId === row.report.id;
             const reportEvents = allEvents.filter((e) => e.reportId === row.report.id);
+            const submitterProfile = profiles.find(
+              (p) => p.userId === row.report.submittedByUserId,
+            );
 
             return (
               <Fragment key={row.report.id}>
@@ -143,7 +147,11 @@ export default function ReportReviewStatusPanel({ profile }: Props) {
                   <td>
                     <strong>{row.storeCode}</strong>
                   </td>
-                  <td className="small">{row.submittedBy}</td>
+                  <td className="small">
+                    <IdentityWithAvatar profile={submitterProfile}>
+                      {row.submittedBy}
+                    </IdentityWithAvatar>
+                  </td>
                   <td className="small report-review-status-nowrap">{row.submittedTime}</td>
                   <td>
                     <span className={badgeClass(row.status)}>{statusLabel(t, row.status)}</span>

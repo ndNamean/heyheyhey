@@ -5,6 +5,7 @@ import TimemarkCamera from '../components/TimemarkCamera';
 import ProofPhoto from '../components/ProofPhoto';
 import AckDetailsDropdown from '../components/AckDetailsDropdown';
 import { LogbookTimeline } from '../components/ReportTimeline';
+import IdentityWithAvatar from '../components/profileAvatar/IdentityWithAvatar';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import { canReview } from '../lib/roles';
@@ -275,12 +276,25 @@ export default function LogbookPage({
     return map;
   }, [allProfiles]);
 
-  function assigneeSummaryLabel(entry: LogbookEntry): string {
+  function assigneeSummaryDisplay(entry: LogbookEntry) {
     const role = entry.assigneeRole || '—';
     const ids = parseAssigneeUserIds(entry.assigneeUserIdsJson);
     if (ids.length === 0) return role;
-    const names = ids.map((uid) => profileNameById.get(uid) || uid);
-    return `${names.join(', ')} (${role})`;
+    return (
+      <>
+        {ids.map((uid, i) => {
+          const p = allProfiles.find((x) => x.userId === uid);
+          const label = p?.displayName || p?.email || profileNameById.get(uid) || uid;
+          return (
+            <span key={uid}>
+              {i > 0 ? ', ' : ''}
+              <IdentityWithAvatar profile={p}>{label}</IdentityWithAvatar>
+            </span>
+          );
+        })}
+        {` (${role})`}
+      </>
+    );
   }
 
   function toggleAssigneeUserId(selected: string[], userId: string): string[] {
@@ -2015,7 +2029,7 @@ export default function LogbookPage({
               {entryStore && <span className="small">{entryStore.code}</span>}
               {type === 'issue' && entry.assigneeRole && (
                 <span className="small">
-                  {t.logbook.assignedLabel}: {assigneeSummaryLabel(entry)}
+                  {t.logbook.assignedLabel}: {assigneeSummaryDisplay(entry)}
                 </span>
               )}
               {type === 'issue' && (
@@ -2236,7 +2250,8 @@ export default function LogbookPage({
                       {byLine ? (
                         <>
                           {' '}
-                          {t.timeline.by} {byLine}
+                          {t.timeline.by}{' '}
+                          <IdentityWithAvatar profile={reviewer}>{byLine}</IdentityWithAvatar>
                         </>
                       ) : null}
                     </p>

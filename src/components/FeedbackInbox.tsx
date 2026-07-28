@@ -9,7 +9,8 @@ import {
   isNoteAnnouncementNotificationType,
 } from '../lib/notifications';
 import ReportTimeline from './ReportTimeline';
-import type { Notification, Report, ReviewEvent } from '../types';
+import IdentityWithAvatar from './profileAvatar/IdentityWithAvatar';
+import type { Notification, Profile, Report, ReviewEvent } from '../types';
 
 interface Props {
   userId: string;
@@ -34,6 +35,7 @@ export default function FeedbackInbox({
     },
     reviewEvents: {},
     reports: { responses: {} },
+    profiles: {},
   });
 
   const all = ((data?.notifications ?? []) as Notification[]).sort((a, b) =>
@@ -44,6 +46,7 @@ export default function FeedbackInbox({
 
   const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];
   const allReports = (data?.reports ?? []) as Report[];
+  const profiles = (data?.profiles ?? []) as Profile[];
 
   const reportById = useMemo(() => {
     const map = new Map<string, Report>();
@@ -108,6 +111,13 @@ export default function FeedbackInbox({
           const isLogbook = isLogbookNotificationType(n.type);
           const report = !isLogbook && n.reportId ? reportById.get(n.reportId) : undefined;
           const showTimeline = expandedReportId === n.reportId && report;
+          const actorProfile = n.actorUserId
+            ? profiles.find((p) => p.userId === n.actorUserId)
+            : undefined;
+          const actorName =
+            actorProfile?.displayName?.trim() ||
+            actorProfile?.email?.split('@')[0] ||
+            '';
 
           return (
             <button
@@ -130,7 +140,16 @@ export default function FeedbackInbox({
               <div className="feedback-item-body">{n.body}</div>
               {n.actorRole && (
                 <div className="feedback-item-actor">
-                  {t.feedback.reviewedBy} {n.actorRole}
+                  {t.feedback.reviewedBy}{' '}
+                  {actorProfile && actorName ? (
+                    <span
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    >
+                      <IdentityWithAvatar profile={actorProfile}>{actorName}</IdentityWithAvatar>{' '}
+                    </span>
+                  ) : null}
+                  {n.actorRole}
                   {n.type === 'report_finalized' ? ` · ${t.feedback.reportSummary}` : ''}
                 </div>
               )}

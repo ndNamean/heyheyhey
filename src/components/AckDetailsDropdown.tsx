@@ -3,6 +3,7 @@ import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import { useLang } from '../i18n';
 import { parseLogbookAckUserIds, resolveLogbookAckPeople } from '../lib/logbook';
 import type { Profile } from '../types';
+import IdentityWithAvatar from './profileAvatar/IdentityWithAvatar';
 
 interface Props {
   ackUserIdsJson: string;
@@ -83,20 +84,25 @@ export default function AckDetailsDropdown({ ackUserIdsJson, profiles }: Props) 
         {people.length === 0 ? (
           <div className="ack-details-empty">{t.logbook.noAcksYet}</div>
         ) : (
-          people.map((person) => (
-            <div key={person.userId} className="ack-details-row" role="listitem">
-              <span className="ack-details-name">
-                {person.displayName}
-                {(person.storeCodesLabel || person.allStores) && (
-                  <span className="ack-details-stores">
-                    {' · '}
-                    {person.allStores ? t.logbook.ackAllStores : person.storeCodesLabel}
-                  </span>
-                )}
-              </span>
-              <span className="ack-details-role">{person.role}</span>
-            </div>
-          ))
+          people.map((person) => {
+            const personProfile = profiles.find((p) => p.userId === person.userId);
+            return (
+              <div key={person.userId} className="ack-details-row" role="listitem">
+                <span className="ack-details-name">
+                  <IdentityWithAvatar profile={personProfile}>
+                    {person.displayName}
+                  </IdentityWithAvatar>
+                  {(person.storeCodesLabel || person.allStores) && (
+                    <span className="ack-details-stores">
+                      {' · '}
+                      {person.allStores ? t.logbook.ackAllStores : person.storeCodesLabel}
+                    </span>
+                  )}
+                </span>
+                <span className="ack-details-role">{person.role}</span>
+              </div>
+            );
+          })
         )}
       </div>
     </details>

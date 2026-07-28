@@ -7,6 +7,7 @@ import { canClockIn, canReview, canScheduleShifts, canAccessAllStores } from '..
 import { statusLabel } from '../lib/i18nUtils';
 import { badgeClass, nowIso, todayYmd } from '../lib/utils';
 import type { Profile, Shift, Store } from '../types';
+import IdentityWithAvatar from '../components/profileAvatar/IdentityWithAvatar';
 
 interface Props {
   profile: Profile;
@@ -253,7 +254,13 @@ export default function ShiftsPage({ profile }: Props) {
               return (
                 <tr key={s.id}>
                   <td>
-                    {emp?.displayName || emp?.email || s.employeeUserId}
+                    {emp ? (
+                      <IdentityWithAvatar profile={emp}>
+                        {emp.displayName || emp.email}
+                      </IdentityWithAvatar>
+                    ) : (
+                      s.employeeUserId
+                    )}
                     <br />
                     <span className="small">{s.role}</span>
                   </td>

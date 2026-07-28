@@ -23,6 +23,7 @@ import ReviewFeedbackModal, { type FeedbackResult } from '../components/ReviewFe
 import { isVideoMedia } from '../lib/mediaMime';
 import { formatMediaCaptureTime } from '../lib/proofTime';
 import ReportTimeline, { LogbookTimeline } from '../components/ReportTimeline';
+import IdentityWithAvatar from '../components/profileAvatar/IdentityWithAvatar';
 import {
   canReviewLogbookIssue,
   getIssueConfigurationState,
@@ -301,6 +302,10 @@ export default function ReviewPage({ profile }: Props) {
             allProfiles,
           );
           const creator = resolveActorDisplay(entry.authorUserId, undefined, allProfiles);
+          const submitterProfile = allProfiles.find(
+            (p) => p.userId === (entry.resolutionSubmittedByUserId || ''),
+          );
+          const creatorProfile = allProfiles.find((p) => p.userId === entry.authorUserId);
           const entryEvents = allEvents.filter((e) => e.logbookEntryId === entry.id);
           const sourceMedia = resolveSourceMedia(entry);
           const resolutionProofs = resolveResolutionProofs(entry);
@@ -321,7 +326,8 @@ export default function ReviewPage({ profile }: Props) {
                 {t.logbook.assigneeRole}: {entry.assigneeRole || '—'}
               </p>
               <p className="small">
-                {t.review.submittedBy} {creator}
+                {t.review.submittedBy}{' '}
+                <IdentityWithAvatar profile={creatorProfile}>{creator}</IdentityWithAvatar>
                 {entry.dueAt
                   ? ` · ${t.logbook.dueAt}: ${new Date(entry.dueAt).toLocaleString()}`
                   : ` · ${t.logbook.noDeadline}`}
@@ -341,7 +347,8 @@ export default function ReviewPage({ profile }: Props) {
                 </p>
               )}
               <p className="small">
-                {t.logbook.resolvedBySubmitter}: {submitter}
+                {t.logbook.resolvedBySubmitter}:{' '}
+                <IdentityWithAvatar profile={submitterProfile}>{submitter}</IdentityWithAvatar>
                 {entry.resolutionSubmittedAt
                   ? ` · ${new Date(entry.resolutionSubmittedAt).toLocaleString()}`
                   : ''}
@@ -440,6 +447,9 @@ export default function ReviewPage({ profile }: Props) {
           undefined,
           allProfiles,
         );
+        const reportSubmitterProfile = allProfiles.find(
+          (p) => p.userId === report.submittedByUserId,
+        );
 
         return (
           <div className="card" key={report.id}>
@@ -449,7 +459,10 @@ export default function ReviewPage({ profile }: Props) {
                   {report.storeCode} — {report.templateName}
                 </h2>
                 <p className="small" style={{ margin: '4px 0 0' }}>
-                  {report.reportDate} · {t.review.submittedBy} {reportSubmitterName}
+                  {report.reportDate} · {t.review.submittedBy}{' '}
+                  <IdentityWithAvatar profile={reportSubmitterProfile}>
+                    {reportSubmitterName}
+                  </IdentityWithAvatar>
                   {report.submittedByRole ? ` (${report.submittedByRole})` : ''} ·{' '}
                   <span className={badgeClass(report.status)}>{statusLabel(t, report.status)}</span> ·{' '}
                   {report.completionPercent ?? 0}% {t.review.percentComplete}
@@ -468,10 +481,14 @@ export default function ReviewPage({ profile }: Props) {
 
             {responses.map((resp) => {
               const media = (resp.media ?? []) as MediaRecord[];
+              const itemSubmitterUserId = resp.submittedByUserId || report.submittedByUserId;
               const itemSubmitterName = resolveActorDisplay(
-                resp.submittedByUserId || report.submittedByUserId,
+                itemSubmitterUserId,
                 undefined,
                 allProfiles,
+              );
+              const itemSubmitterProfile = allProfiles.find(
+                (p) => p.userId === itemSubmitterUserId,
               );
               return (
                 <div className="item-card" key={resp.id} style={{ marginTop: 12 }}>
@@ -480,7 +497,11 @@ export default function ReviewPage({ profile }: Props) {
                     <span className={badgeClass(resp.status)}>{statusLabel(t, resp.status)}</span>
                   </div>
                   <p className="small">
-                    By {itemSubmitterName} · {resp.section} · {resp.proofType}
+                    By{' '}
+                    <IdentityWithAvatar profile={itemSubmitterProfile}>
+                      {itemSubmitterName}
+                    </IdentityWithAvatar>{' '}
+                    · {resp.section} · {resp.proofType}
                   </p>
                   {resp.note && (
                     <p>

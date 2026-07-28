@@ -5,6 +5,7 @@ import ExportModal from '../components/ExportModal';
 import FailureCorrectionHistory from '../components/FailureCorrectionHistory';
 import ScheduledTaskCompletion from '../components/ScheduledTaskCompletion';
 import { ReportTimelineLeadCell } from '../components/ReportTimeline';
+import IdentityWithAvatar from '../components/profileAvatar/IdentityWithAvatar';
 import { useLang } from '../i18n';
 import { statusLabel } from '../lib/i18nUtils';
 import { aggregateFeedbackFrequency } from '../lib/feedbackReasons';
@@ -495,11 +496,21 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
                           ids = [];
                         }
                         if (ids.length === 0) return role;
-                        const names = ids.map((uid) => {
-                          const p = (profiles as Profile[]).find((x) => x.userId === uid);
-                          return p?.displayName || p?.email || uid;
-                        });
-                        return `${names.join(', ')} (${role})`;
+                        return (
+                          <>
+                            {ids.map((uid, i) => {
+                              const p = (profiles as Profile[]).find((x) => x.userId === uid);
+                              const label = p?.displayName || p?.email || uid;
+                              return (
+                                <span key={uid}>
+                                  {i > 0 ? ', ' : ''}
+                                  <IdentityWithAvatar profile={p}>{label}</IdentityWithAvatar>
+                                </span>
+                              );
+                            })}
+                            {` (${role})`}
+                          </>
+                        );
                       })()}
                     </td>
                     <td className="small">
