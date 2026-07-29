@@ -1139,10 +1139,9 @@ export default function UsersPage({ currentProfile }: Props) {
         new Set([
           ...assignableRoles,
           ...allProfiles.map((profile) => profile.role).filter(Boolean),
-          ...defs.map((def) => def.key).filter(Boolean),
         ]),
       ).sort((a, b) => a.localeCompare(b)),
-    [assignableRoles, allProfiles, defs],
+    [assignableRoles, allProfiles],
   );
 
   const activeFilterCount =
