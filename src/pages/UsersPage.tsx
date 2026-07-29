@@ -1072,6 +1072,7 @@ export default function UsersPage({ currentProfile }: Props) {
   const [busyRequestId, setBusyRequestId] = useState<string | null>(null);
   const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>([]);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const { data } = db.useQuery({
     profiles: { stores: {}, roleDefinition: {} },
@@ -1758,35 +1759,19 @@ export default function UsersPage({ currentProfile }: Props) {
 
       {effectiveTab === 'all' && (
         <div className="card table-wrap">
-          <div
-            className="users-all-filters"
-          >
-            <div className="users-all-filter-col">
-              <p className="small users-all-filter-heading">{t.common.stores}</p>
-              <StorePicker
-                stores={allUsersFilterStores}
-                selectedStoreIds={selectedStoreIds}
-                onChange={setSelectedStoreIds}
-                compact
-              />
-            </div>
-
-            <div className="users-all-filter-col">
-              <p className="small users-all-filter-heading">{t.common.role}</p>
-              <RolePicker
-                roles={allUsersRoleOptions}
-                selectedRoles={selectedRoles}
-                onChange={setSelectedRoles}
-                compact
-              />
-            </div>
-          </div>
-
-          {hasActiveFilters && (
-            <div style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: filtersOpen ? 8 : 12 }}>
+            <button
+              className="secondary"
+              style={{ fontSize: 12, padding: '6px 10px', minHeight: 30 }}
+              onClick={() => setFiltersOpen((v) => !v)}
+            >
+              {filtersOpen ? '▲ Filters' : '▼ Filters'}
+              {!filtersOpen && hasActiveFilters && ` (${activeFilterCount} active)`}
+            </button>
+            {hasActiveFilters && (
               <button
                 className="secondary"
-                style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
+                style={{ fontSize: 12, padding: '6px 10px', minHeight: 30 }}
                 onClick={() => {
                   setSelectedStoreIds([]);
                   setSelectedRoles([]);
@@ -1794,6 +1779,30 @@ export default function UsersPage({ currentProfile }: Props) {
               >
                 Clear filters
               </button>
+            )}
+          </div>
+
+          {filtersOpen && (
+            <div className="users-all-filters" style={{ marginBottom: 12 }}>
+              <div className="users-all-filter-col">
+                <p className="small users-all-filter-heading">{t.common.stores}</p>
+                <StorePicker
+                  stores={allUsersFilterStores}
+                  selectedStoreIds={selectedStoreIds}
+                  onChange={setSelectedStoreIds}
+                  compact
+                />
+              </div>
+
+              <div className="users-all-filter-col">
+                <p className="small users-all-filter-heading">{t.common.role}</p>
+                <RolePicker
+                  roles={allUsersRoleOptions}
+                  selectedRoles={selectedRoles}
+                  onChange={setSelectedRoles}
+                  compact
+                />
+              </div>
             </div>
           )}
 
