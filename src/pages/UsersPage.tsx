@@ -15,7 +15,7 @@ import {
   managerCanReviewAccess,
   parseAccessReviewStoreIds,
 } from '../lib/accessReview';
-import { getRoleLinkStatus, profileRoleAssignTx } from '../lib/roleResolver';
+import { getRoleLinkStatus, profileRoleAssignTx, rankOf } from '../lib/roleResolver';
 import { getRoleDef } from '../lib/roles';
 import {
   buildAccessAdminNotifications,
@@ -1140,8 +1140,8 @@ export default function UsersPage({ currentProfile }: Props) {
           ...assignableRoles,
           ...allProfiles.map((profile) => profile.role).filter(Boolean),
         ]),
-      ).sort((a, b) => a.localeCompare(b)),
-    [assignableRoles, allProfiles],
+      ).sort((a, b) => rankOf(a, defs) - rankOf(b, defs)),
+    [assignableRoles, allProfiles, defs],
   );
 
   const activeFilterCount =
