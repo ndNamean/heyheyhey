@@ -6,6 +6,7 @@ import {
   canPublishTemplateItemProposal,
 } from './roles';
 import {
+  assertProposalAssignedRolesAllowed,
   assignedRolesFromProposal,
   computeChecklistItemProposalMetrics,
   findSimilarChecklistItemsAndProposals,
@@ -18,7 +19,10 @@ import {
   canActorPublish,
   canActorRequestApprovalCheck,
 } from './checklistItemProposals';
+import { defaultDefinitionsAsEntities } from './roleResolver';
 import type { ChecklistItemProposal, Profile, TemplateItem } from '../types';
+
+const defs = defaultDefinitionsAsEntities();
 
 function profile(partial: Partial<Profile> & Pick<Profile, 'userId' | 'role'>): Profile {
   return {
@@ -115,6 +119,23 @@ describe('proposal assigned roles', () => {
         proposedItemJson: '',
       }),
     ).toEqual(['hybrid']);
+  });
+
+  it('blocks manager from assigning owner or manager; allows staff and All', () => {
+    expect(() =>
+      assertProposalAssignedRolesAllowed('manager', ['owner'], defs),
+    ).toThrow(/cannot assign the role "owner"/i);
+    expect(() =>
+      assertProposalAssignedRolesAllowed('manager', ['manager'], defs),
+    ).toThrow(/cannot assign the role "manager"/i);
+    expect(() => assertProposalAssignedRolesAllowed('manager', ['staff'], defs)).not.toThrow();
+    expect(() => assertProposalAssignedRolesAllowed('manager', ['*'], defs)).not.toThrow();
+  });
+
+  it('blocks leader from assigning manager', () => {
+    expect(() =>
+      assertProposalAssignedRolesAllowed('leader', ['manager'], defs),
+    ).toThrow(/cannot assign the role "manager"/i);
   });
 });
 

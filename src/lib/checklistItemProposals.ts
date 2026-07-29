@@ -1,6 +1,8 @@
 import { id } from '@instantdb/react';
 import { db } from '../db';
 import { managersForStores } from './accessReview';
+import { canAssignRole } from './inviteScope';
+import { defaultDefinitionsAsEntities } from './roleResolver';
 import {
   canAccessAllStores,
   canFinalApproveTemplateItemProposal,
@@ -11,6 +13,7 @@ import {
   userCanAccessStore,
 } from './roles';
 import {
+  isAllAssignedRoles,
   itemPayload,
   parseAssignedRoles,
   toAssignedRolePrimary,
@@ -316,6 +319,21 @@ export function validateProposalItemFields(
   }
 }
 
+/** Ensure proposal assigned roles are within the actor's invite/assign hierarchy. */
+export function assertProposalAssignedRolesAllowed(
+  actorRole: Role,
+  assignedRoles: string[],
+  defs?: RoleDefinition[],
+): void {
+  if (isAllAssignedRoles(assignedRoles)) return;
+  const roleDefs = defs?.length ? defs : defaultDefinitionsAsEntities();
+  for (const role of assignedRoles) {
+    if (!canAssignRole(actorRole, role as Role, roleDefs)) {
+      throw new Error(`You cannot assign the role "${role}" on this proposal.`);
+    }
+  }
+}
+
 export function canActorFirstApprove(
   actor: Profile,
   proposal: ChecklistItemProposal,
@@ -495,6 +513,9 @@ export async function createChecklistItemProposal(
   const schedule = parseTemplateSchedule(template.scheduleJson);
   validateProposalItemFields(fields, schedule.enabled);
 
+  const assignedRoles = resolveProposalAssignedRoles(fields);
+  assertProposalAssignedRolesAllowed(actor.role, assignedRoles, defs);
+
   const similar = findSimilarChecklistItemsAndProposals({
     title: fields.title,
     requirement: fields.requirement,
@@ -516,7 +537,6 @@ export async function createChecklistItemProposal(
   const now = nowIso();
   const status: ChecklistItemProposalStatus = submitNow ? 'pending_first_approval' : 'draft';
   const failureCategory = normalizeFailureCategory(fields.failureCategory);
-  const assignedRoles = resolveProposalAssignedRoles(fields);
   const proposedItem = proposedItemSnapshot(fields, assignedRoles, failureCategory);
 
   const txs: unknown[] = [
@@ -656,6 +676,9 @@ export async function submitChecklistItemProposal(params: {
   const schedule = parseTemplateSchedule(template.scheduleJson);
   validateProposalItemFields(nextFields, schedule.enabled);
 
+  const assignedRoles = resolveProposalAssignedRoles(nextFields);
+  assertProposalAssignedRolesAllowed(actor.role, assignedRoles, defs);
+
   const similar = findSimilarChecklistItemsAndProposals({
     title: nextFields.title,
     requirement: nextFields.requirement,
@@ -679,7 +702,6 @@ export async function submitChecklistItemProposal(params: {
   const now = nowIso();
   const wasChanges = fromStatus === 'changes_requested';
   const failureCategory = normalizeFailureCategory(nextFields.failureCategory);
-  const assignedRoles = resolveProposalAssignedRoles(nextFields);
   const proposedItem = proposedItemSnapshot(nextFields, assignedRoles, failureCategory);
 
   await transactAll([

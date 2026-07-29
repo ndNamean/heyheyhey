@@ -7,9 +7,9 @@ import {
   PROOF_TYPES,
   canProposeTemplateItem,
   failureCategoryOptions,
-  getOrderedRoles,
   userCanAccessStore,
 } from '../lib/roles';
+import { rolesAssignableBy } from '../lib/inviteScope';
 import {
   createChecklistItemProposal,
   findSimilarChecklistItemsAndProposals,
@@ -174,7 +174,7 @@ export default function ChecklistItemProposalFormPage({
     }
   }
 
-  const roles = getOrderedRoles(defs);
+  const roles = rolesAssignableBy(profile.role, defs);
 
   return (
     <div>
