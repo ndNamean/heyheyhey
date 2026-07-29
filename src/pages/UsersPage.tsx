@@ -1069,6 +1069,8 @@ export default function UsersPage({ currentProfile }: Props) {
   const [requestRoleTargetId, setRequestRoleTargetId] = useState<string | null>(null);
   const [requestDeleteTargetId, setRequestDeleteTargetId] = useState<string | null>(null);
   const [busyRequestId, setBusyRequestId] = useState<string | null>(null);
+  const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>([]);
+  const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
 
   const { data } = db.useQuery({
     profiles: { stores: {}, roleDefinition: {} },
@@ -1120,6 +1122,41 @@ export default function UsersPage({ currentProfile }: Props) {
   );
 
   const managerQueueProfiles = accessQueueProfiles;
+  const allUsersStoreOptions = scopedStores
+    .map((store) => ({ id: store.id, label: `${store.code}${store.name ? ` - ${store.name}` : ''}` }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  const allUsersRoleOptions = Array.from(
+    new Set([
+      ...assignableRoles,
+      ...allProfiles.map((profile) => profile.role).filter(Boolean),
+      ...defs.map((def) => def.key).filter(Boolean),
+    ]),
+  ).sort((a, b) => a.localeCompare(b));
+
+  const activeFilterCount =
+    (selectedStoreIds.length > 0 ? 1 : 0) +
+    (selectedRoles.length > 0 ? 1 : 0);
+  const hasActiveFilters = activeFilterCount > 0;
+  const filteredAllProfiles = allProfiles.filter((profile) => {
+    const storeMatch =
+      selectedStoreIds.length === 0 ||
+      (profile.stores ?? []).some((store) => selectedStoreIds.includes(store.id));
+    const roleMatch =
+      selectedRoles.length === 0 ||
+      selectedRoles.includes(profile.role);
+    // OR inside a group (some/includes), AND across groups.
+    return storeMatch && roleMatch;
+  });
+
+  useEffect(() => {
+    const validStores = new Set(allUsersStoreOptions.map((store) => store.id));
+    setSelectedStoreIds((prev) => prev.filter((storeId) => validStores.has(storeId)));
+  }, [allUsersStoreOptions]);
+
+  useEffect(() => {
+    const validRoles = new Set(allUsersRoleOptions);
+    setSelectedRoles((prev) => prev.filter((role) => validRoles.has(role)));
+  }, [allUsersRoleOptions]);
 
   async function updateRole(profile: Profile, role: Role) {
     if (!canAssignRole(currentProfile.role, role, defs)) {
@@ -1710,6 +1747,68 @@ export default function UsersPage({ currentProfile }: Props) {
 
       {effectiveTab === 'all' && (
         <div className="card table-wrap">
+          <div
+            style={{
+              display: 'flex',
+              gap: 10,
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              marginBottom: 12,
+            }}
+          >
+            <label className="small" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <span>{t.common.stores}</span>
+              <select
+                multiple
+                value={selectedStoreIds}
+                onChange={(e) =>
+                  setSelectedStoreIds(
+                    Array.from(e.target.selectedOptions).map((option) => option.value),
+                  )
+                }
+                style={{ minWidth: 200, maxWidth: 280, minHeight: 72, fontSize: 12 }}
+              >
+                {allUsersStoreOptions.map((store) => (
+                  <option key={store.id} value={store.id}>
+                    {store.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="small" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <span>{t.common.role}</span>
+              <select
+                multiple
+                value={selectedRoles}
+                onChange={(e) =>
+                  setSelectedRoles(
+                    Array.from(e.target.selectedOptions).map((option) => option.value),
+                  )
+                }
+                style={{ minWidth: 160, maxWidth: 220, minHeight: 72, fontSize: 12 }}
+              >
+                {allUsersRoleOptions.map((role) => (
+                  <option key={role} value={role}>
+                    {role}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {hasActiveFilters && (
+              <button
+                className="secondary"
+                style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
+                onClick={() => {
+                  setSelectedStoreIds([]);
+                  setSelectedRoles([]);
+                }}
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
           <table>
             <thead>
               <tr>
@@ -1721,7 +1820,7 @@ export default function UsersPage({ currentProfile }: Props) {
               </tr>
             </thead>
             <tbody>
-              {allProfiles.map((p) => {
+              {filteredAllProfiles.map((p) => {
                 const canEditRole =
                   canFinalApprove && canAssignRole(currentProfile.role, p.role, defs);
                 const linkStatus = getRoleLinkStatus(p, defs);
@@ -1918,7 +2017,7 @@ export default function UsersPage({ currentProfile }: Props) {
                   </tr>
                 );
               })}
-              {!allProfiles.length && (
+              {!filteredAllProfiles.length && (
                 <tr>
                   <td colSpan={5} style={{ textAlign: 'center', padding: 24 }}>
                     {requestOnlyShell ? t.users.emptyScopedUsers : t.users.noOtherUsers}
