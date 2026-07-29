@@ -1,10 +1,11 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import RolesPermissionsPanel from '../components/RolesPermissionsPanel';
 import StorePicker from '../components/StorePicker';
+import RolePicker from '../components/RolePicker';
 import IdentityWithAvatar from '../components/profileAvatar/IdentityWithAvatar';
 import ProfileAvatarPreview from '../components/profileAvatar/ProfileAvatarPreview';
 import { statusLabel } from '../lib/i18nUtils';
@@ -1122,16 +1123,26 @@ export default function UsersPage({ currentProfile }: Props) {
   );
 
   const managerQueueProfiles = accessQueueProfiles;
-  const allUsersStoreOptions = scopedStores
-    .map((store) => ({ id: store.id, label: `${store.code}${store.name ? ` - ${store.name}` : ''}` }))
-    .sort((a, b) => a.label.localeCompare(b.label));
-  const allUsersRoleOptions = Array.from(
-    new Set([
-      ...assignableRoles,
-      ...allProfiles.map((profile) => profile.role).filter(Boolean),
-      ...defs.map((def) => def.key).filter(Boolean),
-    ]),
-  ).sort((a, b) => a.localeCompare(b));
+  const allUsersFilterStores = useMemo(
+    () =>
+      [...scopedStores].sort((a, b) => {
+        const aLabel = `${a.code}${a.name ? ` - ${a.name}` : ''}`;
+        const bLabel = `${b.code}${b.name ? ` - ${b.name}` : ''}`;
+        return aLabel.localeCompare(bLabel);
+      }),
+    [scopedStores],
+  );
+  const allUsersRoleOptions = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          ...assignableRoles,
+          ...allProfiles.map((profile) => profile.role).filter(Boolean),
+          ...defs.map((def) => def.key).filter(Boolean),
+        ]),
+      ).sort((a, b) => a.localeCompare(b)),
+    [assignableRoles, allProfiles, defs],
+  );
 
   const activeFilterCount =
     (selectedStoreIds.length > 0 ? 1 : 0) +
@@ -1149,9 +1160,9 @@ export default function UsersPage({ currentProfile }: Props) {
   });
 
   useEffect(() => {
-    const validStores = new Set(allUsersStoreOptions.map((store) => store.id));
+    const validStores = new Set(allUsersFilterStores.map((store) => store.id));
     setSelectedStoreIds((prev) => prev.filter((storeId) => validStores.has(storeId)));
-  }, [allUsersStoreOptions]);
+  }, [allUsersFilterStores]);
 
   useEffect(() => {
     const validRoles = new Set(allUsersRoleOptions);
@@ -1748,55 +1759,31 @@ export default function UsersPage({ currentProfile }: Props) {
       {effectiveTab === 'all' && (
         <div className="card table-wrap">
           <div
-            style={{
-              display: 'flex',
-              gap: 10,
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              marginBottom: 12,
-            }}
+            className="users-all-filters"
           >
-            <label className="small" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <span>{t.common.stores}</span>
-              <select
-                multiple
-                value={selectedStoreIds}
-                onChange={(e) =>
-                  setSelectedStoreIds(
-                    Array.from(e.target.selectedOptions).map((option) => option.value),
-                  )
-                }
-                style={{ minWidth: 200, maxWidth: 280, minHeight: 72, fontSize: 12 }}
-              >
-                {allUsersStoreOptions.map((store) => (
-                  <option key={store.id} value={store.id}>
-                    {store.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="users-all-filter-col">
+              <p className="small users-all-filter-heading">{t.common.stores}</p>
+              <StorePicker
+                stores={allUsersFilterStores}
+                selectedStoreIds={selectedStoreIds}
+                onChange={setSelectedStoreIds}
+                compact
+              />
+            </div>
 
-            <label className="small" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <span>{t.common.role}</span>
-              <select
-                multiple
-                value={selectedRoles}
-                onChange={(e) =>
-                  setSelectedRoles(
-                    Array.from(e.target.selectedOptions).map((option) => option.value),
-                  )
-                }
-                style={{ minWidth: 160, maxWidth: 220, minHeight: 72, fontSize: 12 }}
-              >
-                {allUsersRoleOptions.map((role) => (
-                  <option key={role} value={role}>
-                    {role}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="users-all-filter-col">
+              <p className="small users-all-filter-heading">{t.common.role}</p>
+              <RolePicker
+                roles={allUsersRoleOptions}
+                selectedRoles={selectedRoles}
+                onChange={setSelectedRoles}
+                compact
+              />
+            </div>
+          </div>
 
-            {hasActiveFilters && (
+          {hasActiveFilters && (
+            <div style={{ marginBottom: 12 }}>
               <button
                 className="secondary"
                 style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
@@ -1807,8 +1794,9 @@ export default function UsersPage({ currentProfile }: Props) {
               >
                 Clear filters
               </button>
-            )}
-          </div>
+            </div>
+          )}
+
           <table>
             <thead>
               <tr>

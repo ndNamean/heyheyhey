@@ -695,6 +695,49 @@ tbody tr:hover td {
   padding: 4px 0;
 }
 
+.store-picker-compact .store-picker-toolbar {
+  margin-bottom: 6px;
+}
+
+.store-picker-compact .store-picker-action-btn {
+  padding: 4px 8px;
+  min-height: 30px;
+  font-size: 12px;
+}
+
+.store-picker-compact .store-picker-panel {
+  max-height: 140px;
+  padding: 8px 10px;
+  gap: 4px;
+}
+
+.store-picker-compact .store-picker-row {
+  padding: 2px 0;
+}
+
+.users-all-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 10px;
+  align-items: start;
+  margin-bottom: 10px;
+}
+
+.users-all-filter-col {
+  min-width: 0;
+}
+
+.users-all-filter-heading {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .users-all-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* ── Badges ───────────────────────────────────────────────────────────────── */
 .badge {
   display: inline-block;

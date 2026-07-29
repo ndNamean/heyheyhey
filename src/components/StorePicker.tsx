@@ -5,9 +5,15 @@ export interface StorePickerProps {
   stores: Store[];
   selectedStoreIds: string[];
   onChange: (ids: string[]) => void;
+  compact?: boolean;
 }
 
-export default function StorePicker({ stores, selectedStoreIds, onChange }: StorePickerProps) {
+export default function StorePicker({
+  stores,
+  selectedStoreIds,
+  onChange,
+  compact = false,
+}: StorePickerProps) {
   const { t } = useLang();
   const selectedSet = new Set(selectedStoreIds);
 
@@ -30,7 +36,7 @@ export default function StorePicker({ stores, selectedStoreIds, onChange }: Stor
   const countLabel = t.common.selectedCount.replace('{count}', String(selectedStoreIds.length));
 
   return (
-    <div className="store-picker">
+    <div className={`store-picker${compact ? ' store-picker-compact' : ''}`}>
       <div className="store-picker-toolbar">
         <div className="store-picker-actions">
           <button
