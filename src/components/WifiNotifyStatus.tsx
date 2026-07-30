@@ -195,7 +195,7 @@ export default function WifiNotifyStatus({ profile }: Props) {
     return null;
   }
 
-  const toggleDetailsLabel = detailsOpen ? t.wifiNotify.hideDetails : t.wifiNotify.showDetails;
+  const toggleDetailsLabel = detailsOpen ? '▲' : '▼';
 
   if (hasActiveSession) {
     return (
