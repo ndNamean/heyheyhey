@@ -15,9 +15,39 @@ import {
   loadProfileContext,
   verifyRequestUser,
 } from './_lib/export/auth.js';
+import { deliverPushForNotificationIds } from './_lib/push/deliver-notifications.js';
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function notificationIdsFromTxs(txs) {
+  const ids = [];
+  for (const chunk of txs) {
+    const ops = chunk?.__ops;
+    if (!Array.isArray(ops)) continue;
+    for (const op of ops) {
+      if (!Array.isArray(op) || op.length < 3) continue;
+      const [cmd, etype, entityId] = op;
+      if (
+        (cmd === 'update' || cmd === 'merge' || cmd === 'create') &&
+        etype === 'notifications' &&
+        typeof entityId === 'string'
+      ) {
+        ids.push(entityId);
+      }
+    }
+  }
+  return [...new Set(ids)];
+}
+
+/** Fire-and-forget in-process push deliver after inbox writes. */
+function schedulePushAfterNotify(txs) {
+  const ids = notificationIdsFromTxs(txs);
+  if (!ids.length) return;
+  void deliverPushForNotificationIds(ids).catch((err) => {
+    console.warn('[logbook-notify] push deliver skipped', err?.message || err);
+  });
 }
 
 function emptyLogbookNotifFields(storeId, entryId, actionStatus) {
@@ -429,6 +459,7 @@ export default async function handler(req, res) {
 
     if (txs.length) {
       await adminDb.transact(txs);
+      schedulePushAfterNotify(txs);
     }
     return res.status(200).json({ ok: true, created: txs.length });
   }
@@ -462,6 +493,7 @@ export default async function handler(req, res) {
     );
     if (txs.length) {
       await adminDb.transact(txs);
+      schedulePushAfterNotify(txs);
     }
     return res.status(200).json({ ok: true, created: txs.length });
   }
@@ -497,6 +529,7 @@ export default async function handler(req, res) {
     );
     if (txs.length) {
       await adminDb.transact(txs);
+      schedulePushAfterNotify(txs);
     }
     return res.status(200).json({ ok: true, created: txs.length });
   }

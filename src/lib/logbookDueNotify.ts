@@ -51,6 +51,8 @@ export async function maybeNotifyLogbookDueStates(
   if (!all.length) return;
   try {
     await db.transact(all);
+    const { schedulePushDeliveryFromTxs } = await import('./pushDelivery');
+    schedulePushDeliveryFromTxs(notifTxs);
   } catch {
     // Best-effort; ignore permission / race failures
   }

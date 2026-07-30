@@ -673,6 +673,56 @@ export const sectionsEn = {
     noStores: 'No stores yet.',
     active: 'Active',
     deactivate: 'Deactivate',
+    wifiIpsTitle: 'Store Wi-Fi public IPs',
+    wifiIpsHelper:
+      "Connect this device to the store's Wi-Fi, turn off VPN and mobile data, then select Detect current public IP. Add each separate internet line used by this store. Do not enter local addresses such as 192.168.x.x or 10.x.x.x.",
+    wifiIpsLimitation:
+      'Public IP is verified only when activating store notifications. A closed or backgrounded app cannot continuously prove the device remains on store Wi-Fi.',
+    wifiIpLabel: 'Network label',
+    wifiIpLabelPlaceholder: 'e.g. Main Wi-Fi or Backup ISP',
+    wifiIpAddress: 'Public IP',
+    wifiIpPlaceholder: 'Public IP, e.g. 203.0.113.25',
+    wifiIpActive: 'Active',
+    wifiIpRemove: 'Remove',
+    wifiIpRemoveConfirm: 'Remove this Wi-Fi IP from the store?',
+    wifiIpAddAnother: '+ Add another IP',
+    wifiIpDetect: 'Detect current public IP',
+    wifiIpDetectConfirm:
+      'Detected public IP: {ip}\n\nConfirm you are connected to the correct store Wi-Fi before adding it.',
+    wifiIpDetectDuplicate: 'That IP is already in the list for this store.',
+    wifiIpDetectFailed: 'Could not detect public IP.',
+    wifiIpTest: 'Test current network',
+    wifiIpTestMatch: 'Current network matches an active Wi-Fi IP for this store ({ip}).',
+    wifiIpTestNoMatch: 'Current network does not match any active Wi-Fi IP for this store ({ip}).',
+    wifiIpTestFailed: 'Could not test current network.',
+    wifiIpInvalid: 'Invalid or private public IP: {ip}',
+    wifiIpDuplicate: 'Active public IP {ip} is already assigned to another store.',
+    wifiIpDuplicateDraft: 'Duplicate active public IP in this store: {ip}',
+    wifiActiveCount: '{n} active Wi-Fi IPs',
+    wifiListColumn: 'Wi-Fi IPs',
+  },
+  wifiNotify: {
+    unrecognized:
+      'Network not recognized. You can continue using the app, but store push notifications are inactive on this device.',
+    recognizedTitle: 'Store Wi-Fi recognized: {storeCode}',
+    enableHint: 'Enable store notifications on this device for your current shift.',
+    enable: 'Enable store notifications',
+    enabling: 'Enabling…',
+    active:
+      'Store Wi-Fi recognized: {storeCode}. Notifications active on this device until {time}.',
+    sendTest: 'Send test notification',
+    testSent:
+      'Test notification sent. Sound and vibration depend on your device settings (Silent / Focus / DND).',
+    testFailed: 'Could not send test notification.',
+    activateFailed: 'Could not activate store notifications.',
+    statusFailed: 'Could not check network status',
+    permissionDenied:
+      'Notifications are blocked for this site. Enable them in browser settings, then try again.',
+    unsupported: 'Push notifications are not supported in this browser.',
+    iosInstallFirst:
+      'On iPhone/iPad, add Hey Pelo Ops to your Home Screen first, then open it from there to enable store notifications.',
+    limitation:
+      'Public IP is checked when you enable notifications — not continuously while the app is closed or in the background.',
   },
   users: {
     title: 'Users & Access',
@@ -1839,6 +1889,56 @@ export const sectionsVi = {
     noStores: 'Chưa có cửa hàng nào.',
     active: 'Hoạt động',
     deactivate: 'Vô hiệu hóa',
+    wifiIpsTitle: 'IP công khai Wi-Fi cửa hàng',
+    wifiIpsHelper:
+      'Kết nối thiết bị này với Wi-Fi cửa hàng, tắt VPN và dữ liệu di động, rồi chọn Phát hiện IP công khai hiện tại. Thêm từng đường internet riêng của cửa hàng. Không nhập địa chỉ nội bộ như 192.168.x.x hoặc 10.x.x.x.',
+    wifiIpsLimitation:
+      'IP công khai chỉ được xác minh khi kích hoạt thông báo cửa hàng. Ứng dụng đã đóng hoặc chạy nền không thể liên tục chứng minh thiết bị vẫn trên Wi-Fi cửa hàng.',
+    wifiIpLabel: 'Nhãn mạng',
+    wifiIpLabelPlaceholder: 'vd. Wi-Fi chính hoặc ISP dự phòng',
+    wifiIpAddress: 'IP công khai',
+    wifiIpPlaceholder: 'IP công khai, vd. 203.0.113.25',
+    wifiIpActive: 'Hoạt động',
+    wifiIpRemove: 'Xóa',
+    wifiIpRemoveConfirm: 'Xóa IP Wi-Fi này khỏi cửa hàng?',
+    wifiIpAddAnother: '+ Thêm IP khác',
+    wifiIpDetect: 'Phát hiện IP công khai hiện tại',
+    wifiIpDetectConfirm:
+      'IP công khai phát hiện: {ip}\n\nXác nhận bạn đang kết nối đúng Wi-Fi cửa hàng trước khi thêm.',
+    wifiIpDetectDuplicate: 'IP này đã có trong danh sách cửa hàng.',
+    wifiIpDetectFailed: 'Không phát hiện được IP công khai.',
+    wifiIpTest: 'Kiểm tra mạng hiện tại',
+    wifiIpTestMatch: 'Mạng hiện tại khớp một IP Wi-Fi đang hoạt động của cửa hàng ({ip}).',
+    wifiIpTestNoMatch: 'Mạng hiện tại không khớp IP Wi-Fi nào đang hoạt động của cửa hàng ({ip}).',
+    wifiIpTestFailed: 'Không kiểm tra được mạng hiện tại.',
+    wifiIpInvalid: 'IP công khai không hợp lệ hoặc là IP nội bộ: {ip}',
+    wifiIpDuplicate: 'IP công khai đang hoạt động {ip} đã được gán cho cửa hàng khác.',
+    wifiIpDuplicateDraft: 'Trùng IP công khai đang hoạt động trong cửa hàng này: {ip}',
+    wifiActiveCount: '{n} IP Wi-Fi đang hoạt động',
+    wifiListColumn: 'IP Wi-Fi',
+  },
+  wifiNotify: {
+    unrecognized:
+      'Không nhận diện được mạng. Bạn vẫn dùng được ứng dụng, nhưng thông báo đẩy cửa hàng đang tắt trên thiết bị này.',
+    recognizedTitle: 'Đã nhận diện Wi-Fi cửa hàng: {storeCode}',
+    enableHint: 'Bật thông báo cửa hàng trên thiết bị này cho ca hiện tại.',
+    enable: 'Bật thông báo cửa hàng',
+    enabling: 'Đang bật…',
+    active:
+      'Đã nhận diện Wi-Fi cửa hàng: {storeCode}. Thông báo đang bật trên thiết bị này đến {time}.',
+    sendTest: 'Gửi thông báo thử',
+    testSent:
+      'Đã gửi thông báo thử. Âm thanh và rung phụ thuộc cài đặt thiết bị (Im lặng / Tập trung / Không làm phiền).',
+    testFailed: 'Không gửi được thông báo thử.',
+    activateFailed: 'Không bật được thông báo cửa hàng.',
+    statusFailed: 'Không kiểm tra được trạng thái mạng',
+    permissionDenied:
+      'Thông báo đang bị chặn cho trang này. Hãy bật trong cài đặt trình duyệt rồi thử lại.',
+    unsupported: 'Trình duyệt này không hỗ trợ thông báo đẩy.',
+    iosInstallFirst:
+      'Trên iPhone/iPad, hãy thêm Hey Pelo Ops vào Màn hình chính trước, rồi mở từ đó để bật thông báo cửa hàng.',
+    limitation:
+      'IP công cộng chỉ được kiểm tra khi bạn bật thông báo — không theo dõi liên tục khi ứng dụng đóng hoặc chạy nền.',
   },
   users: {
     title: 'Người dùng & Quyền truy cập',

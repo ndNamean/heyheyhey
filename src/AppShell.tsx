@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { DesktopNav, MobileNav, type Page } from './components/Nav';
+import WifiNotifyStatus from './components/WifiNotifyStatus';
 import StaffHome from './pages/StaffHome';
 import DashboardPage from './pages/DashboardPage';
 import SubmitReportPage from './pages/SubmitReportPage';
@@ -198,6 +199,7 @@ export default function AppShell({ profile }: Props) {
     <div className="app-shell">
       <main className="page">
         <DesktopNav page={page} setPage={setPage} profile={profile} onOpenLogbook={() => goLogbook()} />
+        <WifiNotifyStatus profile={profile} />
         {renderPage()}
         <MobileNav page={page} setPage={setPage} profile={profile} onOpenLogbook={() => goLogbook()} />
       </main>

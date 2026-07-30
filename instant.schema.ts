@@ -502,6 +502,55 @@ const _schema = i.schema({
       createdAt: i.string(),
       updatedAt: i.string(),
     }),
+
+    // ─── Store Wi-Fi public IPs (push activation gate) ───────────────────────
+    storeWifiIps: i.entity({
+      storeId: i.string().indexed(),
+      label: i.string(),
+      publicIp: i.string().indexed(),
+      active: i.boolean(),
+      createdAt: i.string(),
+      updatedAt: i.string(),
+    }),
+
+    // ─── Web Push subscriptions (device-scoped) ──────────────────────────────
+    pushSubscriptions: i.entity({
+      userId: i.string().indexed(),
+      deviceId: i.string().indexed(),
+      endpoint: i.string().unique(),
+      p256dh: i.string(),
+      auth: i.string(),
+      userAgent: i.string(),
+      createdAt: i.string(),
+      updatedAt: i.string(),
+      revokedAt: i.string(),              // '' = active
+    }),
+
+    // ─── Device activation sessions (Admin SDK writes only) ──────────────────
+    notificationActivationSessions: i.entity({
+      userId: i.string().indexed(),
+      deviceId: i.string().indexed(),
+      storeId: i.string().indexed(),
+      wifiIpId: i.string(),
+      shiftId: i.string(),
+      subscriptionId: i.string(),
+      matchedPublicIp: i.string(),
+      storeCode: i.string(),
+      activatedAt: i.string(),
+      expiresAt: i.string().indexed(),
+      deactivatedAt: i.string(),          // '' = active
+      deactivateReason: i.string(),
+    }),
+
+    // ─── Push delivery / suppression audit (Admin SDK writes only) ───────────
+    pushDeliveryLogs: i.entity({
+      notificationId: i.string().indexed(),
+      userId: i.string().indexed(),
+      deviceId: i.string(),
+      outcome: i.string(),                // sent|suppressed
+      reason: i.string(),
+      createdAt: i.string(),
+    }),
   },
 
   links: {
@@ -521,6 +570,12 @@ const _schema = i.schema({
     profileStores: {
       forward: { on: 'profiles', has: 'many', label: 'stores' },
       reverse: { on: 'stores', has: 'many', label: 'staff' },
+    },
+
+    // ─── StoreWifiIps -> store (many:one) ─────────────────────────────────────
+    storeWifiIpStore: {
+      forward: { on: 'storeWifiIps', has: 'one', label: 'store' },
+      reverse: { on: 'stores', has: 'many', label: 'wifiIps' },
     },
 
     // ─── Templates <-> stores (many:many) ────────────────────────────────────

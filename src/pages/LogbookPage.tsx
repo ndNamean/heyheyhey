@@ -93,6 +93,7 @@ import {
   buildLogbookNoteAnnouncementNotifications,
   buildLogbookResolutionDecisionNotifications,
 } from '../lib/notifications';
+import { schedulePushDeliveryFromTxs } from '../lib/pushDelivery';
 import {
   buildLogbookAssignmentChangedEvent,
   buildLogbookCreatorUpdateEvent,
@@ -595,6 +596,7 @@ export default function LogbookPage({
       }
 
       await db.transact(txs as Parameters<typeof db.transact>[0]);
+      schedulePushDeliveryFromTxs(txs);
       setForm({
         entryType: 'note',
         storeId: '',
@@ -748,7 +750,7 @@ export default function LogbookPage({
     const note = prompt(t.logbook.reviewNotePrompt) ?? '';
     if (!note.trim()) return alert(t.logbook.reviewNoteRequired);
     const now = nowIso();
-    await db.transact([
+    const txs = [
       db.tx.logbookEntries[entry.id].update({
         status: 'resolved',
         resolvedAt: now,
@@ -766,7 +768,9 @@ export default function LogbookPage({
         'approved',
         defs,
       ),
-    ]);
+    ];
+    await db.transact(txs);
+    schedulePushDeliveryFromTxs(txs);
   }
 
   async function requestCorrection(entry: LogbookEntry) {
@@ -774,7 +778,7 @@ export default function LogbookPage({
     const note = prompt(t.logbook.correctionNotePrompt) ?? '';
     if (!note.trim()) return alert(t.logbook.reviewNoteRequired);
     const now = nowIso();
-    await db.transact([
+    const txs = [
       db.tx.logbookEntries[entry.id].update({
         status: 'in_progress',
         reviewedAt: now,
@@ -790,7 +794,9 @@ export default function LogbookPage({
         'rejected',
         defs,
       ),
-    ]);
+    ];
+    await db.transact(txs);
+    schedulePushDeliveryFromTxs(txs);
   }
 
   async function reopenIssue(entry: LogbookEntry) {
@@ -800,7 +806,7 @@ export default function LogbookPage({
     const reason = prompt(t.logbook.reopenReasonPrompt) ?? '';
     if (!reason.trim()) return alert(t.logbook.reopenReasonRequired);
     const now = nowIso();
-    await db.transact([
+    const txs = [
       db.tx.logbookEntries[entry.id].update({
         status: 'in_progress',
         reopenedAt: now,
@@ -815,7 +821,9 @@ export default function LogbookPage({
         allProfiles,
         defs,
       ),
-    ]);
+    ];
+    await db.transact(txs);
+    schedulePushDeliveryFromTxs(txs);
   }
 
   function openChangeAssignment(entry: LogbookEntry) {
@@ -876,7 +884,7 @@ export default function LogbookPage({
 
     setChangeAssignSaving(true);
     try {
-      await db.transact([
+      const txs = [
         db.tx.logbookEntries[entry.id].update({
           assigneeRole: role,
           assigneeUserIdsJson,
@@ -886,7 +894,9 @@ export default function LogbookPage({
         }),
         buildLogbookAssignmentChangedEvent(entry, profile, note, nextStatus, prevStatus),
         ...buildLogbookIssueAssignedNotifications(updated as LogbookEntry, profile, allProfiles, defs),
-      ]);
+      ];
+      await db.transact(txs);
+      schedulePushDeliveryFromTxs(txs);
       setChangeAssignEntryId(null);
       setChangeAssignForm({
         assigneeRole: eligibleAssigneeRoles[0] || '',
@@ -908,7 +918,7 @@ export default function LogbookPage({
     const prevStatus = resolveLogbookIssueStatus(entry) || 'open';
     const now = nowIso();
     try {
-      await db.transact([
+      const txs = [
         db.tx.logbookEntries[entry.id].update({
           status: 'recalled',
           recalledAt: now,
@@ -924,7 +934,9 @@ export default function LogbookPage({
           reason.trim(),
           defs,
         ),
-      ]);
+      ];
+      await db.transact(txs);
+      schedulePushDeliveryFromTxs(txs);
       if (proofEntryId === entry.id) closeResolutionForm();
     } catch (e) {
       alert(e instanceof Error ? e.message : t.logbook.saveFailed);
@@ -984,7 +996,7 @@ export default function LogbookPage({
         ? 'anyone with role'
         : assigneeUserIds.map((uid) => profileNameById.get(uid) || uid).join(', ');
     const prevStatus = resolveLogbookIssueStatus(entry) || 'open';
-    await db.transact([
+    const txs = [
       db.tx.logbookEntries[entry.id].update({
         assigneeRole: setupForm.assigneeRole,
         assigneeUserIdsJson,
@@ -1013,7 +1025,9 @@ export default function LogbookPage({
         allProfiles,
         defs,
       ),
-    ]);
+    ];
+    await db.transact(txs);
+    schedulePushDeliveryFromTxs(txs);
     setSetupEntryId(null);
   }
 
@@ -1047,6 +1061,7 @@ export default function LogbookPage({
     );
     try {
       await db.transact(txs as Parameters<typeof db.transact>[0]);
+      schedulePushDeliveryFromTxs(txs);
       setCreatorUpdateEntryId(null);
       setCreatorNote('');
       setCreatorMedia(null);

@@ -518,6 +518,55 @@ const rules = {
     bind: { ...LEGACY_BIND },
   },
 
+  // ── Store Wi-Fi public IPs (master-data only; hide from ordinary staff) ───
+  storeWifiIps: {
+    allow: {
+      view: 'canEditMaster',
+      create: 'canEditMaster',
+      update: 'canEditMaster',
+      delete: 'canEditMaster',
+      link: {
+        store: 'canEditMaster',
+      },
+      unlink: {
+        store: 'canEditMaster',
+      },
+    },
+    bind: { ...LEGACY_BIND },
+  },
+
+  // ── Web Push subscriptions (own device only) ──────────────────────────────
+  pushSubscriptions: {
+    allow: {
+      view: 'isApproved && data.userId == auth.id',
+      create: 'isApproved && data.userId == auth.id',
+      update: 'isApproved && data.userId == auth.id',
+      delete: 'false',
+    },
+    bind: { ...LEGACY_BIND },
+  },
+
+  // ── Notification activation sessions (Admin SDK writes only) ──────────────
+  notificationActivationSessions: {
+    allow: {
+      view: 'isApproved && data.userId == auth.id',
+      create: 'false',
+      update: 'false',
+      delete: 'false',
+    },
+    bind: { ...LEGACY_BIND },
+  },
+
+  // ── Push delivery logs (Admin SDK only; no client access) ─────────────────
+  pushDeliveryLogs: {
+    allow: {
+      view: 'false',
+      create: 'false',
+      update: 'false',
+      delete: 'false',
+    },
+  },
+
   // ── User change requests ──────────────────────────────────────────────────
   userChangeRequests: {
     allow: {

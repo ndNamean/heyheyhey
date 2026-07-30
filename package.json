@@ -24,6 +24,7 @@
     "react-easy-crop": "^6.2.2",
     "react-leaflet": "^4.2.1",
     "tz-lookup": "^6.1.25",
+    "web-push": "^3.6.7",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

@@ -248,6 +248,17 @@ export interface InvitationAdminRow {
   revokedAt: string;
 }
 
+export interface StoreWifiIp {
+  id: string;
+  storeId: string;
+  label: string;
+  publicIp: string;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+  store?: Store;
+}
+
 export interface Store {
   id: string;
   code: string;
@@ -261,6 +272,59 @@ export interface Store {
   createdAt: string;
   updatedAt: string;
   proofLogoUrl?: string;
+  wifiIps?: StoreWifiIp[];
+}
+
+export type PushDeactivateReason =
+  | ''
+  | 'logout'
+  | 'shift_end'
+  | 'auth_expired'
+  | 'store_access_removed'
+  | 'store_deactivated'
+  | 'wifi_ip_deactivated'
+  | 'subscription_removed'
+  | 'replaced';
+
+export interface PushSubscriptionRecord {
+  id: string;
+  userId: string;
+  deviceId: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+  userAgent: string;
+  createdAt: string;
+  updatedAt: string;
+  revokedAt: string;
+}
+
+export interface NotificationActivationSession {
+  id: string;
+  userId: string;
+  deviceId: string;
+  storeId: string;
+  wifiIpId: string;
+  shiftId: string;
+  subscriptionId: string;
+  matchedPublicIp: string;
+  storeCode: string;
+  activatedAt: string;
+  expiresAt: string;
+  deactivatedAt: string;
+  deactivateReason: PushDeactivateReason | string;
+}
+
+export type PushDeliveryOutcome = 'sent' | 'suppressed';
+
+export interface PushDeliveryLog {
+  id: string;
+  notificationId: string;
+  userId: string;
+  deviceId: string;
+  outcome: PushDeliveryOutcome | string;
+  reason: string;
+  createdAt: string;
 }
 
 export interface Template {

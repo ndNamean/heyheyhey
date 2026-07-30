@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import { BACK_PRIORITY, useNativeBack } from '../lib/nativeBack';
+import { signOutWithWifiDeactivate } from '../lib/wifiNotifyLogout';
 import LanguageSelector from './LanguageSelector';
 import type { ApprovalStatus, Profile } from '../types';
 
@@ -242,7 +243,7 @@ function PendingScreen({ email, status }: { email: string; status: ApprovalStatu
         <span className="ticket-status-dot" />
         {t.auth.waitingBadge}
       </div>
-      <button className="secondary" style={{ width: '100%', marginTop: 20 }} onClick={() => db.auth.signOut()}>
+      <button className="secondary" style={{ width: '100%', marginTop: 20 }} onClick={() => void signOutWithWifiDeactivate()}>
         {t.auth.signOut}
       </button>
     </TicketShell>
@@ -260,7 +261,7 @@ function RejectedScreen({ email }: { email: string }) {
         {t.auth.rejectedBody} <strong>{email}</strong>
       </p>
       <p className="small" style={{ marginBottom: 24 }}>{t.auth.rejectedContact}</p>
-      <button className="secondary" style={{ width: '100%' }} onClick={() => db.auth.signOut()}>
+      <button className="secondary" style={{ width: '100%' }} onClick={() => void signOutWithWifiDeactivate()}>
         {t.auth.signOut}
       </button>
     </TicketShell>
@@ -276,7 +277,7 @@ function NeedInvitationScreen({ email }: { email: string }) {
       <h2 className="ticket-section-title">{t.auth.needInvitationTitle}</h2>
       <p style={{ marginBottom: 8 }}><strong>{email}</strong></p>
       <p className="small" style={{ marginBottom: 24 }}>{t.auth.needInvitationBody}</p>
-      <button className="secondary" style={{ width: '100%' }} onClick={() => db.auth.signOut()}>
+      <button className="secondary" style={{ width: '100%' }} onClick={() => void signOutWithWifiDeactivate()}>
         {t.auth.signOut}
       </button>
     </TicketShell>
@@ -304,7 +305,7 @@ export default function AuthGate({ children }: Props) {
       <TicketShell>
         <h2 className="ticket-section-title">{t.auth.errorTitle}</h2>
         <p className="small" style={{ marginBottom: 20 }}>{authError.message}</p>
-        <button className="secondary" style={{ width: '100%' }} onClick={() => db.auth.signOut()}>
+        <button className="secondary" style={{ width: '100%' }} onClick={() => void signOutWithWifiDeactivate()}>
           {t.auth.signOut}
         </button>
       </TicketShell>

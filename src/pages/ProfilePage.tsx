@@ -4,6 +4,7 @@ import { useLang } from '../i18n';
 import LanguageSelector from '../components/LanguageSelector';
 import ProfileAvatarEditor from '../components/profileAvatar/ProfileAvatarEditor';
 import { nowIso } from '../lib/utils';
+import { signOutWithWifiDeactivate } from '../lib/wifiNotifyLogout';
 import type { Profile } from '../types';
 
 interface Props {
@@ -92,7 +93,7 @@ export default function ProfilePage({ profile }: Props) {
       </div>
 
       <div className="card">
-        <button className="danger" onClick={() => db.auth.signOut()}>
+        <button className="danger" onClick={() => void signOutWithWifiDeactivate()}>
           {t.profile.signOut}
         </button>
       </div>

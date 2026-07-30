@@ -1,4 +1,5 @@
 import { db } from '../db';
+import { signOutWithWifiDeactivate } from '../lib/wifiNotifyLogout';
 import {
   canAccessChecklistItemProposals,
   canAccessUsersPage,
@@ -108,7 +109,7 @@ export function DesktopNav({ page, setPage, profile, onOpenLogbook }: NavProps) 
 
       <LanguageSelector />
 
-      <button className="secondary" onClick={() => db.auth.signOut()}>
+      <button className="secondary" onClick={() => void signOutWithWifiDeactivate()}>
         {t.nav.signOut}
       </button>
     </div>

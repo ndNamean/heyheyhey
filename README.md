@@ -145,3 +145,36 @@ restaurant-ops-instant/
    - Google Cloud Console → OAuth client → Authorized JavaScript origins
    - Instant Dashboard → Auth → your Google client
 4. Set `VITE_GOOGLE_CLIENT_ID` and `VITE_INSTANT_APP_ID` as environment variables in your host.
+
+---
+
+## Store Wi-Fi + Web Push
+
+Staff can enable store push notifications when the device’s public IP matches a configured store Wi-Fi IP **and** they have an overlapping scheduled shift. Delivery is gated by an activation session; the in-app inbox is unchanged if push is suppressed.
+
+### VAPID environment variables (server-only)
+
+Generate once:
+
+```powershell
+npx web-push generate-vapid-keys
+```
+
+Set on local `.env` / `.env.local` **and** Vercel → Settings → Environment Variables (then redeploy):
+
+| Variable | Notes |
+|----------|--------|
+| `VAPID_PUBLIC_KEY` | Public key from `web-push` |
+| `VAPID_PRIVATE_KEY` | Private key — **never** commit, never use `VITE_*` |
+| `VAPID_SUBJECT` | Contact URI, e.g. `mailto:ops@example.com` |
+
+Also push Instant schema/perms after pulling entity changes:
+
+```powershell
+npx instant-cli@latest push schema --yes
+npx instant-cli@latest push perms
+```
+
+### Platform limitation
+
+Public IP is verified **only when activating** (and re-checked against the stored session on each push delivery). A closed or backgrounded web app **cannot** continuously prove the device remains on store Wi-Fi after activation. Copy in the UI and Stores page states this explicitly.

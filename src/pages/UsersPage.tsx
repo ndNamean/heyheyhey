@@ -23,6 +23,7 @@ import {
   buildAccessManagerRequestedNotifications,
   buildAccessRecheckNotifications,
 } from '../lib/notifications';
+import { schedulePushDeliveryFromTxs } from '../lib/pushDelivery';
 import {
   canAccessUsersPage,
   canFinalApproveAccess,
@@ -441,6 +442,7 @@ function ApproveModal({
         ...buildAccessFinalizedNotification(pending, 'approved', currentProfile),
       ];
       await db.transact(txs);
+      schedulePushDeliveryFromTxs(txs);
       onClose();
     } catch (e) {
       alert(e instanceof Error ? e.message : t.users.approveFailed);
@@ -516,7 +518,7 @@ function RequestManagerModal({
     setSaving(true);
     try {
       const now = nowIso();
-      await db.transact([
+      const txs = [
         db.tx.profiles[target.id].update({
           approvalStatus: 'manager_review',
           accessReviewStoreIdsJson: JSON.stringify(selectedStoreIds),
@@ -532,7 +534,9 @@ function RequestManagerModal({
           currentProfile,
           allProfiles,
         ),
-      ]);
+      ];
+      await db.transact(txs);
+      schedulePushDeliveryFromTxs(txs);
       onClose();
     } catch (e) {
       alert(e instanceof Error ? e.message : t.errors.saveFailed);
@@ -1205,13 +1209,15 @@ export default function UsersPage({ currentProfile }: Props) {
 
   async function rejectAccess(profile: Profile) {
     const now = nowIso();
-    await db.transact([
+    const txs = [
       db.tx.profiles[profile.id].update({
         approvalStatus: 'rejected',
         updatedAt: now,
       }),
       ...buildAccessFinalizedNotification(profile, 'rejected', currentProfile),
-    ]);
+    ];
+    await db.transact(txs);
+    schedulePushDeliveryFromTxs(txs);
   }
 
   async function deleteUserAccess(profile: Profile) {
@@ -1262,7 +1268,7 @@ export default function UsersPage({ currentProfile }: Props) {
 
   async function preApproveAccess(profile: Profile) {
     const now = nowIso();
-    await db.transact([
+    const txs = [
       db.tx.profiles[profile.id].update({
         approvalStatus: 'pre_approved',
         preApprovedByUserId: currentProfile.userId,
@@ -1272,24 +1278,28 @@ export default function UsersPage({ currentProfile }: Props) {
         updatedAt: now,
       }),
       ...buildAccessAdminNotifications(profile, 'access_pre_approved', '', currentProfile, profiles),
-    ]);
+    ];
+    await db.transact(txs);
+    schedulePushDeliveryFromTxs(txs);
   }
 
   async function flagAccess(profile: Profile, note: string) {
     const now = nowIso();
-    await db.transact([
+    const txs = [
       db.tx.profiles[profile.id].update({
         approvalStatus: 'pending',
         accessReviewNote: note,
         updatedAt: now,
       }),
       ...buildAccessAdminNotifications(profile, 'access_flagged', note, currentProfile, profiles),
-    ]);
+    ];
+    await db.transact(txs);
+    schedulePushDeliveryFromTxs(txs);
   }
 
   async function checkAgainAccess(profile: Profile, note: string) {
     const now = nowIso();
-    await db.transact([
+    const txs = [
       db.tx.profiles[profile.id].update({
         approvalStatus: 'needs_manager_recheck',
         accessReviewNote: note,
@@ -1298,7 +1308,9 @@ export default function UsersPage({ currentProfile }: Props) {
         updatedAt: now,
       }),
       ...buildAccessRecheckNotifications(profile, note, currentProfile, profiles),
-    ]);
+    ];
+    await db.transact(txs);
+    schedulePushDeliveryFromTxs(txs);
   }
 
   const approvingProfile = approvingId ? profiles.find((p) => p.id === approvingId) : null;

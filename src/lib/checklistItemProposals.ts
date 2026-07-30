@@ -481,6 +481,8 @@ function notifyUsers(
 
 async function transactAll(txs: unknown[]) {
   await db.transact(txs as Parameters<typeof db.transact>[0]);
+  const { schedulePushDeliveryFromTxs } = await import('./pushDelivery');
+  schedulePushDeliveryFromTxs(txs);
 }
 
 export interface CreateProposalParams {

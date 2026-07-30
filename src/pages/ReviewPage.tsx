@@ -9,6 +9,7 @@ import {
   buildLogbookResolutionDecisionNotifications,
   buildReportFinalizedNotifications,
 } from '../lib/notifications';
+import { schedulePushDeliveryFromTxs } from '../lib/pushDelivery';
 import {
   buildItemReviewEvent,
   buildLogbookResolutionApprovedEvent,
@@ -96,6 +97,13 @@ export default function ReviewPage({ profile }: Props) {
     const note = prompt(t.logbook.reviewNotePrompt) ?? '';
     if (!note.trim()) return alert(t.logbook.reviewNoteRequired);
     const now = nowIso();
+    const notificationTxs = buildLogbookResolutionDecisionNotifications(
+      { ...entry, reviewNote: note.trim() },
+      profile,
+      allProfiles,
+      'approved',
+      defs,
+    );
     await db.transact([
       db.tx.logbookEntries[entry.id].update({
         status: 'resolved',
@@ -107,14 +115,9 @@ export default function ReviewPage({ profile }: Props) {
         updatedAt: now,
       }),
       buildLogbookResolutionApprovedEvent(entry, profile, note.trim()),
-      ...buildLogbookResolutionDecisionNotifications(
-        { ...entry, reviewNote: note.trim() },
-        profile,
-        allProfiles,
-        'approved',
-        defs,
-      ),
+      ...notificationTxs,
     ]);
+    schedulePushDeliveryFromTxs(notificationTxs);
   }
 
   async function requestLogbookCorrection(entry: LogbookEntry) {
@@ -122,6 +125,13 @@ export default function ReviewPage({ profile }: Props) {
     const note = prompt(t.logbook.correctionNotePrompt) ?? '';
     if (!note.trim()) return alert(t.logbook.reviewNoteRequired);
     const now = nowIso();
+    const notificationTxs = buildLogbookResolutionDecisionNotifications(
+      { ...entry, reviewNote: note.trim() },
+      profile,
+      allProfiles,
+      'rejected',
+      defs,
+    );
     await db.transact([
       db.tx.logbookEntries[entry.id].update({
         status: 'in_progress',
@@ -131,14 +141,9 @@ export default function ReviewPage({ profile }: Props) {
         updatedAt: now,
       }),
       buildLogbookResolutionRejectedEvent(entry, profile, note.trim()),
-      ...buildLogbookResolutionDecisionNotifications(
-        { ...entry, reviewNote: note.trim() },
-        profile,
-        allProfiles,
-        'rejected',
-        defs,
-      ),
+      ...notificationTxs,
     ]);
+    schedulePushDeliveryFromTxs(notificationTxs);
   }
 
   function openFeedbackModal(
@@ -210,6 +215,7 @@ export default function ReviewPage({ profile }: Props) {
       }),
       ...notificationTxs,
     ]);
+    schedulePushDeliveryFromTxs(notificationTxs);
   }
 
   async function handleFeedbackConfirm(result: FeedbackResult) {
@@ -249,6 +255,7 @@ export default function ReviewPage({ profile }: Props) {
       buildReportFinalizedEvent(report, newStatus, profile, nowIso()),
       ...notificationTxs,
     ]);
+    schedulePushDeliveryFromTxs(notificationTxs);
   }
 
   return (

@@ -168,6 +168,8 @@ function overlappingStoreIds(actor: Profile, target: Profile): string[] {
 
 async function transactAll(txs: unknown[]) {
   await db.transact(txs as Parameters<typeof db.transact>[0]);
+  const { schedulePushDeliveryFromTxs } = await import('./pushDelivery');
+  schedulePushDeliveryFromTxs(txs);
 }
 
 function softRevokeProfileTx(target: Profile, now: string) {
