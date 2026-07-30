@@ -76,10 +76,17 @@ export default function WifiNotifyStatus({ profile }: Props) {
   const [busy, setBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [showInstallGate, setShowInstallGate] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [localActive, setLocalActive] = useState<{
     storeCode: string;
     expiresAt: string;
   } | null>(null);
+
+  useEffect(() => {
+    if (actionMessage || statusError || showInstallGate) {
+      setDetailsOpen(true);
+    }
+  }, [actionMessage, statusError, showInstallGate]);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -188,28 +195,39 @@ export default function WifiNotifyStatus({ profile }: Props) {
     return null;
   }
 
+  const toggleDetailsLabel = detailsOpen ? t.wifiNotify.hideDetails : t.wifiNotify.showDetails;
+
   if (hasActiveSession) {
     return (
       <div className="alert-success wifi-notify-banner" style={{ marginBottom: 12 }}>
-        <p className="small" style={{ margin: 0 }}>
-          {activeExpiresAt
-            ? t.wifiNotify.activeUntil
-                .replace('{storeCode}', activeStoreCode)
-                .replace('{time}', formatExpiry(activeExpiresAt, lang))
-            : t.wifiNotify.active.replace('{storeCode}', activeStoreCode)}
-        </p>
-        <p className="small" style={{ margin: '8px 0 0', opacity: 0.85 }}>
-          {t.wifiNotify.limitation}
-        </p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-          <button className="secondary" disabled={busy} onClick={() => void onTestPush()}>
-            {t.wifiNotify.sendTest}
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+          <p className="small" style={{ margin: 0 }}>
+            {activeExpiresAt
+              ? t.wifiNotify.activeUntil
+                  .replace('{storeCode}', activeStoreCode)
+                  .replace('{time}', formatExpiry(activeExpiresAt, lang))
+              : t.wifiNotify.active.replace('{storeCode}', activeStoreCode)}
+          </p>
+          <button className="secondary" type="button" onClick={() => setDetailsOpen((v) => !v)}>
+            {toggleDetailsLabel}
           </button>
         </div>
-        {actionMessage && (
-          <p className="small" style={{ margin: '8px 0 0' }}>
-            {actionMessage}
-          </p>
+        {detailsOpen && (
+          <>
+            <p className="small" style={{ margin: '8px 0 0', opacity: 0.85 }}>
+              {t.wifiNotify.limitation}
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+              <button className="secondary" disabled={busy} onClick={() => void onTestPush()}>
+                {t.wifiNotify.sendTest}
+              </button>
+            </div>
+            {actionMessage && (
+              <p className="small" style={{ margin: '8px 0 0' }}>
+                {actionMessage}
+              </p>
+            )}
+          </>
         )}
       </div>
     );
@@ -218,17 +236,24 @@ export default function WifiNotifyStatus({ profile }: Props) {
   if (statusError) {
     return (
       <div className="alert-info wifi-notify-banner" style={{ marginBottom: 12 }}>
-        <p className="small" style={{ margin: 0 }}>
-          {t.wifiNotify.statusFailed}: {statusError}
-        </p>
-        <button
-          className="secondary"
-          style={{ marginTop: 8 }}
-          disabled={busy}
-          onClick={() => void refreshStatus()}
-        >
-          {t.common.retry}
-        </button>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+          <p className="small" style={{ margin: 0 }}>
+            {t.wifiNotify.statusFailed}: {statusError}
+          </p>
+          <button className="secondary" type="button" onClick={() => setDetailsOpen((v) => !v)}>
+            {toggleDetailsLabel}
+          </button>
+        </div>
+        {detailsOpen && (
+          <button
+            className="secondary"
+            style={{ marginTop: 8 }}
+            disabled={busy}
+            onClick={() => void refreshStatus()}
+          >
+            {t.common.retry}
+          </button>
+        )}
       </div>
     );
   }
@@ -236,12 +261,19 @@ export default function WifiNotifyStatus({ profile }: Props) {
   if (!status?.recognized) {
     return (
       <div className="alert-info wifi-notify-banner" style={{ marginBottom: 12 }}>
-        <p className="small" style={{ margin: 0 }}>
-          {t.wifiNotify.unrecognized}
-        </p>
-        <p className="small" style={{ margin: '8px 0 0', opacity: 0.85 }}>
-          {t.wifiNotify.limitation}
-        </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+          <p className="small" style={{ margin: 0 }}>
+            {t.wifiNotify.unrecognized}
+          </p>
+          <button className="secondary" type="button" onClick={() => setDetailsOpen((v) => !v)}>
+            {toggleDetailsLabel}
+          </button>
+        </div>
+        {detailsOpen && (
+          <p className="small" style={{ margin: '8px 0 0', opacity: 0.85 }}>
+            {t.wifiNotify.limitation}
+          </p>
+        )}
       </div>
     );
   }
@@ -250,41 +282,50 @@ export default function WifiNotifyStatus({ profile }: Props) {
 
   return (
     <div className="alert-info wifi-notify-banner" style={{ marginBottom: 12 }}>
-      <p className="small alert-info-title" style={{ margin: '0 0 6px' }}>
-        {t.wifiNotify.recognizedTitle.replace('{storeCode}', storeCode)}
-      </p>
-      <p className="small" style={{ margin: 0 }}>
-        {t.wifiNotify.enableHint}
-      </p>
-      <p className="small" style={{ margin: '8px 0 0', opacity: 0.85 }}>
-        {t.wifiNotify.limitation}
-      </p>
-
-      {showInstallGate && install.isIos && !install.standalone ? (
-        <div style={{ marginTop: 10 }}>
-          <p className="small" style={{ margin: '0 0 8px' }}>
-            {t.wifiNotify.iosInstallFirst}
-          </p>
-          <InstallAppCard
-            compact
-            onContinue={() => {
-              // Stay gated until installed / standalone — do not request permission in browser
-              setShowInstallGate(false);
-            }}
-          />
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
-          <button className="btn-gold" disabled={busy} onClick={() => void runEnable()}>
-            {busy ? t.wifiNotify.enabling : t.wifiNotify.enable}
-          </button>
-        </div>
-      )}
-
-      {actionMessage && (
-        <p className="small" style={{ margin: '8px 0 0' }}>
-          {actionMessage}
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+        <p className="small alert-info-title" style={{ margin: 0 }}>
+          {t.wifiNotify.recognizedTitle.replace('{storeCode}', storeCode)}
         </p>
+        <button className="secondary" type="button" onClick={() => setDetailsOpen((v) => !v)}>
+          {toggleDetailsLabel}
+        </button>
+      </div>
+      {detailsOpen && (
+        <>
+          <p className="small" style={{ margin: '8px 0 0' }}>
+            {t.wifiNotify.enableHint}
+          </p>
+          <p className="small" style={{ margin: '8px 0 0', opacity: 0.85 }}>
+            {t.wifiNotify.limitation}
+          </p>
+
+          {showInstallGate && install.isIos && !install.standalone ? (
+            <div style={{ marginTop: 10 }}>
+              <p className="small" style={{ margin: '0 0 8px' }}>
+                {t.wifiNotify.iosInstallFirst}
+              </p>
+              <InstallAppCard
+                compact
+                onContinue={() => {
+                  // Stay gated until installed / standalone — do not request permission in browser
+                  setShowInstallGate(false);
+                }}
+              />
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+              <button className="btn-gold" disabled={busy} onClick={() => void runEnable()}>
+                {busy ? t.wifiNotify.enabling : t.wifiNotify.enable}
+              </button>
+            </div>
+          )}
+
+          {actionMessage && (
+            <p className="small" style={{ margin: '8px 0 0' }}>
+              {actionMessage}
+            </p>
+          )}
+        </>
       )}
     </div>
   );

@@ -704,6 +704,8 @@ export const sectionsEn = {
   wifiNotify: {
     unrecognized:
       'Network not recognized. You can continue using the app, but store push notifications are inactive on this device.',
+    showDetails: 'Show details',
+    hideDetails: 'Hide details',
     recognizedTitle: 'Store Wi-Fi recognized: {storeCode}',
     enableHint: 'Enable store notifications on this device while on store Wi-Fi.',
     enable: 'Enable store notifications',
@@ -1921,6 +1923,8 @@ export const sectionsVi = {
   wifiNotify: {
     unrecognized:
       'Không nhận diện được mạng. Bạn vẫn dùng được ứng dụng, nhưng thông báo đẩy cửa hàng đang tắt trên thiết bị này.',
+    showDetails: 'Hiện chi tiết',
+    hideDetails: 'Ẩn chi tiết',
     recognizedTitle: 'Đã nhận diện Wi-Fi cửa hàng: {storeCode}',
     enableHint: 'Bật thông báo cửa hàng trên thiết bị này khi dùng Wi-Fi cửa hàng.',
     enable: 'Bật thông báo cửa hàng',
