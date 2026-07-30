@@ -108,7 +108,7 @@ export function isPushSupported(): boolean {
 
 export async function getVapidPublicKey(): Promise<string> {
   const headers = await authHeaders();
-  const resp = await fetch('/api/push/vapid-public-key', {
+  const resp = await fetch('/api/wifi-push?action=vapid-public-key', {
     method: 'GET',
     headers,
   });
@@ -147,7 +147,7 @@ export async function subscribePush(deviceId?: string): Promise<{
   }
 
   const headers = await authHeaders();
-  const resp = await fetch('/api/push/subscribe', {
+  const resp = await fetch('/api/wifi-push?action=subscribe', {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -165,7 +165,7 @@ export async function subscribePush(deviceId?: string): Promise<{
 export async function unsubscribePush(deviceId?: string): Promise<void> {
   const id = (deviceId || getOrCreateWifiNotifyDeviceId()).trim();
   const headers = await authHeaders();
-  const resp = await fetch('/api/push/unsubscribe', {
+  const resp = await fetch('/api/wifi-push?action=unsubscribe', {
     method: 'POST',
     headers,
     body: JSON.stringify({ deviceId: id }),
@@ -188,7 +188,7 @@ export async function requestPushDelivery(notificationIds: string[]): Promise<vo
   if (!ids.length) return;
   try {
     const headers = await authHeaders();
-    const resp = await fetch('/api/push/deliver', {
+    const resp = await fetch('/api/wifi-push?action=deliver', {
       method: 'POST',
       headers,
       body: JSON.stringify({ notificationIds: ids }),
@@ -211,7 +211,7 @@ export async function sendTestPush(
   const id = (deviceId || getOrCreateWifiNotifyDeviceId()).trim();
   try {
     const headers = await authHeaders();
-    const resp = await fetch('/api/push/test', {
+    const resp = await fetch('/api/wifi-push?action=test', {
       method: 'POST',
       headers,
       body: JSON.stringify({ deviceId: id }),
@@ -268,7 +268,7 @@ export async function activateWifiNotify(
     }
 
     const headers = await authHeaders();
-    const resp = await fetch('/api/wifi-notify/activate', {
+    const resp = await fetch('/api/wifi-push?action=activate', {
       method: 'POST',
       headers,
       body: JSON.stringify({
@@ -319,7 +319,7 @@ export async function deactivateWifiNotify(
   const id = (deviceId || getOrCreateWifiNotifyDeviceId()).trim();
   try {
     const headers = await authHeaders();
-    const resp = await fetch('/api/wifi-notify/deactivate', {
+    const resp = await fetch('/api/wifi-push?action=deactivate', {
       method: 'POST',
       headers,
       body: JSON.stringify({ deviceId: id, reason }),
@@ -337,7 +337,7 @@ export async function fetchWifiNotifyStatus(
 ): Promise<WifiNotifyStatusResponse> {
   const id = (deviceId || getOrCreateWifiNotifyDeviceId()).trim();
   const headers = await authHeaders();
-  const resp = await fetch('/api/wifi-notify/status', {
+  const resp = await fetch('/api/wifi-push?action=status', {
     method: 'POST',
     headers,
     body: JSON.stringify({ deviceId: id }),
@@ -375,7 +375,7 @@ export async function fetchWifiNotifyStatus(
 
 export async function fetchClientPublicIp(): Promise<string | null> {
   const headers = await authHeaders();
-  const resp = await fetch('/api/wifi-notify/client-ip', {
+  const resp = await fetch('/api/wifi-push?action=client-ip', {
     method: 'GET',
     headers,
   });

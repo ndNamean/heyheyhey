@@ -1,6 +1,6 @@
 /**
  * Shared Web Push delivery for inbox notifications.
- * Callable in-process from /api/push/deliver and /api/logbook-notify.
+ * Callable in-process from /api/wifi-push?action=deliver and /api/logbook-notify.
  *
  * Gates (all must pass): active session, unexpired, subscription valid,
  * store/wifi active, recipient store access, storeId match.

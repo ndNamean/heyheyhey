@@ -68,7 +68,7 @@ async function fetchClientPublicIp(): Promise<string> {
   const token = user?.refresh_token;
   if (!token) throw new Error('Not authenticated');
 
-  const resp = await fetch('/api/wifi-notify/client-ip', {
+  const resp = await fetch('/api/wifi-push?action=client-ip', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
