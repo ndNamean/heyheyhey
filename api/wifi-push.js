@@ -101,8 +101,8 @@ async function handleStatus(req, res, body) {
     reason: recognition.reason,
     storeId: recognition.store?.id ?? activeSession?.storeId ?? null,
     storeCode: recognition.store?.code ?? activeSession?.storeCode ?? null,
-    shiftId: recognition.shift?.id ?? null,
-    expiresAt: activeSession?.expiresAt ?? recognition.expiresAt,
+    shiftId: null,
+    expiresAt: activeSession?.expiresAt ?? recognition.expiresAt ?? '',
     sessionActive: Boolean(activeSession),
     activeSession,
   };
@@ -156,12 +156,13 @@ async function handleActivate(req, res, body) {
       deviceId,
       storeId: recognition.store.id,
       wifiIpId: recognition.wifiIp.id,
-      shiftId: recognition.shift.id,
+      shiftId: '',
       subscriptionId,
       matchedPublicIp: recognition.publicIp || '',
       storeCode,
       activatedAt: now.toISOString(),
-      expiresAt: recognition.expiresAt,
+      // '' = no time expiry; ends on logout / access / IP / store / subscription.
+      expiresAt: '',
       deactivatedAt: '',
       deactivateReason: '',
     }),
@@ -172,8 +173,8 @@ async function handleActivate(req, res, body) {
     sessionId,
     storeId: recognition.store.id,
     storeCode,
-    expiresAt: recognition.expiresAt,
-    shiftId: recognition.shift.id,
+    expiresAt: '',
+    shiftId: '',
     subscriptionId,
   });
 }

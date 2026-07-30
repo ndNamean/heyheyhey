@@ -163,7 +163,10 @@ export async function deliverPushForNotificationIds(notificationIds, opts = {}) 
       });
       sessions = (sq.notificationActivationSessions ?? []).filter((s) => {
         if (storeId && s.storeId && s.storeId !== storeId) return false;
-        const exp = Date.parse(s.expiresAt);
+        // Empty expiresAt = no time expiry (logout / access / IP / sub still apply).
+        const raw = String(s.expiresAt ?? '').trim();
+        if (!raw) return true;
+        const exp = Date.parse(raw);
         return Number.isFinite(exp) && exp > now;
       });
     } catch {

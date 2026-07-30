@@ -62,6 +62,15 @@ describe('evaluateDeliveryGates', () => {
     ).toBe('session_expired');
   });
 
+  it('allows empty expiresAt (no time expiry)', () => {
+    expect(
+      evaluateDeliveryGates({
+        ...base,
+        session: { ...base.session, expiresAt: '' },
+      }),
+    ).toEqual({ allow: true, reason: null });
+  });
+
   it('suppresses store mismatch', () => {
     expect(
       evaluateDeliveryGates({

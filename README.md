@@ -150,7 +150,7 @@ restaurant-ops-instant/
 
 ## Store Wi-Fi + Web Push
 
-Staff can enable store push notifications when the device’s public IP matches a configured store Wi-Fi IP **and** they have an overlapping scheduled shift. Delivery is gated by an activation session; the in-app inbox is unchanged if push is suppressed.
+Staff can enable store push notifications when the device’s public IP matches a configured store Wi-Fi IP and they have access to that store (no scheduled shift required). Sessions have no time expiry; they end on logout, store access removal, store/IP deactivation, or push subscription removal. Delivery is gated by an activation session; the in-app inbox is unchanged if push is suppressed.
 
 ### VAPID environment variables (server-only)
 

@@ -349,8 +349,7 @@ export async function fetchWifiNotifyStatus(
       : null;
 
   const sessionActive = Boolean(
-    data.sessionActive === true ||
-      (activeSession && activeSession.expiresAt),
+    data.sessionActive === true || activeSession,
   );
 
   return {

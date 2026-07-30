@@ -43,10 +43,20 @@ function pickActiveSession(
   const active = sessions.filter((s) => {
     if (s.deviceId !== deviceId) return false;
     if ((s.deactivatedAt ?? '').trim()) return false;
-    const exp = Date.parse(s.expiresAt);
+    const raw = String(s.expiresAt ?? '').trim();
+    // Empty expiresAt = no time expiry
+    if (!raw) return true;
+    const exp = Date.parse(raw);
     return Number.isFinite(exp) && exp > nowMs;
   });
-  active.sort((a, b) => Date.parse(b.expiresAt) - Date.parse(a.expiresAt));
+  active.sort((a, b) => {
+    const ae = String(a.expiresAt ?? '').trim();
+    const be = String(b.expiresAt ?? '').trim();
+    if (!ae && !be) return 0;
+    if (!ae) return -1;
+    if (!be) return 1;
+    return Date.parse(be) - Date.parse(ae);
+  });
   return active[0] ?? null;
 }
 
@@ -111,7 +121,11 @@ export default function WifiNotifyStatus({ profile }: Props) {
     (status?.sessionActive ? status.expiresAt || '' : '') ||
     '';
 
-  const hasActiveSession = Boolean(activeStoreCode && activeExpiresAt);
+  const hasActiveSession = Boolean(
+    queriedActive ||
+      localActive?.storeCode ||
+      (status?.sessionActive && (status.storeCode || activeStoreCode)),
+  );
 
   async function runEnable() {
     setBusy(true);
@@ -139,7 +153,7 @@ export default function WifiNotifyStatus({ profile }: Props) {
       }
       const storeCode = result.storeCode || status?.storeCode || '';
       const expiresAt = result.expiresAt || status?.expiresAt || '';
-      if (storeCode && expiresAt) {
+      if (storeCode) {
         setLocalActive({ storeCode, expiresAt });
       }
       setShowInstallGate(false);
@@ -178,9 +192,11 @@ export default function WifiNotifyStatus({ profile }: Props) {
     return (
       <div className="alert-success wifi-notify-banner" style={{ marginBottom: 12 }}>
         <p className="small" style={{ margin: 0 }}>
-          {t.wifiNotify.active
-            .replace('{storeCode}', activeStoreCode)
-            .replace('{time}', formatExpiry(activeExpiresAt, lang))}
+          {activeExpiresAt
+            ? t.wifiNotify.activeUntil
+                .replace('{storeCode}', activeStoreCode)
+                .replace('{time}', formatExpiry(activeExpiresAt, lang))
+            : t.wifiNotify.active.replace('{storeCode}', activeStoreCode)}
         </p>
         <p className="small" style={{ margin: '8px 0 0', opacity: 0.85 }}>
           {t.wifiNotify.limitation}

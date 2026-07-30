@@ -2,6 +2,8 @@
  * Pure delivery-gate evaluation for Web Push (no inbox mutation).
  */
 
+import { isSessionTimeExpired } from '../wifi-notify/recognize.js';
+
 /**
  * @typedef {object} DeliveryContext
  * @property {object} notification
@@ -32,8 +34,7 @@ export function evaluateDeliveryGates(ctx) {
   if (String(session.deactivatedAt || '') !== '') {
     return { allow: false, reason: 'no_active_session' };
   }
-  const expiresMs = Date.parse(session.expiresAt);
-  if (!Number.isFinite(expiresMs) || expiresMs <= now.getTime()) {
+  if (isSessionTimeExpired(session.expiresAt, now)) {
     return { allow: false, reason: 'session_expired' };
   }
 

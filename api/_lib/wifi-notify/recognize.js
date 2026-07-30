@@ -1,42 +1,29 @@
 /**
- * Shared recognition: trusted IP → active wifi IP → store access → overlapping shift.
+ * Shared recognition: trusted IP → active wifi IP → store access.
+ * No scheduled-shift requirement. Sessions use expiresAt '' = no time expiry
+ * (still ends on logout / access / IP / store / subscription invalidation).
  */
 
 import { getClientPublicIp } from './request-ip.js';
 import { findMatchingActiveWifiIp } from './match.js';
-import { parseShiftWindow, shiftOverlapsNow } from './shift-overlap.js';
 import { userHasStoreAccess } from './access.js';
 
-function isSchedulableShiftStatus(status) {
-  const s = String(status ?? 'scheduled').trim();
-  return s === '' || s === 'scheduled' || s === 'swap_requested';
+/**
+ * True when a session should be treated as time-expired.
+ * Empty / missing expiresAt means no time-based expiry.
+ */
+export function isSessionTimeExpired(expiresAt, now = new Date()) {
+  const raw = String(expiresAt ?? '').trim();
+  if (!raw) return false;
+  const exp = Date.parse(raw);
+  if (!Number.isFinite(exp)) return false;
+  return exp <= now.getTime();
 }
 
 /**
- * Pick the overlapping scheduled shift for employee at store (earliest end wins if multiple).
- * @returns {{ shift: object, expiresAt: string } | null}
+ * Load wifi + stores and evaluate recognition for the request IP.
  */
-export function findOverlappingScheduledShift(shifts, storeId, employeeUserId, now = new Date()) {
-  const candidates = [];
-  for (const shift of shifts ?? []) {
-    if (!shift) continue;
-    if (shift.storeId !== storeId) continue;
-    if (shift.employeeUserId !== employeeUserId) continue;
-    if (!isSchedulableShiftStatus(shift.status)) continue;
-    if (!shiftOverlapsNow(shift, now)) continue;
-    const window = parseShiftWindow(shift.date, shift.startTime, shift.endTime);
-    if (!window) continue;
-    candidates.push({ shift, expiresAt: window.end.toISOString() });
-  }
-  if (!candidates.length) return null;
-  candidates.sort((a, b) => a.expiresAt.localeCompare(b.expiresAt));
-  return candidates[0];
-}
-
-/**
- * Load wifi + stores + overlapping shifts and evaluate recognition for the request IP.
- */
-export async function recognizeStoreWifi(req, adminDb, ctx, now = new Date()) {
+export async function recognizeStoreWifi(req, adminDb, ctx) {
   const publicIp = getClientPublicIp(req);
   if (!publicIp) {
     return {
@@ -46,7 +33,7 @@ export async function recognizeStoreWifi(req, adminDb, ctx, now = new Date()) {
       wifiIp: null,
       store: null,
       shift: null,
-      expiresAt: null,
+      expiresAt: '',
     };
   }
 
@@ -69,7 +56,7 @@ export async function recognizeStoreWifi(req, adminDb, ctx, now = new Date()) {
       wifiIp: null,
       store: null,
       shift: null,
-      expiresAt: null,
+      expiresAt: '',
     };
   }
 
@@ -82,7 +69,7 @@ export async function recognizeStoreWifi(req, adminDb, ctx, now = new Date()) {
       wifiIp: match.wifiIp,
       store,
       shift: null,
-      expiresAt: null,
+      expiresAt: '',
     };
   }
 
@@ -94,37 +81,7 @@ export async function recognizeStoreWifi(req, adminDb, ctx, now = new Date()) {
       wifiIp: match.wifiIp,
       store,
       shift: null,
-      expiresAt: null,
-    };
-  }
-
-  const shiftResult = await adminDb.query({
-    shifts: {
-      $: {
-        where: {
-          employeeUserId: ctx.userId,
-          storeId: store.id,
-        },
-      },
-    },
-  });
-
-  const overlap = findOverlappingScheduledShift(
-    shiftResult.shifts ?? [],
-    store.id,
-    ctx.userId,
-    now,
-  );
-
-  if (!overlap) {
-    return {
-      recognized: false,
-      reason: 'no_overlapping_shift',
-      publicIp,
-      wifiIp: match.wifiIp,
-      store,
-      shift: null,
-      expiresAt: null,
+      expiresAt: '',
     };
   }
 
@@ -134,13 +91,13 @@ export async function recognizeStoreWifi(req, adminDb, ctx, now = new Date()) {
     publicIp,
     wifiIp: match.wifiIp,
     store,
-    shift: overlap.shift,
-    expiresAt: overlap.expiresAt,
+    shift: null,
+    expiresAt: '',
   };
 }
 
 /**
- * Load active (non-deactivated, non-expired) activation sessions for a user+device.
+ * Load active (non-deactivated, non-time-expired) activation sessions for a user+device.
  */
 export async function loadActiveSessions(adminDb, userId, deviceId, now = new Date()) {
   const result = await adminDb.query({
@@ -153,12 +110,10 @@ export async function loadActiveSessions(adminDb, userId, deviceId, now = new Da
       },
     },
   });
-  const nowMs = now.getTime();
   return (result.notificationActivationSessions ?? []).filter((s) => {
     if (!s) return false;
     if (String(s.deactivatedAt || '') !== '') return false;
-    const exp = Date.parse(s.expiresAt);
-    if (!Number.isFinite(exp) || exp <= nowMs) return false;
+    if (isSessionTimeExpired(s.expiresAt, now)) return false;
     return true;
   });
 }

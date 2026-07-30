@@ -705,10 +705,11 @@ export const sectionsEn = {
     unrecognized:
       'Network not recognized. You can continue using the app, but store push notifications are inactive on this device.',
     recognizedTitle: 'Store Wi-Fi recognized: {storeCode}',
-    enableHint: 'Enable store notifications on this device for your current shift.',
+    enableHint: 'Enable store notifications on this device while on store Wi-Fi.',
     enable: 'Enable store notifications',
     enabling: 'Enabling…',
-    active:
+    active: 'Store Wi-Fi recognized: {storeCode}. Notifications are active on this device.',
+    activeUntil:
       'Store Wi-Fi recognized: {storeCode}. Notifications active on this device until {time}.',
     sendTest: 'Send test notification',
     testSent:
@@ -1921,10 +1922,11 @@ export const sectionsVi = {
     unrecognized:
       'Không nhận diện được mạng. Bạn vẫn dùng được ứng dụng, nhưng thông báo đẩy cửa hàng đang tắt trên thiết bị này.',
     recognizedTitle: 'Đã nhận diện Wi-Fi cửa hàng: {storeCode}',
-    enableHint: 'Bật thông báo cửa hàng trên thiết bị này cho ca hiện tại.',
+    enableHint: 'Bật thông báo cửa hàng trên thiết bị này khi dùng Wi-Fi cửa hàng.',
     enable: 'Bật thông báo cửa hàng',
     enabling: 'Đang bật…',
-    active:
+    active: 'Đã nhận diện Wi-Fi cửa hàng: {storeCode}. Thông báo đang bật trên thiết bị này.',
+    activeUntil:
       'Đã nhận diện Wi-Fi cửa hàng: {storeCode}. Thông báo đang bật trên thiết bị này đến {time}.',
     sendTest: 'Gửi thông báo thử',
     testSent:
