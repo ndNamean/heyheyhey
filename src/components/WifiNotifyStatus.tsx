@@ -196,34 +196,46 @@ export default function WifiNotifyStatus({ profile }: Props) {
   }
 
   const toggleDetailsLabel = detailsOpen ? '▲' : '▼';
+  const detailsToggle = (
+    <button
+      className="secondary wifi-notify-toggle"
+      type="button"
+      aria-expanded={detailsOpen}
+      aria-label={detailsOpen ? t.wifiNotify.hideDetails : t.wifiNotify.showDetails}
+      onClick={() => setDetailsOpen((v) => !v)}
+    >
+      {toggleDetailsLabel}
+    </button>
+  );
 
   if (hasActiveSession) {
     return (
-      <div className="alert-success wifi-notify-banner" style={{ marginBottom: 12 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
-          <p className="small" style={{ margin: 0 }}>
-            {activeExpiresAt
-              ? t.wifiNotify.activeUntil
-                  .replace('{storeCode}', activeStoreCode)
-                  .replace('{time}', formatExpiry(activeExpiresAt, lang))
-              : t.wifiNotify.active.replace('{storeCode}', activeStoreCode)}
+      <div className="alert-success wifi-notify-banner">
+        <div className="wifi-notify-summary">
+          <p className="small">
+            {t.wifiNotify.recognizedTitle.replace('{storeCode}', activeStoreCode)}
           </p>
-          <button className="secondary" type="button" onClick={() => setDetailsOpen((v) => !v)}>
-            {toggleDetailsLabel}
-          </button>
+          {detailsToggle}
         </div>
         {detailsOpen && (
           <>
-            <p className="small" style={{ margin: '8px 0 0', opacity: 0.85 }}>
+            <p className="small" style={{ margin: '6px 0 0' }}>
+              {activeExpiresAt
+                ? t.wifiNotify.activeUntil
+                    .replace('{storeCode}', activeStoreCode)
+                    .replace('{time}', formatExpiry(activeExpiresAt, lang))
+                : t.wifiNotify.active.replace('{storeCode}', activeStoreCode)}
+            </p>
+            <p className="small" style={{ margin: '6px 0 0', opacity: 0.85 }}>
               {t.wifiNotify.limitation}
             </p>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
               <button className="secondary" disabled={busy} onClick={() => void onTestPush()}>
                 {t.wifiNotify.sendTest}
               </button>
             </div>
             {actionMessage && (
-              <p className="small" style={{ margin: '8px 0 0' }}>
+              <p className="small" style={{ margin: '6px 0 0' }}>
                 {actionMessage}
               </p>
             )}
@@ -235,19 +247,17 @@ export default function WifiNotifyStatus({ profile }: Props) {
 
   if (statusError) {
     return (
-      <div className="alert-info wifi-notify-banner" style={{ marginBottom: 12 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
-          <p className="small" style={{ margin: 0 }}>
+      <div className="alert-info wifi-notify-banner">
+        <div className="wifi-notify-summary">
+          <p className="small">
             {t.wifiNotify.statusFailed}: {statusError}
           </p>
-          <button className="secondary" type="button" onClick={() => setDetailsOpen((v) => !v)}>
-            {toggleDetailsLabel}
-          </button>
+          {detailsToggle}
         </div>
         {detailsOpen && (
           <button
             className="secondary"
-            style={{ marginTop: 8 }}
+            style={{ marginTop: 6 }}
             disabled={busy}
             onClick={() => void refreshStatus()}
           >
@@ -260,17 +270,13 @@ export default function WifiNotifyStatus({ profile }: Props) {
 
   if (!status?.recognized) {
     return (
-      <div className="alert-info wifi-notify-banner" style={{ marginBottom: 12 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
-          <p className="small" style={{ margin: 0 }}>
-            {t.wifiNotify.unrecognized}
-          </p>
-          <button className="secondary" type="button" onClick={() => setDetailsOpen((v) => !v)}>
-            {toggleDetailsLabel}
-          </button>
+      <div className="alert-info wifi-notify-banner">
+        <div className="wifi-notify-summary">
+          <p className="small">{t.wifiNotify.unrecognized}</p>
+          {detailsToggle}
         </div>
         {detailsOpen && (
-          <p className="small" style={{ margin: '8px 0 0', opacity: 0.85 }}>
+          <p className="small" style={{ margin: '6px 0 0', opacity: 0.85 }}>
             {t.wifiNotify.limitation}
           </p>
         )}
@@ -281,14 +287,12 @@ export default function WifiNotifyStatus({ profile }: Props) {
   const storeCode = status.storeCode || '—';
 
   return (
-    <div className="alert-info wifi-notify-banner" style={{ marginBottom: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
-        <p className="small alert-info-title" style={{ margin: 0 }}>
+    <div className="alert-info wifi-notify-banner">
+      <div className="wifi-notify-summary">
+        <p className="small alert-info-title" style={{ margin: 0, fontSize: 12, lineHeight: 1.25 }}>
           {t.wifiNotify.recognizedTitle.replace('{storeCode}', storeCode)}
         </p>
-        <button className="secondary" type="button" onClick={() => setDetailsOpen((v) => !v)}>
-          {toggleDetailsLabel}
-        </button>
+        {detailsToggle}
       </div>
       {detailsOpen && (
         <>

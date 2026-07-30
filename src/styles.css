@@ -2578,6 +2578,44 @@ body.wizard-active .page {
   color: var(--text-primary);
 }
 
+.wifi-notify-banner {
+  padding: 6px 10px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+}
+
+.wifi-notify-banner .wifi-notify-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.wifi-notify-banner .wifi-notify-summary .small {
+  margin: 0;
+  line-height: 1.25;
+  font-size: 12px;
+}
+
+.wifi-notify-banner button.wifi-notify-toggle {
+  min-height: 0;
+  min-width: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 9px;
+  line-height: 1;
+  border-radius: 5px;
+  flex-shrink: 0;
+  box-shadow: none;
+  font-weight: 600;
+}
+
+.wifi-notify-banner button.wifi-notify-toggle:hover:not(:disabled),
+.wifi-notify-banner button.wifi-notify-toggle:focus-visible {
+  box-shadow: none;
+}
+
 .panel-inset {
   background: var(--input-bg);
   border: 1px solid var(--card-border);
