@@ -115,7 +115,7 @@ export default function StoresPage({ profile }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [wifiBusy, setWifiBusy] = useState(false);
-  const [wifiRows, setWifiRows] = useState<WifiDraftRow[]>([]);
+  const [wifiRows, setWifiRows] = useState<WifiDraftRow[]>([emptyWifiRow()]);
   const [mapFlyTarget, setMapFlyTarget] = useState<{ lat: number; lng: number } | null>(null);
 
   const { data } = db.useQuery({ stores: { wifiIps: {} } });
@@ -128,7 +128,8 @@ export default function StoresPage({ profile }: Props) {
   function startEdit(store: Store) {
     setEditingId(store.id);
     setMapFlyTarget(null);
-    setWifiRows(rowsFromStore(store));
+    const existing = rowsFromStore(store);
+    setWifiRows(existing.length > 0 ? existing : [emptyWifiRow()]);
     setForm({
       code: store.code,
       name: store.name,
@@ -143,7 +144,7 @@ export default function StoresPage({ profile }: Props) {
   function cancelEdit() {
     setEditingId(null);
     setForm(EMPTY_FORM);
-    setWifiRows([]);
+    setWifiRows([emptyWifiRow()]);
     setMapFlyTarget(null);
   }
 
@@ -174,11 +175,12 @@ export default function StoresPage({ profile }: Props) {
 
   function removeWifiRow(key: string) {
     if (!confirm(t.stores.wifiIpRemoveConfirm)) return;
-    setWifiRows((prev) =>
-      prev
+    setWifiRows((prev) => {
+      const next = prev
         .map((r) => (r.key === key ? (r.id ? { ...r, _remove: true, active: false } : null) : r))
-        .filter((r): r is WifiDraftRow => r != null),
-    );
+        .filter((r): r is WifiDraftRow => r != null);
+      return next.some((r) => !r._remove) ? next : [...next, emptyWifiRow()];
+    });
   }
 
   async function detectCurrentIp() {
@@ -463,29 +465,13 @@ export default function StoresPage({ profile }: Props) {
         </div>
 
         <div style={{ marginBottom: 16 }}>
-          <h3 style={{ margin: '0 0 8px' }}>{t.stores.wifiIpsTitle}</h3>
-          <p className="small" style={{ marginTop: 0 }}>
+          <h3 style={{ margin: '0 0 6px', fontSize: 15 }}>{t.stores.wifiIpsTitle}</h3>
+          <p className="small" style={{ marginTop: 0, marginBottom: 10 }}>
             {t.stores.wifiIpsHelper}
-          </p>
-          <p className="small" style={{ marginTop: 0, opacity: 0.85 }}>
-            {t.stores.wifiIpsLimitation}
           </p>
 
           {visibleWifiRows.map((row) => (
-            <div
-              key={row.key}
-              className="grid two"
-              style={{ marginBottom: 10, alignItems: 'end' }}
-            >
-              <label>
-                {t.stores.wifiIpLabel}
-                <input
-                  value={row.label}
-                  onChange={(e) => updateWifiRow(row.key, { label: e.target.value })}
-                  placeholder={t.stores.wifiIpLabelPlaceholder}
-                  style={{ marginTop: 4 }}
-                />
-              </label>
+            <div key={row.key} style={{ marginBottom: 10 }}>
               <label>
                 {t.stores.wifiIpAddress}
                 <input
@@ -497,24 +483,46 @@ export default function StoresPage({ profile }: Props) {
                   spellCheck={false}
                 />
               </label>
-              <label className="ui-checkbox-label" style={{ marginBottom: 8 }}>
-                <input
-                  type="checkbox"
-                  className="ui-checkbox"
-                  checked={row.active}
-                  onChange={(e) => updateWifiRow(row.key, { active: e.target.checked })}
-                />
-                {t.stores.wifiIpActive}
-              </label>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-                <button
-                  type="button"
-                  className="danger"
-                  style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
-                  onClick={() => removeWifiRow(row.key)}
+              <div
+                className="grid two"
+                style={{ marginTop: 8, alignItems: 'end', gap: 8 }}
+              >
+                <label>
+                  {t.stores.wifiIpLabel}
+                  <input
+                    value={row.label}
+                    onChange={(e) => updateWifiRow(row.key, { label: e.target.value })}
+                    placeholder={t.stores.wifiIpLabelPlaceholder}
+                    style={{ marginTop: 4 }}
+                  />
+                </label>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 8,
+                    marginBottom: 4,
+                  }}
                 >
-                  {t.stores.wifiIpRemove}
-                </button>
+                  <label className="ui-checkbox-label">
+                    <input
+                      type="checkbox"
+                      className="ui-checkbox"
+                      checked={row.active}
+                      onChange={(e) => updateWifiRow(row.key, { active: e.target.checked })}
+                    />
+                    {t.stores.wifiIpActive}
+                  </label>
+                  <button
+                    type="button"
+                    className="danger"
+                    style={{ fontSize: 12, padding: '6px 10px', minHeight: 32 }}
+                    onClick={() => removeWifiRow(row.key)}
+                  >
+                    {t.stores.wifiIpRemove}
+                  </button>
+                </div>
               </div>
             </div>
           ))}
