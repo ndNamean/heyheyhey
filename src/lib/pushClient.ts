@@ -248,7 +248,11 @@ export async function activateWifiNotify(
     }
     const id = (deviceId || getOrCreateWifiNotifyDeviceId()).trim();
 
-    const permission = await Notification.requestPermission();
+    // Silent path: skip prompt when already granted (still never auto-prompt from UI)
+    const permission =
+      Notification.permission === 'granted'
+        ? 'granted'
+        : await Notification.requestPermission();
     if (permission !== 'granted') {
       return {
         ok: false,

@@ -1,9 +1,11 @@
 /**
  * Post-login store Wi-Fi + Web Push status banner.
  * Never auto-requests Notification permission — only on explicit Enable CTA.
+ * When permission is already granted and Wi-Fi is recognized with no session,
+ * auto-runs the same activate path as Enable (subscribe + API activate).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import InstallAppCard from './InstallAppCard';
 import { usePwaInstall } from '../hooks/usePwaInstall';
 import { useLang } from '../i18n';
@@ -64,6 +66,10 @@ export default function WifiNotifyStatus({ profile }: Props) {
   const { t, lang } = useLang();
   const install = usePwaInstall();
   const deviceId = useMemo(() => getOrCreateWifiNotifyDeviceId(), []);
+  const autoActivateRef = useRef<{ inFlight: boolean; attemptedStoreId: string | null }>({
+    inFlight: false,
+    attemptedStoreId: null,
+  });
 
   const { data: sessionData } = db.useQuery({
     notificationActivationSessions: {
@@ -142,7 +148,12 @@ export default function WifiNotifyStatus({ profile }: Props) {
       (status?.sessionActive && (status.storeCode || activeStoreCode)),
   );
 
-  async function runEnable() {
+  const iosInstallRequired =
+    install.isIos && !install.standalone && !install.installed;
+  const permissionGranted = getPushPermissionState() === 'granted';
+  const canAutoActivate = permissionGranted && !iosInstallRequired;
+
+  const runEnable = useCallback(async () => {
     setBusy(true);
     setActionMessage(null);
     try {
@@ -179,7 +190,40 @@ export default function WifiNotifyStatus({ profile }: Props) {
     } finally {
       setBusy(false);
     }
-  }
+  }, [
+    deviceId,
+    install.isIos,
+    install.installed,
+    install.standalone,
+    refreshStatus,
+    status?.expiresAt,
+    status?.storeCode,
+    t.wifiNotify.activateFailed,
+    t.wifiNotify.permissionDenied,
+    t.wifiNotify.unsupported,
+  ]);
+
+  // Auto-activate when recognized + permission already granted + no session
+  useEffect(() => {
+    if (!status?.recognized || hasActiveSession || status.sessionActive) {
+      if (!status?.recognized || hasActiveSession) {
+        autoActivateRef.current.attemptedStoreId = null;
+      }
+      return;
+    }
+    if (!canAutoActivate) return;
+    if (busy || autoActivateRef.current.inFlight) return;
+
+    const storeKey = String(status.storeId || status.storeCode || '').trim();
+    if (!storeKey) return;
+    if (autoActivateRef.current.attemptedStoreId === storeKey) return;
+
+    autoActivateRef.current.attemptedStoreId = storeKey;
+    autoActivateRef.current.inFlight = true;
+    void runEnable().finally(() => {
+      autoActivateRef.current.inFlight = false;
+    });
+  }, [busy, canAutoActivate, hasActiveSession, runEnable, status]);
 
   async function onTestPush() {
     setBusy(true);
@@ -293,20 +337,27 @@ export default function WifiNotifyStatus({ profile }: Props) {
   }
 
   const storeCode = status.storeCode || '—';
+  // Auto path: no Enable unless prior attempt failed (actionMessage) so user can retry
+  const showEnableCta = !canAutoActivate || Boolean(actionMessage);
+  const showEnabling = canAutoActivate && busy && !actionMessage;
 
   return (
     <div className="alert-info wifi-notify-banner">
       <div className="wifi-notify-summary">
         <p className="small alert-info-title" style={{ margin: 0, fontSize: 12, lineHeight: 1.25 }}>
-          {t.wifiNotify.recognizedTitle.replace('{storeCode}', storeCode)}
+          {showEnabling
+            ? t.wifiNotify.enabling
+            : t.wifiNotify.recognizedTitle.replace('{storeCode}', storeCode)}
         </p>
         {detailsToggle}
       </div>
       {detailsOpen && (
         <>
-          <p className="small" style={{ margin: '8px 0 0' }}>
-            {t.wifiNotify.enableHint}
-          </p>
+          {showEnableCta && (
+            <p className="small" style={{ margin: '8px 0 0' }}>
+              {t.wifiNotify.enableHint}
+            </p>
+          )}
           <p className="small" style={{ margin: '8px 0 0', opacity: 0.85 }}>
             {t.wifiNotify.limitation}
           </p>
@@ -324,13 +375,17 @@ export default function WifiNotifyStatus({ profile }: Props) {
                 }}
               />
             </div>
-          ) : (
+          ) : showEnableCta ? (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
               <button className="btn-gold" disabled={busy} onClick={() => void runEnable()}>
                 {busy ? t.wifiNotify.enabling : t.wifiNotify.enable}
               </button>
             </div>
-          )}
+          ) : showEnabling ? (
+            <p className="small" style={{ margin: '10px 0 0' }}>
+              {t.wifiNotify.enabling}
+            </p>
+          ) : null}
 
           {actionMessage && (
             <p className="small" style={{ margin: '8px 0 0' }}>

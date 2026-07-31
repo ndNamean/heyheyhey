@@ -707,7 +707,8 @@ export const sectionsEn = {
     showDetails: 'Show details',
     hideDetails: 'Hide details',
     recognizedTitle: 'Store Wi-Fi recognized: {storeCode}',
-    enableHint: 'Enable store notifications on this device while on store Wi-Fi.',
+    enableHint:
+      'Enable store notifications once on this device while on store Wi-Fi. Later visits activate automatically when permission is already allowed.',
     enable: 'Enable store notifications',
     enabling: 'Enabling…',
     active: 'Store Wi-Fi recognized: {storeCode}. Notifications are active on this device.',
@@ -1926,7 +1927,8 @@ export const sectionsVi = {
     showDetails: 'Hiện chi tiết',
     hideDetails: 'Ẩn chi tiết',
     recognizedTitle: 'Đã nhận diện Wi-Fi cửa hàng: {storeCode}',
-    enableHint: 'Bật thông báo cửa hàng trên thiết bị này khi dùng Wi-Fi cửa hàng.',
+    enableHint:
+      'Bật thông báo cửa hàng một lần trên thiết bị này khi dùng Wi-Fi cửa hàng. Các lần sau sẽ tự kích hoạt nếu quyền thông báo đã được cho phép.',
     enable: 'Bật thông báo cửa hàng',
     enabling: 'Đang bật…',
     active: 'Đã nhận diện Wi-Fi cửa hàng: {storeCode}. Thông báo đang bật trên thiết bị này.',
