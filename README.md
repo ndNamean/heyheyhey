@@ -177,4 +177,4 @@ npx instant-cli@latest push perms
 
 ### Platform limitation
 
-Public IP is verified **only when activating** (and re-checked against the stored session on each push delivery). A closed or backgrounded web app **cannot** continuously prove the device remains on store Wi-Fi after activation. Copy in the UI and Stores page states this explicitly.
+Public IP is re-checked when the app is open (status on load / focus / online). Leaving store Wi-Fi ends the activation session. A closed or backgrounded web app **cannot** continuously prove the device remains on store Wi-Fi until the next open/focus refresh. Copy in the UI and Stores page states this explicitly.

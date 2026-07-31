@@ -20,6 +20,7 @@ import { roleCanEditMaster } from './_lib/wifi-notify/access.js';
 import {
   recognizeStoreWifi,
   loadActiveSessions,
+  shouldDeactivateSessionForNetwork,
 } from './_lib/wifi-notify/recognize.js';
 import {
   parseSubscriptionPayload,
@@ -40,6 +41,7 @@ const ALLOWED_DEACTIVATE_REASONS = new Set([
   'wifi_ip_deactivated',
   'subscription_removed',
   'replaced',
+  'network_left',
 ]);
 
 function userAgentFromReq(req) {
@@ -82,9 +84,18 @@ async function handleStatus(req, res, body) {
   let activeSession = null;
   if (deviceId) {
     const sessions = await loadActiveSessions(adminDb, userId, deviceId);
+    const toDeactivate = sessions.filter((s) =>
+      shouldDeactivateSessionForNetwork(s, recognition),
+    );
+    if (toDeactivate.length > 0) {
+      await deactivateSessions(adminDb, toDeactivate, 'network_left');
+    }
+    const remaining = sessions.filter(
+      (s) => !toDeactivate.some((d) => d.id === s.id),
+    );
     const preferred =
-      sessions.find((s) => recognition.store && s.storeId === recognition.store.id) ||
-      sessions[0] ||
+      remaining.find((s) => recognition.store && s.storeId === recognition.store.id) ||
+      remaining[0] ||
       null;
     if (preferred) {
       activeSession = {
@@ -99,8 +110,8 @@ async function handleStatus(req, res, body) {
   const payload = {
     recognized: recognition.recognized,
     reason: recognition.reason,
-    storeId: recognition.store?.id ?? activeSession?.storeId ?? null,
-    storeCode: recognition.store?.code ?? activeSession?.storeCode ?? null,
+    storeId: recognition.store?.id ?? null,
+    storeCode: recognition.store?.code ?? null,
     shiftId: null,
     expiresAt: activeSession?.expiresAt ?? recognition.expiresAt ?? '',
     sessionActive: Boolean(activeSession),
@@ -161,7 +172,7 @@ async function handleActivate(req, res, body) {
       matchedPublicIp: recognition.publicIp || '',
       storeCode,
       activatedAt: now.toISOString(),
-      // '' = no time expiry; ends on logout / access / IP / store / subscription.
+      // '' = no time expiry; ends on logout / access / IP / store / network leave / subscription.
       expiresAt: '',
       deactivatedAt: '',
       deactivateReason: '',

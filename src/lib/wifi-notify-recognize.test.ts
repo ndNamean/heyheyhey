@@ -3,6 +3,7 @@ import {
   isSessionTimeExpired,
   loadActiveSessions,
   recognizeStoreWifi,
+  shouldDeactivateSessionForNetwork,
 } from '../../api/_lib/wifi-notify/recognize.js';
 
 describe('isSessionTimeExpired', () => {
@@ -16,6 +17,37 @@ describe('isSessionTimeExpired', () => {
     const now = new Date('2026-07-30T12:00:00.000Z');
     expect(isSessionTimeExpired('2026-07-30T11:59:59.000Z', now)).toBe(true);
     expect(isSessionTimeExpired('2026-07-30T12:00:01.000Z', now)).toBe(false);
+  });
+});
+
+describe('shouldDeactivateSessionForNetwork', () => {
+  const session = { storeId: 's1' };
+
+  it('deactivates when recognition is unrecognized', () => {
+    expect(
+      shouldDeactivateSessionForNetwork(session, {
+        recognized: false,
+        store: null,
+      }),
+    ).toBe(true);
+  });
+
+  it('keeps session when recognition matches the same store', () => {
+    expect(
+      shouldDeactivateSessionForNetwork(session, {
+        recognized: true,
+        store: { id: 's1' },
+      }),
+    ).toBe(false);
+  });
+
+  it('deactivates when recognition is a different store', () => {
+    expect(
+      shouldDeactivateSessionForNetwork(session, {
+        recognized: true,
+        store: { id: 's2' },
+      }),
+    ).toBe(true);
   });
 });
 

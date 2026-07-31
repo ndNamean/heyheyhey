@@ -725,7 +725,7 @@ export const sectionsEn = {
     iosInstallFirst:
       'On iPhone/iPad, add Hey Pelo Ops to your Home Screen first, then open it from there to enable store notifications.',
     limitation:
-      'Public IP is checked when you enable notifications — not continuously while the app is closed or in the background.',
+      'Public IP is re-checked when the app is open (on load, focus, or when you come online). Leaving store Wi‑Fi ends the session. A closed or backgrounded app cannot prove network continuously until the next refresh.',
   },
   users: {
     title: 'Users & Access',
@@ -1944,7 +1944,7 @@ export const sectionsVi = {
     iosInstallFirst:
       'Trên iPhone/iPad, hãy thêm Hey Pelo Ops vào Màn hình chính trước, rồi mở từ đó để bật thông báo cửa hàng.',
     limitation:
-      'IP công cộng chỉ được kiểm tra khi bạn bật thông báo — không theo dõi liên tục khi ứng dụng đóng hoặc chạy nền.',
+      'IP công cộng được kiểm tra lại khi ứng dụng đang mở (khi tải, lấy focus, hoặc khi lên mạng). Rời Wi‑Fi cửa hàng sẽ kết thúc phiên. Ứng dụng đóng hoặc chạy nền không thể chứng minh mạng liên tục cho đến lần làm mới tiếp theo.',
   },
   users: {
     title: 'Người dùng & Quyền truy cập',

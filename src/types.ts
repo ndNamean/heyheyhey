@@ -284,7 +284,8 @@ export type PushDeactivateReason =
   | 'store_deactivated'
   | 'wifi_ip_deactivated'
   | 'subscription_removed'
-  | 'replaced';
+  | 'replaced'
+  | 'network_left';
 
 export interface PushSubscriptionRecord {
   id: string;

@@ -1,7 +1,7 @@
 /**
  * Shared recognition: trusted IP → active wifi IP → store access.
  * No scheduled-shift requirement. Sessions use expiresAt '' = no time expiry
- * (still ends on logout / access / IP / store / subscription invalidation).
+ * (still ends on logout / access / IP / store / network leave / subscription invalidation).
  */
 
 import { getClientPublicIp } from './request-ip.js';
@@ -18,6 +18,19 @@ export function isSessionTimeExpired(expiresAt, now = new Date()) {
   const exp = Date.parse(raw);
   if (!Number.isFinite(exp)) return false;
   return exp <= now.getTime();
+}
+
+/**
+ * True when status refresh should end an activation session because the device
+ * is no longer on that session's store Wi‑Fi (unrecognized or different store).
+ */
+export function shouldDeactivateSessionForNetwork(session, recognition) {
+  if (!session) return false;
+  if (!recognition?.recognized) return true;
+  const sessionStoreId = String(session.storeId || '').trim();
+  const recognitionStoreId = String(recognition.store?.id || '').trim();
+  if (!sessionStoreId || !recognitionStoreId) return true;
+  return sessionStoreId !== recognitionStoreId;
 }
 
 /**

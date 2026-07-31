@@ -93,6 +93,7 @@ export default function WifiNotifyStatus({ profile }: Props) {
       const next = await fetchWifiNotifyStatus();
       setStatus(next);
       setStatusError(null);
+      if (!next.sessionActive) setLocalActive(null);
     } catch (e) {
       setStatusError(e instanceof Error ? e.message : t.wifiNotify.statusFailed);
     }
@@ -103,8 +104,15 @@ export default function WifiNotifyStatus({ profile }: Props) {
     const onVis = () => {
       if (document.visibilityState === 'visible') void refreshStatus();
     };
+    const onOnline = () => {
+      void refreshStatus();
+    };
     document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
+    window.addEventListener('online', onOnline);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('online', onOnline);
+    };
   }, [refreshStatus]);
 
   const queriedActive = useMemo(
