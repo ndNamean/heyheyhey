@@ -18,7 +18,6 @@ import {
 import { rankOf } from './roleResolver';
 import {
   canViewLogbookEntry,
-  isStaffOrHybrid,
   parseAssigneeUserIds,
   resolveLogbookEntryType,
   resolveLogbookIssueStatus,
@@ -852,7 +851,7 @@ export function buildLogbookIssueRecalledNotifications(
   );
 }
 
-/** Approved staff/hybrid who can see the note/announcement; excludes actor. */
+/** Approved users who can see the note/announcement; excludes actor. */
 export function getNoteAnnouncementRecipients(
   entry: LogbookEntry,
   profiles: Profile[],
@@ -863,7 +862,6 @@ export function getNoteAnnouncementRecipients(
   for (const p of profiles) {
     if (p.userId === actorId) continue;
     if (p.approvalStatus !== 'approved') continue;
-    if (!isStaffOrHybrid(p.role)) continue;
     if (!canViewLogbookEntry(p, entry, defs)) continue;
     recipients.add(p.userId);
   }

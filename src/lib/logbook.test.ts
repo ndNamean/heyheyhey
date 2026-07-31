@@ -1008,7 +1008,7 @@ describe('notes & announcements home helpers', () => {
     ]);
   });
 
-  it('getNoteAnnouncementRecipients is staff/hybrid only, store-scoped, excludes actor', () => {
+  it('getNoteAnnouncementRecipients includes all viewing roles, store-scoped, excludes actor', () => {
     const note = entry({
       id: 'n1',
       entryType: 'note',
@@ -1020,15 +1020,17 @@ describe('notes & announcements home helpers', () => {
 
     expect(getNoteAnnouncementRecipients(note, profiles, author.userId, defs).sort()).toEqual([
       'hybrid-1',
+      'mgr-1',
       'staff-1',
+      'sub-1',
     ]);
 
     // Actor excluded even if staff
     expect(
       getNoteAnnouncementRecipients(note, profiles, staff.userId, defs).sort(),
-    ).toEqual(['hybrid-1']);
+    ).toEqual(['author-1', 'hybrid-1', 'mgr-1', 'sub-1']);
 
-    // Blank store = all stores audience → staff at other store included
+    // Blank store = all stores audience → viewing roles across stores included
     const allStoresNote = entry({
       id: 'n2',
       entryType: 'announcement',
@@ -1038,7 +1040,7 @@ describe('notes & announcements home helpers', () => {
     });
     expect(
       getNoteAnnouncementRecipients(allStoresNote, profiles, author.userId, defs).sort(),
-    ).toEqual(['hybrid-1', 'staff-1', 'staff-other']);
+    ).toEqual(['hybrid-1', 'mgr-1', 'staff-1', 'staff-other', 'sub-1']);
   });
 
   it('buildLogbookNoteAnnouncementNotifications skips when no requiresAck or no recipients', () => {
@@ -1057,13 +1059,13 @@ describe('notes & announcements home helpers', () => {
       storeId: 'store-b',
       authorUserId: author.userId,
     });
-    // staff/hybrid only have store-a → no recipients
+    // viewing roles only have store-a → no recipients
     expect(
       buildLogbookNoteAnnouncementNotifications(note, author, [staff, hybrid, manager], defs),
     ).toEqual([]);
   });
 
-  it('buildLogbookNoteAnnouncementNotifications creates txs for staff/hybrid recipients', () => {
+  it('buildLogbookNoteAnnouncementNotifications creates txs for viewing-role recipients', () => {
     const note = entry({
       id: 'note-tx',
       entryType: 'announcement',
@@ -1079,6 +1081,6 @@ describe('notes & announcements home helpers', () => {
       [staff, hybrid, manager, subleader],
       defs,
     );
-    expect(txs).toHaveLength(2);
+    expect(txs).toHaveLength(4);
   });
 });

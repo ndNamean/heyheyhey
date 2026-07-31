@@ -518,7 +518,7 @@ export function countAssignedOpenOrOverdue(
   }).length;
 }
 
-/** Staff and Hybrid — home notes card + note/announcement inbox recipients. */
+/** Staff and Hybrid — home notes card audience only. */
 export function isStaffOrHybrid(role: Role): boolean {
   return role === 'staff' || role === 'hybrid';
 }
