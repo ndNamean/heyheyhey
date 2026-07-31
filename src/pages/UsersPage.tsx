@@ -46,6 +46,7 @@ import {
   finalApproveUserChangeRequest,
   firstApproveUserChangeRequest,
   OPEN_USER_CHANGE_STATUSES,
+  parseStoreIdsJson,
   rejectUserChangeRequest,
 } from '../lib/userChangeRequests';
 import { OWNER_ROLE_KEY } from '../types';
@@ -669,6 +670,25 @@ function AccessRequestMeta({
       )}
     </>
   );
+}
+
+function formatStoreLabel(store: Pick<Store, 'code' | 'name'>): string {
+  return store.name ? `${store.code} — ${store.name}` : store.code;
+}
+
+function profileStoreLabels(profile: Profile | undefined | null): string {
+  return (profile?.stores ?? []).map(formatStoreLabel).join(', ');
+}
+
+function storeLabelsFromIds(storeIds: string[], stores: Store[]): string {
+  if (!storeIds.length) return '';
+  const byId = new Map(stores.map((s) => [s.id, s]));
+  return storeIds
+    .map((id) => {
+      const store = byId.get(id);
+      return store ? formatStoreLabel(store) : id;
+    })
+    .join(', ');
 }
 
 function AccessRequestCard({
@@ -1608,6 +1628,18 @@ export default function UsersPage({ currentProfile }: Props) {
             changeRequests.map((req) => {
               const target =
                 profiles.find((p) => p.userId === req.targetUserId) || req.target;
+              const requester =
+                profiles.find((p) => p.userId === req.requestedByUserId) || req.requester;
+              const requesterName =
+                requester?.displayName?.trim() ||
+                requester?.email?.split('@')[0] ||
+                req.requestedByUserId;
+              const targetStores = profileStoreLabels(target);
+              const requesterStores = profileStoreLabels(requester);
+              const requestStores = storeLabelsFromIds(
+                parseStoreIdsJson(req.storeIdsJson),
+                stores,
+              );
               const canFirst = canActorFirstApprove(currentProfile, req);
               const canFinal = canActorFinalApprove(currentProfile, req);
               const canElevated =
@@ -1630,24 +1662,64 @@ export default function UsersPage({ currentProfile }: Props) {
                         </strong>
                         <span className="badge warn">{changeRequestStatusLabel(req.status)}</span>
                       </div>
-                      <p className="small" style={{ margin: '8px 0 0' }}>
-                        {t.users.changeRequestTarget}:{' '}
-                        <strong>{target?.displayName || req.targetEmail}</strong> ({req.targetEmail})
-                      </p>
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          marginTop: 10,
+                        }}
+                      >
+                        {target ? (
+                          <ProfileAvatarPreview
+                            profile={target}
+                            size={40}
+                            previewEnabled
+                            desktopHoverPreview
+                            mobileTapPreview
+                          />
+                        ) : null}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div className="small" style={{ margin: 0 }}>
+                            {t.users.changeRequestTarget}
+                          </div>
+                          <strong>{target?.displayName || req.targetEmail}</strong>
+                          <div className="small">{req.targetEmail}</div>
+                          <div className="small">
+                            {[target?.role || req.fromRole, targetStores]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </div>
+                        </div>
+                      </div>
                       {req.type === 'role_change' && (
-                        <p className="small" style={{ margin: '4px 0 0' }}>
+                        <p className="small" style={{ margin: '8px 0 0' }}>
                           {t.users.changeRequestFromTo
                             .replace('{from}', req.fromRole)
                             .replace('{to}', req.toRole)}
                         </p>
                       )}
                       {req.type === 'delete' && (
-                        <p className="small" style={{ margin: '4px 0 0' }}>
+                        <p className="small" style={{ margin: '8px 0 0' }}>
                           {req.fromRole}
                         </p>
                       )}
-                      <p className="small" style={{ margin: '4px 0 0' }}>
-                        {t.users.changeRequestRequester}: {req.requestedByUserId}
+                      {requestStores ? (
+                        <p className="small" style={{ margin: '4px 0 0' }}>
+                          {t.common.stores}: {requestStores}
+                        </p>
+                      ) : null}
+                      <p className="small" style={{ margin: '8px 0 0' }}>
+                        {t.users.changeRequestRequester}:{' '}
+                        {requester ? (
+                          <IdentityWithAvatar profile={requester}>
+                            {requesterName}
+                          </IdentityWithAvatar>
+                        ) : (
+                          requesterName
+                        )}
+                        {requester?.role ? ` · ${requester.role}` : ''}
+                        {requesterStores ? ` · ${requesterStores}` : ''}
                       </p>
                       {req.note ? (
                         <p className="small" style={{ margin: '4px 0 0' }}>
