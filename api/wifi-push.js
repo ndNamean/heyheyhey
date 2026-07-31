@@ -31,6 +31,7 @@ import {
 } from './_lib/push/subscriptions.js';
 import { getVapidConfig, sendWebPush } from './_lib/push/web-push-send.js';
 import { deliverPushForNotificationIds } from './_lib/push/deliver-notifications.js';
+import { flushPendingPushesForSession } from './_lib/push/flush-pending.js';
 
 const ALLOWED_DEACTIVATE_REASONS = new Set([
   'logout',
@@ -178,6 +179,15 @@ async function handleActivate(req, res, body) {
       deactivateReason: '',
     }),
   );
+
+  // Fire-and-forget: do not fail activate if pending flush errors.
+  void flushPendingPushesForSession({
+    adminDb,
+    userId,
+    storeId: recognition.store.id,
+  }).catch((err) => {
+    console.warn('[wifi-push] pending push flush skipped', err?.message || err);
+  });
 
   return res.status(200).json({
     ok: true,

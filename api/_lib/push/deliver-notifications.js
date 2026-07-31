@@ -134,7 +134,42 @@ export async function deliverPushForNotificationIds(notificationIds, opts = {}) 
 
   const byId = new Map(notifications.map((n) => [n.id, n]));
 
+  /** @type {Set<string>} */
+  const alreadySentIds = new Set();
+  try {
+    const logsQ = await adminDb.query({
+      pushDeliveryLogs: {
+        $: { where: { notificationId: { $in: ids } } },
+      },
+    });
+    for (const log of logsQ.pushDeliveryLogs ?? []) {
+      if (log?.outcome === 'sent' && log.notificationId) {
+        alreadySentIds.add(log.notificationId);
+      }
+    }
+  } catch {
+    for (const nid of ids) {
+      try {
+        const logsQ = await adminDb.query({
+          pushDeliveryLogs: {
+            $: { where: { notificationId: nid } },
+          },
+        });
+        if ((logsQ.pushDeliveryLogs ?? []).some((log) => log?.outcome === 'sent')) {
+          alreadySentIds.add(nid);
+        }
+      } catch {
+        /* skip */
+      }
+    }
+  }
+
   for (const notificationId of ids) {
+    if (alreadySentIds.has(notificationId)) {
+      results.push({ notificationId, outcome: 'suppressed', reason: 'already_sent' });
+      continue;
+    }
+
     const notif = byId.get(notificationId);
     if (!notif) {
       results.push({ notificationId, outcome: 'suppressed', reason: 'notification_missing' });
