@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
-import type { Profile } from '../../types';
+import type { AvatarProfileFields } from '../../lib/avatarDisplay';
 import ProfileAvatarPreview from './ProfileAvatarPreview';
 
 interface Props {
-  profile: Pick<Profile, 'displayName' | 'email' | 'avatarUrl'> | null | undefined;
+  profile: AvatarProfileFields | null | undefined;
   children: ReactNode;
   size?: number;
   className?: string;
@@ -11,7 +11,7 @@ interface Props {
 
 /**
  * Compact inline identity: avatar (with full hover/tap preview) + text.
- * Missing profile → children only. Missing/broken avatarUrl → initials, no empty preview.
+ * Missing profile → children only. Missing/broken avatar → initials, no empty preview.
  */
 export default function IdentityWithAvatar({
   profile,

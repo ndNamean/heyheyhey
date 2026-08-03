@@ -207,8 +207,12 @@ export interface Profile {
   createdAt: string;
   updatedAt: string;
   cameraOptionsJson?: string;
-  /** Custom profile photo URL; empty/missing = initials avatar. */
+  /** Legacy denormalized signed URL; do not use for display — prefer avatarFile.url. */
   avatarUrl?: string;
+  /** Stable Instant storage path (`profile-avatars/{userId}/avatar.ext`); '' when none. */
+  avatarPath?: string;
+  /** Linked $files row; `url` is the live signed URL from Instant queries. */
+  avatarFile?: { id: string; path?: string; url?: string };
   roleDefinition?: RoleDefinition;
   // Optional linked data from useQuery:
   stores?: Store[];

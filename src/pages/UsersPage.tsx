@@ -1099,7 +1099,7 @@ export default function UsersPage({ currentProfile }: Props) {
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const { data } = db.useQuery({
-    profiles: { stores: {}, roleDefinition: {} },
+    profiles: { stores: {}, roleDefinition: {}, avatarFile: {} },
     stores: {},
     userChangeRequests: { requester: {}, target: {} },
   });

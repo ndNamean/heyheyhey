@@ -2,11 +2,16 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { BACK_PRIORITY, useNativeBack } from '../../lib/nativeBack';
-import type { Profile } from '../../types';
+import {
+  type AvatarProfileFields,
+  profileHasAvatar,
+  profileWithoutAvatarDisplay,
+  resolveAvatarUrl,
+} from '../../lib/avatarDisplay';
 import ProfileAvatar from './ProfileAvatar';
 
 interface Props {
-  profile: Pick<Profile, 'displayName' | 'email' | 'avatarUrl'>;
+  profile: AvatarProfileFields;
   size?: number;
   previewEnabled?: boolean;
   desktopHoverPreview?: boolean;
@@ -42,7 +47,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(value, max));
 }
 
-function getName(profile: Pick<Profile, 'displayName' | 'email'>) {
+function getName(profile: Pick<AvatarProfileFields, 'displayName' | 'email'>) {
   return profile.displayName?.trim() || profile.email?.trim() || 'user';
 }
 
@@ -117,10 +122,10 @@ export default function ProfileAvatarPreview({
   const [placement, setPlacement] = useState<Placement | null>(null);
   const [failedUrls, setFailedUrls] = useState<Record<string, true>>({});
 
-  const avatarUrl = profile.avatarUrl?.trim() || '';
-  const hasAvatar = !!avatarUrl;
-  const previewDisabled = !previewEnabled || !hasAvatar || !!failedUrls[avatarUrl];
-  const effectiveProfile = previewDisabled ? { ...profile, avatarUrl: '' } : profile;
+  const avatarUrl = resolveAvatarUrl(profile);
+  const hasAvatar = profileHasAvatar(profile) && !!avatarUrl && !failedUrls[avatarUrl];
+  const previewDisabled = !previewEnabled || !hasAvatar;
+  const effectiveProfile = previewDisabled ? profileWithoutAvatarDisplay(profile) : profile;
   const name = getName(profile);
   const triggerLabel = `View profile photo for ${name}`;
   const imageAlt = `Profile photo of ${name}`;

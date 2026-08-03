@@ -247,7 +247,7 @@ export default function LogbookPage({
       resolutionProofHistory: {},
     },
     stores: {},
-    profiles: { stores: {} },
+    profiles: { stores: {}, avatarFile: {} },
     reviewEvents: {},
   });
 

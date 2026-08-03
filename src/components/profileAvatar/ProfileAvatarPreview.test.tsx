@@ -3,6 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import ProfileAvatarPreview from './ProfileAvatarPreview';
 
+vi.mock('../../lib/avatarClient', () => ({
+  resolveAvatar: vi.fn(async () => ({ url: '', repaired: false })),
+}));
+
+function withFile(url: string) {
+  return { id: `file-${url}`, url, path: `profile-avatars/u/avatar.png` };
+}
+
 function setMatchMedia(matches: boolean) {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
@@ -13,7 +21,6 @@ function setMatchMedia(matches: boolean) {
       addEventListener: vi.fn(),
       removeEventListener: vi.fn(),
       addListener: vi.fn(),
-      removeListener: vi.fn(),
       dispatchEvent: vi.fn(),
     })),
   });
@@ -44,7 +51,11 @@ describe('ProfileAvatarPreview', () => {
     setMatchMedia(true);
     render(
       <ProfileAvatarPreview
-        profile={{ displayName: 'Alice', email: 'alice@example.com', avatarUrl: 'https://cdn/a.png' }}
+        profile={{
+          displayName: 'Alice',
+          email: 'alice@example.com',
+          avatarFile: withFile('https://cdn/a.png'),
+        }}
         previewEnabled
       />,
     );
@@ -76,11 +87,19 @@ describe('ProfileAvatarPreview', () => {
     render(
       <>
         <ProfileAvatarPreview
-          profile={{ displayName: 'Alpha', email: 'alpha@example.com', avatarUrl: 'https://cdn/a.png' }}
+          profile={{
+            displayName: 'Alpha',
+            email: 'alpha@example.com',
+            avatarFile: withFile('https://cdn/a.png'),
+          }}
           previewEnabled
         />
         <ProfileAvatarPreview
-          profile={{ displayName: 'Beta', email: 'beta@example.com', avatarUrl: 'https://cdn/b.png' }}
+          profile={{
+            displayName: 'Beta',
+            email: 'beta@example.com',
+            avatarFile: withFile('https://cdn/b.png'),
+          }}
           previewEnabled
         />
       </>,
@@ -100,7 +119,11 @@ describe('ProfileAvatarPreview', () => {
     setMatchMedia(false);
     render(
       <ProfileAvatarPreview
-        profile={{ displayName: 'Mina', email: 'mina@example.com', avatarUrl: 'https://cdn/m.png' }}
+        profile={{
+          displayName: 'Mina',
+          email: 'mina@example.com',
+          avatarFile: withFile('https://cdn/m.png'),
+        }}
         previewEnabled
       />,
     );
@@ -118,7 +141,7 @@ describe('ProfileAvatarPreview', () => {
     expect(screen.queryByRole('dialog', { name: 'Profile photo of Mina' })).toBeNull();
   });
 
-  it('renders non-clickable avatar when avatarUrl is missing', () => {
+  it('renders non-clickable avatar when live avatar file is missing', () => {
     setMatchMedia(false);
     render(
       <ProfileAvatarPreview
@@ -131,11 +154,33 @@ describe('ProfileAvatarPreview', () => {
     expect(screen.getByText('NP')).toBeTruthy();
   });
 
+  it('ignores stale avatarUrl and does not enable preview from it alone', () => {
+    setMatchMedia(true);
+    render(
+      <ProfileAvatarPreview
+        profile={{
+          displayName: 'Stale',
+          email: 'stale@example.com',
+          avatarUrl: 'https://cdn/stale-expired.png',
+        }}
+        previewEnabled
+      />,
+    );
+
+    expect(screen.queryByRole('button', { name: 'View profile photo for Stale' })).toBeNull();
+    expect(screen.getByText('S')).toBeTruthy();
+    expect(document.querySelector('img')).toBeNull();
+  });
+
   it('disables preview and falls back after image error', () => {
     setMatchMedia(true);
     render(
       <ProfileAvatarPreview
-        profile={{ displayName: 'Broken', email: 'broken@example.com', avatarUrl: 'https://cdn/broken.png' }}
+        profile={{
+          displayName: 'Broken',
+          email: 'broken@example.com',
+          avatarFile: withFile('https://cdn/broken.png'),
+        }}
         previewEnabled
       />,
     );
@@ -156,7 +201,11 @@ describe('ProfileAvatarPreview', () => {
     render(
       <div>
         <ProfileAvatarPreview
-          profile={{ displayName: 'Row User', email: 'row@example.com', avatarUrl: 'https://cdn/row.png' }}
+          profile={{
+            displayName: 'Row User',
+            email: 'row@example.com',
+            avatarFile: withFile('https://cdn/row.png'),
+          }}
           previewEnabled
         />
         <button type="button" onClick={onRowAction}>
@@ -177,7 +226,11 @@ describe('ProfileAvatarPreview', () => {
     setMatchMedia(true);
     render(
       <ProfileAvatarPreview
-        profile={{ displayName: 'Opt In', email: 'optin@example.com', avatarUrl: 'https://cdn/optin.png' }}
+        profile={{
+          displayName: 'Opt In',
+          email: 'optin@example.com',
+          avatarFile: withFile('https://cdn/optin.png'),
+        }}
       />,
     );
 
@@ -189,7 +242,11 @@ describe('ProfileAvatarPreview', () => {
     const onTriggerClick = vi.fn();
     render(
       <ProfileAvatarPreview
-        profile={{ displayName: 'Nav User', email: 'nav@example.com', avatarUrl: 'https://cdn/nav.png' }}
+        profile={{
+          displayName: 'Nav User',
+          email: 'nav@example.com',
+          avatarFile: withFile('https://cdn/nav.png'),
+        }}
         previewEnabled
         mobileTapPreview={false}
         onTriggerClick={onTriggerClick}
@@ -206,7 +263,11 @@ describe('ProfileAvatarPreview', () => {
     const onTriggerClick = vi.fn();
     render(
       <ProfileAvatarPreview
-        profile={{ displayName: 'Desktop Nav', email: 'desktop-nav@example.com', avatarUrl: 'https://cdn/desktop-nav.png' }}
+        profile={{
+          displayName: 'Desktop Nav',
+          email: 'desktop-nav@example.com',
+          avatarFile: withFile('https://cdn/desktop-nav.png'),
+        }}
         previewEnabled
         desktopHoverPreview
         mobileTapPreview={false}
@@ -230,7 +291,11 @@ describe('ProfileAvatarPreview', () => {
     const onTriggerClick = vi.fn();
     render(
       <ProfileAvatarPreview
-        profile={{ displayName: 'Mobile Nav', email: 'mobile-nav@example.com', avatarUrl: 'https://cdn/mobile-nav.png' }}
+        profile={{
+          displayName: 'Mobile Nav',
+          email: 'mobile-nav@example.com',
+          avatarFile: withFile('https://cdn/mobile-nav.png'),
+        }}
         previewEnabled
         mobileTapPreview={false}
         onTriggerClick={onTriggerClick}
@@ -247,7 +312,11 @@ describe('ProfileAvatarPreview', () => {
     setMatchMedia(true);
     render(
       <ProfileAvatarPreview
-        profile={{ displayName: 'Disabled Modes', email: 'disabled-modes@example.com', avatarUrl: 'https://cdn/disabled.png' }}
+        profile={{
+          displayName: 'Disabled Modes',
+          email: 'disabled-modes@example.com',
+          avatarFile: withFile('https://cdn/disabled.png'),
+        }}
         previewEnabled
         desktopHoverPreview={false}
         mobileTapPreview={false}

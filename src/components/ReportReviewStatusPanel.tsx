@@ -25,7 +25,7 @@ export default function ReportReviewStatusPanel({ profile }: Props) {
   const { data } = db.useQuery({
     reports: { responses: {} },
     reviewEvents: {},
-    profiles: {},
+    profiles: { avatarFile: {} },
   });
 
   const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];

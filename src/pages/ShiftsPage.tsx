@@ -34,11 +34,11 @@ export default function ShiftsPage({ profile }: Props) {
     shifts: {
       $: { where: { date } },
       store: {},
-      employee: {},
+      employee: { avatarFile: {} },
       clockEvents: {},
     },
     stores: {},
-    profiles: { $: { where: { approvalStatus: 'approved' } } },
+    profiles: { $: { where: { approvalStatus: 'approved' } }, avatarFile: {} },
   });
 
   const shifts: Shift[] = (data?.shifts ?? []) as Shift[];

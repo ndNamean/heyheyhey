@@ -30,7 +30,7 @@ export default function NotesAnnouncementsCard({
   const [historyOpen, setHistoryOpen] = useState(false);
 
   const { data: profilesData } = db.useQuery({
-    profiles: { stores: {} },
+    profiles: { stores: {}, avatarFile: {} },
   });
   const allProfiles = (profilesData?.profiles ?? []) as Profile[];
 

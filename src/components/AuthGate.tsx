@@ -292,7 +292,7 @@ export default function AuthGate({ children }: Props) {
 
   const { data: profileData, isLoading: profileLoading } = db.useQuery(
     user
-      ? { profiles: { $: { where: { userId: user.id } }, stores: {} } }
+      ? { profiles: { $: { where: { userId: user.id } }, stores: {}, avatarFile: {} } }
       : null,
   );
 

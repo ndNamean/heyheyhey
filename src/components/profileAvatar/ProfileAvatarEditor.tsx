@@ -9,6 +9,7 @@ import {
   uploadAvatar,
   validateAvatarFile,
 } from '../../lib/avatarClient';
+import { profileHasAvatar } from '../../lib/avatarDisplay';
 import {
   type AvatarBackgroundChoice,
   canvasToPngBlob,
@@ -248,7 +249,7 @@ export default function ProfileAvatarEditor({ profile }: Props) {
   }
 
   async function handleRemove() {
-    if (!profile.avatarUrl?.trim()) return;
+    if (!profileHasAvatar(profile)) return;
     if (!window.confirm(t.profile.avatarRemoveConfirm)) return;
     setUploading(true);
     setErrorMsg(null);
@@ -306,7 +307,7 @@ export default function ProfileAvatarEditor({ profile }: Props) {
                 <button type="button" className="secondary" onClick={() => fileRef.current?.click()}>
                   {t.profile.avatarChooseDevice}
                 </button>
-                {!!profile.avatarUrl?.trim() && (
+                {profileHasAvatar(profile) && (
                   <button type="button" className="danger" onClick={handleRemove} disabled={uploading}>
                     {t.profile.avatarRemove}
                   </button>

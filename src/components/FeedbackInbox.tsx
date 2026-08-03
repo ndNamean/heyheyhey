@@ -35,7 +35,7 @@ export default function FeedbackInbox({
     },
     reviewEvents: {},
     reports: { responses: {} },
-    profiles: {},
+    profiles: { avatarFile: {} },
   });
 
   const all = ((data?.notifications ?? []) as Notification[]).sort((a, b) =>

@@ -50,6 +50,7 @@ function emptyProfileFields(now) {
     invitedStoreIdsJson: '[]',
     cameraOptionsJson: '{"weatherEnabled":true,"logoEnabled":true}',
     avatarUrl: '',
+    avatarPath: '',
     createdAt: now,
     updatedAt: now,
   };

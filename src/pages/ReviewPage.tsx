@@ -72,7 +72,7 @@ export default function ReviewPage({ profile }: Props) {
       store: {},
     },
     logbookEntries: { store: {}, photo: {}, sourceMedia: {}, resolutionMedia: {}, resolutionProofHistory: {} },
-    profiles: { stores: {} },
+    profiles: { stores: {}, avatarFile: {} },
     reviewEvents: {},
   });
 

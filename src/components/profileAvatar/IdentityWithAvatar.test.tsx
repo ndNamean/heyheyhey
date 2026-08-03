@@ -2,7 +2,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import IdentityWithAvatar from './IdentityWithAvatar';
-import type { Profile } from '../../types';
+import type { AvatarProfileFields } from '../../lib/avatarDisplay';
+
+vi.mock('../../lib/avatarClient', () => ({
+  resolveAvatar: vi.fn(async () => ({ url: '', repaired: false })),
+}));
+
+function withFile(url: string) {
+  return { id: `file-${url}`, url, path: `profile-avatars/u/avatar.png` };
+}
 
 function setMatchMedia(matches: boolean) {
   Object.defineProperty(window, 'matchMedia', {
@@ -29,21 +37,21 @@ function advance(ms: number) {
   });
 }
 
-const alice: Pick<Profile, 'displayName' | 'email' | 'avatarUrl' | 'userId'> = {
+const alice: AvatarProfileFields = {
   userId: 'u-alice',
   displayName: 'Alice Chen',
   email: 'alice@example.com',
-  avatarUrl: 'https://cdn/alice.png',
+  avatarFile: withFile('https://cdn/alice.png'),
 };
 
-const bob: Pick<Profile, 'displayName' | 'email' | 'avatarUrl' | 'userId'> = {
+const bob: AvatarProfileFields = {
   userId: 'u-bob',
   displayName: 'Bob Lee',
   email: 'bob@example.com',
-  avatarUrl: 'https://cdn/bob.png',
+  avatarFile: withFile('https://cdn/bob.png'),
 };
 
-const noPhoto: Pick<Profile, 'displayName' | 'email' | 'avatarUrl'> = {
+const noPhoto: AvatarProfileFields = {
   displayName: 'No Photo',
   email: 'nophoto@example.com',
   avatarUrl: '',
@@ -97,7 +105,7 @@ describe('IdentityWithAvatar', () => {
     expect(screen.getByAltText('Profile photo of Alice Chen')).toBeTruthy();
   });
 
-  it('shows initials and no empty preview when avatarUrl is missing', () => {
+  it('shows initials and no empty preview when avatar file is missing', () => {
     setMatchMedia(true);
     render(<IdentityWithAvatar profile={noPhoto}>No Photo</IdentityWithAvatar>);
 
@@ -115,7 +123,7 @@ describe('IdentityWithAvatar', () => {
 
   it('smoke: assignee chip list resolves profiles and skips missing ones', () => {
     setMatchMedia(true);
-    const profiles = [alice, bob] as Profile[];
+    const profiles = [alice, bob];
     const ids = ['u-alice', 'u-missing', 'u-bob'];
 
     const { container } = render(

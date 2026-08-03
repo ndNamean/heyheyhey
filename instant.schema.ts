@@ -33,7 +33,8 @@ const _schema = i.schema({
       createdAt: i.string(),
       updatedAt: i.string(),
       cameraOptionsJson: i.string().clientRequired(),       // JSON: { weatherEnabled, logoEnabled, flashlightLastUsed }
-      avatarUrl: i.string().clientRequired(),               // '' = initials fallback; set via /api/upload-avatar
+      avatarUrl: i.string().clientRequired(),               // legacy; new uploads leave ''; prefer avatarFile.url
+      avatarPath: i.string().clientRequired(),              // stable $files path; '' when none
     }),
 
     // Opaque-token user invitations (managed via admin API)
@@ -574,6 +575,12 @@ const _schema = i.schema({
     profileUser: {
       forward: { on: 'profiles', has: 'one', label: '$user' },
       reverse: { on: '$users', has: 'one', label: 'profile' },
+    },
+
+    // ─── Profiles <-> $files (avatar; Admin SDK link/unlink only) ────────────
+    profileAvatarFile: {
+      forward: { on: 'profiles', has: 'one', label: 'avatarFile' },
+      reverse: { on: '$files', has: 'one', label: 'avatarProfile' },
     },
 
     // ─── Profiles <-> roleDefinitions (many:one) ─────────────────────────────

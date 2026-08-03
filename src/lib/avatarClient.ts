@@ -66,6 +66,22 @@ export async function removeAvatar(): Promise<void> {
   await parseJson(resp);
 }
 
+/** Fetch a fresh live avatar URL; lazy-repairs profile↔$file link server-side. */
+export async function resolveAvatar(userId?: string): Promise<{ url: string; repaired: boolean }> {
+  const headers = await authHeaders();
+  const qs = new URLSearchParams({ action: 'resolve' });
+  if (userId) qs.set('userId', userId);
+  const resp = await fetch(`/api/avatar?${qs.toString()}`, {
+    method: 'GET',
+    headers: { Authorization: headers.Authorization },
+  });
+  const data = await parseJson(resp);
+  return {
+    url: String(data.url ?? ''),
+    repaired: Boolean(data.repaired),
+  };
+}
+
 export async function removeBackground(
   blob: Blob,
   mimeType: string,

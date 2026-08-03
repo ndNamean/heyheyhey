@@ -1,7 +1,7 @@
 /**
  * Vercel Serverless — profile avatar ops (single function for Hobby limit).
  * Actions via ?action= or body.action:
- *   upload | remove | remove-background
+ *   upload | remove | remove-background | resolve
  * Storage path: profile-avatars/{authenticatedUserId}/avatar.{ext}
  */
 
@@ -12,6 +12,7 @@ import { parseBody } from './_lib/export/instant-admin.js';
 const DEFAULT_APP_ID = 'f7ac027e-2079-41eb-8f34-aa0e4543ca71';
 const MAX_BYTES = 5 * 1024 * 1024;
 const POOF_URL = 'https://api.poof.bg/v1/remove';
+const AVATAR_EXTS = ['png', 'jpg', 'webp'];
 
 const ALLOWED_EXT = {
   'image/png': 'png',
@@ -49,8 +50,30 @@ function getCredentials() {
   return { appId, adminToken };
 }
 
-function avatarPath(userId, ext) {
+function storageAvatarPath(userId, ext) {
   return `profile-avatars/${userId}/avatar.${ext}`;
+}
+
+async function collectAvatarFiles(adminDb, userId) {
+  const files = [];
+  for (const ext of AVATAR_EXTS) {
+    const pathTry = storageAvatarPath(userId, ext);
+    const q = await adminDb.query({
+      $files: { $: { where: { path: pathTry } } },
+    });
+    if (q?.$files?.[0]) files.push(q.$files[0]);
+  }
+  return files;
+}
+
+async function loadProfileWithAvatar(adminDb, userId) {
+  const profileResult = await adminDb.query({
+    profiles: {
+      $: { where: { userId } },
+      avatarFile: {},
+    },
+  });
+  return profileResult.profiles?.[0] ?? null;
 }
 
 async function handleUpload(req, res, userId) {
@@ -86,27 +109,16 @@ async function handleUpload(req, res, userId) {
     return res.status(400).json({ error: 'File too large. Max 5MB.' });
   }
 
-  const path = avatarPath(userId, ext);
+  const path = storageAvatarPath(userId, ext);
   const adminDb = init({ appId, adminToken });
 
   try {
-    const profileResult = await adminDb.query({
-      profiles: { $: { where: { userId } } },
-    });
-    const profile = profileResult.profiles?.[0];
+    const profile = await loadProfileWithAvatar(adminDb, userId);
     if (!profile) {
       return res.status(403).json({ error: 'Profile not found' });
     }
 
-    const priorExts = ['png', 'jpg', 'webp'];
-    const existingFiles = [];
-    for (const e of priorExts) {
-      const pathTry = `profile-avatars/${userId}/avatar.${e}`;
-      const q = await adminDb.query({
-        $files: { $: { where: { path: pathTry } } },
-      });
-      if (q?.$files?.[0]) existingFiles.push(q.$files[0]);
-    }
+    const existingFiles = await collectAvatarFiles(adminDb, userId);
 
     const { data: fileData } = await adminDb.storage.uploadFile(path, buffer, {
       contentType: mime,
@@ -119,12 +131,21 @@ async function handleUpload(req, res, userId) {
     const url = filesResult?.$files?.[0]?.url ?? '';
     if (!url) throw new Error('Upload returned no URL');
 
-    await adminDb.transact(
-      adminDb.tx.profiles[profile.id].update({
-        avatarUrl: url,
-        updatedAt: new Date().toISOString(),
-      }),
+    const priorLinkedId = profile.avatarFile?.id;
+    const txs = [];
+    if (priorLinkedId && priorLinkedId !== fileData.id) {
+      txs.push(adminDb.tx.profiles[profile.id].unlink({ avatarFile: priorLinkedId }));
+    }
+    txs.push(
+      adminDb.tx.profiles[profile.id]
+        .update({
+          avatarPath: path,
+          avatarUrl: '',
+          updatedAt: new Date().toISOString(),
+        })
+        .link({ avatarFile: fileData.id }),
     );
+    await adminDb.transact(txs);
 
     const toDelete = existingFiles.filter(
       (f) => f.id !== fileData.id && f.path !== path,
@@ -133,7 +154,7 @@ async function handleUpload(req, res, userId) {
       await adminDb.transact(toDelete.map((f) => adminDb.tx.$files[f.id].delete()));
     }
 
-    return res.status(200).json({ url, path });
+    return res.status(200).json({ url, path, fileId: fileData.id });
   } catch (e) {
     console.error('[avatar/upload]', e);
     return res.status(500).json({
@@ -156,31 +177,25 @@ async function handleRemove(req, res, userId) {
   const adminDb = init({ appId, adminToken });
 
   try {
-    const profileResult = await adminDb.query({
-      profiles: { $: { where: { userId } } },
-    });
-    const profile = profileResult.profiles?.[0];
+    const profile = await loadProfileWithAvatar(adminDb, userId);
     if (!profile) {
       return res.status(403).json({ error: 'Profile not found' });
     }
 
-    const priorExts = ['png', 'jpg', 'webp'];
-    const files = [];
-    for (const e of priorExts) {
-      const pathTry = `profile-avatars/${userId}/avatar.${e}`;
-      const filesResult = await adminDb.query({
-        $files: { $: { where: { path: pathTry } } },
-      });
-      if (filesResult?.$files?.[0]) files.push(filesResult.$files[0]);
-    }
+    const files = await collectAvatarFiles(adminDb, userId);
+    const linkedId = profile.avatarFile?.id;
 
     const txs = [
       adminDb.tx.profiles[profile.id].update({
+        avatarPath: '',
         avatarUrl: '',
         updatedAt: new Date().toISOString(),
       }),
-      ...files.map((f) => adminDb.tx.$files[f.id].delete()),
     ];
+    if (linkedId) {
+      txs.push(adminDb.tx.profiles[profile.id].unlink({ avatarFile: linkedId }));
+    }
+    txs.push(...files.map((f) => adminDb.tx.$files[f.id].delete()));
     await adminDb.transact(txs);
 
     return res.status(200).json({ ok: true });
@@ -188,6 +203,82 @@ async function handleRemove(req, res, userId) {
     console.error('[avatar/remove]', e);
     return res.status(500).json({
       error: e instanceof Error ? e.message : 'Remove failed',
+    });
+  }
+}
+
+/**
+ * Return a fresh live URL for a profile avatar; lazy-repair link + avatarPath when
+ * the storage file still exists but the profile link / path is missing.
+ */
+async function handleResolve(req, res, callerUserId) {
+  let appId;
+  let adminToken;
+  try {
+    ({ appId, adminToken } = getCredentials());
+  } catch (e) {
+    return res.status(500).json({
+      error: e instanceof Error ? e.message : 'Missing config',
+    });
+  }
+
+  const body = parseBody(req.body) || {};
+  const targetUserId = String(
+    req.query?.userId || body.userId || callerUserId || '',
+  ).trim();
+  if (!targetUserId) {
+    return res.status(400).json({ error: 'Missing userId' });
+  }
+
+  const adminDb = init({ appId, adminToken });
+
+  try {
+    const profile = await loadProfileWithAvatar(adminDb, targetUserId);
+    if (!profile) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+
+    const linkedUrl = profile.avatarFile?.url?.trim() || '';
+    if (linkedUrl) {
+      return res.status(200).json({
+        url: linkedUrl,
+        path: profile.avatarFile?.path || profile.avatarPath || '',
+        fileId: profile.avatarFile.id,
+        repaired: false,
+      });
+    }
+
+    const files = await collectAvatarFiles(adminDb, targetUserId);
+    const preferredPath = profile.avatarPath?.trim() || '';
+    const file =
+      (preferredPath && files.find((f) => f.path === preferredPath)) ||
+      files[0] ||
+      null;
+
+    if (!file?.url) {
+      return res.status(200).json({ url: '', path: '', fileId: null, repaired: false });
+    }
+
+    await adminDb.transact(
+      adminDb.tx.profiles[profile.id]
+        .update({
+          avatarPath: file.path || preferredPath || '',
+          avatarUrl: '',
+          updatedAt: new Date().toISOString(),
+        })
+        .link({ avatarFile: file.id }),
+    );
+
+    return res.status(200).json({
+      url: file.url,
+      path: file.path || '',
+      fileId: file.id,
+      repaired: true,
+    });
+  } catch (e) {
+    console.error('[avatar/resolve]', e);
+    return res.status(500).json({
+      error: e instanceof Error ? e.message : 'Resolve failed',
     });
   }
 }
@@ -275,10 +366,6 @@ async function handleRemoveBackground(req, res) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
   let userId;
   try {
     ({ userId } = await verifyRequestUser(req));
@@ -290,11 +377,22 @@ export default async function handler(req, res) {
   const body = parseBody(req.body) || {};
   const action = String(req.query?.action || body.action || '').trim();
 
+  if (action === 'resolve') {
+    if (req.method !== 'GET' && req.method !== 'POST') {
+      return res.status(405).json({ error: 'Method not allowed' });
+    }
+    return handleResolve(req, res, userId);
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
   if (action === 'upload') return handleUpload(req, res, userId);
   if (action === 'remove') return handleRemove(req, res, userId);
   if (action === 'remove-background') return handleRemoveBackground(req, res);
 
   return res.status(400).json({
-    error: 'Invalid action. Use upload, remove, or remove-background.',
+    error: 'Invalid action. Use upload, remove, remove-background, or resolve.',
   });
 }

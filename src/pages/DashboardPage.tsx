@@ -74,7 +74,7 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
       store: {},
     },
     stores: {},
-    profiles: { stores: {} },
+    profiles: { stores: {}, avatarFile: {} },
     reviewEvents: {},
     templates: { items: {}, stores: {}, scheduleVersions: {} },
     checklistItemProposals: {},
