@@ -551,6 +551,22 @@ const _schema = i.schema({
       reason: i.string(),
       createdAt: i.string(),
     }),
+
+    // ─── Store Chat messages (room key = storeId) ───────────────────────────
+    storeChatMessages: i.entity({
+      storeId: i.string().indexed(),           // room key
+      senderUserId: i.string().indexed(),      // auth.id — ownership for rules
+      senderProfileId: i.string().indexed(),
+      senderNameSnapshot: i.string(),
+      senderRoleSnapshot: i.string(),
+      messageType: i.string(),                 // 'text'
+      body: i.string(),
+      createdAt: i.string().indexed(),
+      editedAt: i.string().clientRequired(),   // '' unused in v1
+      deletedAt: i.string().clientRequired(),  // '' = active
+      status: i.string(),                      // 'active' | 'deleted'
+      replyToMessageId: i.string().clientRequired(), // '' unused in v1
+    }),
   },
 
   links: {
@@ -762,6 +778,17 @@ const _schema = i.schema({
     userChangeRequestTarget: {
       forward: { on: 'userChangeRequests', has: 'one', label: 'target' },
       reverse: { on: 'profiles', has: 'many', label: 'targetedUserChangeRequests' },
+    },
+
+    // ─── Store Chat messages -> store / sender profile ───────────────────────
+    // Rules primarily use denormalized storeId + senderUserId; links aid tooling.
+    storeChatMessageStore: {
+      forward: { on: 'storeChatMessages', has: 'one', label: 'store' },
+      reverse: { on: 'stores', has: 'many', label: 'storeChatMessages' },
+    },
+    storeChatMessageSender: {
+      forward: { on: 'storeChatMessages', has: 'one', label: 'sender' },
+      reverse: { on: 'profiles', has: 'many', label: 'storeChatMessages' },
     },
   },
 });

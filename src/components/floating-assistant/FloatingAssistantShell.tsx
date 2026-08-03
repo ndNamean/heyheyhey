@@ -1,0 +1,184 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { BACK_PRIORITY, useNativeBack } from '../../lib/nativeBack';
+import type { Profile } from '../../types';
+import FloatingAssistantLauncher from './FloatingAssistantLauncher';
+import FloatingAssistantPanel from './FloatingAssistantPanel';
+import { type AssistantTabId } from './AssistantTabs';
+import { useAuthorizedChatStores } from './useAuthorizedChatStores';
+import { useComposerVisualState } from './useComposerVisualState';
+import { useFloatingLauncherPosition } from './useFloatingLauncherPosition';
+import { useUnreadStoreChat } from './useUnreadStoreChat';
+import './floatingAssistant.css';
+
+interface Props {
+  profile: Profile;
+}
+
+function useOfflineFlag() {
+  const [offline, setOffline] = useState(
+    () => typeof navigator !== 'undefined' && !navigator.onLine,
+  );
+
+  useEffect(() => {
+    function onOnline() {
+      setOffline(false);
+    }
+    function onOffline() {
+      setOffline(true);
+    }
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
+
+  return offline;
+}
+
+export default function FloatingAssistantShell({ profile }: Props) {
+  const [open, setOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<AssistantTabId>('knowledge');
+  const launcherRef = useRef<HTMLButtonElement>(null);
+  const wasOpenRef = useRef(false);
+  const offline = useOfflineFlag();
+
+  const {
+    authorizedStores,
+    selectedStoreId,
+    selectedStore,
+    setSelectedStoreId,
+    isLoading: storesLoading,
+  } = useAuthorizedChatStores(profile);
+
+  const {
+    side,
+    dragging,
+    dragX,
+    dragEnabled,
+    dockLeft,
+    dockRight,
+    resetPosition,
+    beginPointerDrag,
+  } = useFloatingLauncherPosition();
+
+  const isViewer = profile.role === 'viewer';
+  const canSend = !isViewer;
+  const storeChatComposerEnabled = open && activeTab === 'store-chat' && canSend;
+
+  const {
+    state: composerState,
+    keyFlash,
+    onFocus,
+    onBlur,
+    onInput,
+    setSending,
+    setSuccess,
+    setFailure,
+    resetFlash,
+  } = useComposerVisualState({
+    enabled: storeChatComposerEnabled,
+    offline,
+  });
+
+  const composerVisual = {
+    onFocus,
+    onBlur,
+    onInput,
+    setSending,
+    setSuccess,
+    setFailure,
+    resetFlash,
+  };
+
+  const authorizedStoreIds = useMemo(
+    () => authorizedStores.map((s) => s.id),
+    [authorizedStores],
+  );
+
+  const viewingStoreId =
+    open && activeTab === 'store-chat' && selectedStoreId ? selectedStoreId : null;
+
+  const { totalUnread, hasUnread } = useUnreadStoreChat({
+    authorizedStoreIds,
+    currentUserId: profile.userId,
+    viewingStoreId,
+  });
+
+  const close = useCallback(() => {
+    setOpen(false);
+    resetFlash();
+  }, [resetFlash]);
+
+  const toggle = useCallback(() => {
+    setOpen((prev) => !prev);
+  }, []);
+
+  useNativeBack(
+    () => {
+      if (!open) return false;
+      close();
+      return true;
+    },
+    open,
+    BACK_PRIORITY.MODAL,
+  );
+
+  useEffect(() => {
+    if (wasOpenRef.current && !open) {
+      launcherRef.current?.focus();
+    }
+    wasOpenRef.current = open;
+  }, [open]);
+
+  useEffect(() => {
+    resetFlash();
+  }, [activeTab, resetFlash]);
+
+  const root = (
+    <div
+      className="floating-assistant-root"
+      data-panel-state={open ? 'open' : 'closed'}
+      data-composer-state={composerState}
+    >
+      <FloatingAssistantLauncher
+        open={open}
+        side={side}
+        dragging={dragging}
+        dragX={dragX}
+        dragEnabled={dragEnabled}
+        unreadCount={totalUnread}
+        hasUnread={hasUnread}
+        onToggle={toggle}
+        onDockLeft={dockLeft}
+        onDockRight={dockRight}
+        onReset={resetPosition}
+        beginPointerDrag={beginPointerDrag}
+        buttonRef={launcherRef}
+      />
+      <FloatingAssistantPanel
+        open={open}
+        side={side}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onClose={close}
+        profile={profile}
+        stores={authorizedStores}
+        selectedStoreId={selectedStoreId}
+        selectedStore={selectedStore}
+        onStoreChange={setSelectedStoreId}
+        storesLoading={storesLoading}
+        canSend={canSend}
+        composerState={composerState}
+        keyFlash={keyFlash}
+        composerVisual={composerVisual}
+        storeChatUnread={totalUnread}
+      />
+    </div>
+  );
+
+  if (typeof document === 'undefined') return null;
+  return createPortal(root, document.body);
+}

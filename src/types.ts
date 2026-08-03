@@ -807,6 +807,26 @@ export interface Notification {
   createdAt: string;
 }
 
+export type StoreChatMessageType = 'text';
+export type StoreChatMessageStatus = 'active' | 'deleted';
+
+/** InstantDB storeChatMessages — room key is storeId. */
+export interface StoreChatMessage {
+  id: string;
+  storeId: string;
+  senderUserId: string;
+  senderProfileId: string;
+  senderNameSnapshot: string;
+  senderRoleSnapshot: string;
+  messageType: StoreChatMessageType | string;
+  body: string;
+  createdAt: string;
+  editedAt: string; // '' unused in v1
+  deletedAt: string; // '' = active
+  status: StoreChatMessageStatus | string;
+  replyToMessageId: string; // '' unused in v1
+}
+
 export type ExportJobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 export type ExportType = 'dashboard' | 'review_status' | 'failure_history';
 export type ExportFormat = 'csv' | 'pdf';

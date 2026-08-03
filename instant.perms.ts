@@ -567,6 +567,43 @@ const rules = {
     },
   },
 
+  // ── Store Chat messages (store-scoped; Viewer read-only) ──────────────────
+  // Membership: data.storeId in auth.ref('$user.profile.stores.id').
+  // Verify this traversal after push; fall back if Instant rejects the path.
+  storeChatMessages: {
+    allow: {
+      view: 'canAccessMessageStore',
+      create:
+        "canSendStoreChat && data.senderUserId == auth.id && isOwnSenderProfile && storeIdValid && data.status == 'active' && data.messageType == 'text' && bodyValid",
+      update: 'isOwnMessage && onlyDeletedFields && softDeleteValid',
+      delete: 'false',
+      link: {
+        store: 'canSendStoreChat',
+        sender: 'canSendStoreChat && isOwnSenderProfile',
+      },
+      unlink: {
+        store: 'false',
+        sender: 'false',
+      },
+    },
+    bind: {
+      ...LEGACY_BIND,
+      hasAllStoreChatAccess: 'isOwner || isAreaManagerTier',
+      storeIdValid: "data.storeId != ''",
+      canAccessMessageStore:
+        "isApproved && storeIdValid && (hasAllStoreChatAccess || data.storeId in auth.ref('$user.profile.stores.id'))",
+      isViewer: "'viewer' in auth.ref('$user.profile.role')",
+      canSendStoreChat: 'canAccessMessageStore && !isViewer',
+      isOwnMessage: 'auth.id != null && data.senderUserId == auth.id',
+      // Denormalized profile id must match the signed-in profile (not another user).
+      isOwnSenderProfile: "data.senderProfileId in auth.ref('$user.profile.id')",
+      onlyDeletedFields:
+        "request.modifiedFields.all(f, f in ['deletedAt', 'status'])",
+      softDeleteValid: "newData.status == 'deleted' && newData.deletedAt != ''",
+      bodyValid: 'size(data.body) > 0 && size(data.body) <= 2000',
+    },
+  },
+
   // ── User change requests ──────────────────────────────────────────────────
   userChangeRequests: {
     allow: {

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { DesktopNav, MobileNav, type Page } from './components/Nav';
 import WifiNotifyStatus from './components/WifiNotifyStatus';
+import FloatingAssistantShell from './components/floating-assistant/FloatingAssistantShell';
 import StaffHome from './pages/StaffHome';
 import DashboardPage from './pages/DashboardPage';
 import SubmitReportPage from './pages/SubmitReportPage';
@@ -203,6 +204,7 @@ export default function AppShell({ profile }: Props) {
         {renderPage()}
         <MobileNav page={page} setPage={setPage} profile={profile} onOpenLogbook={() => goLogbook()} />
       </main>
+      <FloatingAssistantShell profile={profile} />
     </div>
   );
 }
