@@ -1,12 +1,12 @@
 /**
  * Vercel Serverless — profile avatar ops (single function for Hobby limit).
  * Actions via ?action= or body.action:
- *   upload | remove | remove-background | resolve
+ *   upload | remove | remove-background | resolve | repair-all
  * Storage path: profile-avatars/{authenticatedUserId}/avatar.{ext}
  */
 
 import { init } from '@instantdb/admin';
-import { verifyRequestUser } from './_lib/export/auth.js';
+import { verifyRequestUser, loadProfileContext } from './_lib/export/auth.js';
 import { parseBody } from './_lib/export/instant-admin.js';
 
 const DEFAULT_APP_ID = 'f7ac027e-2079-41eb-8f34-aa0e4543ca71';
@@ -74,6 +74,65 @@ async function loadProfileWithAvatar(adminDb, userId) {
     },
   });
   return profileResult.profiles?.[0] ?? null;
+}
+
+/**
+ * Link profile to an existing storage file when present.
+ * @returns {{ url: string, path: string, fileId: string|null, repaired: boolean, skipped: boolean }}
+ */
+async function repairProfileAvatar(adminDb, profile) {
+  const linkedUrl = profile.avatarFile?.url?.trim() || '';
+  const linkedId = profile.avatarFile?.id || null;
+  if (linkedUrl && linkedId) {
+    return {
+      url: linkedUrl,
+      path: profile.avatarFile?.path || profile.avatarPath || '',
+      fileId: linkedId,
+      repaired: false,
+      skipped: true,
+    };
+  }
+
+  const userId = profile.userId;
+  const files = await collectAvatarFiles(adminDb, userId);
+  const preferredPath = profile.avatarPath?.trim() || '';
+  const file =
+    (preferredPath && files.find((f) => f.path === preferredPath)) ||
+    files[0] ||
+    null;
+
+  if (!file?.id) {
+    return { url: '', path: '', fileId: null, repaired: false, skipped: false };
+  }
+
+  // Prefer a file that still has a downloadable URL.
+  const withUrl = file.url
+    ? file
+    : files.find((f) => f.url) || file;
+  const liveUrl = withUrl.url?.trim() || '';
+
+  const txs = [];
+  if (linkedId && linkedId !== withUrl.id) {
+    txs.push(adminDb.tx.profiles[profile.id].unlink({ avatarFile: linkedId }));
+  }
+  txs.push(
+    adminDb.tx.profiles[profile.id]
+      .update({
+        avatarPath: withUrl.path || preferredPath || '',
+        avatarUrl: '',
+        updatedAt: new Date().toISOString(),
+      })
+      .link({ avatarFile: withUrl.id }),
+  );
+  await adminDb.transact(txs);
+
+  return {
+    url: liveUrl,
+    path: withUrl.path || '',
+    fileId: withUrl.id,
+    repaired: true,
+    skipped: false,
+  };
 }
 
 async function handleUpload(req, res, userId) {
@@ -238,47 +297,86 @@ async function handleResolve(req, res, callerUserId) {
       return res.status(404).json({ error: 'Profile not found' });
     }
 
-    const linkedUrl = profile.avatarFile?.url?.trim() || '';
-    if (linkedUrl) {
-      return res.status(200).json({
-        url: linkedUrl,
-        path: profile.avatarFile?.path || profile.avatarPath || '',
-        fileId: profile.avatarFile.id,
-        repaired: false,
-      });
-    }
-
-    const files = await collectAvatarFiles(adminDb, targetUserId);
-    const preferredPath = profile.avatarPath?.trim() || '';
-    const file =
-      (preferredPath && files.find((f) => f.path === preferredPath)) ||
-      files[0] ||
-      null;
-
-    if (!file?.url) {
-      return res.status(200).json({ url: '', path: '', fileId: null, repaired: false });
-    }
-
-    await adminDb.transact(
-      adminDb.tx.profiles[profile.id]
-        .update({
-          avatarPath: file.path || preferredPath || '',
-          avatarUrl: '',
-          updatedAt: new Date().toISOString(),
-        })
-        .link({ avatarFile: file.id }),
-    );
-
+    const result = await repairProfileAvatar(adminDb, profile);
     return res.status(200).json({
-      url: file.url,
-      path: file.path || '',
-      fileId: file.id,
-      repaired: true,
+      url: result.url,
+      path: result.path,
+      fileId: result.fileId,
+      repaired: result.repaired,
     });
   } catch (e) {
     console.error('[avatar/resolve]', e);
     return res.status(500).json({
       error: e instanceof Error ? e.message : 'Resolve failed',
+    });
+  }
+}
+
+/**
+ * Owner-only: walk all profiles and relink any remaining profile-avatars/* files.
+ */
+async function handleRepairAll(req, res, callerUserId) {
+  let appId;
+  let adminToken;
+  try {
+    ({ appId, adminToken } = getCredentials());
+  } catch (e) {
+    return res.status(500).json({
+      error: e instanceof Error ? e.message : 'Missing config',
+    });
+  }
+
+  try {
+    const ctx = await loadProfileContext(callerUserId);
+    if (ctx.role !== 'owner') {
+      return res.status(403).json({ error: 'Owner only' });
+    }
+  } catch (e) {
+    const status = e?.status || 403;
+    return res.status(status).json({
+      error: e instanceof Error ? e.message : 'Forbidden',
+    });
+  }
+
+  const adminDb = init({ appId, adminToken });
+
+  try {
+    const result = await adminDb.query({
+      profiles: { avatarFile: {} },
+    });
+    const profiles = result.profiles ?? [];
+
+    let repaired = 0;
+    let alreadyOk = 0;
+    let missing = 0;
+    const errors = [];
+
+    for (const profile of profiles) {
+      try {
+        const out = await repairProfileAvatar(adminDb, profile);
+        if (out.repaired) repaired++;
+        else if (out.skipped) alreadyOk++;
+        else missing++;
+      } catch (e) {
+        errors.push({
+          userId: profile.userId,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+
+    return res.status(200).json({
+      ok: true,
+      scanned: profiles.length,
+      repaired,
+      alreadyOk,
+      missing,
+      errors,
+    });
+  } catch (e) {
+    console.error('[avatar/repair-all]', e);
+    return res.status(500).json({
+      error: e instanceof Error ? e.message : 'Repair failed',
     });
   }
 }
@@ -384,6 +482,13 @@ export default async function handler(req, res) {
     return handleResolve(req, res, userId);
   }
 
+  if (action === 'repair-all') {
+    if (req.method !== 'POST' && req.method !== 'GET') {
+      return res.status(405).json({ error: 'Method not allowed' });
+    }
+    return handleRepairAll(req, res, userId);
+  }
+
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -393,6 +498,6 @@ export default async function handler(req, res) {
   if (action === 'remove-background') return handleRemoveBackground(req, res);
 
   return res.status(400).json({
-    error: 'Invalid action. Use upload, remove, remove-background, or resolve.',
+    error: 'Invalid action. Use upload, remove, remove-background, resolve, or repair-all.',
   });
 }

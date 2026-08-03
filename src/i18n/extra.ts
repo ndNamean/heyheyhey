@@ -742,6 +742,13 @@ export const sectionsEn = {
     pending: 'Pending',
     accessQueue: 'Access queue',
     allUsers: 'All users',
+    repairAvatars: 'Repair profile photos',
+    repairAvatarsConfirm:
+      'Scan all users and relink any profile photos still in storage? This does not delete files.',
+    repairAvatarsDone:
+      'Avatar repair finished. Relinked {repaired}, already OK {alreadyOk}, no file {missing} (of {scanned}).',
+    repairAvatarsFailed: 'Avatar repair failed.',
+    repairingAvatars: 'Repairing…',
     noPending: 'No pending access requests.',
     approveNow: 'Approve now',
     finalApprove: 'Final approve',
@@ -1962,6 +1969,13 @@ export const sectionsVi = {
     pending: 'Đang chờ',
     accessQueue: 'Hàng chờ truy cập',
     allUsers: 'Tất cả người dùng',
+    repairAvatars: 'Sửa ảnh hồ sơ',
+    repairAvatarsConfirm:
+      'Quét tất cả người dùng và liên kết lại ảnh hồ sơ còn trong kho lưu trữ? Không xóa tệp.',
+    repairAvatarsDone:
+      'Đã sửa ảnh hồ sơ. Liên kết lại {repaired}, đã OK {alreadyOk}, không có tệp {missing} (trên {scanned}).',
+    repairAvatarsFailed: 'Sửa ảnh hồ sơ thất bại.',
+    repairingAvatars: 'Đang sửa…',
     noPending: 'Không có yêu cầu truy cập đang chờ.',
     approveNow: 'Phê duyệt ngay',
     finalApprove: 'Phê duyệt cuối',

@@ -82,6 +82,32 @@ export async function resolveAvatar(userId?: string): Promise<{ url: string; rep
   };
 }
 
+/** Owner-only: relink all profiles that still have profile-avatars/* files. */
+export async function repairAllAvatars(): Promise<{
+  scanned: number;
+  repaired: number;
+  alreadyOk: number;
+  missing: number;
+  errors: { userId?: string; error: string }[];
+}> {
+  const headers = await authHeaders();
+  const resp = await fetch('/api/avatar?action=repair-all', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ action: 'repair-all' }),
+  });
+  const data = await parseJson(resp);
+  return {
+    scanned: Number(data.scanned ?? 0),
+    repaired: Number(data.repaired ?? 0),
+    alreadyOk: Number(data.alreadyOk ?? 0),
+    missing: Number(data.missing ?? 0),
+    errors: Array.isArray(data.errors)
+      ? (data.errors as { userId?: string; error: string }[])
+      : [],
+  };
+}
+
 export async function removeBackground(
   blob: Blob,
   mimeType: string,

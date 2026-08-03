@@ -58,6 +58,7 @@ import {
   resendInvitation,
   revokeInvitation,
 } from '../lib/inviteClient';
+import { repairAllAvatars } from '../lib/avatarClient';
 import { removeUserFromSystem } from '../lib/removeUserClient';
 
 interface Props {
@@ -1097,6 +1098,7 @@ export default function UsersPage({ currentProfile }: Props) {
   const [selectedStoreIds, setSelectedStoreIds] = useState<string[]>([]);
   const [selectedRoles, setSelectedRoles] = useState<string[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [repairingAvatars, setRepairingAvatars] = useState(false);
 
   const { data } = db.useQuery({
     profiles: { stores: {}, roleDefinition: {}, avatarFile: {} },
@@ -1283,6 +1285,26 @@ export default function UsersPage({ currentProfile }: Props) {
       alert(e instanceof Error ? e.message : t.users.removeFromSystemFailed);
     } finally {
       setRemovingId(null);
+    }
+  }
+
+  async function runAvatarRepair() {
+    if (!isOwner || repairingAvatars) return;
+    if (!confirm(t.users.repairAvatarsConfirm)) return;
+    setRepairingAvatars(true);
+    try {
+      const result = await repairAllAvatars();
+      alert(
+        t.users.repairAvatarsDone
+          .replace('{repaired}', String(result.repaired))
+          .replace('{alreadyOk}', String(result.alreadyOk))
+          .replace('{missing}', String(result.missing))
+          .replace('{scanned}', String(result.scanned)),
+      );
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.users.repairAvatarsFailed);
+    } finally {
+      setRepairingAvatars(false);
     }
   }
 
@@ -1861,6 +1883,16 @@ export default function UsersPage({ currentProfile }: Props) {
                 }}
               >
                 Clear filters
+              </button>
+            )}
+            {isOwner && (
+              <button
+                className="secondary"
+                style={{ fontSize: 12, padding: '6px 10px', minHeight: 30, marginLeft: 'auto' }}
+                onClick={() => void runAvatarRepair()}
+                disabled={repairingAvatars}
+              >
+                {repairingAvatars ? t.users.repairingAvatars : t.users.repairAvatars}
               </button>
             )}
           </div>
