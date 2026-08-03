@@ -566,9 +566,6 @@ export default function StoreChatPanel({
                       </span>
                       <span className="fa-mention-option-text">
                         <span className="fa-mention-option-name">{c.label}</span>
-                        {c.email ? (
-                          <span className="fa-mention-option-meta">{c.email}</span>
-                        ) : null}
                       </span>
                     </button>
                   </li>
