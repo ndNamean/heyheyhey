@@ -829,6 +829,11 @@ export interface StoreChatMessage {
   deletedAt: string; // '' = active
   status: StoreChatMessageStatus | string;
   replyToMessageId: string; // '' unused in v1
+  /** Linked sender profile when queried with `sender: { avatarFile: {} }`. */
+  sender?: Pick<
+    Profile,
+    'id' | 'userId' | 'displayName' | 'email' | 'avatarUrl' | 'avatarPath' | 'avatarFile'
+  >;
 }
 
 export type ExportJobStatus = 'pending' | 'processing' | 'completed' | 'failed';

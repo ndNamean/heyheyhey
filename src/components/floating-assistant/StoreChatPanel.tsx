@@ -8,8 +8,10 @@ import {
 } from 'react';
 import { id } from '@instantdb/react';
 import { db } from '../../db';
+import type { AvatarProfileFields } from '../../lib/avatarDisplay';
 import { nowIso } from '../../lib/utils';
 import type { Profile, Store, StoreChatMessage } from '../../types';
+import ProfileAvatarPreview from '../profileAvatar/ProfileAvatarPreview';
 import FloatingAssistantLoader from './FloatingAssistantLoader';
 import { useStoreChatRoom } from './useStoreChatRoom';
 import type { ComposerVisualHandlers } from './useComposerVisualState';
@@ -42,18 +44,52 @@ function isDeleted(m: StoreChatMessage): boolean {
   return m.status === 'deleted' || Boolean(m.deletedAt);
 }
 
+function avatarFieldsForMessage(
+  message: StoreChatMessage,
+  isOwn: boolean,
+  liveProfile: Profile,
+): AvatarProfileFields {
+  if (isOwn) return liveProfile;
+  const sender = message.sender;
+  if (sender) {
+    return {
+      displayName: sender.displayName,
+      email: sender.email,
+      userId: sender.userId,
+      avatarUrl: sender.avatarUrl,
+      avatarPath: sender.avatarPath,
+      avatarFile: sender.avatarFile,
+    };
+  }
+  return {
+    displayName: message.senderNameSnapshot || 'Unknown',
+    email: '',
+    userId: message.senderUserId,
+  };
+}
+
 function MessageBubble({
   message,
   isOwn,
+  profile,
 }: {
   message: StoreChatMessage;
   isOwn: boolean;
+  profile: Profile;
 }) {
+  const avatarProfile = avatarFieldsForMessage(message, isOwn, profile);
+  const rowClass = `fa-msg-row${isOwn ? ' fa-msg-row--own' : ''}`;
+
   if (isDeleted(message)) {
     if (!isOwn) return null;
     return (
-      <div className={`fa-msg fa-msg--own fa-msg--deleted`} data-msg-id={message.id}>
-        <p className="fa-msg-deleted">Message deleted</p>
+      <div className={rowClass} data-msg-id={message.id}>
+        <span className="fa-msg-avatar">
+          <ProfileAvatarPreview profile={avatarProfile} size={28} previewEnabled />
+        </span>
+        <div className="fa-msg fa-msg--own fa-msg--deleted">
+          <p className="fa-msg-deleted">Message deleted</p>
+        </div>
       </div>
     );
   }
@@ -62,18 +98,20 @@ function MessageBubble({
   const role = message.senderRoleSnapshot?.trim();
 
   return (
-    <div
-      className={`fa-msg${isOwn ? ' fa-msg--own' : ' fa-msg--other'}`}
-      data-msg-id={message.id}
-    >
-      <div className="fa-msg-meta">
-        <span className="fa-msg-name">{name}</span>
-        {role && !isOwn ? <span className="fa-msg-role">{role}</span> : null}
-        <time className="fa-msg-time" dateTime={message.createdAt}>
-          {formatMessageTime(message.createdAt)}
-        </time>
+    <div className={rowClass} data-msg-id={message.id}>
+      <span className="fa-msg-avatar">
+        <ProfileAvatarPreview profile={avatarProfile} size={28} previewEnabled />
+      </span>
+      <div className={`fa-msg${isOwn ? ' fa-msg--own' : ' fa-msg--other'}`}>
+        <div className="fa-msg-meta">
+          <span className="fa-msg-name">{name}</span>
+          {role && !isOwn ? <span className="fa-msg-role">{role}</span> : null}
+          <time className="fa-msg-time" dateTime={message.createdAt}>
+            {formatMessageTime(message.createdAt)}
+          </time>
+        </div>
+        <p className="fa-msg-body">{message.body}</p>
       </div>
-      <p className="fa-msg-body">{message.body}</p>
     </div>
   );
 }
@@ -230,7 +268,11 @@ export default function StoreChatPanel({
       <ul className="fa-msg-list" aria-live="polite">
         {visibleMessages.map((m) => (
           <li key={m.id}>
-            <MessageBubble message={m} isOwn={m.senderUserId === profile.userId} />
+            <MessageBubble
+              message={m}
+              isOwn={m.senderUserId === profile.userId}
+              profile={profile}
+            />
           </li>
         ))}
       </ul>

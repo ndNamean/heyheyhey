@@ -421,8 +421,28 @@ body.wizard-active .floating-assistant-root {
   flex-direction: column;
 }
 
+.fa-msg-row {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  align-items: flex-end;
+  max-width: 100%;
+}
+
+.fa-msg-row--own {
+  flex-direction: row-reverse;
+  margin-left: auto;
+}
+
+.fa-msg-avatar {
+  flex-shrink: 0;
+  display: inline-flex;
+  border-radius: 50%;
+}
+
 .fa-msg {
   max-width: 92%;
+  min-width: 0;
   padding: 8px 10px;
   border-radius: 12px;
   background: var(--card-bg);
@@ -430,14 +450,8 @@ body.wizard-active .floating-assistant-root {
 }
 
 .fa-msg--own {
-  align-self: flex-end;
-  margin-left: auto;
   background: rgba(253, 194, 22, 0.1);
   border-color: rgba(253, 194, 22, 0.28);
-}
-
-.fa-msg--other {
-  align-self: flex-start;
 }
 
 .fa-msg--deleted {

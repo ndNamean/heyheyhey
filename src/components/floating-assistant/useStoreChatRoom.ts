@@ -17,6 +17,7 @@ export function useStoreChatRoom(storeId: string | null | undefined) {
             order: { createdAt: 'desc' as const },
             limit: MESSAGE_LIMIT,
           },
+          sender: { avatarFile: {} },
         },
       }
     : null;
