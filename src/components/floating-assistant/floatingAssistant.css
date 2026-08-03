@@ -126,6 +126,24 @@ body.wizard-active .floating-assistant-root {
   color: var(--text-primary);
   overflow: hidden;
   outline: none;
+  transition: box-shadow 0.25s ease;
+}
+
+.fa-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
+  background: radial-gradient(ellipse at center, rgba(253, 194, 22, 0.35) 0%, transparent 70%);
+  transition: opacity 0.25s ease, background 0.25s ease;
+}
+
+.fa-panel > * {
+  position: relative;
+  z-index: 1;
 }
 
 .fa-panel--right {
@@ -138,9 +156,16 @@ body.wizard-active .floating-assistant-root {
   right: auto;
 }
 
-.fa-panel[data-composer-state='focused'],
-.fa-panel[data-composer-state='typing'] {
+.fa-panel[data-composer-state='focused'] {
   box-shadow: var(--fa-panel-glow), 0 0 28px rgba(253, 194, 22, 0.18);
+}
+
+.fa-panel[data-composer-state='typing'] {
+  box-shadow: var(--fa-panel-glow), 0 0 30px rgba(253, 194, 22, 0.35), 0 0 80px rgba(253, 194, 22, 0.15);
+}
+
+.fa-panel[data-composer-state='typing']::before {
+  opacity: 1;
 }
 
 .fa-panel[data-composer-state='sending'] {
@@ -153,7 +178,14 @@ body.wizard-active .floating-assistant-root {
 }
 
 .fa-panel[data-key-flash='true'] {
-  box-shadow: var(--fa-panel-glow), 0 0 36px rgba(253, 194, 22, 0.35);
+  box-shadow: var(--fa-panel-glow), 0 0 50px rgba(253, 194, 22, 0.8), 0 0 100px rgba(253, 194, 22, 0.3);
+  transition: box-shadow 0.08s ease;
+}
+
+.fa-panel[data-key-flash='true']::before {
+  opacity: 1;
+  background: radial-gradient(ellipse at center, rgba(253, 194, 22, 0.7) 0%, transparent 70%);
+  transition: opacity 0.08s ease, background 0.08s ease;
 }
 
 @media (max-width: 800px) {
@@ -174,7 +206,8 @@ body.wizard-active .floating-assistant-root {
 
 @media (prefers-reduced-motion: reduce) {
   .fa-launcher,
-  .fa-panel {
+  .fa-panel,
+  .fa-panel::before {
     transition: none;
   }
 
@@ -185,6 +218,12 @@ body.wizard-active .floating-assistant-root {
   .fa-panel[data-composer-state='failure'],
   .fa-panel[data-composer-state='offline'] {
     box-shadow: var(--fa-panel-glow);
+  }
+
+  .fa-panel::before,
+  .fa-panel[data-composer-state='typing']::before,
+  .fa-panel[data-key-flash='true']::before {
+    opacity: 0;
   }
 }
 
