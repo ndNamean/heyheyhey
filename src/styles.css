@@ -2163,6 +2163,22 @@ body.wizard-active .page {
   margin-bottom: 6px;
 }
 
+.feedback-item-identity {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0 4px;
+  margin: -2px 0 8px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--text-secondary);
+  text-transform: capitalize;
+}
+
+.feedback-item-identity .identity-with-avatar {
+  gap: 5px;
+}
+
 .feedback-item-stats {
   font-size: 12px;
   color: var(--text-secondary);
@@ -2176,7 +2192,8 @@ body.wizard-active .page {
   color: var(--text-primary);
 }
 
-.feedback-item-actor {
+.feedback-item-actor,
+.feedback-item-cta {
   margin-top: 8px;
   font-size: 11px;
   color: var(--text-secondary);

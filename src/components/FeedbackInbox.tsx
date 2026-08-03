@@ -155,6 +155,30 @@ export default function FeedbackInbox({
                 <span className="feedback-item-time">{formatIsoToLocalTime(n.createdAt)}</span>
               </div>
               <div className="feedback-item-title">{n.title}</div>
+              {(n.actorUserId || n.actorRole) && (
+                <div className="feedback-item-identity">
+                  {!isLogbook && <>{t.feedback.reviewedBy}{' '}</>}
+                  {actorProfile ? (
+                    <span
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                    >
+                      <IdentityWithAvatar profile={actorProfile}>
+                        {actorName || null}
+                      </IdentityWithAvatar>
+                    </span>
+                  ) : actorName ? (
+                    actorName
+                  ) : null}
+                  {n.actorRole ? (
+                    <>
+                      {actorProfile || actorName ? ' · ' : ''}
+                      {n.actorRole}
+                    </>
+                  ) : null}
+                  {n.type === 'report_finalized' ? ` · ${t.feedback.reportSummary}` : ''}
+                </div>
+              )}
               {!skipReportChrome && (
                 <div className="feedback-item-stats">
                   {t.feedback.completion} {n.completionPercent ?? 0}% · {t.feedback.compliance}{' '}
@@ -162,30 +186,15 @@ export default function FeedbackInbox({
                 </div>
               )}
               <div className="feedback-item-body">{n.body}</div>
-              {n.actorRole && (
-                <div className="feedback-item-actor">
-                  {t.feedback.reviewedBy}{' '}
-                  {actorProfile && actorName ? (
-                    <span
-                      onClick={(e) => e.stopPropagation()}
-                      onKeyDown={(e) => e.stopPropagation()}
-                    >
-                      <IdentityWithAvatar profile={actorProfile}>{actorName}</IdentityWithAvatar>{' '}
-                    </span>
-                  ) : null}
-                  {n.actorRole}
-                  {n.type === 'report_finalized' ? ` · ${t.feedback.reportSummary}` : ''}
-                </div>
-              )}
               {isLogbook && onOpenLogbookEntry && n.reportId && (
-                <div className="feedback-item-actor">
+                <div className="feedback-item-cta">
                   {isNoteAnnouncementNotificationType(n.type)
                     ? t.staffHome.openNoteOnHome
                     : t.logbook.openInLogbook}
                 </div>
               )}
               {isStoreChatMention && n.storeId && (
-                <div className="feedback-item-actor">Open in Store Chat</div>
+                <div className="feedback-item-cta">Open in Store Chat</div>
               )}
               {n.reportId && report && (
                 <div className="feedback-item-timeline" onClick={(e) => e.stopPropagation()}>

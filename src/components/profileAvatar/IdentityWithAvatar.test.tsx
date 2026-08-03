@@ -155,8 +155,8 @@ describe('IdentityWithAvatar', () => {
     setMatchMedia(false);
     const onItemClick = vi.fn();
 
-    // Mirrors FeedbackInbox: stopPropagation wrapper around IdentityWithAvatar
-    // inside a clickable item (div avoids nested <button> warning in jsdom).
+    // Mirrors FeedbackInbox: identity row under title with stopPropagation around
+    // IdentityWithAvatar; CTA is a separate line (div avoids nested <button> in jsdom).
     render(
       <div
         role="button"
@@ -165,17 +165,19 @@ describe('IdentityWithAvatar', () => {
         onClick={onItemClick}
         onKeyDown={() => undefined}
       >
-        <div className="feedback-item-body">Open item</div>
-        <div className="feedback-item-actor">
-          Reviewed by{' '}
+        <div className="feedback-item-title">Assigned a logbook entry</div>
+        <div className="feedback-item-identity">
           <span
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
-            <IdentityWithAvatar profile={alice}>{alice.displayName}</IdentityWithAvatar>{' '}
+            <IdentityWithAvatar profile={alice}>{alice.displayName}</IdentityWithAvatar>
           </span>
+          {' · '}
           manager
         </div>
+        <div className="feedback-item-body">Open item</div>
+        <div className="feedback-item-cta">Open in Logbook</div>
       </div>,
     );
 
@@ -185,5 +187,8 @@ describe('IdentityWithAvatar', () => {
 
     fireEvent.click(screen.getByText('Open item'));
     expect(onItemClick).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByText('Open in Logbook'));
+    expect(onItemClick).toHaveBeenCalledTimes(2);
   });
 });
