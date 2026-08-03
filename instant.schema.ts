@@ -567,6 +567,8 @@ const _schema = i.schema({
       deletedAt: i.string().clientRequired(),  // '' = active
       status: i.string(),                      // 'active' | 'deleted'
       replyToMessageId: i.string().clientRequired(), // '' unused in v1
+      mentionedUserIdsJson: i.string().clientRequired(), // JSON string[]; '[]' default
+      mentionAll: i.boolean().clientRequired(),         // false default
     }),
   },
 

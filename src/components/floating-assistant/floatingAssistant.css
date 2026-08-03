@@ -494,6 +494,14 @@ body.wizard-active .floating-assistant-root {
   color: var(--text-primary);
 }
 
+.fa-msg-mention {
+  font-weight: 700;
+  color: var(--accent-text, #8a6a00);
+  background: rgba(253, 194, 22, 0.22);
+  border-radius: 4px;
+  padding: 0 2px;
+}
+
 .fa-msg-deleted {
   margin: 0;
   font-size: 13px;
@@ -510,6 +518,90 @@ body.wizard-active .floating-assistant-root {
   padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--card-border);
   background: var(--bg-gradient);
+}
+
+.fa-composer-input-wrap {
+  position: relative;
+  min-width: 0;
+}
+
+.fa-mention-menu {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 5;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  border-radius: 12px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.fa-mention-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.fa-mention-option--active,
+.fa-mention-option:hover {
+  background: rgba(253, 194, 22, 0.14);
+}
+
+.fa-mention-option-avatar {
+  flex-shrink: 0;
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  overflow: hidden;
+}
+
+.fa-mention-option-avatar--all {
+  background: rgba(253, 194, 22, 0.28);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-text, #8a6a00);
+}
+
+.fa-mention-option-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+
+.fa-mention-option-name {
+  font-size: 13px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fa-mention-option-meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fa-composer-error,

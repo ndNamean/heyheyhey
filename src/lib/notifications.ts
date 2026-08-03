@@ -872,6 +872,10 @@ export function isNoteAnnouncementNotificationType(type: string): boolean {
   return type === 'logbook_note_created' || type === 'logbook_announcement_created';
 }
 
+export function isStoreChatMentionNotificationType(type: string): boolean {
+  return type === 'store_chat_mention' || type === 'store_chat_mention_all';
+}
+
 export function buildLogbookNoteAnnouncementNotifications(
   entry: LogbookEntry,
   actor: Profile,
@@ -909,4 +913,68 @@ export function buildLogbookNoteAnnouncementNotifications(
 
 export function isLogbookNotificationType(type: string): boolean {
   return type.startsWith('logbook_');
+}
+
+function emptyStoreChatNotifFields(storeId: string, messageId: string) {
+  return {
+    reportId: messageId,
+    reportResponseId: '',
+    storeId,
+    itemTitle: '',
+    completionPercent: 0,
+    compliancePercent: 0,
+    actionStatus: '',
+  };
+}
+
+function storeChatPreview(body: string): string {
+  const trimmed = body.trim().replace(/\s+/g, ' ');
+  if (trimmed.length <= 120) return trimmed;
+  return `${trimmed.slice(0, 117)}…`;
+}
+
+/**
+ * In-app notifications for Store Chat @mentions / @all.
+ * `reportId` stores the message id (same reuse pattern as logbook entry id).
+ */
+export function buildStoreChatMentionNotifications(opts: {
+  messageId: string;
+  storeId: string;
+  storeLabel: string;
+  body: string;
+  actor: Profile;
+  recipientUserIds: string[];
+  mentionAll: boolean;
+}) {
+  const { messageId, storeId, storeLabel, body, actor, recipientUserIds, mentionAll } = opts;
+  const actorName = actor.displayName?.trim() || actor.email?.split('@')[0] || 'Someone';
+  const preview = storeChatPreview(body);
+  const storePart = storeLabel.trim() || storeId;
+  const type = mentionAll ? 'store_chat_mention_all' : 'store_chat_mention';
+  const title = mentionAll
+    ? `${actorName} mentioned everyone in Store Chat`
+    : `${actorName} mentioned you in Store Chat`;
+  const notifBody = [`Store: ${storePart}`, preview].filter(Boolean).join('\n');
+
+  const seen = new Set<string>();
+  const txs = [];
+  for (const uid of recipientUserIds) {
+    if (!uid || uid === actor.userId) continue;
+    if (seen.has(uid)) continue;
+    seen.add(uid);
+    txs.push(
+      db.tx.notifications[id()].update({
+        recipientUserId: uid,
+        type,
+        title,
+        body: notifBody,
+        actorUserId: actor.userId,
+        actorRole: actor.role,
+        readAt: '',
+        createdAt: nowIso(),
+        ...emptyStoreChatNotifFields(storeId, messageId),
+      }),
+    );
+  }
+  return txs;
 }

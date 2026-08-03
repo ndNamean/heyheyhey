@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { BACK_PRIORITY, useNativeBack } from '../../lib/nativeBack';
 import type { Profile } from '../../types';
+import {
+  OPEN_STORE_CHAT_EVENT,
+  type OpenStoreChatDetail,
+} from '../FeedbackInbox';
 import FloatingAssistantLauncher from './FloatingAssistantLauncher';
 import FloatingAssistantPanel from './FloatingAssistantPanel';
 import { type AssistantTabId } from './AssistantTabs';
@@ -136,6 +140,19 @@ export default function FloatingAssistantShell({ profile }: Props) {
   useEffect(() => {
     resetFlash();
   }, [activeTab, resetFlash]);
+
+  useEffect(() => {
+    function onOpenStoreChat(event: Event) {
+      const detail = (event as CustomEvent<OpenStoreChatDetail>).detail;
+      const storeId = detail?.storeId?.trim();
+      if (!storeId) return;
+      setSelectedStoreId(storeId);
+      setActiveTab('store-chat');
+      setOpen(true);
+    }
+    window.addEventListener(OPEN_STORE_CHAT_EVENT, onOpenStoreChat);
+    return () => window.removeEventListener(OPEN_STORE_CHAT_EVENT, onOpenStoreChat);
+  }, [setSelectedStoreId]);
 
   const root = (
     <div

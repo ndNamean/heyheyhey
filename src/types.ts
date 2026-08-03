@@ -790,7 +790,9 @@ export type NotificationType =
   | 'logbook_resolution_correction_requested'
   | 'logbook_issue_reopened'
   | 'logbook_note_created'
-  | 'logbook_announcement_created';
+  | 'logbook_announcement_created'
+  | 'store_chat_mention'
+  | 'store_chat_mention_all';
 
 export interface Notification {
   id: string;
@@ -829,6 +831,10 @@ export interface StoreChatMessage {
   deletedAt: string; // '' = active
   status: StoreChatMessageStatus | string;
   replyToMessageId: string; // '' unused in v1
+  /** JSON string[] of Instant auth userIds; '[]' when none. */
+  mentionedUserIdsJson?: string;
+  /** True when the message @all'd everyone who can access the room. */
+  mentionAll?: boolean;
   /** Linked sender profile when queried with `sender: { avatarFile: {} }`. */
   sender?: Pick<
     Profile,

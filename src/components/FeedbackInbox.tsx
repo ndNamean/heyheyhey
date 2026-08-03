@@ -7,10 +7,18 @@ import { formatIsoToLocalTime } from '../lib/proofTime';
 import {
   isLogbookNotificationType,
   isNoteAnnouncementNotificationType,
+  isStoreChatMentionNotificationType,
 } from '../lib/notifications';
 import ReportTimeline from './ReportTimeline';
 import IdentityWithAvatar from './profileAvatar/IdentityWithAvatar';
 import type { Notification, Profile, Report, ReviewEvent } from '../types';
+
+export const OPEN_STORE_CHAT_EVENT = 'heyPelo:openStoreChat';
+
+export type OpenStoreChatDetail = {
+  storeId: string;
+  messageId?: string;
+};
 
 interface Props {
   userId: string;
@@ -69,6 +77,7 @@ export default function FeedbackInbox({
     const map = new Map<string, Notification[]>();
     for (const n of all) {
       if (!n.reportId || isLogbookNotificationType(n.type)) continue;
+      if (isStoreChatMentionNotificationType(n.type)) continue;
       const list = map.get(n.reportId) ?? [];
       list.push(n);
       map.set(n.reportId, list);
@@ -86,8 +95,21 @@ export default function FeedbackInbox({
     setExpandedReportId((prev) => (prev === reportId ? null : reportId));
   }
 
+  function openStoreChat(n: Notification) {
+    if (!n.storeId || typeof window === 'undefined') return;
+    const detail: OpenStoreChatDetail = {
+      storeId: n.storeId,
+      messageId: n.reportId || undefined,
+    };
+    window.dispatchEvent(new CustomEvent(OPEN_STORE_CHAT_EVENT, { detail }));
+  }
+
   function handleClick(n: Notification) {
     void markRead(n);
+    if (isStoreChatMentionNotificationType(n.type) && n.storeId) {
+      openStoreChat(n);
+      return;
+    }
     if (isLogbookNotificationType(n.type) && n.reportId && onOpenLogbookEntry) {
       onOpenLogbookEntry(n.reportId, n.type);
     }
@@ -109,7 +131,9 @@ export default function FeedbackInbox({
       <div className="feedback-list">
         {notifications.map((n) => {
           const isLogbook = isLogbookNotificationType(n.type);
-          const report = !isLogbook && n.reportId ? reportById.get(n.reportId) : undefined;
+          const isStoreChatMention = isStoreChatMentionNotificationType(n.type);
+          const skipReportChrome = isLogbook || isStoreChatMention;
+          const report = !skipReportChrome && n.reportId ? reportById.get(n.reportId) : undefined;
           const showTimeline = expandedReportId === n.reportId && report;
           const actorProfile = n.actorUserId
             ? profiles.find((p) => p.userId === n.actorUserId)
@@ -131,7 +155,7 @@ export default function FeedbackInbox({
                 <span className="feedback-item-time">{formatIsoToLocalTime(n.createdAt)}</span>
               </div>
               <div className="feedback-item-title">{n.title}</div>
-              {!isLogbook && (
+              {!skipReportChrome && (
                 <div className="feedback-item-stats">
                   {t.feedback.completion} {n.completionPercent ?? 0}% · {t.feedback.compliance}{' '}
                   {n.compliancePercent ?? 0}%
@@ -159,6 +183,9 @@ export default function FeedbackInbox({
                     ? t.staffHome.openNoteOnHome
                     : t.logbook.openInLogbook}
                 </div>
+              )}
+              {isStoreChatMention && n.storeId && (
+                <div className="feedback-item-actor">Open in Store Chat</div>
               )}
               {n.reportId && report && (
                 <div className="feedback-item-timeline" onClick={(e) => e.stopPropagation()}>
