@@ -105,7 +105,7 @@ export default function FloatingAssistantShell({ profile }: Props) {
   const viewingStoreId =
     open && activeTab === 'store-chat' && selectedStoreId ? selectedStoreId : null;
 
-  const { totalUnread, hasUnread } = useUnreadStoreChat({
+  const { totalUnread, hasUnread, unreadByStore } = useUnreadStoreChat({
     authorizedStoreIds,
     currentUserId: profile.userId,
     viewingStoreId,
@@ -192,6 +192,7 @@ export default function FloatingAssistantShell({ profile }: Props) {
         keyFlash={keyFlash}
         composerVisual={composerVisual}
         storeChatUnread={totalUnread}
+        unreadByStore={unreadByStore}
       />
     </div>
   );

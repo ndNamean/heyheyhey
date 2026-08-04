@@ -32,6 +32,7 @@ interface Props {
   keyFlash: boolean;
   composerVisual: ComposerVisualHandlers;
   storeChatUnread: number;
+  unreadByStore: Record<string, number>;
 }
 
 export default function FloatingAssistantPanel({
@@ -51,6 +52,7 @@ export default function FloatingAssistantPanel({
   keyFlash,
   composerVisual,
   storeChatUnread,
+  unreadByStore,
 }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -100,6 +102,7 @@ export default function FloatingAssistantPanel({
             stores={stores}
             selectedStoreId={selectedStoreId}
             onChange={onStoreChange}
+            unreadByStore={unreadByStore}
           />
         )}
       </div>
