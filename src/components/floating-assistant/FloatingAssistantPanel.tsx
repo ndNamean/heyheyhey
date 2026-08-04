@@ -11,6 +11,7 @@ import type {
   ComposerVisualState,
 } from './useComposerVisualState';
 import type { LauncherSide } from './useFloatingLauncherPosition';
+import type { UnreadSenderSummary } from './useUnreadStoreChat';
 
 const KNOWLEDGE_PANEL_ID = 'fa-panel-knowledge';
 const STORE_CHAT_PANEL_ID = 'fa-panel-store-chat';
@@ -33,6 +34,7 @@ interface Props {
   composerVisual: ComposerVisualHandlers;
   storeChatUnread: number;
   unreadByStore: Record<string, number>;
+  unreadSendersByStore: Record<string, UnreadSenderSummary[]>;
 }
 
 export default function FloatingAssistantPanel({
@@ -53,6 +55,7 @@ export default function FloatingAssistantPanel({
   composerVisual,
   storeChatUnread,
   unreadByStore,
+  unreadSendersByStore,
 }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -103,6 +106,7 @@ export default function FloatingAssistantPanel({
             selectedStoreId={selectedStoreId}
             onChange={onStoreChange}
             unreadByStore={unreadByStore}
+            unreadSendersByStore={unreadSendersByStore}
           />
         )}
       </div>
