@@ -273,6 +273,10 @@ body.wizard-active .floating-assistant-root {
   border-bottom: 1px solid var(--card-border);
 }
 
+.fa-panel-store:has(.fa-store-selector--open) {
+  z-index: 6;
+}
+
 .fa-store-selector {
   position: relative;
   display: flex;
@@ -303,8 +307,6 @@ body.wizard-active .floating-assistant-root {
   text-align: left;
   cursor: pointer;
   font: inherit;
-  overflow: hidden;
-  white-space: nowrap;
 }
 
 .fa-store-selector-trigger:disabled {
@@ -346,7 +348,7 @@ body.wizard-active .floating-assistant-root {
 
 .fa-store-selector-list {
   position: absolute;
-  z-index: 20;
+  z-index: 30;
   top: calc(100% + 4px);
   left: 0;
   right: 0;
@@ -357,7 +359,7 @@ body.wizard-active .floating-assistant-root {
   overflow-y: auto;
   border-radius: 10px;
   border: 1px solid var(--input-border);
-  background: var(--input-bg);
+  background: var(--bg-base);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
 }
 
@@ -372,8 +374,6 @@ body.wizard-active .floating-assistant-root {
   border: 1px solid transparent;
   cursor: pointer;
   color: var(--text-primary);
-  overflow: hidden;
-  white-space: nowrap;
 }
 
 .fa-store-option.is-active,

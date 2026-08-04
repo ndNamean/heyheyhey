@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
 import type { Store } from '../../types';
-import ProfileAvatar from '../profileAvatar/ProfileAvatar';
+import ProfileAvatarPreview from '../profileAvatar/ProfileAvatarPreview';
 import type { UnreadSenderSummary } from './useUnreadStoreChat';
 
 const MAX_VISIBLE_SENDERS = 3;
+
+function stopAvatarTriggerClick(event: ReactMouseEvent<HTMLButtonElement>) {
+  event.stopPropagation();
+}
 
 interface Props {
   stores: Store[];
@@ -49,14 +53,25 @@ function UnreadSenderAvatarStack({ senders }: { senders: UnreadSenderSummary[] }
   const overflow = senders.length - visible.length;
 
   return (
-    <span className="fa-store-unread-avatars" aria-hidden="true">
+    <span className="fa-store-unread-avatars">
       {visible.map((sender) => (
         <span key={sender.userId} className="fa-store-sender-avatar">
-          <ProfileAvatar profile={sender.profile} size={18} />
-          <span className="fa-store-sender-count">{formatUnreadDisplay(sender.count)}</span>
+          <ProfileAvatarPreview
+            profile={sender.profile}
+            size={18}
+            previewEnabled
+            onTriggerClick={stopAvatarTriggerClick}
+          />
+          <span className="fa-store-sender-count" aria-hidden="true">
+            {formatUnreadDisplay(sender.count)}
+          </span>
         </span>
       ))}
-      {overflow > 0 ? <span className="fa-store-sender-overflow">+{overflow}</span> : null}
+      {overflow > 0 ? (
+        <span className="fa-store-sender-overflow" aria-hidden="true">
+          +{overflow}
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -191,7 +206,10 @@ export default function AuthorizedStoreSelector({
       : 'Select store for assistant and chat';
 
   return (
-    <div className="fa-store-selector" ref={rootRef}>
+    <div
+      className={`fa-store-selector${open && !isLocked ? ' fa-store-selector--open' : ''}`}
+      ref={rootRef}
+    >
       <span className="fa-store-selector-label" id={`${id}-label`}>
         Store
       </span>
