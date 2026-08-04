@@ -485,6 +485,7 @@ export default function SubmitReportPage({
             approvedByUserId: '',
             approvedAt: '',
             updatedAt: now,
+            storeId: selectedStore.id,
             scheduleOccurrenceKey: resp.scheduleOccurrenceKey,
             scheduledDueAt: resp.scheduledDueAt,
             firstCompletedAt: resp.firstCompletedAt,
@@ -547,6 +548,7 @@ export default function SubmitReportPage({
           updatedAt: now,
           approvedByUserId: '',
           approvedAt: '',
+          storeId: selectedStore.id,
         });
       });
 

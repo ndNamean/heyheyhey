@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
-import { canApproveItem, canReview } from '../lib/roles';
+import { canReview } from '../lib/roles';
+import { canReviewReport, canReviewReportItem } from '../lib/reportReview';
 import { statusLabel } from '../lib/i18nUtils';
 import {
   buildItemReviewNotifications,
@@ -76,9 +77,13 @@ export default function ReviewPage({ profile }: Props) {
     reviewEvents: {},
   });
 
-  const reports: Report[] = (data?.reports ?? []) as Report[];
   const allProfiles: Profile[] = (data?.profiles ?? []) as Profile[];
   const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];
+  const reports = useMemo(() => {
+    return ((data?.reports ?? []) as Report[]).filter((r) =>
+      canReviewReport(profile, r, defs),
+    );
+  }, [data?.reports, profile, defs]);
   const logbookIssues = useMemo(() => {
     return ((data?.logbookEntries ?? []) as LogbookEntry[]).filter(
       (e) =>
@@ -151,15 +156,7 @@ export default function ReviewPage({ profile }: Props) {
     response: ReportResponse,
     status: 'rejected' | 'need_correction',
   ) {
-    const approverRoles = JSON.parse(response.approverRolesJson || '[]') as import('../types').Role[];
-    if (
-      !canApproveItem(
-        response.submittedByRole as import('../types').Role,
-        profile.role,
-        approverRoles,
-        defs,
-      )
-    ) {
+    if (!canReviewReportItem(profile, report, response, defs)) {
       alert(t.review.noPermissionItem);
       return;
     }
@@ -172,15 +169,7 @@ export default function ReviewPage({ profile }: Props) {
     status: 'approved' | 'rejected' | 'need_correction',
     feedback?: FeedbackResult,
   ) {
-    const approverRoles = JSON.parse(response.approverRolesJson || '[]') as import('../types').Role[];
-    if (
-      !canApproveItem(
-        response.submittedByRole as import('../types').Role,
-        profile.role,
-        approverRoles,
-        defs,
-      )
-    ) {
+    if (!canReviewReportItem(profile, report, response, defs)) {
       alert(t.review.noPermissionItem);
       return;
     }
@@ -197,6 +186,7 @@ export default function ReviewPage({ profile }: Props) {
       profile,
       allProfiles,
       responses,
+      defs,
     );
 
     await db.transact([
@@ -208,6 +198,8 @@ export default function ReviewPage({ profile }: Props) {
         approvedByUserId: profile.userId,
         approvedAt: now,
         updatedAt: now,
+        // Lazy backfill storeId on legacy responses so Instant store-scoped rules apply.
+        ...(!response.storeId && report.storeId ? { storeId: report.storeId } : {}),
       }),
       buildItemReviewEvent(report, response, status, reason, profile, now, {
         feedbackCode: feedback?.feedbackCode,
@@ -226,6 +218,10 @@ export default function ReviewPage({ profile }: Props) {
   }
 
   async function markReportApproved(report: Report) {
+    if (!canReviewReport(profile, report, defs)) {
+      alert(t.review.noPermissionItem);
+      return;
+    }
     const responses = (report.responses ?? []) as ReportResponse[];
     const allApproved = responses.every((r) => r.status === 'approved');
     const anyRejected = responses.some((r) => r.status === 'rejected');
@@ -244,6 +240,7 @@ export default function ReviewPage({ profile }: Props) {
       profile,
       allProfiles,
       responses,
+      defs,
     );
 
     await db.transact([

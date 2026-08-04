@@ -1,0 +1,234 @@
+import { describe, expect, it } from 'vitest';
+import { canReviewReport, canReviewReportItem } from './reportReview';
+import { getReviewNotificationRecipients } from './notifications';
+import { buildReportReviewStatusRows } from './reportReviewStatus';
+import { defaultDefinitionsAsEntities } from './roleResolver';
+import type { Profile, Report, ReportResponse, RoleDefinition, Store } from '../types';
+
+const defs = defaultDefinitionsAsEntities();
+
+const storeA: Store = {
+  id: 'store-a',
+  code: 'TKA',
+  name: 'Store A',
+  address: '',
+  area: '',
+  lat: 0,
+  lng: 0,
+  geofenceRadiusM: 100,
+  active: true,
+  createdAt: '',
+  updatedAt: '',
+};
+
+const storeB: Store = {
+  ...storeA,
+  id: 'store-b',
+  code: 'TKB',
+  name: 'Store B',
+};
+
+function profile(partial: Partial<Profile> & Pick<Profile, 'role' | 'userId'>): Profile {
+  return {
+    id: partial.id ?? `p-${partial.userId}`,
+    userId: partial.userId,
+    email: partial.email ?? `${partial.userId}@test.com`,
+    displayName: partial.displayName ?? partial.userId,
+    role: partial.role,
+    approvalStatus: partial.approvalStatus ?? 'approved',
+    approvedAt: '',
+    approvedByEmail: '',
+    createdAt: '',
+    updatedAt: '',
+    stores: partial.stores ?? [storeA],
+  };
+}
+
+function report(partial: Partial<Report> & Pick<Report, 'storeId'>): Report {
+  return {
+    id: partial.id ?? 'r1',
+    storeId: partial.storeId,
+    storeCode: partial.storeCode ?? 'TKA',
+    storeName: partial.storeName ?? 'Store A',
+    templateId: partial.templateId ?? 't1',
+    templateName: partial.templateName ?? 'Checklist',
+    reportType: partial.reportType ?? 'daily',
+    reportDate: partial.reportDate ?? new Date().toISOString().slice(0, 10),
+    submittedByUserId: partial.submittedByUserId ?? 'staff1',
+    submittedByRole: partial.submittedByRole ?? 'staff',
+    submittedAt: partial.submittedAt ?? new Date().toISOString(),
+    status: partial.status ?? 'waiting_approval',
+    completionPercent: partial.completionPercent ?? 100,
+    compliancePercent: partial.compliancePercent ?? 0,
+    archived: partial.archived ?? false,
+    archiveMonth: partial.archiveMonth ?? '',
+    createdAt: partial.createdAt ?? '',
+    updatedAt: partial.updatedAt ?? '',
+    responses: partial.responses,
+  };
+}
+
+function response(
+  partial: Partial<ReportResponse> & Pick<ReportResponse, 'submittedByRole'> = {
+    submittedByRole: 'staff',
+  },
+): ReportResponse {
+  return {
+    id: partial.id ?? 'resp1',
+    reportId: partial.reportId ?? 'r1',
+    templateItemId: partial.templateItemId ?? 'item1',
+    section: partial.section ?? 'Ops',
+    title: partial.title ?? 'Clean floor',
+    proofType: partial.proofType ?? 'tick',
+    required: partial.required ?? true,
+    assignedRole: partial.assignedRole ?? 'staff',
+    approverRolesJson: partial.approverRolesJson ?? '[]',
+    weight: partial.weight ?? 1,
+    failureCategory: partial.failureCategory ?? 'Operations',
+    ticked: partial.ticked ?? true,
+    numberValue: partial.numberValue ?? '',
+    note: partial.note ?? '',
+    status: partial.status ?? 'waiting_approval',
+    rejectionReason: partial.rejectionReason ?? '',
+    feedbackCode: partial.feedbackCode ?? '',
+    feedbackNote: partial.feedbackNote ?? '',
+    submittedByUserId: partial.submittedByUserId ?? 'staff1',
+    submittedByRole: partial.submittedByRole,
+    submittedAt: partial.submittedAt ?? '',
+    approvedByUserId: partial.approvedByUserId ?? '',
+    approvedAt: partial.approvedAt ?? '',
+    updatedAt: partial.updatedAt ?? '',
+    storeId: partial.storeId,
+  };
+}
+
+describe('canReviewReport', () => {
+  it('manager Store A can review Store A; cannot review Store B', () => {
+    const manager = profile({ userId: 'm1', role: 'manager', stores: [storeA] });
+    expect(canReviewReport(manager, report({ storeId: 'store-a' }), defs)).toBe(true);
+    expect(canReviewReport(manager, report({ storeId: 'store-b' }), defs)).toBe(false);
+  });
+
+  it('owner and areaManager can review any store', () => {
+    const owner = profile({ userId: 'o1', role: 'owner', stores: [] });
+    const areaManager = profile({ userId: 'am1', role: 'areaManager', stores: [] });
+    expect(canReviewReport(owner, report({ storeId: 'store-b' }), defs)).toBe(true);
+    expect(canReviewReport(areaManager, report({ storeId: 'store-b' }), defs)).toBe(true);
+  });
+
+  it('staff cannot review', () => {
+    const staff = profile({ userId: 's1', role: 'staff', stores: [storeA] });
+    expect(canReviewReport(staff, report({ storeId: 'store-a' }), defs)).toBe(false);
+  });
+
+  it('hybrid only when store overlaps', () => {
+    const hybrid = profile({ userId: 'h1', role: 'hybrid', stores: [storeA] });
+    expect(canReviewReport(hybrid, report({ storeId: 'store-a' }), defs)).toBe(true);
+    expect(canReviewReport(hybrid, report({ storeId: 'store-b' }), defs)).toBe(false);
+  });
+
+  it('rejects unapproved profiles and missing storeId', () => {
+    const manager = profile({
+      userId: 'm1',
+      role: 'manager',
+      stores: [storeA],
+      approvalStatus: 'pending',
+    });
+    expect(canReviewReport(manager, report({ storeId: 'store-a' }), defs)).toBe(false);
+    expect(
+      canReviewReport(
+        profile({ userId: 'm2', role: 'manager', stores: [storeA] }),
+        report({ storeId: '' }),
+        defs,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('canReviewReportItem', () => {
+  it('manager can approve staff item on assigned store', () => {
+    const manager = profile({ userId: 'm1', role: 'manager', stores: [storeA] });
+    const r = report({ storeId: 'store-a' });
+    expect(canReviewReportItem(manager, r, response({ submittedByRole: 'staff' }), defs)).toBe(
+      true,
+    );
+  });
+
+  it('blocks peer manager even on assigned store', () => {
+    const manager = profile({ userId: 'm1', role: 'manager', stores: [storeA] });
+    const r = report({ storeId: 'store-a' });
+    expect(canReviewReportItem(manager, r, response({ submittedByRole: 'manager' }), defs)).toBe(
+      false,
+    );
+  });
+
+  it('blocks item approve when store does not match even if rank allows', () => {
+    const manager = profile({ userId: 'm1', role: 'manager', stores: [storeA] });
+    const r = report({ storeId: 'store-b' });
+    expect(canReviewReportItem(manager, r, response({ submittedByRole: 'staff' }), defs)).toBe(
+      false,
+    );
+  });
+});
+
+describe('parity: notifications + review status defs', () => {
+  it('getReviewNotificationRecipients respects custom canAccessAllStores via defs', () => {
+    const customDefs: RoleDefinition[] = defs.map((d) =>
+      d.key === 'manager' ? { ...d, canAccessAllStores: true } : d,
+    );
+    const approver = profile({ userId: 'am1', role: 'areaManager', stores: [] });
+    const supervisorOnOtherStore = profile({
+      userId: 'm-other',
+      role: 'manager',
+      stores: [storeB],
+    });
+    const r = report({ storeId: 'store-a', submittedByRole: 'staff' });
+    const resp = response({ submittedByRole: 'staff', submittedByUserId: 'staff1' });
+
+    // Default defs: manager without store A is excluded
+    const withoutCustom = getReviewNotificationRecipients(
+      r,
+      resp,
+      approver,
+      [supervisorOnOtherStore, profile({ userId: 'staff1', role: 'staff' })],
+      defs,
+    );
+    expect(withoutCustom).not.toContain('m-other');
+
+    // Custom defs: manager with canAccessAllStores is included
+    const withCustom = getReviewNotificationRecipients(
+      r,
+      resp,
+      approver,
+      [supervisorOnOtherStore, profile({ userId: 'staff1', role: 'staff' })],
+      customDefs,
+    );
+    expect(withCustom).toContain('m-other');
+  });
+
+  it('buildReportReviewStatusRows passes defs into store access', () => {
+    const customDefs: RoleDefinition[] = defs.map((d) =>
+      d.key === 'manager' ? { ...d, canAccessAllStores: true } : d,
+    );
+    const manager = profile({ userId: 'm1', role: 'manager', stores: [storeA] });
+    const otherStoreReport = report({
+      id: 'r-b',
+      storeId: 'store-b',
+      storeCode: 'TKB',
+      status: 'waiting_approval',
+    });
+
+    const withoutCustom = buildReportReviewStatusRows([otherStoreReport], [], [], {
+      profile: manager,
+      defs,
+    });
+    expect(withoutCustom).toHaveLength(0);
+
+    const withCustom = buildReportReviewStatusRows([otherStoreReport], [], [], {
+      profile: manager,
+      defs: customDefs,
+    });
+    expect(withCustom).toHaveLength(1);
+    expect(withCustom[0]!.report.id).toBe('r-b');
+  });
+});

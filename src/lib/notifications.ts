@@ -40,6 +40,7 @@ export function getReviewNotificationRecipients(
   response: ReportResponse,
   approver: Profile,
   allProfiles: Profile[],
+  defs?: RoleDefinition[],
 ): string[] {
   const recipients = new Set<string>();
   const submitterUserId = response.submittedByUserId || report.submittedByUserId;
@@ -49,13 +50,13 @@ export function getReviewNotificationRecipients(
   }
 
   const submitterRole = (response.submittedByRole || report.submittedByRole) as Role;
-  if (isHigherPositionReview(approver.role, submitterRole)) {
-    const supervisorRoles = new Set(supervisorRolesToNotify(submitterRole));
+  if (isHigherPositionReview(approver.role, submitterRole, defs)) {
+    const supervisorRoles = new Set(supervisorRolesToNotify(submitterRole, defs));
     for (const p of allProfiles) {
       if (p.userId === approver.userId) continue;
       if (p.approvalStatus !== 'approved') continue;
       if (!supervisorRoles.has(p.role)) continue;
-      if (!userCanAccessStore(p.role, (p.stores ?? []).map((s) => s.id), report.storeId)) continue;
+      if (!userCanAccessStore(p.role, (p.stores ?? []).map((s) => s.id), report.storeId, defs)) continue;
       recipients.add(p.userId);
     }
   }
@@ -96,12 +97,19 @@ export function buildItemReviewNotifications(
   approver: Profile,
   allProfiles: Profile[],
   responses: ReportResponse[],
+  defs?: RoleDefinition[],
 ) {
   const now = nowIso();
   const compliancePercent = complianceFromResponses(
     responses.map((r) => (r.id === response.id ? { ...r, status } : r)),
   );
-  const recipients = getReviewNotificationRecipients(report, response, approver, allProfiles);
+  const recipients = getReviewNotificationRecipients(
+    report,
+    response,
+    approver,
+    allProfiles,
+    defs,
+  );
   const notifType =
     status === 'approved' ? 'item_approved' : status === 'rejected' ? 'item_rejected' : 'item_correction';
 
@@ -133,6 +141,7 @@ export function buildReportFinalizedNotifications(
   approver: Profile,
   allProfiles: Profile[],
   responses: ReportResponse[],
+  defs?: RoleDefinition[],
 ) {
   const now = nowIso();
   const recipients = new Set<string>();
@@ -142,13 +151,13 @@ export function buildReportFinalizedNotifications(
   }
 
   const submitterRole = report.submittedByRole as Role;
-  if (isHigherPositionReview(approver.role, submitterRole)) {
-    const supervisorRoles = new Set(supervisorRolesToNotify(submitterRole));
+  if (isHigherPositionReview(approver.role, submitterRole, defs)) {
+    const supervisorRoles = new Set(supervisorRolesToNotify(submitterRole, defs));
     for (const p of allProfiles) {
       if (p.userId === approver.userId) continue;
       if (p.approvalStatus !== 'approved') continue;
       if (!supervisorRoles.has(p.role)) continue;
-      if (!userCanAccessStore(p.role, (p.stores ?? []).map((s) => s.id), report.storeId)) continue;
+      if (!userCanAccessStore(p.role, (p.stores ?? []).map((s) => s.id), report.storeId, defs)) continue;
       recipients.add(p.userId);
     }
   }

@@ -188,7 +188,7 @@ const rules = {
     allow: {
       view: 'isApproved',
       create: 'isApproved',
-      update: 'canReview || canSubmitterUpdateReport || canSubmitterSubmitReport',
+      update: 'canReviewReportStore || canSubmitterUpdateReport || canSubmitterSubmitReport',
       delete: 'isOwner',
       link: {
         store: 'isApproved',
@@ -203,6 +203,9 @@ const rules = {
     },
     bind: {
       ...LEGACY_BIND,
+      hasAllStoreAccess: 'isOwner || isAreaManagerTier',
+      canReviewReportStore:
+        "canReview && (hasAllStoreAccess || data.storeId in auth.ref('$user.profile.stores.id'))",
       isReportSubmitter: 'auth.id != null && data.submittedByUserId == auth.id',
       reportOpenForCorrection:
         "data.status == 'waiting_approval' || data.status == 'need_correction' || data.status == 'rejected'",
@@ -220,7 +223,7 @@ const rules = {
     allow: {
       view: 'isApproved',
       create: 'isApproved',
-      update: 'canReview || canResubmitCorrection || canSubmitterSubmitResponse',
+      update: 'canReviewReportStore || canResubmitCorrection || canSubmitterSubmitResponse',
       delete: 'isOwner',
       link: {
         report: 'isApproved',
@@ -233,12 +236,16 @@ const rules = {
     },
     bind: {
       ...LEGACY_BIND,
+      hasAllStoreAccess: 'isOwner || isAreaManagerTier',
+      // Empty storeId = legacy row; client still gates by report.storeId until backfill.
+      canReviewReportStore:
+        "canReview && (hasAllStoreAccess || data.storeId == null || data.storeId == '' || data.storeId in auth.ref('$user.profile.stores.id'))",
       isResponseSubmitter: 'auth.id != null && data.submittedByUserId == auth.id',
       isCorrectable: "data.status == 'need_correction' || data.status == 'rejected'",
       onlyResubmitFields:
-        "request.modifiedFields.all(f, f in ['ticked', 'numberValue', 'note', 'status', 'rejectionReason', 'feedbackCode', 'feedbackNote', 'submittedAt', 'updatedAt', 'approvedByUserId', 'approvedAt'])",
+        "request.modifiedFields.all(f, f in ['ticked', 'numberValue', 'note', 'status', 'rejectionReason', 'feedbackCode', 'feedbackNote', 'submittedAt', 'updatedAt', 'approvedByUserId', 'approvedAt', 'storeId'])",
       onlyResponseSubmitFields:
-        "request.modifiedFields.all(f, f in ['reportId', 'templateItemId', 'section', 'title', 'proofType', 'required', 'assignedRole', 'assignedRolesJson', 'approverRolesJson', 'weight', 'failureCategory', 'ticked', 'numberValue', 'note', 'status', 'rejectionReason', 'feedbackCode', 'feedbackNote', 'submittedByUserId', 'submittedByRole', 'submittedAt', 'approvedByUserId', 'approvedAt', 'updatedAt', 'scheduleOccurrenceKey', 'scheduledDueAt', 'firstCompletedAt', 'scheduleVersionId'])",
+        "request.modifiedFields.all(f, f in ['reportId', 'templateItemId', 'section', 'title', 'proofType', 'required', 'assignedRole', 'assignedRolesJson', 'approverRolesJson', 'weight', 'failureCategory', 'ticked', 'numberValue', 'note', 'status', 'rejectionReason', 'feedbackCode', 'feedbackNote', 'submittedByUserId', 'submittedByRole', 'submittedAt', 'approvedByUserId', 'approvedAt', 'updatedAt', 'storeId', 'scheduleOccurrenceKey', 'scheduledDueAt', 'firstCompletedAt', 'scheduleVersionId'])",
       canResubmitCorrection: 'isResponseSubmitter && isCorrectable && onlyResubmitFields',
       canSubmitterSubmitResponse: 'isApproved && onlyResponseSubmitFields',
     },
@@ -406,11 +413,17 @@ const rules = {
   reviewEvents: {
     allow: {
       view: 'isApproved',
-      create: 'isApproved',
+      // Non-reviewers (e.g. staff submitters) may create; reviewers must have store access.
+      create: '(canReview && canReviewReportStore) || (isApproved && !canReview)',
       update: 'false',
       delete: 'false',
     },
-    bind: { ...LEGACY_BIND },
+    bind: {
+      ...LEGACY_BIND,
+      hasAllStoreAccess: 'isOwner || isAreaManagerTier',
+      canReviewReportStore:
+        "canReview && (hasAllStoreAccess || data.storeId in auth.ref('$user.profile.stores.id'))",
+    },
   },
 
   // ── Export jobs (server-managed via Admin SDK) ─────────────────────────────

@@ -36,6 +36,8 @@ export interface RoleDefinitionSeed {
   canFinalApproveTemplateItemProposal?: boolean;
   canPublishTemplateItemProposal?: boolean;
   canRequestUserChanges?: boolean;
+  /** Schema/migration marker; Owner-editable fields are never rewritten by ensure. */
+  roleDefinitionVersion?: number;
   approvesSubmitterRolesJson: string;
 }
 
@@ -552,6 +554,8 @@ export interface ReportResponse {
   approvedByUserId: string;
   approvedAt: string;
   updatedAt: string;
+  /** Denormalised for Instant store-scoped review; blank/missing on legacy rows */
+  storeId?: string;
   /** Additive schedule fields — blank when unscheduled */
   scheduleOccurrenceKey?: string;
   scheduledDueAt?: string;

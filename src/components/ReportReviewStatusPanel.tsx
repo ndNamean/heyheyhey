@@ -2,6 +2,7 @@ import { Fragment, useMemo, useState } from 'react';
 import { db } from '../db';
 import ExportModal from './ExportModal';
 import { useLang } from '../i18n';
+import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import { statusLabel } from '../lib/i18nUtils';
 import {
   buildReportReviewStatusRows,
@@ -19,6 +20,7 @@ interface Props {
 
 export default function ReportReviewStatusPanel({ profile }: Props) {
   const { t } = useLang();
+  const { defs } = useRoleDefinitions();
   const [expandedReportId, setExpandedReportId] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
 
@@ -38,9 +40,9 @@ export default function ReportReviewStatusPanel({ profile }: Props) {
         reports as Report[],
         profiles,
         allEvents,
-        { profile },
+        { profile, defs },
       ),
-    [reports, profiles, allEvents, profile],
+    [reports, profiles, allEvents, profile, defs],
   );
 
   const summary = useMemo(() => buildReportReviewStatusSummary(rows), [rows]);

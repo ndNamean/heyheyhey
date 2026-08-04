@@ -149,6 +149,8 @@ const _schema = i.schema({
       approvedByUserId: i.string(),
       approvedAt: i.string(),
       updatedAt: i.string(),
+      // Denormalised for Instant store-scoped review writes (optional for legacy rows)
+      storeId: i.string().indexed().optional(),
       // Additive schedule capture (Phase 2) — optional so existing responses can stay null
       scheduleOccurrenceKey: i.string().indexed().optional(),
       scheduledDueAt: i.string().optional(),
@@ -499,6 +501,7 @@ const _schema = i.schema({
       canFinalApproveTemplateItemProposal: i.boolean().optional(),
       canPublishTemplateItemProposal: i.boolean().optional(),
       canRequestUserChanges: i.boolean().optional(),
+      roleDefinitionVersion: i.number().optional(),
       approvesSubmitterRolesJson: i.string(),
       createdAt: i.string(),
       updatedAt: i.string(),

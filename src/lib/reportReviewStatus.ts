@@ -1,7 +1,7 @@
 import { formatIsoToLocalTime } from './proofTime';
 import { userCanAccessStore } from './roles';
 import { buildReportTimeline } from './reviewTimeline';
-import type { Profile, Report, ReportResponse, ReviewEvent, Role } from '../types';
+import type { Profile, Report, ReportResponse, ReviewEvent, Role, RoleDefinition } from '../types';
 
 export interface ReportReviewStatusRow {
   report: Report;
@@ -27,6 +27,7 @@ export interface ReportReviewStatusSummary {
 
 export interface BuildReportReviewStatusOptions {
   profile: Profile;
+  defs?: RoleDefinition[];
   daysBack?: number;
   limit?: number;
 }
@@ -168,11 +169,11 @@ export function buildReportReviewStatusRows(
   events: ReviewEvent[],
   options: BuildReportReviewStatusOptions,
 ): ReportReviewStatusRow[] {
-  const { profile, daysBack = 30, limit = 20 } = options;
+  const { profile, defs, daysBack = 30, limit = 20 } = options;
   const storeIds = (profile.stores ?? []).map((s) => s.id);
 
   const filtered = reports
-    .filter((r) => userCanAccessStore(profile.role as Role, storeIds, r.storeId))
+    .filter((r) => userCanAccessStore(profile.role as Role, storeIds, r.storeId, defs))
     .filter((r) => isWithinDateWindow(r.reportDate, daysBack))
     .sort(sortReports)
     .slice(0, limit);
