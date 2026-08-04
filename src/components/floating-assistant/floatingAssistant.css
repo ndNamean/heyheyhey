@@ -274,6 +274,7 @@ body.wizard-active .floating-assistant-root {
 }
 
 .fa-store-selector {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -287,7 +288,10 @@ body.wizard-active .floating-assistant-root {
   color: var(--text-secondary);
 }
 
-.fa-store-selector select {
+.fa-store-selector-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
   min-height: 40px;
   border-radius: 10px;
@@ -295,12 +299,152 @@ body.wizard-active .floating-assistant-root {
   background: var(--input-bg);
   color: var(--text-primary);
   padding: 8px 10px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
 }
 
-.fa-store-selector select:focus-visible {
+.fa-store-selector-trigger:disabled {
+  cursor: default;
+  opacity: 0.92;
+}
+
+.fa-store-selector-trigger:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
   border-color: var(--accent);
+}
+
+.fa-store-selector-trigger-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fa-store-selector-chevron {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.fa-store-selector-trigger.has-unread,
+.fa-store-option.has-unread {
+  border-color: rgba(253, 194, 22, 0.55);
+  box-shadow: 0 0 0 1px rgba(253, 194, 22, 0.28), 0 0 14px rgba(253, 194, 22, 0.22);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fa-store-selector-trigger.has-unread,
+  .fa-store-option.has-unread {
+    animation: fa-store-unread-pulse 2.4s ease-in-out infinite;
+  }
+}
+
+@keyframes fa-store-unread-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px rgba(253, 194, 22, 0.28), 0 0 12px rgba(253, 194, 22, 0.18);
+  }
+  50% {
+    box-shadow: 0 0 0 1px rgba(253, 194, 22, 0.5), 0 0 18px rgba(253, 194, 22, 0.32);
+  }
+}
+
+.fa-store-selector-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: min(280px, 45vh);
+  overflow-y: auto;
+  border-radius: 10px;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+.fa-store-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.fa-store-option.is-active,
+.fa-store-option:hover {
+  background: rgba(253, 194, 22, 0.08);
+}
+
+.fa-store-option.is-selected {
+  background: rgba(253, 194, 22, 0.12);
+}
+
+.fa-store-option-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fa-store-unread-avatars {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 0;
+}
+
+.fa-store-sender-avatar {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-left: -6px;
+}
+
+.fa-store-unread-avatars > .fa-store-sender-avatar:first-child {
+  margin-left: 0;
+}
+
+.fa-store-sender-avatar .avatar-circle {
+  box-shadow: 0 0 0 1.5px var(--input-bg);
+}
+
+.fa-store-sender-count {
+  position: absolute;
+  top: -5px;
+  right: -6px;
+  z-index: 1;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--danger, #ef4444);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.fa-store-sender-overflow {
+  margin-left: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  line-height: 1;
 }
 
 .fa-store-empty {
