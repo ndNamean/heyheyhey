@@ -52,7 +52,7 @@ function UnreadSenderAvatarStack({ senders }: { senders: UnreadSenderSummary[] }
     <span className="fa-store-unread-avatars" aria-hidden="true">
       {visible.map((sender) => (
         <span key={sender.userId} className="fa-store-sender-avatar">
-          <ProfileAvatar profile={sender.profile} size={22} />
+          <ProfileAvatar profile={sender.profile} size={18} />
           <span className="fa-store-sender-count">{formatUnreadDisplay(sender.count)}</span>
         </span>
       ))}
