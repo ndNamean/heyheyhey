@@ -1,12 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { id } from '@instantdb/react';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import {
+  CURRENT_ROLE_DEFINITION_VERSION,
   linkProfilesToRoleDefinitions,
   orderedRoles,
   parseApprovesSubmitterRoles,
+  resetApprovalMatrixToDefaults,
 } from '../lib/roleResolver';
 import { DEFAULT_ROLE_DEFINITIONS } from '../lib/defaultRoleDefinitions';
 import { nowIso } from '../lib/utils';
@@ -53,6 +55,8 @@ const CAPABILITY_KEYS: CapabilityKey[] = [
   'canRequestUserChanges',
 ];
 
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed';
+
 interface Props {
   currentProfile: Profile;
   allProfiles: Profile[];
@@ -89,6 +93,22 @@ export default function RolesPermissionsPanel({
   const [addLabel, setAddLabel] = useState('');
   const [placeBelow, setPlaceBelow] = useState('staff');
   const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
+    };
+  }, []);
+
+  function flashSaveStatus(next: SaveStatus) {
+    setSaveStatus(next);
+    if (saveStatusTimerRef.current) clearTimeout(saveStatusTimerRef.current);
+    if (next === 'saved' || next === 'failed') {
+      saveStatusTimerRef.current = setTimeout(() => setSaveStatus('idle'), 2000);
+    }
+  }
 
   const usageByKey = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -116,6 +136,7 @@ export default function RolesPermissionsPanel({
 
   async function saveRole(def: RoleDefinition, patch: Partial<RoleDefinition>) {
     setSaving(true);
+    flashSaveStatus('saving');
     try {
       await db.transact(
         db.tx.roleDefinitions[def.id].update({
@@ -123,7 +144,9 @@ export default function RolesPermissionsPanel({
           updatedAt: nowIso(),
         }),
       );
+      flashSaveStatus('saved');
     } catch (e) {
+      flashSaveStatus('failed');
       alert(e instanceof Error ? e.message : t.errors.saveFailed);
     } finally {
       setSaving(false);
@@ -142,6 +165,23 @@ export default function RolesPermissionsPanel({
       ? current.filter((k) => k !== submitterKey)
       : [...current, submitterKey];
     await saveRole(def, { approvesSubmitterRolesJson: JSON.stringify(next) });
+  }
+
+  async function resetApprovalMatrix() {
+    if (readOnly) return;
+    if (!confirm(rp.resetApprovalMatrixConfirm)) return;
+    setSaving(true);
+    flashSaveStatus('saving');
+    try {
+      await resetApprovalMatrixToDefaults(sorted);
+      flashSaveStatus('saved');
+      alert(rp.resetApprovalMatrixSuccess);
+    } catch (e) {
+      flashSaveStatus('failed');
+      alert(e instanceof Error ? e.message : t.errors.saveFailed);
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function addRole() {
@@ -179,6 +219,7 @@ export default function RolesPermissionsPanel({
           rank: newRank,
           isSystem: false,
           active: true,
+          roleDefinitionVersion: CURRENT_ROLE_DEFINITION_VERSION,
           createdAt: now,
           updatedAt: now,
         }),
@@ -227,8 +268,6 @@ export default function RolesPermissionsPanel({
     }
   }
 
-  const editing = editingId ? sorted.find((d) => d.id === editingId) : null;
-
   async function saveLabel(def: RoleDefinition) {
     const trimmed = editLabel.trim();
     if (!trimmed || trimmed === def.label) {
@@ -238,6 +277,15 @@ export default function RolesPermissionsPanel({
     await saveRole(def, { label: trimmed });
     setEditingId(null);
   }
+
+  const saveStatusText =
+    saveStatus === 'saving'
+      ? rp.saveStatusSaving
+      : saveStatus === 'saved'
+        ? rp.saveStatusSaved
+        : saveStatus === 'failed'
+          ? rp.saveStatusFailed
+          : null;
 
   return (
     <div>
@@ -252,6 +300,11 @@ export default function RolesPermissionsPanel({
             <button className="secondary" onClick={relinkProfiles} disabled={saving}>
               {rp.relinkProfiles}
             </button>
+            {saveStatusText && (
+              <span className="small" aria-live="polite">
+                {saveStatusText}
+              </span>
+            )}
           </div>
         )}
         {readOnly && (
@@ -360,7 +413,29 @@ export default function RolesPermissionsPanel({
       </div>
 
       <div className="card table-wrap">
-        <h3 style={{ marginTop: 0 }}>{rp.approvalMatrix}</h3>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            flexWrap: 'wrap',
+            marginBottom: 8,
+          }}
+        >
+          <h3 style={{ margin: 0 }}>{rp.approvalMatrix}</h3>
+          {!readOnly && (
+            <button
+              type="button"
+              className="secondary"
+              onClick={resetApprovalMatrix}
+              disabled={saving}
+              style={{ fontSize: 13, padding: '6px 12px', minHeight: 32 }}
+            >
+              {rp.resetApprovalMatrix}
+            </button>
+          )}
+        </div>
         <p className="small">{rp.approvalMatrixHint}</p>
         <table className="roles-matrix-table">
           <thead>

@@ -5,6 +5,18 @@ import { DEFAULT_ROLE_DEFINITIONS } from './defaultRoleDefinitions';
 import { nowIso } from './utils';
 import type { Role, RoleDefinition, RoleDefinitionSeed } from '../types';
 
+/** Bump only when a future ensure migration must patch existing records. */
+export const CURRENT_ROLE_DEFINITION_VERSION = 1;
+
+/** Optional Owner-editable capabilities filled once when missing; never force-synced. */
+const OPTIONAL_CAPABILITY_KEYS = [
+  'canProposeTemplateItem',
+  'canFirstApproveTemplateItemProposal',
+  'canFinalApproveTemplateItemProposal',
+  'canPublishTemplateItemProposal',
+  'canRequestUserChanges',
+] as const satisfies ReadonlyArray<keyof RoleDefinitionSeed>;
+
 export function parseApprovesSubmitterRoles(json: string | undefined): string[] {
   if (!json?.trim()) return [];
   try {
@@ -20,6 +32,7 @@ export function seedToDefinition(seed: RoleDefinitionSeed, defId: string): RoleD
   return {
     id: defId,
     ...seed,
+    roleDefinitionVersion: seed.roleDefinitionVersion ?? CURRENT_ROLE_DEFINITION_VERSION,
     createdAt: now,
     updatedAt: now,
   };
@@ -95,96 +108,127 @@ export function buildSeedTransactions() {
     const defId = id();
     return db.tx.roleDefinitions[defId].update({
       ...seed,
+      roleDefinitionVersion: CURRENT_ROLE_DEFINITION_VERSION,
       createdAt: now,
       updatedAt: now,
     });
   });
 }
 
-/** Create missing system roles; upgrade custom `admin`; sync system ranks. */
-export function buildEnsureSystemRoleTransactions(defs: RoleDefinition[]) {
-  const now = nowIso();
-  const txs: ReturnType<typeof db.tx.roleDefinitions[string]['update']>[] = [];
+export type EnsureSystemRoleOp =
+  | {
+      op: 'create';
+      seedKey: string;
+      fields: RoleDefinitionSeed & {
+        roleDefinitionVersion: number;
+        createdAt: string;
+        updatedAt: string;
+      };
+    }
+  | { op: 'update'; id: string; patch: Record<string, unknown> };
+
+/**
+ * Pure ensure planner: create missing system roles; repair system-managed fields only.
+ * Never overwrites Owner-editable fields (label, can*, approvesSubmitterRolesJson).
+ */
+export function buildEnsureSystemRoleOps(
+  defs: RoleDefinition[],
+  now: string = nowIso(),
+): EnsureSystemRoleOp[] {
+  const ops: EnsureSystemRoleOp[] = [];
 
   for (const seed of DEFAULT_ROLE_DEFINITIONS) {
     const existing = defs.find((d) => d.key === seed.key);
     if (!existing) {
-      const defId = id();
-      txs.push(
-        db.tx.roleDefinitions[defId].update({
+      ops.push({
+        op: 'create',
+        seedKey: seed.key,
+        fields: {
           ...seed,
+          roleDefinitionVersion: CURRENT_ROLE_DEFINITION_VERSION,
           createdAt: now,
           updatedAt: now,
-        }),
-      );
+        },
+      });
       continue;
     }
 
-    if (seed.key === 'admin') {
-      const needsUpgrade =
-        existing.isSystem !== seed.isSystem ||
-        existing.rank !== seed.rank ||
-        existing.label !== seed.label ||
-        existing.active !== seed.active ||
-        existing.canEditMaster !== seed.canEditMaster ||
-        existing.canManageUsers !== seed.canManageUsers ||
-        existing.canReview !== seed.canReview ||
-        existing.canPreApproveAccess !== seed.canPreApproveAccess ||
-        existing.canAccessAllStores !== seed.canAccessAllStores ||
-        existing.seesAllTemplateItems !== seed.seesAllTemplateItems ||
-        existing.canExportDashboard !== seed.canExportDashboard ||
-        existing.canExportReviewStatus !== seed.canExportReviewStatus ||
-        existing.canScheduleShifts !== seed.canScheduleShifts ||
-        existing.canDeleteShifts !== seed.canDeleteShifts ||
-        existing.canUseOpsTools !== seed.canUseOpsTools ||
-        existing.canClockIn !== seed.canClockIn ||
-        existing.canProposeTemplateItem !== seed.canProposeTemplateItem ||
-        existing.canFirstApproveTemplateItemProposal !== seed.canFirstApproveTemplateItemProposal ||
-        existing.canFinalApproveTemplateItemProposal !== seed.canFinalApproveTemplateItemProposal ||
-        existing.canPublishTemplateItemProposal !== seed.canPublishTemplateItemProposal ||
-        existing.canRequestUserChanges !== seed.canRequestUserChanges ||
-        existing.approvesSubmitterRolesJson !== seed.approvesSubmitterRolesJson;
+    const patch: Record<string, unknown> = {};
 
-      if (needsUpgrade) {
-        txs.push(
-          db.tx.roleDefinitions[existing.id].update({
-            ...seed,
-            updatedAt: now,
-          }),
-        );
+    if (existing.rank !== seed.rank) patch.rank = seed.rank;
+    if (!existing.isSystem) patch.isSystem = true;
+    // Admin-only structural repair for inactive / mismatched active flag.
+    if (seed.key === 'admin' && existing.active !== seed.active) {
+      patch.active = seed.active;
+    }
+    if (existing.roleDefinitionVersion === undefined) {
+      patch.roleDefinitionVersion = CURRENT_ROLE_DEFINITION_VERSION;
+    }
+
+    for (const key of OPTIONAL_CAPABILITY_KEYS) {
+      if (existing[key] === undefined && seed[key] !== undefined) {
+        patch[key] = seed[key];
       }
-      continue;
     }
 
-    const rankPatch: Record<string, unknown> = {};
-    if (existing.rank !== seed.rank) rankPatch.rank = seed.rank;
-    if (!existing.isSystem) rankPatch.isSystem = true;
-    if (existing.canProposeTemplateItem !== seed.canProposeTemplateItem) {
-      rankPatch.canProposeTemplateItem = seed.canProposeTemplateItem;
-    }
-    if (existing.canFirstApproveTemplateItemProposal !== seed.canFirstApproveTemplateItemProposal) {
-      rankPatch.canFirstApproveTemplateItemProposal = seed.canFirstApproveTemplateItemProposal;
-    }
-    if (existing.canFinalApproveTemplateItemProposal !== seed.canFinalApproveTemplateItemProposal) {
-      rankPatch.canFinalApproveTemplateItemProposal = seed.canFinalApproveTemplateItemProposal;
-    }
-    if (existing.canPublishTemplateItemProposal !== seed.canPublishTemplateItemProposal) {
-      rankPatch.canPublishTemplateItemProposal = seed.canPublishTemplateItemProposal;
-    }
-    if (existing.canRequestUserChanges !== seed.canRequestUserChanges) {
-      rankPatch.canRequestUserChanges = seed.canRequestUserChanges;
-    }
-    if (Object.keys(rankPatch).length) {
-      txs.push(
-        db.tx.roleDefinitions[existing.id].update({
-          ...rankPatch,
-          updatedAt: now,
-        }),
-      );
+    if (Object.keys(patch).length) {
+      patch.updatedAt = now;
+      ops.push({ op: 'update', id: existing.id, patch });
     }
   }
 
-  return txs;
+  return ops;
+}
+
+/** Create missing system roles; repair ranks / isSystem / missing optionals only. */
+export function buildEnsureSystemRoleTransactions(defs: RoleDefinition[]) {
+  return buildEnsureSystemRoleOps(defs).map((op) => {
+    if (op.op === 'create') {
+      return db.tx.roleDefinitions[id()].update(op.fields);
+    }
+    return db.tx.roleDefinitions[op.id].update(op.patch);
+  });
+}
+
+export type ResetApprovalMatrixPatch = {
+  id: string;
+  patch: { approvesSubmitterRolesJson: string; updatedAt: string };
+};
+
+/** Pure reset planner: only `approvesSubmitterRolesJson` (+ updatedAt) for default system roles. */
+export function buildResetApprovalMatrixPatches(
+  defs: RoleDefinition[],
+  now: string = nowIso(),
+): ResetApprovalMatrixPatch[] {
+  const patches: ResetApprovalMatrixPatch[] = [];
+
+  for (const seed of DEFAULT_ROLE_DEFINITIONS) {
+    const existing = defs.find((d) => d.key === seed.key);
+    if (!existing) continue;
+    if (existing.approvesSubmitterRolesJson === seed.approvesSubmitterRolesJson) continue;
+    patches.push({
+      id: existing.id,
+      patch: {
+        approvesSubmitterRolesJson: seed.approvesSubmitterRolesJson,
+        updatedAt: now,
+      },
+    });
+  }
+
+  return patches;
+}
+
+export function buildResetApprovalMatrixTransactions(defs: RoleDefinition[]) {
+  return buildResetApprovalMatrixPatches(defs).map(({ id: defId, patch }) =>
+    db.tx.roleDefinitions[defId].update(patch),
+  );
+}
+
+export async function resetApprovalMatrixToDefaults(defs: RoleDefinition[]) {
+  const txs = buildResetApprovalMatrixTransactions(defs);
+  if (!txs.length) return { updated: 0 };
+  await db.transact(txs);
+  return { updated: txs.length };
 }
 
 export function linkProfilesToRoleDefinitions(
