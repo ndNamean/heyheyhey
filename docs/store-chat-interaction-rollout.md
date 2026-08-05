@@ -19,6 +19,8 @@ Historical rows stay readable without backfill. Empty `replyToMessageId` / GIPHY
 | `VITE_GIPHY_API_KEY` | Composer GIF button and GIPHY reaction search stay hidden/disabled. |
 | `VITE_STORE_CHAT_TRANSLATION` | Translate action stays unavailable even if a provider exists. |
 | `TRANSLATION_PROVIDER` (+ optional `TRANSLATION_API_KEY`) | `/api/translate-store-chat` reports unsupported when unset; `mymemory` works keyless. |
+
+Hobby note: Vercel Hobby allows ≤12 serverless functions. Translation is its own route; `/api/media-url` was folded into `/api/image-proxy` (with a rewrite) to stay under the limit.
 | Ambient glow | Controlled by `src/config/ambientMediaEffects.ts` (`enabled`); reduced-motion users get sustained color only. |
 
 Reply UI, Unicode reactions, copy/forward/favorite/delete do not require the GIPHY or translation flags.

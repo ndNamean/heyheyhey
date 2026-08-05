@@ -47,6 +47,7 @@
     }
   },
   "rewrites": [
+    { "source": "/api/media-url", "destination": "/api/image-proxy" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

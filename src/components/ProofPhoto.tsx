@@ -77,7 +77,7 @@ export default function ProofPhoto({ media, className = '', reviewContext }: Pro
 
     (async () => {
       try {
-        const res = await fetch(`/api/media-url?mediaId=${encodeURIComponent(media.id)}`);
+        const res = await fetch(`/api/image-proxy?mediaId=${encodeURIComponent(media.id)}`);
         const data = (await res.json()) as { url?: string; error?: string };
         if (cancelled) return;
 
