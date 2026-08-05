@@ -186,6 +186,7 @@ describe('StoreChatPanel unicode reactions', () => {
     renderPanel();
 
     fireEvent.click(screen.getByRole('button', { name: /React to Alice/i }));
+    expect(screen.getByRole('toolbar', { name: /Quick reactions/i })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Add ❤️ reaction/i }));
 
     await act(async () => undefined);
@@ -200,6 +201,25 @@ describe('StoreChatPanel unicode reactions', () => {
         giphyId: '',
       }),
     );
+    expect(screen.queryByRole('toolbar', { name: /Quick reactions/i })).toBeNull();
+  });
+
+  it('closes the quick tray on Escape', () => {
+    renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: /React to Alice/i }));
+    expect(screen.getByRole('toolbar', { name: /Quick reactions/i })).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('toolbar', { name: /Quick reactions/i })).toBeNull();
+  });
+
+  it('closes the quick tray on outside pointerdown', () => {
+    renderPanel();
+    fireEvent.click(screen.getByRole('button', { name: /React to Alice/i }));
+    expect(screen.getByRole('toolbar', { name: /Quick reactions/i })).toBeTruthy();
+
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole('toolbar', { name: /Quick reactions/i })).toBeNull();
   });
 
   it('removes own reaction when chip is toggled', async () => {

@@ -992,7 +992,14 @@ export default function StoreChatPanel({
   }, [menuItems.length, mentionIndex]);
 
   useEffect(() => {
-    if (!actionSheetMessageId && !forwardPickerMessageId && !moreMenuMessageId) return;
+    if (
+      !actionSheetMessageId &&
+      !forwardPickerMessageId &&
+      !moreMenuMessageId &&
+      !reactionTrayMessageId
+    ) {
+      return;
+    }
     function onDocKeyDown(event: globalThis.KeyboardEvent) {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -1002,7 +1009,22 @@ export default function StoreChatPanel({
     document.addEventListener('keydown', onDocKeyDown);
     return () => document.removeEventListener('keydown', onDocKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- closeTransientMenus closes current overlays
-  }, [actionSheetMessageId, forwardPickerMessageId, moreMenuMessageId]);
+  }, [actionSheetMessageId, forwardPickerMessageId, moreMenuMessageId, reactionTrayMessageId]);
+
+  useEffect(() => {
+    if (!reactionTrayMessageId) return;
+    function onPointerDown(event: PointerEvent) {
+      const target = event.target as Node | null;
+      if (!(target instanceof Element)) {
+        setReactionTrayMessageId('');
+        return;
+      }
+      if (target.closest('.fa-reaction-tray') || target.closest('.fa-msg-react-btn')) return;
+      setReactionTrayMessageId('');
+    }
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [reactionTrayMessageId]);
 
   const messageById = useMemo(() => {
     const map = new Map<string, StoreChatMessage>();
@@ -1699,6 +1721,7 @@ export default function StoreChatPanel({
               onAction={handleMessageAction}
               onJumpToParent={scrollToMessage}
               onToggleReaction={(messageId, unicode) => {
+                setReactionTrayMessageId('');
                 void toggleUnicodeReaction(messageId, unicode);
               }}
               onToggleGiphyReaction={(messageId, giphyId) => {
