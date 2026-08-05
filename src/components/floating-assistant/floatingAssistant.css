@@ -721,32 +721,99 @@ body.wizard-active .floating-assistant-root {
 .fa-msg-reply-btn,
 .fa-msg-react-btn,
 .fa-msg-more-btn {
-  margin-top: 0;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
   border: none;
+  border-radius: 6px;
   background: transparent;
   color: var(--text-secondary);
   font-size: 11px;
   font-weight: 600;
+  line-height: 1;
   text-align: start;
-  padding: 0 4px;
-  min-height: 44px;
-  min-width: 44px;
+  padding: 4px 6px;
+  min-height: 0;
+  min-width: 0;
+  height: auto;
+  width: auto;
+  box-shadow: none;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+/* Expand hit area to ~44px without growing the painted control. */
+.fa-msg-action-btn::after,
+.fa-msg-reply-btn::after,
+.fa-msg-react-btn::after,
+.fa-msg-more-btn::after {
+  content: '';
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+}
+
+.fa-msg-action-btn:hover:not(:disabled),
+.fa-msg-reply-btn:hover:not(:disabled),
+.fa-msg-react-btn:hover:not(:disabled),
+.fa-msg-more-btn:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.04);
+  box-shadow: none;
+  color: var(--text-primary);
+}
+
+.fa-msg-action-btn:focus-visible,
+.fa-msg-reply-btn:focus-visible,
+.fa-msg-react-btn:focus-visible,
+.fa-msg-more-btn:focus-visible,
+.fa-msg-action-btn[aria-expanded='true'],
+.fa-msg-react-btn[aria-expanded='true'],
+.fa-msg-more-btn[aria-expanded='true'] {
+  outline: none;
+  background: rgba(253, 194, 22, 0.16);
+  color: var(--text-primary);
+  box-shadow: none;
+}
+
+.fa-msg-action-btn:disabled,
+.fa-msg-reply-btn:disabled,
+.fa-msg-react-btn:disabled,
+.fa-msg-more-btn:disabled {
+  box-shadow: none;
+}
+
+.fa-msg-action-icon {
+  flex: 0 0 auto;
+  display: block;
+}
+
+.fa-msg-action-label {
+  white-space: nowrap;
+}
+
+.fa-msg-more-btn {
+  padding: 4px;
 }
 
 .fa-msg-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 4px 10px;
-  margin-top: 2px;
+  gap: 2px 4px;
+  margin-top: 0;
+  min-height: 28px;
 }
 
 .fa-msg-more-wrap {
   position: relative;
   display: inline-flex;
+  margin-inline-start: auto;
 }
 
 .fa-msg-row:focus-within .fa-msg-action-btn,

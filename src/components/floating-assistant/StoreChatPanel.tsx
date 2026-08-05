@@ -668,7 +668,25 @@ function MessageBubble({
                     trayOpen ? sc.closeReactionTray : sc.reactTo.replace('{name}', name)
                   }
                 >
-                  {action.label}
+                  <svg
+                    className="fa-msg-action-icon"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+                    <line x1="9" y1="9" x2="9.01" y2="9" />
+                    <line x1="15" y1="9" x2="15.01" y2="9" />
+                  </svg>
+                  <span className="fa-msg-action-label">{action.label}</span>
                 </button>
               );
             }
@@ -681,11 +699,28 @@ function MessageBubble({
                   onClick={() => onAction('reply', message.id)}
                   aria-label={sc.replyTo.replace('{name}', name)}
                 >
-                  {action.label}
+                  <svg
+                    className="fa-msg-action-icon"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <polyline points="9 17 4 12 9 7" />
+                    <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+                  </svg>
+                  <span className="fa-msg-action-label">{action.label}</span>
                 </button>
               );
             }
             if (action.id === 'more') {
+              const moreLabel = sc.moreActionsFor.replace('{name}', name);
               return (
                 <span key={action.id} className="fa-msg-more-wrap">
                   <button
@@ -695,9 +730,22 @@ function MessageBubble({
                     aria-haspopup="menu"
                     aria-controls={moreOpen ? `fa-msg-more-menu-${message.id}` : undefined}
                     onClick={() => onAction('more', message.id)}
-                    aria-label={sc.moreActionsFor.replace('{name}', name)}
+                    aria-label={moreLabel}
+                    title={moreLabel}
                   >
-                    {action.label}
+                    <svg
+                      className="fa-msg-action-icon"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      aria-hidden="true"
+                      focusable="false"
+                    >
+                      <circle cx="5" cy="12" r="2" />
+                      <circle cx="12" cy="12" r="2" />
+                      <circle cx="19" cy="12" r="2" />
+                    </svg>
                   </button>
                   {moreOpen ? (
                     <div
