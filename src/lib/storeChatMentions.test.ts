@@ -152,6 +152,17 @@ describe('resolveMentionPayload / expandMentionRecipients', () => {
     expect(payload.mentionedUserIds).toEqual(['u1']);
   });
 
+  it('keeps mention resolution stable with reply-style text prefix', () => {
+    const payload = resolveMentionPayload(
+      '> Alice said hello\n@Ada got it',
+      [{ userId: 'u1', label: 'Ada' }],
+      false,
+      candidates,
+    );
+    expect(payload.mentionAll).toBe(false);
+    expect(payload.mentionedUserIds).toEqual(['u1']);
+  });
+
   it('expands @all to all candidates except sender', () => {
     const ids = expandMentionRecipients([], true, candidates, 'me');
     expect(ids.sort()).toEqual(['u1', 'u2']);

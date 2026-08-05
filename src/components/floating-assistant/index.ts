@@ -3,3 +3,9 @@ export { getKnowledgeAssistantMode, isKnowledgeAssistantSuspended } from './know
 export type { KnowledgeAssistantMode, KnowledgeAssistantAdapter } from './knowledgeAssistantMode';
 export { STORE_CHAT_MAX_BODY } from './StoreChatPanel';
 export type { ComposerVisualState, ComposerVisualHandlers } from './useComposerVisualState';
+export { AmbientGlowMedia } from './AmbientGlowMedia';
+export type { AmbientGlowMediaProps } from './AmbientGlowMedia';
+export { GiphyPicker } from './GiphyPicker';
+export type { GiphyPickerProps, GiphyPickerSurface } from './GiphyPicker';
+export { GiphyMediaPreview } from './GiphyMediaPreview';
+export type { GiphyMediaPreviewProps } from './GiphyMediaPreview';

@@ -45,6 +45,7 @@ function useOfflineFlag() {
 export default function FloatingAssistantShell({ profile }: Props) {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<AssistantTabId>('knowledge');
+  const [initialStoreChatMessageId, setInitialStoreChatMessageId] = useState('');
   const launcherRef = useRef<HTMLButtonElement>(null);
   const wasOpenRef = useRef(false);
   const offline = useOfflineFlag();
@@ -146,6 +147,7 @@ export default function FloatingAssistantShell({ profile }: Props) {
       const detail = (event as CustomEvent<OpenStoreChatDetail>).detail;
       const storeId = detail?.storeId?.trim();
       if (!storeId) return;
+      setInitialStoreChatMessageId(detail?.messageId?.trim() || '');
       setSelectedStoreId(storeId);
       setActiveTab('store-chat');
       setOpen(true);
@@ -194,6 +196,8 @@ export default function FloatingAssistantShell({ profile }: Props) {
         storeChatUnread={totalUnread}
         unreadByStore={unreadByStore}
         unreadSendersByStore={unreadSendersByStore}
+        initialStoreChatMessageId={initialStoreChatMessageId}
+        onInitialStoreChatMessageHandled={() => setInitialStoreChatMessageId('')}
       />
     </div>
   );

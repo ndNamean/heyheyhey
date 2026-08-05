@@ -817,10 +817,16 @@ export interface Notification {
   createdAt: string;
 }
 
-export type StoreChatMessageType = 'text';
+export type StoreChatMessageType = 'text' | 'giphy_media' | 'text_giphy';
 export type StoreChatMessageStatus = 'active' | 'deleted';
+/** Phase 4 GIPHY kinds; '' when message has no media. */
+export type StoreChatGiphyKind = 'gif' | 'sticker' | 'meme' | 'emoji' | '';
 
-/** InstantDB storeChatMessages — room key is storeId. */
+/**
+ * InstantDB storeChatMessages — room key is storeId.
+ * Phase 4 giphy* / clientMutationId are additive (optional on read, '' on write).
+ * Keep in sync with Phase 3 forwarded* fields when merging.
+ */
 export interface StoreChatMessage {
   id: string;
   storeId: string;
@@ -839,11 +845,53 @@ export interface StoreChatMessage {
   mentionedUserIdsJson?: string;
   /** True when the message @all'd everyone who can access the room. */
   mentionAll?: boolean;
+  /** Phase 4 GIPHY — '' when text-only. */
+  giphyId?: string;
+  giphyKind?: StoreChatGiphyKind | string;
+  giphyTitle?: string;
+  giphyWidth?: string;
+  giphyHeight?: string;
+  giphyUrl?: string;
+  giphyPreviewUrl?: string;
+  /** Source message id when this row is a forward; '' otherwise. */
+  forwardedFromMessageId?: string;
+  /** Original author userId when forwarded; '' otherwise. Forwarder is senderUserId. */
+  forwardedFromUserId?: string;
+  clientMutationId?: string;
   /** Linked sender profile when queried with `sender: { avatarFile: {} }`. */
   sender?: Pick<
     Profile,
     'id' | 'userId' | 'displayName' | 'email' | 'avatarUrl' | 'avatarPath' | 'avatarFile'
   >;
+}
+
+export type StoreChatReactionType = 'unicode' | 'giphy';
+
+/** InstantDB storeChatReactions — room key is storeId. */
+export interface StoreChatReaction {
+  id: string;
+  storeId: string;
+  messageId: string;
+  userId: string;
+  reactionType: StoreChatReactionType | string;
+  unicode: string;
+  giphyId: string;
+  giphyKind: string;
+  giphyTitle: string;
+  /** Display URL for animated reaction; '' when unicode. */
+  giphyUrl?: string;
+  giphyPreviewUrl?: string;
+  createdAt: string;
+  clientMutationId: string;
+}
+
+/** InstantDB storeChatBookmarks — per-viewer favorites; room key is storeId. */
+export interface StoreChatBookmark {
+  id: string;
+  storeId: string;
+  messageId: string;
+  userId: string;
+  createdAt: string;
 }
 
 export type ExportJobStatus = 'pending' | 'processing' | 'completed' | 'failed';

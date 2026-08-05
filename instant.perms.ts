@@ -587,7 +587,7 @@ const rules = {
     allow: {
       view: 'canAccessMessageStore',
       create:
-        "canSendStoreChat && data.senderUserId == auth.id && isOwnSenderProfile && storeIdValid && data.status == 'active' && data.messageType == 'text' && bodyValid",
+        "canSendStoreChat && data.senderUserId == auth.id && isOwnSenderProfile && storeIdValid && data.status == 'active' && messageTypeValid && bodySizeValid && mediaCoherent",
       update: 'isOwnMessage && onlyDeletedFields && softDeleteValid',
       delete: 'false',
       link: {
@@ -613,7 +613,72 @@ const rules = {
       onlyDeletedFields:
         "request.modifiedFields.all(f, f in ['deletedAt', 'status'])",
       softDeleteValid: "newData.status == 'deleted' && newData.deletedAt != ''",
-      bodyValid: 'size(data.body) > 0 && size(data.body) <= 2000',
+      messageTypeValid:
+        "data.messageType == 'text' || data.messageType == 'giphy_media' || data.messageType == 'text_giphy'",
+      bodySizeValid: 'size(data.body) <= 2000',
+      // text / text_giphy need body; giphy_media may be body-empty; giphy types need media ids.
+      mediaCoherent:
+        "(data.messageType == 'text' && size(data.body) > 0 && data.giphyId == '') || (data.messageType == 'giphy_media' && data.giphyId != '' && data.giphyUrl != '') || (data.messageType == 'text_giphy' && size(data.body) > 0 && data.giphyId != '' && data.giphyUrl != '')",
+    },
+  },
+
+  // ── Store Chat reactions (store-scoped; actor-owned create/delete) ────────
+  storeChatReactions: {
+    allow: {
+      view: 'canAccessReactionStore',
+      create:
+        "canAccessReactionStore && isOwnReaction && storeIdValid && messageIdValid && (unicodeReactionValid || giphyReactionValid)",
+      update: 'false',
+      delete: 'canAccessReactionStore && isOwnReaction',
+      link: {
+        store: 'canAccessReactionStore && isOwnReaction',
+        message: 'canAccessReactionStore && isOwnReaction',
+      },
+      unlink: {
+        store: 'false',
+        message: 'false',
+      },
+    },
+    bind: {
+      ...LEGACY_BIND,
+      hasAllStoreChatAccess: 'isOwner || isAreaManagerTier',
+      storeIdValid: "data.storeId != ''",
+      messageIdValid: "data.messageId != ''",
+      canAccessReactionStore:
+        "isApproved && storeIdValid && (hasAllStoreChatAccess || data.storeId in auth.ref('$user.profile.stores.id'))",
+      isOwnReaction: 'auth.id != null && data.userId == auth.id',
+      unicodeReactionValid:
+        "data.reactionType == 'unicode' && data.unicode != '' && data.giphyId == ''",
+      giphyReactionValid:
+        "data.reactionType == 'giphy' && data.giphyId != '' && data.unicode == '' && data.giphyUrl != ''",
+    },
+  },
+
+  // ── Store Chat bookmarks (store-scoped; actor-owned create/delete) ────────
+  storeChatBookmarks: {
+    allow: {
+      view: 'canAccessBookmarkStore',
+      create:
+        'canAccessBookmarkStore && isOwnBookmark && storeIdValid && messageIdValid',
+      update: 'false',
+      delete: 'canAccessBookmarkStore && isOwnBookmark',
+      link: {
+        store: 'canAccessBookmarkStore && isOwnBookmark',
+        message: 'canAccessBookmarkStore && isOwnBookmark',
+      },
+      unlink: {
+        store: 'false',
+        message: 'false',
+      },
+    },
+    bind: {
+      ...LEGACY_BIND,
+      hasAllStoreChatAccess: 'isOwner || isAreaManagerTier',
+      storeIdValid: "data.storeId != ''",
+      messageIdValid: "data.messageId != ''",
+      canAccessBookmarkStore:
+        "isApproved && storeIdValid && (hasAllStoreChatAccess || data.storeId in auth.ref('$user.profile.stores.id'))",
+      isOwnBookmark: 'auth.id != null && data.userId == auth.id',
     },
   },
 

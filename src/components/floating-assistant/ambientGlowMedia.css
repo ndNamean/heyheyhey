@@ -1,0 +1,104 @@
+/**
+ * Ambient edge-matched glow styles for AmbientGlowMedia.
+ * Driven by CSS variables set from extracted (or fallback #FDC216) RGB.
+ */
+
+.ambient-glow-media {
+  --ambient-r: 253;
+  --ambient-g: 194;
+  --ambient-b: 22;
+  --ambient-glow-primary: 0 0 20px rgba(253, 194, 22, 0.25);
+  --ambient-glow-secondary: 0 0 60px rgba(253, 194, 22, 0.1);
+  --ambient-radial: rgba(253, 194, 22, 0.25);
+  --ambient-border: 1px solid rgba(253, 194, 22, 0.35);
+  --ambient-flash-primary: 0 0 40px rgba(253, 194, 22, 0.6);
+  --ambient-flash-secondary: 0 0 80px rgba(253, 194, 22, 0.25);
+  --ambient-flash-radial: rgba(253, 194, 22, 0.5);
+  --ambient-flash-border: 1px solid rgba(253, 194, 22, 0.7);
+  --ambient-breathe-duration: 1450ms;
+  --ambient-breathe-scale: 1.01;
+  --ambient-flash-duration: 560ms;
+
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  border-radius: inherit;
+  box-shadow: var(--ambient-glow-primary), var(--ambient-glow-secondary);
+  border: var(--ambient-border);
+  background:
+    radial-gradient(ellipse at center, var(--ambient-radial) 0%, transparent 68%);
+  transition: box-shadow 0.35s ease, border-color 0.35s ease;
+  isolation: isolate;
+}
+
+.ambient-glow-media__inner {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  max-width: 100%;
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+.ambient-glow-media__inner > img,
+.ambient-glow-media__inner > video,
+.ambient-glow-media__inner > canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* Gentle breathe — motion preference only */
+.ambient-glow-media[data-ambient-breathe='true'] {
+  animation: ambient-glow-breathe var(--ambient-breathe-duration) ease-in-out infinite alternate;
+}
+
+@keyframes ambient-glow-breathe {
+  from {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  to {
+    transform: scale(var(--ambient-breathe-scale));
+    filter: brightness(1.04);
+  }
+}
+
+/* One-shot bright flash */
+.ambient-glow-media[data-ambient-flash='true'] {
+  animation: ambient-glow-flash var(--ambient-flash-duration) ease-out 1;
+}
+
+@keyframes ambient-glow-flash {
+  0% {
+    box-shadow: var(--ambient-glow-primary), var(--ambient-glow-secondary);
+    border: var(--ambient-border);
+  }
+  35% {
+    box-shadow: var(--ambient-flash-primary), var(--ambient-flash-secondary);
+    border: var(--ambient-flash-border);
+    background:
+      radial-gradient(ellipse at center, var(--ambient-flash-radial) 0%, transparent 70%);
+  }
+  100% {
+    box-shadow: var(--ambient-glow-primary), var(--ambient-glow-secondary);
+    border: var(--ambient-border);
+    background:
+      radial-gradient(ellipse at center, var(--ambient-radial) 0%, transparent 68%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ambient-glow-media[data-ambient-breathe='true'],
+  .ambient-glow-media[data-ambient-flash='true'] {
+    animation: none;
+    transform: none;
+    filter: none;
+  }
+
+  .ambient-glow-media {
+    /* Sustained glow only — keep static edge-matched (or fallback) lighting */
+    box-shadow: var(--ambient-glow-primary), var(--ambient-glow-secondary);
+    border: var(--ambient-border);
+  }
+}

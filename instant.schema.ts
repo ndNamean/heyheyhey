@@ -563,7 +563,7 @@ const _schema = i.schema({
       senderProfileId: i.string().indexed(),
       senderNameSnapshot: i.string(),
       senderRoleSnapshot: i.string(),
-      messageType: i.string(),                 // 'text'
+      messageType: i.string(),                 // 'text' | 'giphy_media' | 'text_giphy'
       body: i.string(),
       createdAt: i.string().indexed(),
       editedAt: i.string().clientRequired(),   // '' unused in v1
@@ -572,6 +572,42 @@ const _schema = i.schema({
       replyToMessageId: i.string().clientRequired(), // '' unused in v1
       mentionedUserIdsJson: i.string().clientRequired(), // JSON string[]; '[]' default
       mentionAll: i.boolean().clientRequired(),         // false default
+      // Phase 4 GIPHY media ('' when text-only). Merge-safe with Phase 3 forward/bookmarks.
+      giphyId: i.string().clientRequired(),
+      giphyKind: i.string().clientRequired(), // 'gif' | 'sticker' | 'meme' | 'emoji' | ''
+      giphyTitle: i.string().clientRequired(),
+      giphyWidth: i.string().clientRequired(), // numeric string or ''
+      giphyHeight: i.string().clientRequired(),
+      giphyUrl: i.string().clientRequired(),
+      giphyPreviewUrl: i.string().clientRequired(),
+      // Forward metadata (empty = not forwarded). Sender remains the forwarder.
+      forwardedFromMessageId: i.string().clientRequired(),
+      forwardedFromUserId: i.string().clientRequired(),
+      clientMutationId: i.string().clientRequired(),
+    }),
+
+    // ─── Store Chat reactions (room key = storeId) ─────────────────────────
+    storeChatReactions: i.entity({
+      storeId: i.string().indexed(),
+      messageId: i.string().indexed(),
+      userId: i.string().indexed(), // auth.id — ownership for rules
+      reactionType: i.string(), // 'unicode' | 'giphy'
+      unicode: i.string().clientRequired(), // emoji; '' when giphy
+      giphyId: i.string().clientRequired(), // '' when unicode
+      giphyKind: i.string().clientRequired(),
+      giphyTitle: i.string().clientRequired(),
+      giphyUrl: i.string().clientRequired(), // '' when unicode
+      giphyPreviewUrl: i.string().clientRequired(), // '' when unicode
+      createdAt: i.string().indexed(),
+      clientMutationId: i.string().clientRequired(),
+    }),
+
+    // ─── Store Chat bookmarks / favorites (per viewer) ─────────────────────
+    storeChatBookmarks: i.entity({
+      storeId: i.string().indexed(),
+      messageId: i.string().indexed(),
+      userId: i.string().indexed(), // auth.id — ownership for rules
+      createdAt: i.string().indexed(),
     }),
   },
 
@@ -801,6 +837,26 @@ const _schema = i.schema({
     storeChatMessageSender: {
       forward: { on: 'storeChatMessages', has: 'one', label: 'sender' },
       reverse: { on: 'profiles', has: 'many', label: 'storeChatMessages' },
+    },
+
+    // ─── Store Chat reactions -> store / message ─────────────────────────────
+    storeChatReactionStore: {
+      forward: { on: 'storeChatReactions', has: 'one', label: 'store' },
+      reverse: { on: 'stores', has: 'many', label: 'storeChatReactions' },
+    },
+    storeChatReactionMessage: {
+      forward: { on: 'storeChatReactions', has: 'one', label: 'message' },
+      reverse: { on: 'storeChatMessages', has: 'many', label: 'reactions' },
+    },
+
+    // ─── Store Chat bookmarks -> store / message ─────────────────────────────
+    storeChatBookmarkStore: {
+      forward: { on: 'storeChatBookmarks', has: 'one', label: 'store' },
+      reverse: { on: 'stores', has: 'many', label: 'storeChatBookmarks' },
+    },
+    storeChatBookmarkMessage: {
+      forward: { on: 'storeChatBookmarks', has: 'one', label: 'message' },
+      reverse: { on: 'storeChatMessages', has: 'many', label: 'bookmarks' },
     },
   },
 });

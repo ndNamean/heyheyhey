@@ -1,4 +1,7 @@
 import {
+  lazy,
+  Suspense,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -9,6 +12,7 @@ import {
 } from 'react';
 import { id } from '@instantdb/react';
 import { db } from '../../db';
+import { useLang } from '../../i18n';
 import type { AvatarProfileFields } from '../../lib/avatarDisplay';
 import {
   buildMentionCandidates,
@@ -20,7 +24,6 @@ import {
   parseMentionedUserIdsJson,
   resolveMentionPayload,
   segmentMentionBody,
-  serializeMentionedUserIds,
   type MentionCandidate,
   type MentionMenuItem,
   type SelectedMention,
@@ -28,13 +31,54 @@ import {
 import {
   buildStoreChatMentionNotifications,
 } from '../../lib/notifications';
+import {
+  QUICK_UNICODE_REACTIONS,
+  giphyReactionDisplayUrl,
+  resolveGiphyReactionToggle,
+  resolveUnicodeReactionToggle,
+  type GiphyReactionGroup,
+  type UnicodeReactionGroup,
+} from '../../lib/storeChatReactions';
+import {
+  buildStoreChatMediaPayload,
+  canSendStoreChatMedia,
+  hasGiphyMedia,
+  storeChatMediaLabel,
+} from '../../lib/storeChatMediaPayload';
+import { isGiphyConfigured, type GiphyMediaItem } from '../../lib/giphyClient';
+import {
+  isStoreChatTranslationEnabled,
+  markTranslationRetry,
+  probeStoreChatTranslationCapability,
+  resolveTranslationTargetLang,
+  runStoreChatTranslation,
+  toggleShowingOriginal,
+  translationDisplayText,
+  type StoreChatTranslationState,
+} from '../../lib/storeChatTranslation';
 import { nowIso } from '../../lib/utils';
 import type { Profile, Store, StoreChatMessage } from '../../types';
 import ProfileAvatar from '../profileAvatar/ProfileAvatar';
 import ProfileAvatarPreview from '../profileAvatar/ProfileAvatarPreview';
+import { AmbientGlowMedia } from './AmbientGlowMedia';
 import FloatingAssistantLoader from './FloatingAssistantLoader';
+import { GiphyMediaPreview } from './GiphyMediaPreview';
+import {
+  listStoreChatActions,
+  resolveStoreChatActionKeyboard,
+  type StoreChatActionCapabilityContext,
+  type StoreChatActionId,
+  type StoreChatActionLabelCopy,
+} from './storeChatActions';
+import { useMessageLongPress } from './useMessageLongPress';
 import { useStoreChatRoom } from './useStoreChatRoom';
+import { useSwipeToReply } from './useSwipeToReply';
 import type { ComposerVisualHandlers } from './useComposerVisualState';
+import './giphyPicker.css';
+
+const GiphyPicker = lazy(() =>
+  import('./GiphyPicker').then((m) => ({ default: m.GiphyPicker })),
+);
 
 export const STORE_CHAT_MAX_BODY = 2000;
 
@@ -45,7 +89,11 @@ interface Props {
   labelledBy: string;
   hidden: boolean;
   canSend: boolean;
+  /** Authorized stores for Forward targets (same access as room selector). */
+  authorizedStores?: Store[];
   composerVisual: ComposerVisualHandlers;
+  initialTargetMessageId?: string;
+  onInitialTargetHandled?: () => void;
 }
 
 function formatMessageTime(iso: string): string {
@@ -62,6 +110,10 @@ function formatMessageTime(iso: string): string {
 
 function isDeleted(m: StoreChatMessage): boolean {
   return m.status === 'deleted' || Boolean(m.deletedAt);
+}
+
+function isForwarded(m: StoreChatMessage): boolean {
+  return Boolean(m.forwardedFromMessageId?.trim());
 }
 
 function avatarFieldsForMessage(
@@ -85,6 +137,35 @@ function avatarFieldsForMessage(
     displayName: message.senderNameSnapshot || 'Unknown',
     email: '',
     userId: message.senderUserId,
+  };
+}
+
+function quotePreviewText(
+  message: StoreChatMessage,
+  copy: { originalDeleted: string; emptyMessage: string },
+): string {
+  if (isDeleted(message)) return copy.originalDeleted;
+  const compact = message.body.trim().replace(/\s+/g, ' ');
+  if (compact) {
+    return compact.length > 120 ? `${compact.slice(0, 117)}...` : compact;
+  }
+  if (hasGiphyMedia(message)) {
+    return storeChatMediaLabel(String(message.messageType || 'giphy_media'), message.giphyKind);
+  }
+  return copy.emptyMessage;
+}
+
+function actionLabelsFromT(sc: StoreChatActionLabelCopy): StoreChatActionLabelCopy {
+  return {
+    reply: sc.reply,
+    react: sc.react,
+    more: sc.more,
+    copy: sc.copy,
+    forward: sc.forward,
+    favorite: sc.favorite,
+    removeFavorite: sc.removeFavorite,
+    translate: sc.translate,
+    delete: sc.delete,
   };
 }
 
@@ -116,56 +197,534 @@ function MentionBody({
   );
 }
 
+function buildActionContext(params: {
+  isOwn: boolean;
+  deleted: boolean;
+  canSend: boolean;
+  canReact: boolean;
+  body: string;
+  translationAvailable: boolean;
+  isBookmarked: boolean;
+  canForward: boolean;
+}): StoreChatActionCapabilityContext {
+  return {
+    isOwn: params.isOwn,
+    isDeleted: params.deleted,
+    canSend: params.canSend,
+    canReact: params.canReact,
+    hasBody: params.body.trim().length > 0,
+    translationAvailable: params.translationAvailable,
+    isBookmarked: params.isBookmarked,
+    canForward: params.canForward,
+  };
+}
+
 function MessageBubble({
   message,
   isOwn,
   profile,
   candidates,
+  parentMessage,
+  reactionGroups,
+  giphyReactionGroups,
+  canReact,
+  canSend,
+  canForward,
+  giphyConfigured,
+  translationAvailable,
+  isBookmarked,
+  trayOpen,
+  whoReactedOpen,
+  moreOpen,
+  translation,
+  glowEnabled,
+  onAction,
+  onJumpToParent,
+  onToggleReaction,
+  onToggleGiphyReaction,
+  onOpenGiphyReactionPicker,
+  onToggleTray,
+  onToggleWhoReacted,
+  onToggleShowOriginal,
+  onRetryTranslation,
+  onRequestCloseMenus,
+  highlighted,
 }: {
   message: StoreChatMessage;
   isOwn: boolean;
   profile: Profile;
   candidates: MentionCandidate[];
+  parentMessage: StoreChatMessage | null;
+  reactionGroups: UnicodeReactionGroup[];
+  giphyReactionGroups: GiphyReactionGroup[];
+  canReact: boolean;
+  canSend: boolean;
+  canForward: boolean;
+  giphyConfigured: boolean;
+  translationAvailable: boolean;
+  isBookmarked: boolean;
+  trayOpen: boolean;
+  whoReactedOpen: boolean;
+  moreOpen: boolean;
+  translation: StoreChatTranslationState | null;
+  glowEnabled: boolean;
+  onAction: (actionId: StoreChatActionId, messageId: string) => void;
+  onJumpToParent: (messageId: string) => void;
+  onToggleReaction: (messageId: string, unicode: string) => void;
+  onToggleGiphyReaction: (messageId: string, giphyId: string) => void;
+  onOpenGiphyReactionPicker: (messageId: string) => void;
+  onToggleTray: (messageId: string) => void;
+  onToggleWhoReacted: (messageId: string) => void;
+  onToggleShowOriginal: (messageId: string) => void;
+  onRetryTranslation: (messageId: string) => void;
+  onRequestCloseMenus: () => void;
+  highlighted: boolean;
 }) {
+  const { t, isRtl } = useLang();
+  const sc = t.storeChat;
+  const labels = actionLabelsFromT(sc);
   const avatarProfile = avatarFieldsForMessage(message, isOwn, profile);
   const rowClass = `fa-msg-row${isOwn ? ' fa-msg-row--own' : ''}`;
+  const deleted = isDeleted(message);
+  const actionCtx = buildActionContext({
+    isOwn,
+    deleted,
+    canSend,
+    canReact,
+    body: message.body,
+    translationAvailable,
+    isBookmarked,
+    canForward,
+  });
+  const stripActions = listStoreChatActions('strip', actionCtx, labels);
+  const moreActions = listStoreChatActions('moreMenu', actionCtx, labels);
 
-  if (isDeleted(message)) {
+  const swipe = useSwipeToReply({
+    enabled: !deleted && canSend,
+    isRtl,
+    onReply: () => onAction('reply', message.id),
+  });
+  const longPress = useMessageLongPress({
+    enabled: !deleted,
+    onLongPress: () => onAction('more', message.id),
+  });
+  const labelByUserId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of candidates) map.set(c.userId, c.label);
+    if (message.senderUserId && message.senderNameSnapshot) {
+      map.set(message.senderUserId, message.senderNameSnapshot);
+    }
+    map.set(profile.userId, sc.you);
+    return map;
+  }, [candidates, message.senderNameSnapshot, message.senderUserId, profile.userId, sc.you]);
+
+  if (deleted) {
     if (!isOwn) return null;
     return (
-      <div className={rowClass} data-msg-id={message.id}>
+      <div
+        className={`${rowClass}${highlighted ? ' fa-msg-row--highlighted' : ''}`}
+        data-msg-id={message.id}
+      >
         <span className="fa-msg-avatar">
           <ProfileAvatarPreview profile={avatarProfile} size={28} previewEnabled />
         </span>
         <div className="fa-msg fa-msg--own fa-msg--deleted">
-          <p className="fa-msg-deleted">Message deleted</p>
+          <p className="fa-msg-deleted">{sc.messageDeleted}</p>
         </div>
       </div>
     );
   }
 
-  const name = isOwn ? 'You' : message.senderNameSnapshot || 'Unknown';
+  const name = isOwn ? sc.you : message.senderNameSnapshot || sc.unknown;
   const role = message.senderRoleSnapshot?.trim();
+  const hasUnicodeReactions = reactionGroups.length > 0;
+  const hasGiphyReactions = giphyReactionGroups.length > 0;
+  const hasReactions = hasUnicodeReactions || hasGiphyReactions;
+  const messageHasMedia = hasGiphyMedia(message);
+  const mediaSrc = (message.giphyUrl || message.giphyPreviewUrl || '').trim();
+  const mediaLabel = storeChatMediaLabel(
+    String(message.messageType || 'giphy_media'),
+    message.giphyKind,
+  );
+  const bodyTrimmed = message.body.trim();
+  const showingTranslated =
+    translation?.status === 'success' &&
+    Boolean(translation.translatedText) &&
+    !translation.showingOriginal;
+  const displayBody = translation ? translationDisplayText(translation) : message.body;
+  const swipeCoach = canSend
+    ? isRtl
+      ? sc.swipeToReplyCoachRtl
+      : sc.swipeToReplyCoach
+    : undefined;
 
   return (
-    <div className={rowClass} data-msg-id={message.id}>
+    <div
+      className={`${rowClass}${highlighted ? ' fa-msg-row--highlighted' : ''}${isBookmarked ? ' fa-msg-row--bookmarked' : ''}`}
+      data-msg-id={message.id}
+      tabIndex={0}
+      aria-description={swipeCoach}
+      {...swipe}
+      {...longPress}
+      onKeyDown={(event) => {
+        if (event.metaKey || event.ctrlKey || event.altKey) return;
+        if (event.key === 'Escape') {
+          if (moreOpen || trayOpen) {
+            event.preventDefault();
+            onRequestCloseMenus();
+          }
+          return;
+        }
+        const actionId = resolveStoreChatActionKeyboard(event.key, actionCtx);
+        if (!actionId) return;
+        event.preventDefault();
+        onAction(actionId, message.id);
+      }}
+    >
       <span className="fa-msg-avatar">
         <ProfileAvatarPreview profile={avatarProfile} size={28} previewEnabled />
       </span>
       <div className={`fa-msg${isOwn ? ' fa-msg--own' : ' fa-msg--other'}`}>
+        {isForwarded(message) ? (
+          <span className="fa-msg-forwarded-badge">{sc.forwarded}</span>
+        ) : null}
+        {message.replyToMessageId ? (
+          <button
+            type="button"
+            className="fa-msg-quote"
+            onClick={() => {
+              if (parentMessage) onJumpToParent(parentMessage.id);
+            }}
+            disabled={!parentMessage}
+            title={parentMessage ? sc.jumpToOriginal : sc.originalUnavailable}
+          >
+            <span className="fa-msg-quote-label">
+              {parentMessage
+                ? sc.replyingTo.replace('{name}', parentMessage.senderNameSnapshot || sc.unknown)
+                : sc.replyingToMissing}
+            </span>
+            <span className="fa-msg-quote-text">
+              {parentMessage
+                ? quotePreviewText(parentMessage, sc)
+                : sc.originalUnavailable}
+            </span>
+          </button>
+        ) : null}
         <div className="fa-msg-meta">
           <span className="fa-msg-name">{name}</span>
           {role && !isOwn ? <span className="fa-msg-role">{role}</span> : null}
+          {isBookmarked ? (
+            <span className="fa-msg-bookmark-mark" title={sc.favorited} aria-label={sc.favorited}>
+              ★
+            </span>
+          ) : null}
           <time className="fa-msg-time" dateTime={message.createdAt}>
             {formatMessageTime(message.createdAt)}
           </time>
         </div>
-        <MentionBody
-          body={message.body}
-          mentionedUserIdsJson={message.mentionedUserIdsJson}
-          mentionAll={message.mentionAll}
-          candidates={candidates}
-        />
+        {messageHasMedia && mediaSrc ? (
+          <div className="fa-msg-media" data-giphy-kind={message.giphyKind || undefined}>
+            <AmbientGlowMedia cacheKey={mediaSrc} breathe enabled={glowEnabled}>
+              <img
+                className="fa-msg-giphy"
+                src={mediaSrc}
+                alt={message.giphyTitle || mediaLabel}
+                width={Number.parseInt(message.giphyWidth || '', 10) || undefined}
+                height={Number.parseInt(message.giphyHeight || '', 10) || undefined}
+                loading="lazy"
+                decoding="async"
+                crossOrigin="anonymous"
+              />
+            </AmbientGlowMedia>
+            {message.giphyTitle ? (
+              <span className="fa-msg-media-caption">{message.giphyTitle}</span>
+            ) : null}
+          </div>
+        ) : null}
+        {showingTranslated ? (
+          <p className="fa-msg-body fa-msg-body--translated">{displayBody}</p>
+        ) : bodyTrimmed ? (
+          <MentionBody
+            body={message.body}
+            mentionedUserIdsJson={message.mentionedUserIdsJson}
+            mentionAll={message.mentionAll}
+            candidates={candidates}
+          />
+        ) : null}
+        {translation && translation.status !== 'idle' && translation.status !== 'empty' ? (
+          <div className="fa-msg-translation" role="status">
+            {translation.status === 'loading' || translation.status === 'retry' ? (
+              <span className="fa-msg-translation-status">{sc.translating}</span>
+            ) : null}
+            {translation.status === 'success' ? (
+              <button
+                type="button"
+                className="fa-msg-translation-toggle"
+                onClick={() => onToggleShowOriginal(message.id)}
+              >
+                {translation.showingOriginal ? sc.showTranslation : sc.showOriginal}
+              </button>
+            ) : null}
+            {translation.status === 'failed' ? (
+              <>
+                <span className="fa-msg-translation-error">
+                  {translation.errorMessage || sc.translationFailed}
+                </span>
+                <button
+                  type="button"
+                  className="fa-msg-translation-retry"
+                  onClick={() => onRetryTranslation(message.id)}
+                >
+                  {t.common.retry}
+                </button>
+              </>
+            ) : null}
+            {translation.status === 'already-same-language' ? (
+              <span className="fa-msg-translation-status">{sc.alreadyInYourLanguage}</span>
+            ) : null}
+            {translation.status === 'unsupported' ? (
+              <span className="fa-msg-translation-status">
+                {translation.errorMessage || sc.translationUnavailable}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+        {hasReactions ? (
+          <div className="fa-msg-reactions" role="group" aria-label={sc.reactions}>
+            {reactionGroups.map((group) => {
+              const who = group.userIds
+                .map((uid) => labelByUserId.get(uid) || sc.someone)
+                .join(', ');
+              const actionHint = group.reactedByMe
+                ? sc.activateRemoveReaction
+                : sc.activateAddReaction;
+              const countLabel = (
+                group.count === 1 ? sc.reactionSingular : sc.reactionPlural
+              ).replace('{count}', String(group.count));
+              return (
+                <button
+                  key={group.unicode}
+                  type="button"
+                  className={`fa-reaction-chip${group.reactedByMe ? ' fa-reaction-chip--mine' : ''}`}
+                  aria-pressed={group.reactedByMe}
+                  aria-label={`${group.unicode}, ${countLabel}. ${who}. ${canReact ? actionHint : ''}`}
+                  disabled={!canReact}
+                  onClick={() => onToggleReaction(message.id, group.unicode)}
+                >
+                  <span className="fa-reaction-chip-emoji" aria-hidden="true">
+                    {group.unicode}
+                  </span>
+                  <span className="fa-reaction-chip-count">{group.count}</span>
+                </button>
+              );
+            })}
+            {giphyReactionGroups.map((group) => {
+              const who = group.userIds
+                .map((uid) => labelByUserId.get(uid) || sc.someone)
+                .join(', ');
+              const actionHint = group.reactedByMe
+                ? sc.activateRemoveGifReaction
+                : sc.activateAddGifReaction;
+              const preview = giphyReactionDisplayUrl(group);
+              const title = group.giphyTitle || sc.gifReaction;
+              const countLabel = (
+                group.count === 1 ? sc.reactionSingular : sc.reactionPlural
+              ).replace('{count}', String(group.count));
+              return (
+                <button
+                  key={`giphy-${group.giphyId}`}
+                  type="button"
+                  className={`fa-reaction-chip fa-reaction-chip--giphy${group.reactedByMe ? ' fa-reaction-chip--mine' : ''}`}
+                  aria-pressed={group.reactedByMe}
+                  aria-label={`${title}, ${countLabel}. ${who}. ${canReact ? actionHint : ''}`}
+                  disabled={!canReact}
+                  onClick={() => onToggleGiphyReaction(message.id, group.giphyId)}
+                >
+                  {preview ? (
+                    <AmbientGlowMedia
+                      className="fa-reaction-chip-glow"
+                      cacheKey={preview}
+                      breathe={false}
+                      enabled={glowEnabled}
+                    >
+                      <img
+                        className="fa-reaction-chip-giphy"
+                        src={preview}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        crossOrigin="anonymous"
+                      />
+                    </AmbientGlowMedia>
+                  ) : (
+                    <span className="fa-reaction-chip-emoji" aria-hidden="true">
+                      {sc.gif}
+                    </span>
+                  )}
+                  <span className="fa-reaction-chip-count">{group.count}</span>
+                </button>
+              );
+            })}
+            {hasReactions ? (
+              <button
+                type="button"
+                className="fa-reaction-who"
+                aria-expanded={whoReactedOpen}
+                aria-controls={`fa-who-reacted-${message.id}`}
+                onClick={() => onToggleWhoReacted(message.id)}
+              >
+                {sc.whoReacted}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {whoReactedOpen && hasReactions ? (
+          <div
+            id={`fa-who-reacted-${message.id}`}
+            className="fa-who-reacted"
+            role="region"
+            aria-label={sc.whoReacted}
+          >
+            {reactionGroups.map((group) => (
+              <div key={`who-${group.unicode}`} className="fa-who-reacted-row">
+                <span className="fa-who-reacted-emoji" aria-hidden="true">
+                  {group.unicode}
+                </span>
+                <span className="fa-who-reacted-names">
+                  {group.userIds.map((uid) => labelByUserId.get(uid) || sc.someone).join(', ')}
+                </span>
+              </div>
+            ))}
+            {giphyReactionGroups.map((group) => (
+              <div key={`who-giphy-${group.giphyId}`} className="fa-who-reacted-row">
+                <span className="fa-who-reacted-giphy" aria-hidden="true">
+                  {giphyReactionDisplayUrl(group) ? (
+                    <img
+                      src={giphyReactionDisplayUrl(group)}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                    />
+                  ) : (
+                    sc.gif
+                  )}
+                </span>
+                <span className="fa-who-reacted-names">
+                  {group.userIds.map((uid) => labelByUserId.get(uid) || sc.someone).join(', ')}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {trayOpen ? (
+          <div className="fa-reaction-tray" role="toolbar" aria-label={sc.quickReactions}>
+            {QUICK_UNICODE_REACTIONS.map((emoji) => {
+              const mine = reactionGroups.some((g) => g.unicode === emoji && g.reactedByMe);
+              return (
+                <button
+                  key={emoji}
+                  type="button"
+                  className={`fa-reaction-tray-btn${mine ? ' fa-reaction-tray-btn--mine' : ''}`}
+                  aria-label={(mine ? sc.removeReaction : sc.addReaction).replace(
+                    '{emoji}',
+                    emoji,
+                  )}
+                  aria-pressed={mine}
+                  disabled={!canReact}
+                  onClick={() => onToggleReaction(message.id, emoji)}
+                >
+                  {emoji}
+                </button>
+              );
+            })}
+            {giphyConfigured ? (
+              <button
+                type="button"
+                className="fa-reaction-tray-btn fa-reaction-tray-btn--giphy"
+                aria-label={sc.searchGiphyReactions}
+                disabled={!canReact}
+                onClick={() => onOpenGiphyReactionPicker(message.id)}
+              >
+                {sc.gif}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        <div
+          className="fa-msg-actions"
+          role="toolbar"
+          aria-label={sc.actionsFor.replace('{name}', name)}
+        >
+          {stripActions.map((action) => {
+            if (action.id === 'react') {
+              return (
+                <button
+                  key={action.id}
+                  type="button"
+                  className="fa-msg-action-btn fa-msg-react-btn"
+                  aria-expanded={trayOpen}
+                  onClick={() => onAction('react', message.id)}
+                  aria-label={
+                    trayOpen ? sc.closeReactionTray : sc.reactTo.replace('{name}', name)
+                  }
+                >
+                  {action.label}
+                </button>
+              );
+            }
+            if (action.id === 'reply') {
+              return (
+                <button
+                  key={action.id}
+                  type="button"
+                  className="fa-msg-action-btn fa-msg-reply-btn"
+                  onClick={() => onAction('reply', message.id)}
+                  aria-label={sc.replyTo.replace('{name}', name)}
+                >
+                  {action.label}
+                </button>
+              );
+            }
+            if (action.id === 'more') {
+              return (
+                <span key={action.id} className="fa-msg-more-wrap">
+                  <button
+                    type="button"
+                    className="fa-msg-action-btn fa-msg-more-btn"
+                    aria-expanded={moreOpen}
+                    aria-haspopup="menu"
+                    aria-controls={moreOpen ? `fa-msg-more-menu-${message.id}` : undefined}
+                    onClick={() => onAction('more', message.id)}
+                    aria-label={sc.moreActionsFor.replace('{name}', name)}
+                  >
+                    {action.label}
+                  </button>
+                  {moreOpen ? (
+                    <div
+                      id={`fa-msg-more-menu-${message.id}`}
+                      className="fa-msg-more-menu"
+                      role="menu"
+                      aria-label={sc.moreMessageActions}
+                    >
+                      {moreActions.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          role="menuitem"
+                          className={`fa-msg-more-item${item.destructive ? ' fa-msg-more-item--danger' : ''}`}
+                          onClick={() => onAction(item.id, message.id)}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </span>
+              );
+            }
+            return null;
+          })}
+        </div>
       </div>
     </div>
   );
@@ -178,10 +737,24 @@ export default function StoreChatPanel({
   labelledBy,
   hidden,
   canSend,
+  authorizedStores = [],
   composerVisual,
+  initialTargetMessageId = '',
+  onInitialTargetHandled,
 }: Props) {
+  const { lang, t } = useLang();
+  const sc = t.storeChat;
+  const actionLabels = actionLabelsFromT(sc);
   const storeId = store?.id ?? null;
-  const { messages, isLoading, error } = useStoreChatRoom(storeId);
+  const {
+    messages,
+    isLoading,
+    error,
+    reactionsByMessageId,
+    reactionGroupsByMessageId,
+    giphyReactionGroupsByMessageId,
+    bookmarkByMessageId,
+  } = useStoreChatRoom(storeId, profile.userId);
 
   const { data: mentionData } = db.useQuery(
     storeId
@@ -205,6 +778,11 @@ export default function StoreChatPanel({
     [roomMembers, profile.userId],
   );
 
+  const forwardTargets = useMemo(
+    () => authorizedStores.filter((s) => s.active && s.id !== storeId),
+    [authorizedStores, storeId],
+  );
+
   const draftsRef = useRef<Record<string, string>>({});
   const [draft, setDraft] = useState(() => (storeId ? draftsRef.current[storeId] ?? '' : ''));
   const [sendError, setSendError] = useState<string | null>(null);
@@ -212,13 +790,36 @@ export default function StoreChatPanel({
   const sendingLock = useRef(false);
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mediaBtnRef = useRef<HTMLButtonElement>(null);
   const prevStoreId = useRef<string | null>(storeId);
+  const focusReturnRef = useRef<HTMLElement | null>(null);
 
   const [trackedMentions, setTrackedMentions] = useState<SelectedMention[]>([]);
   const [mentionAllTracked, setMentionAllTracked] = useState(false);
   const [mentionOpen, setMentionOpen] = useState(false);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [caret, setCaret] = useState(0);
+  const [replyTargetMessageId, setReplyTargetMessageId] = useState('');
+  const [highlightedMessageId, setHighlightedMessageId] = useState('');
+  const highlightTimeoutRef = useRef<number | null>(null);
+  const [reactionTrayMessageId, setReactionTrayMessageId] = useState('');
+  const [whoReactedMessageId, setWhoReactedMessageId] = useState('');
+  const [moreMenuMessageId, setMoreMenuMessageId] = useState('');
+  const [actionSheetMessageId, setActionSheetMessageId] = useState('');
+  const [forwardPickerMessageId, setForwardPickerMessageId] = useState('');
+  const [giphyPickerOpen, setGiphyPickerOpen] = useState(false);
+  const [giphyPickerMode, setGiphyPickerMode] = useState<'composer' | 'reaction'>('composer');
+  const [giphyReactionTargetMessageId, setGiphyReactionTargetMessageId] = useState('');
+  const [selectedGiphy, setSelectedGiphy] = useState<GiphyMediaItem | null>(null);
+  const [actionAnnounce, setActionAnnounce] = useState('');
+  const [translationCapable, setTranslationCapable] = useState(false);
+  const [translationsByMessageId, setTranslationsByMessageId] = useState<
+    Record<string, StoreChatTranslationState>
+  >({});
+  const reactionToggleLock = useRef(new Set<string>());
+  const bookmarkToggleLock = useRef(new Set<string>());
+  const announceTimeoutRef = useRef<number | null>(null);
+  const giphyConfigured = isGiphyConfigured();
 
   const activeMention = useMemo(
     () => (mentionOpen ? getActiveMentionQuery(draft, caret) : null),
@@ -229,6 +830,48 @@ export default function StoreChatPanel({
     if (!activeMention) return [] as MentionMenuItem[];
     return buildMentionMenuItems(mentionCandidates, activeMention.query);
   }, [activeMention, mentionCandidates]);
+
+  const canReact = Boolean(storeId && profile.userId);
+  const canForward = canSend && forwardTargets.length > 0;
+  const translationAvailable = translationCapable && isStoreChatTranslationEnabled();
+
+  function announce(message: string) {
+    setActionAnnounce(message);
+    if (announceTimeoutRef.current !== null) window.clearTimeout(announceTimeoutRef.current);
+    announceTimeoutRef.current = window.setTimeout(() => {
+      setActionAnnounce('');
+      announceTimeoutRef.current = null;
+    }, 2500);
+  }
+
+  function rememberFocusTarget(messageId: string) {
+    const node = listRef.current?.querySelector<HTMLElement>(`[data-msg-id="${messageId}"]`);
+    focusReturnRef.current = node ?? (document.activeElement as HTMLElement | null);
+  }
+
+  function restoreFocus() {
+    const target = focusReturnRef.current;
+    focusReturnRef.current = null;
+    requestAnimationFrame(() => {
+      target?.focus?.();
+    });
+  }
+
+  function closeTransientMenus() {
+    const hadOverlay =
+      Boolean(moreMenuMessageId) ||
+      Boolean(actionSheetMessageId) ||
+      Boolean(forwardPickerMessageId) ||
+      Boolean(reactionTrayMessageId) ||
+      giphyPickerOpen;
+    setMoreMenuMessageId('');
+    setActionSheetMessageId('');
+    setForwardPickerMessageId('');
+    setReactionTrayMessageId('');
+    setGiphyPickerOpen(false);
+    setGiphyReactionTargetMessageId('');
+    if (hadOverlay) restoreFocus();
+  }
 
   // Preserve draft per store when switching rooms.
   useEffect(() => {
@@ -243,13 +886,50 @@ export default function StoreChatPanel({
     setMentionAllTracked(false);
     setMentionOpen(false);
     setMentionIndex(0);
+    setReplyTargetMessageId('');
+    setHighlightedMessageId('');
+    setReactionTrayMessageId('');
+    setWhoReactedMessageId('');
+    setMoreMenuMessageId('');
+    setActionSheetMessageId('');
+    setForwardPickerMessageId('');
+    setSelectedGiphy(null);
+    setGiphyPickerOpen(false);
+    setGiphyReactionTargetMessageId('');
+    setTranslationsByMessageId({});
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to storeId
   }, [storeId]);
+
+  useEffect(
+    () => () => {
+      if (highlightTimeoutRef.current !== null) {
+        window.clearTimeout(highlightTimeoutRef.current);
+      }
+      if (announceTimeoutRef.current !== null) {
+        window.clearTimeout(announceTimeoutRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!storeId) return;
     draftsRef.current[storeId] = draft;
   }, [draft, storeId]);
+
+  useEffect(() => {
+    if (!isStoreChatTranslationEnabled()) {
+      setTranslationCapable(false);
+      return;
+    }
+    let cancelled = false;
+    void probeStoreChatTranslationCapability().then((result) => {
+      if (!cancelled) setTranslationCapable(result.status === 'ready');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Stick to bottom on new messages while active.
   useEffect(() => {
@@ -263,9 +943,462 @@ export default function StoreChatPanel({
     }
   }, [menuItems.length, mentionIndex]);
 
+  useEffect(() => {
+    if (!actionSheetMessageId && !forwardPickerMessageId && !moreMenuMessageId) return;
+    function onDocKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeTransientMenus();
+      }
+    }
+    document.addEventListener('keydown', onDocKeyDown);
+    return () => document.removeEventListener('keydown', onDocKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- closeTransientMenus closes current overlays
+  }, [actionSheetMessageId, forwardPickerMessageId, moreMenuMessageId]);
+
+  const messageById = useMemo(() => {
+    const map = new Map<string, StoreChatMessage>();
+    for (const message of messages) map.set(message.id, message);
+    return map;
+  }, [messages]);
+
+  const scrollToMessage = useCallback((messageId: string) => {
+    if (!messageId || !listRef.current) return false;
+    const node = listRef.current.querySelector<HTMLElement>(`[data-msg-id="${messageId}"]`);
+    if (!node) return false;
+    node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    setHighlightedMessageId(messageId);
+    if (highlightTimeoutRef.current !== null) window.clearTimeout(highlightTimeoutRef.current);
+    highlightTimeoutRef.current = window.setTimeout(() => {
+      setHighlightedMessageId((prev) => (prev === messageId ? '' : prev));
+      highlightTimeoutRef.current = null;
+    }, 1700);
+    return true;
+  }, []);
+
+  useEffect(() => {
+    if (!initialTargetMessageId || hidden || !storeId) return;
+    if (scrollToMessage(initialTargetMessageId)) {
+      onInitialTargetHandled?.();
+    }
+  }, [hidden, initialTargetMessageId, onInitialTargetHandled, scrollToMessage, storeId]);
+
+  function startReply(messageId: string) {
+    if (!messageById.has(messageId)) return;
+    setReplyTargetMessageId(messageId);
+    setReactionTrayMessageId('');
+    setMoreMenuMessageId('');
+    setActionSheetMessageId('');
+    textareaRef.current?.focus();
+  }
+
+  function toggleReactionTray(messageId: string) {
+    setReactionTrayMessageId((prev) => (prev === messageId ? '' : messageId));
+    setWhoReactedMessageId('');
+    setMoreMenuMessageId('');
+  }
+
+  function toggleWhoReacted(messageId: string) {
+    setWhoReactedMessageId((prev) => (prev === messageId ? '' : messageId));
+  }
+
+  async function toggleUnicodeReaction(messageId: string, unicode: string) {
+    if (!storeId || !profile.userId) return;
+    const existing = reactionsByMessageId.get(messageId) ?? [];
+    let decision;
+    try {
+      decision = resolveUnicodeReactionToggle(existing, {
+        messageId,
+        userId: profile.userId,
+        unicode,
+      });
+    } catch {
+      return;
+    }
+
+    if (reactionToggleLock.current.has(decision.identityKey)) return;
+    reactionToggleLock.current.add(decision.identityKey);
+
+    try {
+      if (decision.action === 'add') {
+        const reactionId = id();
+        await db.transact(
+          db.tx.storeChatReactions[reactionId]
+            .update({
+              storeId,
+              messageId: decision.payload.messageId,
+              userId: decision.payload.userId,
+              reactionType: decision.payload.reactionType,
+              unicode: decision.payload.unicode,
+              giphyId: decision.payload.giphyId,
+              giphyKind: decision.payload.giphyKind,
+              giphyTitle: decision.payload.giphyTitle,
+              giphyUrl: decision.payload.giphyUrl,
+              giphyPreviewUrl: decision.payload.giphyPreviewUrl,
+              createdAt: nowIso(),
+              clientMutationId: decision.clientMutationId,
+            })
+            .link({ store: storeId, message: messageId }),
+        );
+      } else {
+        await db.transact(db.tx.storeChatReactions[decision.reactionId].delete());
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Could not update reaction. Try again.';
+      setSendError(message);
+    } finally {
+      reactionToggleLock.current.delete(decision.identityKey);
+    }
+  }
+
+  async function toggleGiphyReaction(
+    messageId: string,
+    giphyId: string,
+    item?: GiphyMediaItem | null,
+  ) {
+    if (!storeId || !profile.userId) return;
+    const existing = reactionsByMessageId.get(messageId) ?? [];
+    let decision;
+    try {
+      decision = resolveGiphyReactionToggle(existing, {
+        messageId,
+        userId: profile.userId,
+        giphyId,
+        item,
+      });
+    } catch {
+      return;
+    }
+
+    if (reactionToggleLock.current.has(decision.identityKey)) return;
+    reactionToggleLock.current.add(decision.identityKey);
+
+    try {
+      if (decision.action === 'add') {
+        const reactionId = id();
+        await db.transact(
+          db.tx.storeChatReactions[reactionId]
+            .update({
+              storeId,
+              messageId: decision.payload.messageId,
+              userId: decision.payload.userId,
+              reactionType: decision.payload.reactionType,
+              unicode: decision.payload.unicode,
+              giphyId: decision.payload.giphyId,
+              giphyKind: decision.payload.giphyKind,
+              giphyTitle: decision.payload.giphyTitle,
+              giphyUrl: decision.payload.giphyUrl,
+              giphyPreviewUrl: decision.payload.giphyPreviewUrl,
+              createdAt: nowIso(),
+              clientMutationId: decision.clientMutationId,
+            })
+            .link({ store: storeId, message: messageId }),
+        );
+      } else {
+        await db.transact(db.tx.storeChatReactions[decision.reactionId].delete());
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Could not update GIF reaction. Try again.';
+      setSendError(message);
+    } finally {
+      reactionToggleLock.current.delete(decision.identityKey);
+    }
+  }
+
+  function openComposerGiphyPicker() {
+    if (!giphyConfigured || !canSend) return;
+    setGiphyPickerMode('composer');
+    setGiphyReactionTargetMessageId('');
+    setGiphyPickerOpen(true);
+    setReactionTrayMessageId('');
+    setMoreMenuMessageId('');
+  }
+
+  function openGiphyReactionPicker(messageId: string) {
+    if (!giphyConfigured || !canReact) return;
+    rememberFocusTarget(messageId);
+    setGiphyPickerMode('reaction');
+    setGiphyReactionTargetMessageId(messageId);
+    setGiphyPickerOpen(true);
+    setReactionTrayMessageId('');
+  }
+
+  function handleGiphyPickerSelect(item: GiphyMediaItem) {
+    if (giphyPickerMode === 'reaction' && giphyReactionTargetMessageId) {
+      const targetId = giphyReactionTargetMessageId;
+      setGiphyPickerOpen(false);
+      setGiphyReactionTargetMessageId('');
+      void toggleGiphyReaction(targetId, item.id, item);
+      restoreFocus();
+      return;
+    }
+    setSelectedGiphy(item);
+    setGiphyPickerOpen(false);
+    textareaRef.current?.focus();
+  }
+
+  async function copyMessage(message: StoreChatMessage) {
+    const text = message.body;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const area = document.createElement('textarea');
+        area.value = text;
+        area.setAttribute('readonly', '');
+        area.style.position = 'fixed';
+        area.style.left = '-9999px';
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand('copy');
+        document.body.removeChild(area);
+      }
+      announce(sc.messageCopied);
+    } catch {
+      announce(sc.copyFailed);
+    }
+  }
+
+  async function toggleBookmark(messageId: string) {
+    if (!storeId || !profile.userId) return;
+    if (bookmarkToggleLock.current.has(messageId)) return;
+    bookmarkToggleLock.current.add(messageId);
+    const existing = bookmarkByMessageId.get(messageId);
+    try {
+      if (existing) {
+        await db.transact(db.tx.storeChatBookmarks[existing.id].delete());
+        announce(sc.removedFromFavorites);
+      } else {
+        const bookmarkId = id();
+        await db.transact(
+          db.tx.storeChatBookmarks[bookmarkId]
+            .update({
+              storeId,
+              messageId,
+              userId: profile.userId,
+              createdAt: nowIso(),
+            })
+            .link({ store: storeId, message: messageId }),
+        );
+        announce(sc.addedToFavorites);
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Could not update favorite. Try again.';
+      setSendError(message);
+    } finally {
+      bookmarkToggleLock.current.delete(messageId);
+    }
+  }
+
+  async function softDeleteMessage(message: StoreChatMessage) {
+    if (message.senderUserId !== profile.userId) return;
+    try {
+      await db.transact(
+        db.tx.storeChatMessages[message.id].update({
+          status: 'deleted',
+          deletedAt: nowIso(),
+        }),
+      );
+      announce(sc.messageDeletedAnnounce);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Could not delete message. Try again.';
+      setSendError(msg);
+    }
+  }
+
+  async function forwardMessage(message: StoreChatMessage, targetStoreId: string) {
+    if (!canSend || !profile.userId) return;
+    if (!forwardTargets.some((s) => s.id === targetStoreId)) {
+      setSendError('You cannot forward to that store.');
+      return;
+    }
+    const body = message.body.trim().slice(0, STORE_CHAT_MAX_BODY);
+    const hasMedia = hasGiphyMedia(message);
+    if (!body && !hasMedia) return;
+    const mediaPayload = buildStoreChatMediaPayload({
+      body,
+      giphy: hasMedia
+        ? {
+            id: message.giphyId || '',
+            kind: (message.giphyKind as GiphyMediaItem['kind']) || 'gif',
+            title: message.giphyTitle || '',
+            width: Number.parseInt(message.giphyWidth || '', 10) || 0,
+            height: Number.parseInt(message.giphyHeight || '', 10) || 0,
+            url: message.giphyUrl || '',
+            previewUrl: message.giphyPreviewUrl || message.giphyUrl || '',
+            username: '',
+            itemUrl: '',
+          }
+        : null,
+      clientMutationId: id(),
+      forwardedFromMessageId: message.id,
+      forwardedFromUserId: message.senderUserId,
+    });
+    const msgId = id();
+    const target = authorizedStores.find((s) => s.id === targetStoreId);
+    try {
+      await db.transact(
+        db.tx.storeChatMessages[msgId]
+          .update({
+            storeId: targetStoreId,
+            senderUserId: profile.userId,
+            senderProfileId: profile.id,
+            senderNameSnapshot: profile.displayName || profile.email || 'You',
+            senderRoleSnapshot: profile.role || '',
+            createdAt: nowIso(),
+            editedAt: '',
+            deletedAt: '',
+            status: 'active',
+            ...mediaPayload,
+          })
+          .link({ store: targetStoreId, sender: profile.id }),
+      );
+      announce(
+        sc.forwardedTo.replace(
+          '{store}',
+          target ? `${target.code} · ${target.name}` : sc.storeFallback,
+        ),
+      );
+      setForwardPickerMessageId('');
+      restoreFocus();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Could not forward message. Try again.';
+      setSendError(msg);
+    }
+  }
+
+  async function translateMessage(message: StoreChatMessage) {
+    if (!translationAvailable) return;
+    const targetLang = resolveTranslationTargetLang(lang);
+    await runStoreChatTranslation(
+      {
+        text: message.body,
+        targetLang,
+        enabled: true,
+      },
+      (state) => {
+        setTranslationsByMessageId((prev) => ({ ...prev, [message.id]: state }));
+      },
+    );
+  }
+
+  function toggleShowOriginal(messageId: string) {
+    setTranslationsByMessageId((prev) => {
+      const current = prev[messageId];
+      if (!current) return prev;
+      return { ...prev, [messageId]: toggleShowingOriginal(current) };
+    });
+  }
+
+  async function retryTranslation(messageId: string) {
+    const message = messageById.get(messageId);
+    if (!message) return;
+    setTranslationsByMessageId((prev) => {
+      const current = prev[messageId];
+      if (!current) return prev;
+      return { ...prev, [messageId]: markTranslationRetry(current) };
+    });
+    await translateMessage(message);
+  }
+
+  function openActionSheet(messageId: string) {
+    rememberFocusTarget(messageId);
+    setActionSheetMessageId(messageId);
+    setMoreMenuMessageId('');
+    setReactionTrayMessageId('');
+    setForwardPickerMessageId('');
+  }
+
+  function toggleMoreMenu(messageId: string) {
+    const isTouch =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(hover: none), (pointer: coarse)').matches;
+    if (isTouch) {
+      openActionSheet(messageId);
+      return;
+    }
+    rememberFocusTarget(messageId);
+    setMoreMenuMessageId((prev) => (prev === messageId ? '' : messageId));
+    setActionSheetMessageId('');
+    setReactionTrayMessageId('');
+  }
+
+  function handleMessageAction(actionId: StoreChatActionId, messageId: string) {
+    const message = messageById.get(messageId);
+    if (!message || isDeleted(message)) return;
+
+    if (actionId === 'reply') {
+      closeTransientMenus();
+      startReply(messageId);
+      return;
+    }
+    if (actionId === 'react') {
+      setMoreMenuMessageId('');
+      setActionSheetMessageId('');
+      toggleReactionTray(messageId);
+      return;
+    }
+    if (actionId === 'more') {
+      toggleMoreMenu(messageId);
+      return;
+    }
+    if (actionId === 'copy') {
+      closeTransientMenus();
+      void copyMessage(message);
+      return;
+    }
+    if (actionId === 'favorite') {
+      closeTransientMenus();
+      void toggleBookmark(messageId);
+      return;
+    }
+    if (actionId === 'forward') {
+      rememberFocusTarget(messageId);
+      setForwardPickerMessageId(messageId);
+      setMoreMenuMessageId('');
+      setActionSheetMessageId('');
+      return;
+    }
+    if (actionId === 'translate') {
+      closeTransientMenus();
+      void translateMessage(message);
+      return;
+    }
+    if (actionId === 'delete') {
+      closeTransientMenus();
+      void softDeleteMessage(message);
+    }
+  }
+
+  const replyTarget = replyTargetMessageId ? messageById.get(replyTargetMessageId) || null : null;
+  const sheetMessage = actionSheetMessageId ? messageById.get(actionSheetMessageId) || null : null;
+  const sheetActions = sheetMessage
+    ? listStoreChatActions(
+        'sheet',
+        buildActionContext({
+          isOwn: sheetMessage.senderUserId === profile.userId,
+          deleted: isDeleted(sheetMessage),
+          canSend,
+          canReact,
+          body: sheetMessage.body,
+          translationAvailable,
+          isBookmarked: bookmarkByMessageId.has(sheetMessage.id),
+          canForward,
+        }),
+        actionLabels,
+      )
+    : [];
+
   const trimmed = draft.trim();
   const canSubmit =
-    canSend && Boolean(storeId) && trimmed.length > 0 && !sending && !sendingLock.current;
+    canSend &&
+    Boolean(storeId) &&
+    canSendStoreChatMedia(draft, selectedGiphy) &&
+    !sending &&
+    !sendingLock.current;
 
   function syncCaretFromTextarea() {
     const el = textareaRef.current;
@@ -315,7 +1448,8 @@ export default function StoreChatPanel({
   }
 
   async function sendMessage() {
-    if (hidden || !canSend || !storeId || !trimmed) return;
+    if (hidden || !canSend || !storeId) return;
+    if (!canSendStoreChatMedia(draft, selectedGiphy)) return;
     if (sendingLock.current) return;
 
     sendingLock.current = true;
@@ -326,6 +1460,7 @@ export default function StoreChatPanel({
     const body = trimmed.slice(0, STORE_CHAT_MAX_BODY);
     const msgId = id();
     const createdAt = nowIso();
+    const clientMutationId = id();
     const resolved = resolveMentionPayload(
       body,
       trackedMentions,
@@ -338,6 +1473,14 @@ export default function StoreChatPanel({
       mentionCandidates,
       profile.userId,
     );
+    const mediaPayload = buildStoreChatMediaPayload({
+      body,
+      giphy: selectedGiphy,
+      replyToMessageId: replyTargetMessageId || '',
+      mentionedUserIds: resolved.mentionedUserIds,
+      mentionAll: resolved.mentionAll,
+      clientMutationId,
+    });
 
     const messageTx = db.tx.storeChatMessages[msgId]
       .update({
@@ -346,25 +1489,26 @@ export default function StoreChatPanel({
         senderProfileId: profile.id,
         senderNameSnapshot: profile.displayName || profile.email || 'You',
         senderRoleSnapshot: profile.role || '',
-        messageType: 'text',
-        body,
         createdAt,
         editedAt: '',
         deletedAt: '',
         status: 'active',
-        replyToMessageId: '',
-        mentionedUserIdsJson: serializeMentionedUserIds(resolved.mentionedUserIds),
-        mentionAll: resolved.mentionAll,
+        ...mediaPayload,
       })
       .link({ store: storeId, sender: profile.id });
 
+    const notifBody =
+      body ||
+      (selectedGiphy
+        ? storeChatMediaLabel(mediaPayload.messageType, selectedGiphy.kind)
+        : '');
     const notifTxs =
       recipientIds.length > 0
         ? buildStoreChatMentionNotifications({
             messageId: msgId,
             storeId,
             storeLabel: store ? `${store.code} · ${store.name}` : storeId,
-            body,
+            body: notifBody,
             actor: profile,
             recipientUserIds: recipientIds,
             mentionAll: resolved.mentionAll,
@@ -378,6 +1522,8 @@ export default function StoreChatPanel({
       setTrackedMentions([]);
       setMentionAllTracked(false);
       setMentionOpen(false);
+      setReplyTargetMessageId('');
+      setSelectedGiphy(null);
       setSendError(null);
       composerVisual.setSuccess();
     } catch (err) {
@@ -426,6 +1572,12 @@ export default function StoreChatPanel({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void sendMessage();
+      return;
+    }
+
+    if (e.key === 'Escape' && replyTargetMessageId) {
+      e.preventDefault();
+      setReplyTargetMessageId('');
     }
   }
 
@@ -439,10 +1591,10 @@ export default function StoreChatPanel({
   }
 
   const placeholder = !store
-    ? 'Select a store to chat…'
+    ? sc.selectStoreToChat
     : !canSend
-      ? 'View only — you cannot send in Store Chat'
-      : 'Message this store… (@ to mention)';
+      ? sc.viewOnlyPlaceholder
+      : sc.messagePlaceholder;
 
   const visibleMessages = messages.filter((m) => !isDeleted(m) || m.senderUserId === profile.userId);
 
@@ -450,18 +1602,18 @@ export default function StoreChatPanel({
   if (!store) {
     bodyContent = (
       <div className="fa-store-chat-empty">
-        <p className="fa-store-chat-empty-title">Store Chat</p>
-        <p className="fa-store-chat-empty-body">Select an authorized store to open its room.</p>
+        <p className="fa-store-chat-empty-title">{sc.storeChatTitle}</p>
+        <p className="fa-store-chat-empty-body">{sc.selectAuthorizedStore}</p>
       </div>
     );
   } else if (isLoading && messages.length === 0) {
-    bodyContent = <FloatingAssistantLoader label="Loading messages…" />;
+    bodyContent = <FloatingAssistantLoader label={sc.loadingMessages} />;
   } else if (error && messages.length === 0) {
     bodyContent = (
       <div className="fa-store-chat-empty" role="alert">
-        <p className="fa-store-chat-empty-title">Couldn’t load chat</p>
+        <p className="fa-store-chat-empty-title">{sc.couldNotLoadChat}</p>
         <p className="fa-store-chat-empty-body">
-          {error.message || 'Check your connection and try again.'}
+          {error.message || sc.checkConnection}
         </p>
       </div>
     );
@@ -469,7 +1621,7 @@ export default function StoreChatPanel({
     bodyContent = (
       <div className="fa-store-chat-empty">
         <p className="fa-store-chat-empty-title">{store.code}</p>
-        <p className="fa-store-chat-empty-body">No messages yet. Say hello to the store team.</p>
+        <p className="fa-store-chat-empty-body">{sc.noMessagesYet}</p>
       </div>
     );
   } else {
@@ -482,6 +1634,37 @@ export default function StoreChatPanel({
               isOwn={m.senderUserId === profile.userId}
               profile={profile}
               candidates={roomMembers}
+              parentMessage={m.replyToMessageId ? messageById.get(m.replyToMessageId) || null : null}
+              reactionGroups={reactionGroupsByMessageId.get(m.id) ?? []}
+              giphyReactionGroups={giphyReactionGroupsByMessageId.get(m.id) ?? []}
+              canReact={canReact}
+              canSend={canSend}
+              canForward={canForward}
+              giphyConfigured={giphyConfigured}
+              translationAvailable={translationAvailable}
+              isBookmarked={bookmarkByMessageId.has(m.id)}
+              trayOpen={reactionTrayMessageId === m.id}
+              whoReactedOpen={whoReactedMessageId === m.id}
+              moreOpen={moreMenuMessageId === m.id}
+              translation={translationsByMessageId[m.id] ?? null}
+              glowEnabled={!hidden}
+              onAction={handleMessageAction}
+              onJumpToParent={scrollToMessage}
+              onToggleReaction={(messageId, unicode) => {
+                void toggleUnicodeReaction(messageId, unicode);
+              }}
+              onToggleGiphyReaction={(messageId, giphyId) => {
+                void toggleGiphyReaction(messageId, giphyId);
+              }}
+              onOpenGiphyReactionPicker={openGiphyReactionPicker}
+              onToggleTray={toggleReactionTray}
+              onToggleWhoReacted={toggleWhoReacted}
+              onToggleShowOriginal={toggleShowOriginal}
+              onRetryTranslation={(messageId) => {
+                void retryTranslation(messageId);
+              }}
+              onRequestCloseMenus={closeTransientMenus}
+              highlighted={highlightedMessageId === m.id}
             />
           </li>
         ))}
@@ -500,9 +1683,94 @@ export default function StoreChatPanel({
       className="fa-tab-panel fa-store-chat-panel"
       data-store-id={storeId ?? undefined}
     >
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {actionAnnounce}
+      </div>
       <div className="fa-tab-panel-body fa-store-chat-messages" ref={listRef}>
         {bodyContent}
       </div>
+
+      {actionSheetMessageId && sheetMessage ? (
+        <div className="fa-msg-sheet-backdrop" role="presentation" onClick={closeTransientMenus}>
+          <div
+            className="fa-msg-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label={sc.messageActions}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                closeTransientMenus();
+              }
+            }}
+          >
+            <div className="fa-msg-sheet-handle" aria-hidden="true" />
+            <p className="fa-msg-sheet-preview">
+              {quotePreviewText(sheetMessage, sc)}
+            </p>
+            <ul className="fa-msg-sheet-list">
+              {sheetActions.map((action) => (
+                <li key={action.id}>
+                  <button
+                    type="button"
+                    className={`fa-msg-sheet-item${action.destructive ? ' fa-msg-sheet-item--danger' : ''}`}
+                    onClick={() => handleMessageAction(action.id, sheetMessage.id)}
+                  >
+                    {action.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button type="button" className="fa-msg-sheet-cancel" onClick={closeTransientMenus}>
+              {t.common.cancel}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {forwardPickerMessageId ? (
+        <div className="fa-msg-sheet-backdrop" role="presentation" onClick={closeTransientMenus}>
+          <div
+            className="fa-msg-sheet fa-msg-forward-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label={sc.forwardMessage}
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                closeTransientMenus();
+              }
+            }}
+          >
+            <p className="fa-msg-sheet-title">{sc.forwardToStore}</p>
+            {forwardTargets.length === 0 ? (
+              <p className="fa-msg-sheet-empty">{sc.noOtherStores}</p>
+            ) : (
+              <ul className="fa-msg-sheet-list">
+                {forwardTargets.map((target) => (
+                  <li key={target.id}>
+                    <button
+                      type="button"
+                      className="fa-msg-sheet-item"
+                      onClick={() => {
+                        const source = messageById.get(forwardPickerMessageId);
+                        if (source) void forwardMessage(source, target.id);
+                      }}
+                    >
+                      {target.code} · {target.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <button type="button" className="fa-msg-sheet-cancel" onClick={closeTransientMenus}>
+              {t.common.cancel}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <form
         className="fa-composer fa-composer--store-chat"
@@ -513,19 +1781,52 @@ export default function StoreChatPanel({
           <div className="fa-composer-error" role="alert">
             <span>{sendError}</span>
             <button type="button" className="fa-composer-retry" onClick={() => void sendMessage()}>
-              Retry
+              {t.common.retry}
             </button>
           </div>
         ) : null}
         {sending ? (
           <div className="fa-composer-status" aria-live="polite">
-            <FloatingAssistantLoader label="Sending…" />
+            <FloatingAssistantLoader label={sc.sending} />
           </div>
+        ) : null}
+        {replyTargetMessageId ? (
+          <div className="fa-reply-preview" role="status" aria-live="polite">
+            <div className="fa-reply-preview-text">
+              <span className="fa-reply-preview-label">
+                {sc.replyingTo.replace(
+                  '{name}',
+                  replyTarget?.senderNameSnapshot || sc.message,
+                )}
+              </span>
+              <span className="fa-reply-preview-body">
+                {replyTarget ? quotePreviewText(replyTarget, sc) : sc.originalUnavailable}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="fa-reply-preview-cancel"
+              onClick={() => setReplyTargetMessageId('')}
+            >
+              {t.common.cancel}
+            </button>
+          </div>
+        ) : null}
+
+        {selectedGiphy ? (
+          <GiphyMediaPreview
+            item={selectedGiphy}
+            onClear={() => setSelectedGiphy(null)}
+            ambientGlow={!hidden}
+            hint={sc.readyToSend}
+            removeLabel={sc.removeGif}
+            previewAriaLabel={sc.gifPreview}
+          />
         ) : null}
 
         <div className="fa-composer-input-wrap">
           {showMentionMenu ? (
-            <ul className="fa-mention-menu" role="listbox" aria-label="Mention suggestions">
+            <ul className="fa-mention-menu" role="listbox" aria-label={sc.mentionSuggestions}>
               {menuItems.map((item, i) => {
                 const selected = i === mentionIndex;
                 if (item.kind === 'all') {
@@ -543,8 +1844,8 @@ export default function StoreChatPanel({
                           @
                         </span>
                         <span className="fa-mention-option-text">
-                          <span className="fa-mention-option-name">Everyone</span>
-                          <span className="fa-mention-option-meta">@all · notify this room</span>
+                          <span className="fa-mention-option-name">{sc.everyone}</span>
+                          <span className="fa-mention-option-meta">{sc.mentionAllMeta}</span>
                         </span>
                       </button>
                     </li>
@@ -574,7 +1875,7 @@ export default function StoreChatPanel({
             </ul>
           ) : null}
           <label className="sr-only" htmlFor="fa-store-chat-composer">
-            Store chat message
+            {sc.storeChatMessage}
           </label>
           <textarea
             id="fa-store-chat-composer"
@@ -610,15 +1911,43 @@ export default function StoreChatPanel({
             onKeyDown={handleKeyDown}
           />
         </div>
+        {giphyConfigured && canSend ? (
+          <button
+            type="button"
+            ref={mediaBtnRef}
+            className="fa-composer-media"
+            disabled={hidden || !store || sending}
+            aria-label={sc.addGif}
+            aria-expanded={giphyPickerOpen && giphyPickerMode === 'composer'}
+            onClick={openComposerGiphyPicker}
+          >
+            {sc.gif}
+          </button>
+        ) : null}
         <button
           type="submit"
           className="fa-composer-send"
           disabled={hidden || !canSubmit}
           aria-disabled={hidden || !canSubmit}
         >
-          Send
+          {t.common.send}
         </button>
       </form>
+
+      {giphyPickerOpen ? (
+        <Suspense fallback={null}>
+          <GiphyPicker
+            open
+            onClose={() => {
+              setGiphyPickerOpen(false);
+              setGiphyReactionTargetMessageId('');
+              restoreFocus();
+            }}
+            onSelect={handleGiphyPickerSelect}
+            anchorRef={mediaBtnRef}
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

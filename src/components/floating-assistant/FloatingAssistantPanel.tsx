@@ -35,6 +35,8 @@ interface Props {
   storeChatUnread: number;
   unreadByStore: Record<string, number>;
   unreadSendersByStore: Record<string, UnreadSenderSummary[]>;
+  initialStoreChatMessageId: string;
+  onInitialStoreChatMessageHandled: () => void;
 }
 
 export default function FloatingAssistantPanel({
@@ -56,6 +58,8 @@ export default function FloatingAssistantPanel({
   storeChatUnread,
   unreadByStore,
   unreadSendersByStore,
+  initialStoreChatMessageId,
+  onInitialStoreChatMessageHandled,
 }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -133,7 +137,10 @@ export default function FloatingAssistantPanel({
           labelledBy="fa-tab-store-chat"
           hidden={activeTab !== 'store-chat'}
           canSend={canSend}
+          authorizedStores={stores}
           composerVisual={composerVisual}
+          initialTargetMessageId={initialStoreChatMessageId}
+          onInitialTargetHandled={onInitialStoreChatMessageHandled}
         />
       </div>
     </div>
