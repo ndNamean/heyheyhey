@@ -44,6 +44,9 @@ describe('storeChatMediaPayload', () => {
     expect(payload.giphyUrl).toBe('');
     expect(payload.forwardedFromMessageId).toBe('');
     expect(payload.clientMutationId).toBe('');
+    expect(payload.sourceType).toBe('');
+    expect(payload.logbookEntryId).toBe('');
+    expect(payload.chatDeliveryKey).toBe('');
   });
 
   it('builds giphy_media when only media is selected', () => {

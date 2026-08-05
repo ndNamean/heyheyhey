@@ -1,6 +1,6 @@
 /**
  * Progressive Logbook filter state + matching (client-side only).
- * Permissions stay in logbook.ts — filters only narrow canViewLogbookEntry results.
+ * Permissions stay in logbook.ts â€” filters only narrow canViewLogbookEntry results.
  */
 
 import {
@@ -121,7 +121,7 @@ export function emptyLogbookFilterState(
   };
 }
 
-/** staff/hybrid → assigned; manager+ → needs_my_action; others → all_visible */
+/** staff/hybrid â†’ assigned; manager+ â†’ needs_my_action; others â†’ all_visible */
 export function defaultLogbookQuickView(
   profile: Profile,
   defs: RoleDefinition[],
@@ -163,6 +163,8 @@ export function parseLogbookInitialFilter(
       return { quickView: 'all_visible', issueLifecycles: ['open'] };
     case 'waiting_approval':
       return { quickView: 'all_visible', issueLifecycles: ['waiting_approval'] };
+    case 'requires_ack':
+      return { quickView: 'all_visible', ackStatuses: ['requires_ack'] };
     case 'overdue':
       return { quickView: 'all_visible', issueLifecycles: ['overdue'] };
     case 'resolved':
@@ -300,7 +302,7 @@ export function clearIncompatibleFiltersOnEntryTypeChange(
   return next;
 }
 
-/** manager / areaManager / admin / owner (rank ≤ manager). */
+/** manager / areaManager / admin / owner (rank â‰¤ manager). */
 export function canSeeMyTeamQuickView(
   profile: Profile,
   defs: RoleDefinition[],
@@ -328,7 +330,7 @@ export function isMyTeamLogbookIssue(
 }
 
 /**
- * Needs my action — OR of:
+ * Needs my action â€” OR of:
  * (1) assigned issue needing work (open / in_progress / correction),
  * (2) waiting_approval I can review,
  * (3) incomplete setup I can edit.

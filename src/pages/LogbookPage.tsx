@@ -82,18 +82,10 @@ import {
 } from '../lib/logbookResolution';
 import { maybeNotifyLogbookDueStates } from '../lib/logbookDueNotify';
 import {
+  deliverLogbookEvent,
   postLogbookNotify,
   postLogbookSubmitResolution,
 } from '../lib/logbookNotifyClient';
-import {
-  buildLogbookCreatorUpdateNotifications,
-  buildLogbookIssueAssignedNotifications,
-  buildLogbookIssueRecalledNotifications,
-  buildLogbookIssueReopenedNotifications,
-  buildLogbookNoteAnnouncementNotifications,
-  buildLogbookResolutionDecisionNotifications,
-} from '../lib/notifications';
-import { schedulePushDeliveryFromTxs } from '../lib/pushDelivery';
 import {
   buildLogbookAssignmentChangedEvent,
   buildLogbookCreatorUpdateEvent,
@@ -571,32 +563,14 @@ export default function LogbookPage({
           resolutionRequirement: form.resolutionRequirement,
         } as LogbookEntry;
         txs.push(...buildLogbookIssueCreatedEvents(entryLike, profile));
-        txs.push(
-          ...buildLogbookIssueAssignedNotifications(entryLike, profile, allProfiles, defs),
-        );
-      } else {
-        const entryLike = {
-          id: entryId,
-          storeId: storeTarget,
-          content: form.content.trim(),
-          severity: form.severity as LogbookEntry['severity'],
-          entryType: form.entryType,
-          isAnnouncement: form.entryType === 'announcement',
-          requiresAck: form.requiresAck,
-          ackUserIdsJson: '[]',
-          authorUserId: profile.userId,
-          date: ymdInTimeZone(now, createdTimezone),
-          shift: form.shift,
-          createdAt,
-          updatedAt: createdAt,
-        } as LogbookEntry;
-        txs.push(
-          ...buildLogbookNoteAnnouncementNotifications(entryLike, profile, allProfiles, defs),
-        );
       }
 
       await db.transact(txs as Parameters<typeof db.transact>[0]);
-      schedulePushDeliveryFromTxs(txs);
+      if (form.entryType === 'issue') {
+        void deliverLogbookEvent({ entryId, eventType: 'issue_assigned', eventVersion: createdAt });
+      } else if (form.requiresAck) {
+        void deliverLogbookEvent({ entryId, eventType: 'ack_required', eventVersion: createdAt });
+      }
       setForm({
         entryType: 'note',
         storeId: '',
@@ -707,10 +681,10 @@ export default function LogbookPage({
     }
 
     // Stage B — soft-fail notifications via Admin SDK
-    const notify = await postLogbookNotify({
+    const notify = await deliverLogbookEvent({
       entryId: live.id,
-      type: 'resolution_submitted',
-      attemptId,
+      eventType: 'resolution_submitted',
+      eventVersion: attemptId,
     });
     if (!notify.ok) {
       logSubmitStepFailure({
@@ -732,10 +706,10 @@ export default function LogbookPage({
 
   async function retryNotify() {
     if (!notifySoftFail) return;
-    const result = await postLogbookNotify({
+    const result = await deliverLogbookEvent({
       entryId: notifySoftFail.entryId,
-      type: 'resolution_submitted',
-      attemptId: notifySoftFail.attemptId,
+      eventType: 'resolution_submitted',
+      eventVersion: notifySoftFail.attemptId,
     });
     if (result.ok) {
       setNotifySoftFail(null);
@@ -761,16 +735,9 @@ export default function LogbookPage({
         updatedAt: now,
       }),
       buildLogbookResolutionApprovedEvent(entry, profile, note.trim()),
-      ...buildLogbookResolutionDecisionNotifications(
-        { ...entry, reviewNote: note.trim() },
-        profile,
-        allProfiles,
-        'approved',
-        defs,
-      ),
     ];
     await db.transact(txs);
-    schedulePushDeliveryFromTxs(txs);
+    void deliverLogbookEvent({ entryId: entry.id, eventType: 'approved', eventVersion: now, note: note.trim() });
   }
 
   async function requestCorrection(entry: LogbookEntry) {
@@ -787,16 +754,9 @@ export default function LogbookPage({
         updatedAt: now,
       }),
       buildLogbookResolutionRejectedEvent(entry, profile, note.trim()),
-      ...buildLogbookResolutionDecisionNotifications(
-        { ...entry, reviewNote: note.trim() },
-        profile,
-        allProfiles,
-        'rejected',
-        defs,
-      ),
     ];
     await db.transact(txs);
-    schedulePushDeliveryFromTxs(txs);
+    void deliverLogbookEvent({ entryId: entry.id, eventType: 'correction_requested', eventVersion: now, note: note.trim() });
   }
 
   async function reopenIssue(entry: LogbookEntry) {
@@ -815,15 +775,9 @@ export default function LogbookPage({
         updatedAt: now,
       }),
       buildLogbookIssueReopenedEvent(entry, profile, reason.trim()),
-      ...buildLogbookIssueReopenedNotifications(
-        { ...entry, reopenReason: reason.trim() },
-        profile,
-        allProfiles,
-        defs,
-      ),
     ];
     await db.transact(txs);
-    schedulePushDeliveryFromTxs(txs);
+    void deliverLogbookEvent({ entryId: entry.id, eventType: 'reopened', eventVersion: now, reason: reason.trim() });
   }
 
   function openChangeAssignment(entry: LogbookEntry) {
@@ -893,10 +847,13 @@ export default function LogbookPage({
           updatedAt: nowIso(),
         }),
         buildLogbookAssignmentChangedEvent(entry, profile, note, nextStatus, prevStatus),
-        ...buildLogbookIssueAssignedNotifications(updated as LogbookEntry, profile, allProfiles, defs),
       ];
       await db.transact(txs);
-      schedulePushDeliveryFromTxs(txs);
+      void deliverLogbookEvent({
+        entryId: entry.id,
+        eventType: 'issue_assigned',
+        eventVersion: nowIso(),
+      });
       setChangeAssignEntryId(null);
       setChangeAssignForm({
         assigneeRole: eligibleAssigneeRoles[0] || '',
@@ -927,16 +884,9 @@ export default function LogbookPage({
           updatedAt: now,
         }),
         buildLogbookIssueRecalledEvent(entry, profile, reason.trim(), prevStatus),
-        ...buildLogbookIssueRecalledNotifications(
-          { ...entry, recallReason: reason.trim() },
-          profile,
-          allProfiles,
-          reason.trim(),
-          defs,
-        ),
       ];
       await db.transact(txs);
-      schedulePushDeliveryFromTxs(txs);
+      void deliverLogbookEvent({ entryId: entry.id, eventType: 'recalled', eventVersion: now, reason: reason.trim() });
       if (proofEntryId === entry.id) closeResolutionForm();
     } catch (e) {
       alert(e instanceof Error ? e.message : t.logbook.saveFailed);
@@ -1012,22 +962,13 @@ export default function LogbookPage({
         prevStatus,
         prevStatus,
       ),
-      ...buildLogbookIssueAssignedNotifications(
-        {
-          ...entry,
-          assigneeRole: setupForm.assigneeRole,
-          assigneeUserIdsJson,
-          dueAt,
-          resolutionProofType: setupForm.resolutionProofType,
-          resolutionRequirement: setupForm.resolutionRequirement,
-        },
-        profile,
-        allProfiles,
-        defs,
-      ),
     ];
     await db.transact(txs);
-    schedulePushDeliveryFromTxs(txs);
+    void deliverLogbookEvent({
+      entryId: entry.id,
+      eventType: 'issue_assigned',
+      eventVersion: nowIso(),
+    });
     setSetupEntryId(null);
   }
 
@@ -1049,19 +990,14 @@ export default function LogbookPage({
     if (creatorMedia) {
       txs.push(db.tx.logbookEntries[entry.id].link({ sourceMedia: creatorMedia.fileId }));
     }
-    txs.push(
-      db.tx.logbookEntries[entry.id].update({ updatedAt: nowIso() }),
-      ...buildLogbookCreatorUpdateNotifications(
-        entry,
-        profile,
-        allProfiles,
-        note,
-        defs,
-      ),
-    );
+    txs.push(db.tx.logbookEntries[entry.id].update({ updatedAt: nowIso() }));
     try {
       await db.transact(txs as Parameters<typeof db.transact>[0]);
-      schedulePushDeliveryFromTxs(txs);
+      void postLogbookNotify({
+        entryId: entry.id,
+        type: 'creator_update',
+        note,
+      });
       setCreatorUpdateEntryId(null);
       setCreatorNote('');
       setCreatorMedia(null);

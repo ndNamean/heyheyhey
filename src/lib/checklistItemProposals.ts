@@ -462,6 +462,8 @@ function notificationTx(params: {
     actorRole: params.actorRole,
     readAt: '',
     createdAt: nowIso(),
+    deliveryKey: '',
+    deepLinkJson: '',
   });
 }
 

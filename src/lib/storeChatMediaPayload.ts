@@ -28,6 +28,18 @@ export interface StoreChatForwardFields {
   forwardedFromUserId: string;
 }
 
+/** Admin logbook system-card fields — empty on human client messages. */
+export interface StoreChatLogbookFields {
+  sourceType: string;
+  logbookEntryId: string;
+  logbookEventType: string;
+  actionType: string;
+  targetUserIdsJson: string;
+  deepLinkJson: string;
+  statusSnapshot: string;
+  chatDeliveryKey: string;
+}
+
 export interface StoreChatMediaPayloadInput {
   body: string;
   giphy?: GiphyMediaItem | null;
@@ -40,7 +52,10 @@ export interface StoreChatMediaPayloadInput {
 }
 
 /** Full Instant update blob for storeChatMessages (media + social metadata). */
-export interface StoreChatMediaMessageAttrs extends StoreChatGiphyFields, StoreChatForwardFields {
+export interface StoreChatMediaMessageAttrs
+  extends StoreChatGiphyFields,
+    StoreChatForwardFields,
+    StoreChatLogbookFields {
   messageType: StoreChatMediaMessageType;
   body: string;
   replyToMessageId: string;
@@ -62,6 +77,17 @@ export const EMPTY_GIPHY_FIELDS: StoreChatGiphyFields = {
 export const EMPTY_FORWARD_FIELDS: StoreChatForwardFields = {
   forwardedFromMessageId: '',
   forwardedFromUserId: '',
+};
+
+export const EMPTY_LOGBOOK_FIELDS: StoreChatLogbookFields = {
+  sourceType: '',
+  logbookEntryId: '',
+  logbookEventType: '',
+  actionType: '',
+  targetUserIdsJson: '',
+  deepLinkJson: '',
+  statusSnapshot: '',
+  chatDeliveryKey: '',
 };
 
 export function emptyStoreChatGiphyFields(): StoreChatGiphyFields {
@@ -124,6 +150,7 @@ export function buildStoreChatMediaPayload(
     forwardedFromMessageId: String(input.forwardedFromMessageId ?? '').trim(),
     forwardedFromUserId: String(input.forwardedFromUserId ?? '').trim(),
     ...giphyFields,
+    ...EMPTY_LOGBOOK_FIELDS,
   };
 }
 

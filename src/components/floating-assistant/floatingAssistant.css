@@ -107,6 +107,23 @@ body.wizard-active .floating-assistant-root {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 2px rgba(253, 194, 22, 0.45);
 }
 
+.fa-msg-row--logbook-system { justify-content: center; }
+.fa-msg--logbook-system {
+  max-width: 92%;
+  display: grid;
+  gap: 5px;
+  text-align: center;
+  border: 1px solid rgba(253, 194, 22, .45);
+  background: rgba(253, 194, 22, .10);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.fa-msg-logbook-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.fa-msg-logbook-status { justify-self: center; border-radius: 999px; padding: 2px 8px; font-size: 11px; background: rgba(255,255,255,.12); }
+.fa-msg-logbook-status--resolved { background: rgba(34,197,94,.25); }
+.fa-msg-logbook-status--recalled { background: rgba(239,68,68,.25); }
+.fa-msg-logbook-body { white-space: pre-line; font-size: 13px; }
+
 /* ── Panel ────────────────────────────────────────────────────────────────── */
 
 .fa-panel {

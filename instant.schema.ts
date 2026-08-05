@@ -387,6 +387,10 @@ const _schema = i.schema({
       actorRole: i.string(),
       readAt: i.string(),                   // '' = unread
       createdAt: i.string(),
+      // Optional: legacy inbox rows have null; new Admin delivers set a key.
+      deliveryKey: i.string().indexed().optional(),
+      // clientRequired for new client writes ('' ok); legacy rows may be null.
+      deepLinkJson: i.string().optional().clientRequired(),
     }),
 
     // ─── Checklist item proposals (new-item requests; not templateItems) ─────
@@ -563,7 +567,7 @@ const _schema = i.schema({
       senderProfileId: i.string().indexed(),
       senderNameSnapshot: i.string(),
       senderRoleSnapshot: i.string(),
-      messageType: i.string(),                 // 'text' | 'giphy_media' | 'text_giphy'
+      messageType: i.string(),                 // 'text' | 'giphy_media' | 'text_giphy' | 'logbook_system'
       body: i.string(),
       createdAt: i.string().indexed(),
       editedAt: i.string().clientRequired(),   // '' unused in v1
@@ -584,6 +588,15 @@ const _schema = i.schema({
       forwardedFromMessageId: i.string().clientRequired(),
       forwardedFromUserId: i.string().clientRequired(),
       clientMutationId: i.string().clientRequired(),
+      // Admin-created Logbook system cards (empty defaults for client messages).
+      sourceType: i.string().clientRequired(),
+      logbookEntryId: i.string().clientRequired(),
+      logbookEventType: i.string().clientRequired(),
+      actionType: i.string().clientRequired(),
+      targetUserIdsJson: i.string().clientRequired(),
+      deepLinkJson: i.string().clientRequired(),
+      statusSnapshot: i.string().clientRequired(),
+      chatDeliveryKey: i.string().indexed().optional(),
     }),
 
     // ─── Store Chat reactions (room key = storeId) ─────────────────────────

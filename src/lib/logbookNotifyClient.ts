@@ -9,6 +9,16 @@ export type LogbookNotifyType =
   | 'creator_update'
   | 'issue_recalled';
 
+export type LogbookDeliveryEventType =
+  | 'issue_assigned'
+  | 'resolution_submitted'
+  | 'ack_required'
+  | 'correction_requested'
+  | 'approved'
+  | 'overdue'
+  | 'reopened'
+  | 'recalled';
+
 export type LogbookNotifyResult =
   | { ok: true; created: number; softFail?: false; deduped?: boolean }
   | { ok: false; softFail: true; message: string };
@@ -117,5 +127,38 @@ export async function postLogbookNotify(params: {
       softFail: true,
       message: e instanceof Error ? e.message : 'Notify failed',
     };
+  }
+}
+
+/** Admin-only inbox, push, and Store Chat delivery for a persisted Logbook event. */
+export async function deliverLogbookEvent(params: {
+  entryId: string;
+  eventType: LogbookDeliveryEventType;
+  eventVersion: string;
+  note?: string;
+  reason?: string;
+}): Promise<LogbookNotifyResult> {
+  try {
+    const headers = await getAuthHeaders();
+    const resp = await fetch('/api/logbook-notify', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ type: 'deliver_event', ...params }),
+    });
+    const json = (await resp.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!resp.ok || !json.ok) {
+      return {
+        ok: false,
+        softFail: true,
+        message: typeof json.error === 'string' ? json.error : `Notify failed (${resp.status})`,
+      };
+    }
+    return {
+      ok: true,
+      created: typeof json.created === 'number' ? json.created : 0,
+      deduped: Boolean(json.deduped),
+    };
+  } catch (e) {
+    return { ok: false, softFail: true, message: e instanceof Error ? e.message : 'Notify failed' };
   }
 }

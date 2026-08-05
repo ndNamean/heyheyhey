@@ -17,7 +17,7 @@ import {
   countAssignedOpenOrOverdue,
   isAssignedUnresolvedIssue,
 } from '../lib/logbook';
-import { isNoteAnnouncementNotificationType } from '../lib/notifications';
+import { filterForLogbookNotificationType } from '../lib/logbookNotificationContent';
 import type { Page } from '../components/Nav';
 import type { LogbookEntry, Profile } from '../types';
 
@@ -88,19 +88,17 @@ export default function StaffHome({
     setHighlightNoteId(null);
   }, []);
 
-  function handleOpenLogbookEntry(entryId: string, type?: string) {
-    if (type && isNoteAnnouncementNotificationType(type)) {
-      setHighlightNoteId(entryId);
-      return;
-    }
+  function handleOpenLogbookEntry(entryId: string, type?: string, deepLinkFilter?: string) {
+    const filter = deepLinkFilter || filterForLogbookNotificationType(type || '');
     try {
       sessionStorage.setItem('logbookHighlightEntryId', entryId);
-      sessionStorage.setItem('logbookInitialFilter', 'my-assigned');
+      sessionStorage.setItem('logbookInitialFilter', filter);
       sessionStorage.setItem('logbookOpenResolutionEntryId', entryId);
     } catch {
       /* ignore */
     }
-    setPage('logbook');
+    if (onOpenLogbook) onOpenLogbook(filter);
+    else setPage('logbook');
   }
 
   return (

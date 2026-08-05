@@ -275,10 +275,41 @@ export async function deliverPushForNotificationIds(notificationIds, opts = {}) 
         continue;
       }
 
+      let url = '/';
+      try {
+        const deepLink = JSON.parse(notif.deepLinkJson || '');
+        if (deepLink?.entryId) {
+          const params = new URLSearchParams({
+            open: 'logbook',
+            entryId: deepLink.entryId,
+            filter: deepLink.filter || 'my-assigned',
+          });
+          if (deepLink.storeId) params.set('storeId', deepLink.storeId);
+          url = `/?${params.toString()}`;
+        }
+      } catch {
+        if (notif.reportId && String(notif.type || '').startsWith('logbook_')) {
+          const filter =
+            notif.type === 'logbook_resolution_submitted'
+              ? 'waiting_approval'
+              : notif.type === 'logbook_note_created' ||
+                  notif.type === 'logbook_announcement_created' ||
+                  notif.type === 'logbook_ack_required'
+                ? 'requires_ack'
+                : 'my-assigned';
+          const params = new URLSearchParams({
+            open: 'logbook',
+            entryId: String(notif.reportId),
+            filter,
+          });
+          if (notif.storeId) params.set('storeId', String(notif.storeId));
+          url = `/?${params.toString()}`;
+        }
+      }
       const payload = {
         title: notif.title || 'Hey Pelo Ops',
         body: notif.body || '',
-        url: '/',
+        url,
       };
 
       const sendResult = await trySendWebPush(

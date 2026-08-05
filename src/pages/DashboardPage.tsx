@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../db';
 import FeedbackInbox from '../components/FeedbackInbox';
+import { filterForLogbookNotificationType } from '../lib/logbookNotificationContent';
 import ExportModal from '../components/ExportModal';
 import FailureCorrectionHistory from '../components/FailureCorrectionHistory';
 import ScheduledTaskCompletion from '../components/ScheduledTaskCompletion';
@@ -261,15 +262,16 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
       <FeedbackInbox
         userId={profile.userId}
         title={t.dashboard.teamFeedback}
-        onOpenLogbookEntry={(entryId) => {
+        onOpenLogbookEntry={(entryId, type, deepLinkFilter) => {
+          const filter = deepLinkFilter || filterForLogbookNotificationType(type || '');
           try {
             sessionStorage.setItem('logbookHighlightEntryId', entryId);
-            sessionStorage.setItem('logbookInitialFilter', 'waiting_approval');
+            sessionStorage.setItem('logbookInitialFilter', filter);
             sessionStorage.setItem('logbookOpenResolutionEntryId', entryId);
           } catch {
             /* ignore */
           }
-          onOpenLogbook?.('waiting_approval');
+          onOpenLogbook?.(filter);
         }}
       />
 

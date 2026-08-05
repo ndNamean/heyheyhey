@@ -188,7 +188,7 @@ export interface ProofMetadata {
   captureFrameRotation?: WatermarkDirection;
 }
 
-// Profile shape (from db.useQuery result — fields only, no links)
+// Profile shape (from db.useQuery result ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â fields only, no links)
 export interface Profile {
   id: string;
   userId: string;
@@ -209,7 +209,7 @@ export interface Profile {
   createdAt: string;
   updatedAt: string;
   cameraOptionsJson?: string;
-  /** Legacy denormalized signed URL; do not use for display — prefer avatarFile.url. */
+  /** Legacy denormalized signed URL; do not use for display ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â prefer avatarFile.url. */
   avatarUrl?: string;
   /** Stable Instant storage path (`profile-avatars/{userId}/avatar.ext`); '' when none. */
   avatarPath?: string;
@@ -556,7 +556,7 @@ export interface ReportResponse {
   updatedAt: string;
   /** Denormalised for Instant store-scoped review; blank/missing on legacy rows */
   storeId?: string;
-  /** Additive schedule fields — blank when unscheduled */
+  /** Additive schedule fields ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â blank when unscheduled */
   scheduleOccurrenceKey?: string;
   scheduledDueAt?: string;
   firstCompletedAt?: string;
@@ -715,7 +715,7 @@ export interface LogbookEntry {
   dueSoonNotifiedAt?: string;
   overdueNotifiedAt?: string;
   store?: Store;
-  /** Legacy single photo link — interpret via resolveLogbookMedia helpers */
+  /** Legacy single photo link ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â interpret via resolveLogbookMedia helpers */
   photo?: LogbookFileRef;
   sourceMedia?: LogbookFileRef[];
   resolutionMedia?: LogbookFileRef;
@@ -815,15 +815,17 @@ export interface Notification {
   actorRole: string;
   readAt: string;
   createdAt: string;
+  deliveryKey?: string;
+  deepLinkJson?: string;
 }
 
-export type StoreChatMessageType = 'text' | 'giphy_media' | 'text_giphy';
+export type StoreChatMessageType = 'text' | 'giphy_media' | 'text_giphy' | 'logbook_system';
 export type StoreChatMessageStatus = 'active' | 'deleted';
 /** Phase 4 GIPHY kinds; '' when message has no media. */
 export type StoreChatGiphyKind = 'gif' | 'sticker' | 'meme' | 'emoji' | '';
 
 /**
- * InstantDB storeChatMessages — room key is storeId.
+ * InstantDB storeChatMessages ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â room key is storeId.
  * Phase 4 giphy* / clientMutationId are additive (optional on read, '' on write).
  * Keep in sync with Phase 3 forwarded* fields when merging.
  */
@@ -845,7 +847,7 @@ export interface StoreChatMessage {
   mentionedUserIdsJson?: string;
   /** True when the message @all'd everyone who can access the room. */
   mentionAll?: boolean;
-  /** Phase 4 GIPHY — '' when text-only. */
+  /** Phase 4 GIPHY ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â '' when text-only. */
   giphyId?: string;
   giphyKind?: StoreChatGiphyKind | string;
   giphyTitle?: string;
@@ -858,6 +860,14 @@ export interface StoreChatMessage {
   /** Original author userId when forwarded; '' otherwise. Forwarder is senderUserId. */
   forwardedFromUserId?: string;
   clientMutationId?: string;
+  sourceType?: string;
+  logbookEntryId?: string;
+  logbookEventType?: string;
+  actionType?: string;
+  targetUserIdsJson?: string;
+  deepLinkJson?: string;
+  statusSnapshot?: string;
+  chatDeliveryKey?: string;
   /** Linked sender profile when queried with `sender: { avatarFile: {} }`. */
   sender?: Pick<
     Profile,
@@ -867,7 +877,7 @@ export interface StoreChatMessage {
 
 export type StoreChatReactionType = 'unicode' | 'giphy';
 
-/** InstantDB storeChatReactions — room key is storeId. */
+/** InstantDB storeChatReactions ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â room key is storeId. */
 export interface StoreChatReaction {
   id: string;
   storeId: string;
@@ -885,7 +895,7 @@ export interface StoreChatReaction {
   clientMutationId: string;
 }
 
-/** InstantDB storeChatBookmarks — per-viewer favorites; room key is storeId. */
+/** InstantDB storeChatBookmarks ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â per-viewer favorites; room key is storeId. */
 export interface StoreChatBookmark {
   id: string;
   storeId: string;

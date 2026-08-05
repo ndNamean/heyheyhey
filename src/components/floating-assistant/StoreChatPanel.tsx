@@ -57,6 +57,7 @@ import {
   type StoreChatTranslationState,
 } from '../../lib/storeChatTranslation';
 import { nowIso } from '../../lib/utils';
+import { OPEN_LOGBOOK_EVENT, parseLogbookDeepLinkJson } from '../../lib/logbookDeepLink';
 import type { Profile, Store, StoreChatMessage } from '../../types';
 import ProfileAvatar from '../profileAvatar/ProfileAvatar';
 import ProfileAvatarPreview from '../profileAvatar/ProfileAvatarPreview';
@@ -317,6 +318,27 @@ function MessageBubble({
     map.set(profile.userId, sc.you);
     return map;
   }, [candidates, message.senderNameSnapshot, message.senderUserId, profile.userId, sc.you]);
+
+  if (message.messageType === 'logbook_system' || message.sourceType === 'logbook') {
+    const link = parseLogbookDeepLinkJson(message.deepLinkJson);
+    return (
+      <div className="fa-msg-row fa-msg-row--logbook-system" data-msg-id={message.id}>
+        <button
+          type="button"
+          className="fa-msg fa-msg--logbook-system"
+          onClick={() => {
+            if (link) window.dispatchEvent(new CustomEvent(OPEN_LOGBOOK_EVENT, { detail: link }));
+          }}
+        >
+          <span className="fa-msg-logbook-label">Logbook</span>
+          <span className={`fa-msg-logbook-status fa-msg-logbook-status--${message.statusSnapshot || 'open'}`}>
+            {message.statusSnapshot || 'open'}
+          </span>
+          <span className="fa-msg-logbook-body">{message.body}</span>
+        </button>
+      </div>
+    );
+  }
 
   if (deleted) {
     if (!isOwn) return null;

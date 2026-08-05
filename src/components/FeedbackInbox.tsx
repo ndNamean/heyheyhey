@@ -12,6 +12,7 @@ import {
 import ReportTimeline from './ReportTimeline';
 import IdentityWithAvatar from './profileAvatar/IdentityWithAvatar';
 import type { Notification, Profile, Report, ReviewEvent } from '../types';
+import { parseLogbookDeepLinkJson } from '../lib/logbookDeepLink';
 
 export const OPEN_STORE_CHAT_EVENT = 'heyPelo:openStoreChat';
 
@@ -24,7 +25,7 @@ interface Props {
   userId: string;
   title?: string;
   limit?: number;
-  onOpenLogbookEntry?: (entryId: string, type?: string) => void;
+  onOpenLogbookEntry?: (entryId: string, type?: string, deepLinkFilter?: string) => void;
 }
 
 export default function FeedbackInbox({
@@ -111,7 +112,7 @@ export default function FeedbackInbox({
       return;
     }
     if (isLogbookNotificationType(n.type) && n.reportId && onOpenLogbookEntry) {
-      onOpenLogbookEntry(n.reportId, n.type);
+      onOpenLogbookEntry(n.reportId, n.type, parseLogbookDeepLinkJson(n.deepLinkJson)?.filter);
     }
   }
 

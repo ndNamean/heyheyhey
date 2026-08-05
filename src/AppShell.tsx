@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DesktopNav, MobileNav, type Page } from './components/Nav';
 import WifiNotifyStatus from './components/WifiNotifyStatus';
 import FloatingAssistantShell from './components/floating-assistant/FloatingAssistantShell';
@@ -23,6 +23,11 @@ import { useRoleDefinitions } from './contexts/RoleDefinitionsContext';
 import { usesDashboardHome } from './lib/roles';
 import { BACK_PRIORITY, useNativeBack } from './lib/nativeBack';
 import type { Profile } from './types';
+import {
+  OPEN_LOGBOOK_EVENT,
+  parseLogbookDeepLinkFromSearch,
+  parseLogbookDeepLinkJson,
+} from './lib/logbookDeepLink';
 
 interface Props {
   profile: Profile;
@@ -79,7 +84,7 @@ export default function AppShell({ profile }: Props) {
     setPage('proposals');
   }
 
-  function goLogbook(opts?: { filter?: string; entryId?: string | null }) {
+  function goLogbook(opts?: { filter?: string; entryId?: string | null; storeId?: string }) {
     setLogbookFilter(opts?.filter);
     setLogbookHighlightId(opts?.entryId ?? null);
     if (opts?.filter) {
@@ -98,6 +103,23 @@ export default function AppShell({ profile }: Props) {
     }
     setPage('logbook');
   }
+
+  useEffect(() => {
+    const initial = parseLogbookDeepLinkFromSearch(window.location.search);
+    if (initial) {
+      goLogbook(initial);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    const onOpen = (event: Event) => {
+      const detail = (event as CustomEvent<unknown>).detail;
+      const link = typeof detail === 'string' ? parseLogbookDeepLinkJson(detail) : detail;
+      if (link && typeof link === 'object' && 'entryId' in link) {
+        goLogbook(link as { entryId: string; filter?: string; storeId?: string });
+      }
+    };
+    window.addEventListener(OPEN_LOGBOOK_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_LOGBOOK_EVENT, onOpen);
+  }, []);
 
   function renderPage() {
     switch (page) {

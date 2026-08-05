@@ -7,7 +7,6 @@ import { canReviewReport, canReviewReportItem } from '../lib/reportReview';
 import { statusLabel } from '../lib/i18nUtils';
 import {
   buildItemReviewNotifications,
-  buildLogbookResolutionDecisionNotifications,
   buildReportFinalizedNotifications,
 } from '../lib/notifications';
 import { schedulePushDeliveryFromTxs } from '../lib/pushDelivery';
@@ -17,6 +16,7 @@ import {
   buildLogbookResolutionRejectedEvent,
   buildReportFinalizedEvent,
 } from '../lib/reviewEvents';
+import { deliverLogbookEvent } from '../lib/logbookNotifyClient';
 import { resolveActorDisplay } from '../lib/actorDisplay';
 import { badgeClass, nowIso } from '../lib/utils';
 import ProofPhoto from '../components/ProofPhoto';
@@ -102,13 +102,6 @@ export default function ReviewPage({ profile }: Props) {
     const note = prompt(t.logbook.reviewNotePrompt) ?? '';
     if (!note.trim()) return alert(t.logbook.reviewNoteRequired);
     const now = nowIso();
-    const notificationTxs = buildLogbookResolutionDecisionNotifications(
-      { ...entry, reviewNote: note.trim() },
-      profile,
-      allProfiles,
-      'approved',
-      defs,
-    );
     await db.transact([
       db.tx.logbookEntries[entry.id].update({
         status: 'resolved',
@@ -120,9 +113,13 @@ export default function ReviewPage({ profile }: Props) {
         updatedAt: now,
       }),
       buildLogbookResolutionApprovedEvent(entry, profile, note.trim()),
-      ...notificationTxs,
     ]);
-    schedulePushDeliveryFromTxs(notificationTxs);
+    void deliverLogbookEvent({
+      entryId: entry.id,
+      eventType: 'approved',
+      eventVersion: now,
+      note: note.trim(),
+    });
   }
 
   async function requestLogbookCorrection(entry: LogbookEntry) {
@@ -130,13 +127,6 @@ export default function ReviewPage({ profile }: Props) {
     const note = prompt(t.logbook.correctionNotePrompt) ?? '';
     if (!note.trim()) return alert(t.logbook.reviewNoteRequired);
     const now = nowIso();
-    const notificationTxs = buildLogbookResolutionDecisionNotifications(
-      { ...entry, reviewNote: note.trim() },
-      profile,
-      allProfiles,
-      'rejected',
-      defs,
-    );
     await db.transact([
       db.tx.logbookEntries[entry.id].update({
         status: 'in_progress',
@@ -146,9 +136,13 @@ export default function ReviewPage({ profile }: Props) {
         updatedAt: now,
       }),
       buildLogbookResolutionRejectedEvent(entry, profile, note.trim()),
-      ...notificationTxs,
     ]);
-    schedulePushDeliveryFromTxs(notificationTxs);
+    void deliverLogbookEvent({
+      entryId: entry.id,
+      eventType: 'correction_requested',
+      eventVersion: now,
+      note: note.trim(),
+    });
   }
 
   function openFeedbackModal(

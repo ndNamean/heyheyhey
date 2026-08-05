@@ -1,5 +1,5 @@
 /**
- * Vercel Serverless — Logbook Admin SDK actions.
+ * Vercel Serverless â€” Logbook Admin SDK actions.
  * - type submit_resolution: Stage A (status + resolutionMedia + timeline)
  * - type resolution_submitted | creator_update | issue_recalled: Stage B inbox
  *
@@ -16,6 +16,13 @@ import {
   verifyRequestUser,
 } from './_lib/export/auth.js';
 import { deliverPushForNotificationIds } from './_lib/push/deliver-notifications.js';
+import {
+  buildNormalizedLogbookNotification,
+  chatDeliveryKey,
+  deliveryKeyForRecipient,
+  isLogbookChatNotifyEnabled,
+  selectMentionUserIds,
+} from './_lib/logbook/notification-content.js';
 
 function nowIso() {
   return new Date().toISOString();
@@ -59,6 +66,8 @@ function emptyLogbookNotifFields(storeId, entryId, actionStatus) {
     completionPercent: 0,
     compliancePercent: 0,
     actionStatus,
+    deliveryKey: '',
+    deepLinkJson: '',
   };
 }
 
@@ -319,6 +328,312 @@ async function handleSubmitResolution(req, res, adminDb, actor, body) {
   return res.status(200).json({ ok: true, attemptId });
 }
 
+
+const NOTE_AUDIENCE_ROLES = new Set([
+  'owner',
+  'admin',
+  'areaManager',
+  'manager',
+  'leader',
+  'subleader',
+  'hybrid',
+  'staff',
+]);
+
+/** Mirrors client getNoteAnnouncementRecipients / canViewLogbookEntry for notes. */
+function getAckRecipients(entry, profiles, actorUserId) {
+  if (!entry.requiresAck) return [];
+  const storeId = String(entry.storeId || '');
+  return profiles
+    .filter((p) => {
+      if (p.userId === actorUserId) return false;
+      if (p.approvalStatus !== 'approved') return false;
+      if (p.role === 'viewer') return false;
+      if (!NOTE_AUDIENCE_ROLES.has(p.role)) return false;
+      if (!storeId) return true;
+      return hasStoreAccess(p, storeId);
+    })
+    .map((p) => p.userId);
+}
+
+function getStoreManagerRecipients(entry, profiles, actorUserId) {
+  return profiles
+    .filter(
+      (p) =>
+        p.userId !== actorUserId &&
+        p.approvalStatus === 'approved' &&
+        p.role === 'manager' &&
+        hasStoreAccess(p, entry.storeId),
+    )
+    .map((p) => p.userId);
+}
+
+function recipientsForEvent(entry, profiles, actor, defs, eventType) {
+  if (eventType === 'issue_assigned') {
+    return getAssigneeRecipients(entry, profiles, actor.userId);
+  }
+  if (eventType === 'resolution_submitted') {
+    return getReviewerRecipients(entry, profiles, actor.userId, defs);
+  }
+  if (eventType === 'ack_required') {
+    return getAckRecipients(entry, profiles, actor.userId);
+  }
+  if (eventType === 'overdue') {
+    return [
+      ...new Set([
+        ...getAssigneeRecipients(entry, profiles, ''),
+        ...getStoreManagerRecipients(entry, profiles, ''),
+        ...getReviewerRecipients(entry, profiles, actor.userId, defs),
+      ]),
+    ];
+  }
+  if (eventType === 'approved' || eventType === 'correction_requested') {
+    const result = new Set(getAssigneeRecipients(entry, profiles, actor.userId));
+    if (
+      entry.resolutionSubmittedByUserId &&
+      entry.resolutionSubmittedByUserId !== actor.userId
+    ) {
+      result.add(entry.resolutionSubmittedByUserId);
+    }
+    if (
+      eventType === 'approved' &&
+      entry.authorUserId &&
+      entry.authorUserId !== actor.userId
+    ) {
+      result.add(entry.authorUserId);
+    }
+    return [...result];
+  }
+  if (eventType === 'reopened' || eventType === 'recalled') {
+    const result = new Set([
+      ...getAssigneeRecipients(entry, profiles, actor.userId),
+      ...getStoreManagerRecipients(entry, profiles, actor.userId),
+    ]);
+    if (entry.authorUserId && entry.authorUserId !== actor.userId) {
+      result.add(entry.authorUserId);
+    }
+    if (
+      entry.resolutionSubmittedByUserId &&
+      entry.resolutionSubmittedByUserId !== actor.userId
+    ) {
+      result.add(entry.resolutionSubmittedByUserId);
+    }
+    return [...result];
+  }
+  return [];
+}
+
+function storeLabelFor(entry, stores) {
+  const storeId = String(entry.storeId || '');
+  if (!storeId) return 'All stores';
+  const store = (stores || []).find((s) => s.id === storeId);
+  if (!store) return 'Unknown store';
+  const code = String(store.code || '').trim();
+  const name = String(store.name || '').trim();
+  if (code && name) return `${code} — ${name}`;
+  return name || code || 'Unknown store';
+}
+
+async function deliverEvent(req, res, adminDb, actor, body) {
+  const entryId = String(body.entryId || '').trim();
+  const eventType = String(body.eventType || '').trim();
+  const eventVersion = String(body.eventVersion || '').trim();
+  const supported = [
+    'issue_assigned',
+    'resolution_submitted',
+    'ack_required',
+    'correction_requested',
+    'approved',
+    'overdue',
+    'reopened',
+    'recalled',
+  ];
+  if (!entryId || !eventVersion || !supported.includes(eventType)) {
+    return res.status(400).json({ error: 'Missing or invalid delivery event' });
+  }
+
+  let entry;
+  let profiles;
+  let defs;
+  let stores;
+  try {
+    const [eq, pq, dq, sq] = await Promise.all([
+      adminDb.query({ logbookEntries: { $: { where: { id: entryId } } } }),
+      adminDb.query({ profiles: { stores: {} } }),
+      loadRoleDefinitions(adminDb),
+      adminDb.query({ stores: {} }),
+    ]);
+    entry = eq.logbookEntries?.[0];
+    profiles = pq.profiles ?? [];
+    defs = dq;
+    stores = sq.stores ?? [];
+  } catch (e) {
+    return res.status(500).json({
+      error: e instanceof Error ? e.message : 'Failed to load delivery context',
+    });
+  }
+  if (!entry) return res.status(404).json({ error: 'Entry not found' });
+
+  // Ack events with requiresAck=false create nothing (inbox/chat/push).
+  if (eventType === 'ack_required' && !entry.requiresAck) {
+    return res.status(200).json({ ok: true, created: 0, chatCreated: false, deduped: 0 });
+  }
+
+  const recipients = recipientsForEvent(entry, profiles, actor, defs, eventType);
+  const normalized = buildNormalizedLogbookNotification({
+    entry,
+    eventType,
+    eventVersion,
+    recipients,
+    note: String(body.note || '').trim(),
+    reason: String(body.reason || '').trim(),
+    actor,
+    profiles,
+    storeLabel: storeLabelFor(entry, stores),
+  });
+
+  const notificationIds = [];
+  const inboxTxs = [];
+  let created = 0;
+  let deduped = 0;
+
+  for (const recipientUserId of recipients) {
+    const deliveryKey = deliveryKeyForRecipient(
+      entryId,
+      eventType,
+      eventVersion,
+      recipientUserId,
+    );
+    let exists = false;
+    try {
+      exists = Boolean(
+        (
+          await adminDb.query({
+            notifications: { $: { where: { deliveryKey } } },
+          })
+        ).notifications?.length,
+      );
+    } catch {
+      /* migration fallback */
+    }
+    if (exists) {
+      deduped += 1;
+      continue;
+    }
+    const notificationId = id();
+    notificationIds.push(notificationId);
+    created += 1;
+    inboxTxs.push(
+      adminDb.tx.notifications[notificationId].update({
+        recipientUserId,
+        type: normalized.type,
+        title: normalized.copy.pushTitle || normalized.title,
+        body: normalized.copy.inboxBody || normalized.body,
+        actorUserId: actor.userId,
+        actorRole: actor.role,
+        readAt: '',
+        createdAt: nowIso(),
+        deliveryKey,
+        deepLinkJson: normalized.deepLinkJson,
+        ...emptyLogbookNotifFields(
+          entry.storeId || '',
+          entry.id,
+          normalized.actionStatus,
+        ),
+      }),
+    );
+  }
+
+  if (inboxTxs.length) {
+    await adminDb.transact(inboxTxs);
+  }
+
+  let chatCreated = false;
+  // All-store notes (storeId ''): inbox + push only — no Store Chat fan-out.
+  if (entry.storeId && isLogbookChatNotifyEnabled()) {
+    const key = chatDeliveryKey(
+      entryId,
+      eventType,
+      eventVersion,
+      entry.storeId,
+    );
+    let exists = false;
+    try {
+      exists = Boolean(
+        (
+          await adminDb.query({
+            storeChatMessages: { $: { where: { chatDeliveryKey: key } } },
+          })
+        ).storeChatMessages?.length,
+      );
+    } catch {
+      /* migration fallback */
+    }
+    if (!exists) {
+      const mentioned = selectMentionUserIds(recipients);
+      await adminDb.transact([
+        adminDb.tx.storeChatMessages[id()].update({
+          storeId: entry.storeId,
+          senderUserId: actor.userId,
+          senderProfileId: actor.id || '',
+          senderNameSnapshot:
+            actor.displayName || actor.email || 'System',
+          senderRoleSnapshot: actor.role || '',
+          messageType: 'logbook_system',
+          body: normalized.copy.chatBody || normalized.body,
+          createdAt: nowIso(),
+          editedAt: '',
+          deletedAt: '',
+          status: 'active',
+          replyToMessageId: '',
+          mentionedUserIdsJson: JSON.stringify(mentioned),
+          mentionAll: false,
+          giphyId: '',
+          giphyKind: '',
+          giphyTitle: '',
+          giphyWidth: '',
+          giphyHeight: '',
+          giphyUrl: '',
+          giphyPreviewUrl: '',
+          forwardedFromMessageId: '',
+          forwardedFromUserId: '',
+          clientMutationId: '',
+          sourceType: 'logbook',
+          logbookEntryId: entry.id,
+          logbookEventType: eventType,
+          actionType: normalized.actionType,
+          targetUserIdsJson: JSON.stringify(recipients),
+          deepLinkJson: normalized.deepLinkJson,
+          statusSnapshot: normalized.statusSnapshot,
+          chatDeliveryKey: key,
+        }),
+      ]);
+      chatCreated = true;
+    } else {
+      deduped += 1;
+    }
+  }
+
+  if (notificationIds.length) {
+    void deliverPushForNotificationIds(notificationIds, { adminDb }).catch(
+      (err) => {
+        console.warn(
+          '[logbook-notify] push deliver skipped',
+          err?.message || err,
+        );
+      },
+    );
+  }
+
+  return res.status(200).json({
+    ok: true,
+    created,
+    chatCreated,
+    deduped,
+    dedupedFully: created === 0 && deduped > 0,
+  });
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -348,6 +663,10 @@ export default async function handler(req, res) {
 
   if (type === 'submit_resolution') {
     return handleSubmitResolution(req, res, adminDb, actor, body);
+  }
+
+  if (type === 'deliver_event') {
+    return deliverEvent(req, res, adminDb, actor, body);
   }
 
   const entryId = String(body.entryId || '').trim();

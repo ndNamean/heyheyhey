@@ -130,6 +130,8 @@ export function buildItemReviewNotifications(
       actorRole: approver.role,
       readAt: '',
       createdAt: now,
+      deliveryKey: '',
+      deepLinkJson: '',
     }),
   );
 }
@@ -194,6 +196,8 @@ export function buildReportFinalizedNotifications(
       actorRole: approver.role,
       readAt: '',
       createdAt: now,
+      deliveryKey: '',
+      deepLinkJson: '',
     }),
   );
 }
@@ -219,6 +223,8 @@ function emptyAccessNotifFields() {
     completionPercent: 0,
     compliancePercent: 0,
     actionStatus: '',
+    deliveryKey: '',
+    deepLinkJson: '',
   };
 }
 
@@ -385,6 +391,8 @@ function buildUserChangeNotificationTx(
     actorRole: actor.role,
     readAt: '',
     createdAt: nowIso(),
+    deliveryKey: '',
+    deepLinkJson: '',
   });
 }
 
@@ -526,6 +534,8 @@ function emptyLogbookNotifFields(storeId: string, entryId: string, actionStatus:
     completionPercent: 0,
     compliancePercent: 0,
     actionStatus,
+    deliveryKey: '',
+    deepLinkJson: '',
   };
 }
 
@@ -933,6 +943,8 @@ function emptyStoreChatNotifFields(storeId: string, messageId: string) {
     completionPercent: 0,
     compliancePercent: 0,
     actionStatus: '',
+    deliveryKey: '',
+    deepLinkJson: '',
   };
 }
 
