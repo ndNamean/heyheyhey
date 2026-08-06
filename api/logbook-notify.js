@@ -23,6 +23,14 @@ import {
   isLogbookChatNotifyEnabled,
   selectMentionUserIds,
 } from './_lib/logbook/notification-content.js';
+import {
+  hasStoreAccess,
+  recipientsForChatRoom,
+  resolveAckChatStoreIds,
+} from './_lib/logbook/ack-chat-rooms.js';
+
+/** Max storeChatMessages updates per Instant transact when fan-out is large. */
+const CHAT_TX_CHUNK = 25;
 
 function nowIso() {
   return new Date().toISOString();
@@ -69,18 +77,6 @@ function emptyLogbookNotifFields(storeId, entryId, actionStatus) {
     deliveryKey: '',
     deepLinkJson: '',
   };
-}
-
-function profileStoreIds(profile) {
-  return (profile.stores ?? []).map((s) => s.id);
-}
-
-function hasStoreAccess(profile, storeId) {
-  if (!storeId) return false;
-  const ids = profileStoreIds(profile);
-  if (ids.includes(storeId)) return true;
-  const role = profile.role || '';
-  return role === 'owner' || role === 'areaManager' || role === 'admin';
 }
 
 function issueSnippet(entry) {
@@ -476,7 +472,13 @@ async function deliverEvent(req, res, adminDb, actor, body) {
 
   // Ack events with requiresAck=false create nothing (inbox/chat/push).
   if (eventType === 'ack_required' && !entry.requiresAck) {
-    return res.status(200).json({ ok: true, created: 0, chatCreated: false, deduped: 0 });
+    return res.status(200).json({
+      ok: true,
+      created: 0,
+      chatCreated: 0,
+      chatDeduped: 0,
+      deduped: 0,
+    });
   }
 
   const recipients = recipientsForEvent(entry, profiles, actor, defs, eventType);
@@ -548,40 +550,70 @@ async function deliverEvent(req, res, adminDb, actor, body) {
     await adminDb.transact(inboxTxs);
   }
 
-  let chatCreated = false;
-  // All-store notes (storeId ''): inbox + push only — no Store Chat fan-out.
-  if (entry.storeId && isLogbookChatNotifyEnabled()) {
-    const key = chatDeliveryKey(
-      entryId,
-      eventType,
-      eventVersion,
-      entry.storeId,
+  let chatCreated = 0;
+  let chatDeduped = 0;
+  // Single-store: one room. All-store (storeId ''): fan out to recipient-linked rooms.
+  if (isLogbookChatNotifyEnabled()) {
+    const roomStoreIds = resolveAckChatStoreIds(
+      entry,
+      recipients,
+      profiles,
+      stores,
     );
-    let exists = false;
-    try {
-      exists = Boolean(
-        (
-          await adminDb.query({
-            storeChatMessages: { $: { where: { chatDeliveryKey: key } } },
-          })
-        ).storeChatMessages?.length,
+    const chatTxs = [];
+    const createdAt = nowIso();
+    for (const roomStoreId of roomStoreIds) {
+      const key = chatDeliveryKey(
+        entryId,
+        eventType,
+        eventVersion,
+        roomStoreId,
       );
-    } catch {
-      /* migration fallback */
-    }
-    if (!exists) {
-      const mentioned = selectMentionUserIds(recipients);
-      await adminDb.transact([
+      let exists = false;
+      try {
+        exists = Boolean(
+          (
+            await adminDb.query({
+              storeChatMessages: { $: { where: { chatDeliveryKey: key } } },
+            })
+          ).storeChatMessages?.length,
+        );
+      } catch {
+        /* migration fallback */
+      }
+      if (exists) {
+        chatDeduped += 1;
+        deduped += 1;
+        continue;
+      }
+      const roomRecipients = recipientsForChatRoom(
+        recipients,
+        profiles,
+        roomStoreId,
+      );
+      const mentioned = selectMentionUserIds(roomRecipients);
+      const roomNormalized = buildNormalizedLogbookNotification({
+        entry,
+        eventType,
+        eventVersion,
+        recipients: roomRecipients,
+        note: String(body.note || '').trim(),
+        reason: String(body.reason || '').trim(),
+        actor,
+        profiles,
+        storeLabel: normalized.storeLabel,
+      });
+      chatTxs.push(
         adminDb.tx.storeChatMessages[id()].update({
-          storeId: entry.storeId,
+          storeId: roomStoreId,
           senderUserId: actor.userId,
           senderProfileId: actor.id || '',
           senderNameSnapshot:
             actor.displayName || actor.email || 'System',
           senderRoleSnapshot: actor.role || '',
           messageType: 'logbook_system',
-          body: normalized.copy.chatBody || normalized.body,
-          createdAt: nowIso(),
+          body: roomNormalized.copy.chatBody || roomNormalized.body,
+          createdAt,
           editedAt: '',
           deletedAt: '',
           status: 'active',
@@ -607,10 +639,11 @@ async function deliverEvent(req, res, adminDb, actor, body) {
           statusSnapshot: normalized.statusSnapshot,
           chatDeliveryKey: key,
         }),
-      ]);
-      chatCreated = true;
-    } else {
-      deduped += 1;
+      );
+      chatCreated += 1;
+    }
+    for (let i = 0; i < chatTxs.length; i += CHAT_TX_CHUNK) {
+      await adminDb.transact(chatTxs.slice(i, i + CHAT_TX_CHUNK));
     }
   }
 
@@ -629,8 +662,9 @@ async function deliverEvent(req, res, adminDb, actor, body) {
     ok: true,
     created,
     chatCreated,
+    chatDeduped,
     deduped,
-    dedupedFully: created === 0 && deduped > 0,
+    dedupedFully: created === 0 && chatCreated === 0 && deduped > 0,
   });
 }
 
