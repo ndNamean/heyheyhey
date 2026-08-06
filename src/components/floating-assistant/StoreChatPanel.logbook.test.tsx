@@ -143,14 +143,14 @@ describe('StoreChatPanel logbook_system row', () => {
         senderRoleSnapshot: 'manager',
         messageType: 'logbook_system',
         sourceType: 'logbook',
-        body: 'New issue assigned\n@all',
+        body: 'New issue assigned\n@Ada',
         createdAt: '2026-08-04T00:00:00.000Z',
         editedAt: '',
         deletedAt: '',
         status: 'active',
         replyToMessageId: '',
-        mentionAll: true,
-        mentionedUserIdsJson: '[]',
+        mentionAll: false,
+        mentionedUserIdsJson: '["u-ada"]',
         logbookEntryId: 'entry-99',
         logbookEventType: 'issue_assigned',
         deepLinkJson: '',
@@ -163,10 +163,17 @@ describe('StoreChatPanel logbook_system row', () => {
     });
   });
 
-  it('renders @all as a mention segment', () => {
+  it('renders named mention segment for issue_assigned', () => {
     renderPanel();
-    const mention = document.querySelector('.fa-msg-mention');
-    expect(mention?.textContent).toMatch(/@all/i);
+    expect(screen.getByText(/@Ada/i)).toBeTruthy();
+  });
+
+  it('renders @all mention segment for ack_required', () => {
+    currentMessages = [
+      { ...currentMessages[0], logbookEventType: 'ack_required', body: 'Ack required\n@all' },
+    ];
+    renderPanel();
+    expect(screen.getByText(/@all/i)).toBeTruthy();
   });
 
   it('dispatches OPEN_LOGBOOK_EVENT with fallback deep link on Open Logbook', () => {

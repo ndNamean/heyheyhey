@@ -4,6 +4,12 @@
  */
 
 export const LOGBOOK_MENTION_CAP = 15;
+export const LOGBOOK_CHAT_MENTION_MODE = {
+  NAMED: 'named',
+  ALL: 'all',
+} as const;
+export type LogbookChatMentionMode =
+  (typeof LOGBOOK_CHAT_MENTION_MODE)[keyof typeof LOGBOOK_CHAT_MENTION_MODE];
 
 export type LogbookNotifyEventType =
   | 'issue_assigned'
@@ -93,6 +99,7 @@ export type BuildNormalizedLogbookNotificationInput = {
   reason?: string;
   nowMs?: number;
   profiles?: Array<{ userId: string; displayName?: string; email?: string }>;
+  chatMentionMode?: LogbookChatMentionMode;
 };
 
 const EVENT_META: Record<
@@ -264,6 +271,16 @@ export function isLogbookChatNotifyEnabled(
   return !['0', 'false', 'off', 'no'].includes(raw);
 }
 
+export function resolveChatMentionMode(
+  eventType: LogbookNotifyEventType,
+): LogbookChatMentionMode {
+  if (eventType === 'ack_required') return LOGBOOK_CHAT_MENTION_MODE.ALL;
+  if (eventType === 'issue_assigned' || eventType === 'resolution_submitted') {
+    return LOGBOOK_CHAT_MENTION_MODE.NAMED;
+  }
+  return LOGBOOK_CHAT_MENTION_MODE.NAMED;
+}
+
 export function filterForLogbookNotificationType(type: string): LogbookDeepLinkFilter {
   if (type === 'logbook_issue_assigned') return 'my-assigned';
   if (type === 'logbook_resolution_submitted') return 'waiting_approval';
@@ -390,8 +407,13 @@ export function buildNormalizedLogbookNotification(
 
   const mentionIds = selectMentionUserIds(input.recipients);
   const mentionLabels = selectMentionLabels(input.profiles || [], mentionIds);
+  const mentionMode = input.chatMentionMode ?? resolveChatMentionMode(input.eventType);
   const mentionLine =
-    mentionLabels.length > 0 ? mentionLabels.map((l) => `@${l}`).join(' ') : '';
+    mentionMode === LOGBOOK_CHAT_MENTION_MODE.ALL
+      ? '@all'
+      : mentionLabels.length > 0
+        ? mentionLabels.map((l) => `@${l}`).join(' ')
+        : '';
 
   const chatLines = [
     `${meta.icon} ${meta.eventLabel} · ${displayId} · ${summary}`,

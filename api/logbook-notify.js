@@ -21,6 +21,8 @@ import {
   chatDeliveryKey,
   deliveryKeyForRecipient,
   isLogbookChatNotifyEnabled,
+  LOGBOOK_CHAT_MENTION_MODE,
+  resolveChatMentionMode,
 } from './_lib/logbook/notification-content.js';
 import {
   hasStoreAccess,
@@ -617,26 +619,25 @@ async function deliverEvent(req, res, adminDb, actor, body) {
         profiles,
         roomStoreId,
       );
-      // Chat copy without per-user @tokens — rooms use @all (mentionAll).
+      const mentionMode = resolveChatMentionMode(eventType);
       const roomNormalized = buildNormalizedLogbookNotification({
         entry,
         eventType,
         eventVersion,
-        recipients: [],
+        recipients:
+          mentionMode === LOGBOOK_CHAT_MENTION_MODE.NAMED ? roomRecipients : [],
         note: String(body.note || '').trim(),
         reason: String(body.reason || '').trim(),
         actor,
         profiles,
         storeLabel: normalized.storeLabel,
+        chatMentionMode: mentionMode,
       });
-      const baseChatBody = String(
-        roomNormalized.copy.chatBody || roomNormalized.body || '',
-      ).trim();
-      const chatBody = /\B@all\b/i.test(baseChatBody)
-        ? baseChatBody
-        : baseChatBody
-          ? `${baseChatBody}\n@all`
-          : '@all';
+      const chatBody = String(roomNormalized.copy.chatBody || roomNormalized.body || '').trim();
+      const mentionAll = mentionMode === LOGBOOK_CHAT_MENTION_MODE.ALL;
+      const mentionedUserIdsJson = mentionAll
+        ? '[]'
+        : JSON.stringify(roomRecipients);
       // Match human Store Chat sends: fields + Instant store/sender links.
       let chatTx = adminDb.tx.storeChatMessages[id()].update({
         storeId: roomStoreId,
@@ -652,8 +653,8 @@ async function deliverEvent(req, res, adminDb, actor, body) {
         deletedAt: '',
         status: 'active',
         replyToMessageId: '',
-        mentionedUserIdsJson: '[]',
-        mentionAll: true,
+        mentionedUserIdsJson,
+        mentionAll,
         giphyId: '',
         giphyKind: '',
         giphyTitle: '',

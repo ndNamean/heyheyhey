@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  LOGBOOK_CHAT_MENTION_MODE,
   LOGBOOK_MENTION_CAP,
   buildNormalizedLogbookNotification,
   chatDeliveryKey,
@@ -8,6 +9,7 @@ import {
   entryDisplayId,
   filterForLogbookNotificationType,
   isLogbookChatNotifyEnabled,
+  resolveChatMentionMode,
   selectMentionUserIds,
   shouldOpenLogbookResolutionFromNotification,
 } from './logbookNotificationContent';
@@ -104,6 +106,18 @@ describe('logbookNotificationContent', () => {
     expect(selectMentionUserIds(many)).toEqual([]);
   });
 
+  it('resolves chat mention mode by event', () => {
+    expect(resolveChatMentionMode('issue_assigned')).toBe(
+      LOGBOOK_CHAT_MENTION_MODE.NAMED,
+    );
+    expect(resolveChatMentionMode('resolution_submitted')).toBe(
+      LOGBOOK_CHAT_MENTION_MODE.NAMED,
+    );
+    expect(resolveChatMentionMode('ack_required')).toBe(
+      LOGBOOK_CHAT_MENTION_MODE.ALL,
+    );
+  });
+
   it('builds issue_assigned normalized payload with all channels', () => {
     const n = buildNormalizedLogbookNotification({
       entry: baseEntry,
@@ -151,6 +165,7 @@ describe('logbookNotificationContent', () => {
     expect(n.storeLabel).toBe('All stores');
     expect(n.type).toBe('logbook_note_created');
     expect(n.filter).toBe('requires_ack');
+    expect(n.copy.chatBody).toContain('@all');
     expect(n.copy.chatBody).not.toContain('@u0');
     expect(selectMentionUserIds(recipients)).toEqual([]);
   });
