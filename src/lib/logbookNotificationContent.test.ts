@@ -9,6 +9,7 @@ import {
   filterForLogbookNotificationType,
   isLogbookChatNotifyEnabled,
   selectMentionUserIds,
+  shouldOpenLogbookResolutionFromNotification,
 } from './logbookNotificationContent';
 
 describe('logbookNotificationContent', () => {
@@ -59,6 +60,41 @@ describe('logbookNotificationContent', () => {
     );
     expect(filterForLogbookNotificationType('logbook_note_created')).toBe(
       'requires_ack',
+    );
+  });
+
+  it('opens resolution only for issue-resolve notification types', () => {
+    expect(shouldOpenLogbookResolutionFromNotification('logbook_issue_assigned')).toBe(
+      true,
+    );
+    expect(
+      shouldOpenLogbookResolutionFromNotification(
+        'logbook_resolution_correction_requested',
+      ),
+    ).toBe(true);
+    expect(shouldOpenLogbookResolutionFromNotification('logbook_issue_overdue')).toBe(
+      true,
+    );
+    expect(shouldOpenLogbookResolutionFromNotification('logbook_issue_reopened')).toBe(
+      true,
+    );
+    expect(shouldOpenLogbookResolutionFromNotification('logbook_note_created')).toBe(
+      false,
+    );
+    expect(
+      shouldOpenLogbookResolutionFromNotification('logbook_announcement_created'),
+    ).toBe(false);
+    expect(shouldOpenLogbookResolutionFromNotification('logbook_ack_required')).toBe(
+      false,
+    );
+    expect(
+      shouldOpenLogbookResolutionFromNotification('logbook_resolution_submitted'),
+    ).toBe(false);
+    expect(
+      shouldOpenLogbookResolutionFromNotification('logbook_resolution_approved'),
+    ).toBe(false);
+    expect(shouldOpenLogbookResolutionFromNotification('logbook_issue_recalled')).toBe(
+      false,
     );
   });
 

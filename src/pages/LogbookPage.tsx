@@ -407,7 +407,9 @@ export default function LogbookPage({
   /** Active proof panel entry — resolved from all entries, ignoring filters. */
   const activeProofEntry = useMemo(() => {
     if (!proofEntryId) return null;
-    return allEntries.find((e) => e.id === proofEntryId) || null;
+    const entry = allEntries.find((e) => e.id === proofEntryId) || null;
+    if (entry && resolveLogbookEntryType(entry) !== 'issue') return null;
+    return entry;
   }, [allEntries, proofEntryId]);
 
   const storeById = useMemo(() => {
@@ -421,7 +423,13 @@ export default function LogbookPage({
     return allEntries
       .filter((e) => canViewLogbookEntry(profile, e, defs))
       .filter((e) => {
-        if (proofEntryId && e.id === proofEntryId) return false;
+        if (
+          proofEntryId &&
+          e.id === proofEntryId &&
+          resolveLogbookEntryType(e) === 'issue'
+        ) {
+          return false;
+        }
         return entryMatchesLogbookFilters(e, profile, defs, filters, { now, storeById });
       })
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -430,6 +438,16 @@ export default function LogbookPage({
   useEffect(() => {
     clearSession(openResolutionSessionKey());
   }, []);
+
+  useEffect(() => {
+    if (!proofEntryId || !allEntries.length) return;
+    const entry = allEntries.find((e) => e.id === proofEntryId);
+    if (!entry) return;
+    if (resolveLogbookEntryType(entry) !== 'issue') {
+      setProofEntryId(null);
+      clearSession(openResolutionSessionKey());
+    }
+  }, [proofEntryId, allEntries]);
 
   useEffect(() => {
     const { highlightId: nextHighlight, filterKey } = resolveLogbookOpenState({

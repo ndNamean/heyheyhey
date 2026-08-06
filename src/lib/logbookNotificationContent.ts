@@ -277,6 +277,16 @@ export function filterForLogbookNotificationType(type: string): LogbookDeepLinkF
   return 'my-assigned';
 }
 
+/** True only for issue notifications that should auto-open Submit resolution. */
+export function shouldOpenLogbookResolutionFromNotification(type: string): boolean {
+  return (
+    type === 'logbook_issue_assigned' ||
+    type === 'logbook_resolution_correction_requested' ||
+    type === 'logbook_issue_overdue' ||
+    type === 'logbook_issue_reopened'
+  );
+}
+
 function resolveEntryType(
   entry: BuildNormalizedLogbookNotificationInput['entry'],
 ): 'issue' | 'note' | 'announcement' {

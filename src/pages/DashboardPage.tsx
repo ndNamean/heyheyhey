@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../db';
 import FeedbackInbox from '../components/FeedbackInbox';
-import { filterForLogbookNotificationType } from '../lib/logbookNotificationContent';
+import {
+  filterForLogbookNotificationType,
+  shouldOpenLogbookResolutionFromNotification,
+} from '../lib/logbookNotificationContent';
 import ExportModal from '../components/ExportModal';
 import FailureCorrectionHistory from '../components/FailureCorrectionHistory';
 import ScheduledTaskCompletion from '../components/ScheduledTaskCompletion';
@@ -267,7 +270,11 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
           try {
             sessionStorage.setItem('logbookHighlightEntryId', entryId);
             sessionStorage.setItem('logbookInitialFilter', filter);
-            sessionStorage.setItem('logbookOpenResolutionEntryId', entryId);
+            if (shouldOpenLogbookResolutionFromNotification(type || '')) {
+              sessionStorage.setItem('logbookOpenResolutionEntryId', entryId);
+            } else {
+              sessionStorage.removeItem('logbookOpenResolutionEntryId');
+            }
           } catch {
             /* ignore */
           }

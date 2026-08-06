@@ -6,7 +6,6 @@ import { badgeClass, nowIso } from '../lib/utils';
 import { formatIsoToLocalTime } from '../lib/proofTime';
 import {
   isLogbookNotificationType,
-  isNoteAnnouncementNotificationType,
   isStoreChatMentionNotificationType,
 } from '../lib/notifications';
 import ReportTimeline from './ReportTimeline';
@@ -189,9 +188,7 @@ export default function FeedbackInbox({
               <div className="feedback-item-body">{n.body}</div>
               {isLogbook && onOpenLogbookEntry && n.reportId && (
                 <div className="feedback-item-cta">
-                  {isNoteAnnouncementNotificationType(n.type)
-                    ? t.staffHome.openNoteOnHome
-                    : t.logbook.openInLogbook}
+                  {t.logbook.openInLogbook}
                 </div>
               )}
               {isStoreChatMention && n.storeId && (

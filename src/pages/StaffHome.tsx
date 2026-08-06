@@ -17,7 +17,10 @@ import {
   countAssignedOpenOrOverdue,
   isAssignedUnresolvedIssue,
 } from '../lib/logbook';
-import { filterForLogbookNotificationType } from '../lib/logbookNotificationContent';
+import {
+  filterForLogbookNotificationType,
+  shouldOpenLogbookResolutionFromNotification,
+} from '../lib/logbookNotificationContent';
 import type { Page } from '../components/Nav';
 import type { LogbookEntry, Profile } from '../types';
 
@@ -93,7 +96,11 @@ export default function StaffHome({
     try {
       sessionStorage.setItem('logbookHighlightEntryId', entryId);
       sessionStorage.setItem('logbookInitialFilter', filter);
-      sessionStorage.setItem('logbookOpenResolutionEntryId', entryId);
+      if (shouldOpenLogbookResolutionFromNotification(type || '')) {
+        sessionStorage.setItem('logbookOpenResolutionEntryId', entryId);
+      } else {
+        sessionStorage.removeItem('logbookOpenResolutionEntryId');
+      }
     } catch {
       /* ignore */
     }
