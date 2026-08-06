@@ -793,9 +793,9 @@ const _schema = i.schema({
       reverse: { on: '$files', has: 'many', label: 'logbookSourceEntries' },
     },
 
-    // Resolution proof media (one) — latest proof only
+    // Resolution proof media (many) — current-attempt proofs
     logbookEntryResolutionMedia: {
-      forward: { on: 'logbookEntries', has: 'one', label: 'resolutionMedia' },
+      forward: { on: 'logbookEntries', has: 'many', label: 'resolutionMedia' },
       reverse: { on: '$files', has: 'many', label: 'logbookResolutionEntries' },
     },
 

@@ -16,7 +16,7 @@ export type LogbookResolutionDraft = {
   note: string;
   numberValue: string;
   checked: boolean;
-  media: UploadedMedia | null;
+  media: UploadedMedia[];
 };
 
 export function resolveLogbookProofType(
@@ -46,7 +46,7 @@ export function canSubmitResolutionDraft(
   if (needsTick(proofType) && !draft.checked) return false;
   if (needsNote(proofType) && !draft.note.trim()) return false;
   if (needsNumber(proofType) && !draft.numberValue.trim()) return false;
-  if (needsMedia(proofType) && !draft.media) return false;
+  if (needsMedia(proofType) && draft.media.length === 0) return false;
   return true;
 }
 
@@ -55,7 +55,7 @@ export function emptyResolutionDraft(entry?: LogbookEntry): LogbookResolutionDra
     note: entry?.resolutionNote ?? '',
     numberValue: entry?.resolutionNumber ?? '',
     checked: Boolean(entry?.resolutionChecked),
-    media: null,
+    media: [],
   };
 }
 

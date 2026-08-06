@@ -377,36 +377,53 @@ export default function ReviewPage({ profile }: Props) {
                   ))}
                 </div>
               )}
-              {resolutionProofs.length > 0 && (
+              {resolutionProofs.current.length + resolutionProofs.history.length > 0 && (
                 <div style={{ marginTop: 8 }}>
                   <div className="small">{t.logbook.resolutionProof}</div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      gap: 12,
-                      overflowX: 'auto',
-                      paddingBottom: 4,
-                      alignItems: 'flex-start',
-                    }}
-                  >
-                    {resolutionProofs.map((m, idx) => {
-                      const isLatest = idx === resolutionProofs.length - 1;
-                      const label =
-                        resolutionProofs.length === 1
-                          ? t.logbook.proofLatest
-                          : isLatest
-                            ? t.logbook.proofLatest
-                            : t.logbook.proofAttempt.replace('{n}', String(idx + 1));
-                      return (
-                        <div key={m.id} style={{ flex: '0 0 auto', minWidth: 120 }}>
-                          <div className="small" style={{ marginBottom: 4 }}>
-                            {label}
+                  {resolutionProofs.current.length > 0 && (
+                    <div style={{ marginTop: 6 }}>
+                      <div className="small" style={{ marginBottom: 4 }}>
+                        {t.logbook.proofLatest}
+                      </div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: 12,
+                          overflowX: 'auto',
+                          paddingBottom: 4,
+                          alignItems: 'flex-start',
+                        }}
+                      >
+                        {resolutionProofs.current.map((m) => (
+                          <div key={m.id} style={{ flex: '0 0 auto', minWidth: 120 }}>
+                            <ProofPhoto media={{ id: m.id, url: m.url }} />
                           </div>
-                          <ProofPhoto media={{ id: m.id, url: m.url }} />
-                        </div>
-                      );
-                    })}
-                  </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {resolutionProofs.history.length > 0 && (
+                    <div style={{ marginTop: 8 }}>
+                      <div className="small" style={{ marginBottom: 4 }}>
+                        {t.logbook.proofPrevious}
+                      </div>
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: 12,
+                          overflowX: 'auto',
+                          paddingBottom: 4,
+                          alignItems: 'flex-start',
+                        }}
+                      >
+                        {resolutionProofs.history.map((m) => (
+                          <div key={m.id} style={{ flex: '0 0 auto', minWidth: 120 }}>
+                            <ProofPhoto media={{ id: m.id, url: m.url }} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               {entryEvents.length > 0 && (

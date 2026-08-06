@@ -344,7 +344,7 @@ export function isPristineLogbookIssue(entry: LogbookEntry): boolean {
     }
   }
   if (entry.photo?.id) return false;
-  if (entry.resolutionMedia?.id) return false;
+  if (normalizeResolutionMediaList(entry.resolutionMedia).length > 0) return false;
   if ((entry.sourceMedia ?? []).length > 0) return false;
   return true;
 }
@@ -670,24 +670,37 @@ export function resolveSourceMedia(entry: LogbookEntry): LogbookFileRef[] {
   return [];
 }
 
-export function resolveResolutionMedia(entry: LogbookEntry): LogbookFileRef | null {
-  if (entry.resolutionMedia?.id) return entry.resolutionMedia;
-  // Legacy photo after resolution submit → resolution proof
-  if (entry.photo?.id && (entry.resolutionSubmittedAt ?? '').trim()) {
-    return entry.photo;
-  }
-  return null;
+/** Normalize Instant resolutionMedia: array (many) or legacy single object. */
+export function normalizeResolutionMediaList(
+  media: LogbookFileRef | LogbookFileRef[] | null | undefined,
+): LogbookFileRef[] {
+  if (!media) return [];
+  if (Array.isArray(media)) return media.filter((f) => f?.id);
+  if (media.id) return [media];
+  return [];
 }
 
-/** Ordered proofs for UI: history + current if missing (dedupe by id). */
-export function resolveResolutionProofs(entry: LogbookEntry): LogbookFileRef[] {
-  const history = (entry.resolutionProofHistory ?? []).filter((f) => f?.id);
-  const seen = new Set(history.map((f) => f.id));
-  const current = resolveResolutionMedia(entry);
-  if (current?.id && !seen.has(current.id)) {
-    return [...history, current];
+export function resolveResolutionMedia(entry: LogbookEntry): LogbookFileRef[] {
+  const linked = normalizeResolutionMediaList(entry.resolutionMedia);
+  if (linked.length) return linked;
+  // Legacy photo after resolution submit → resolution proof
+  if (entry.photo?.id && (entry.resolutionSubmittedAt ?? '').trim()) {
+    return [entry.photo];
   }
-  return history.length ? history : current?.id ? [current] : [];
+  return [];
+}
+
+/** Current-attempt proofs vs prior history (history excludes current ids). */
+export function resolveResolutionProofs(entry: LogbookEntry): {
+  current: LogbookFileRef[];
+  history: LogbookFileRef[];
+} {
+  const current = resolveResolutionMedia(entry);
+  const currentIds = new Set(current.map((f) => f.id));
+  const history = (entry.resolutionProofHistory ?? []).filter(
+    (f) => f?.id && !currentIds.has(f.id),
+  );
+  return { current, history };
 }
 
 export function logSubmitStepFailure(info: {

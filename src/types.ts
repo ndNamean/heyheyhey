@@ -718,7 +718,7 @@ export interface LogbookEntry {
   /** Legacy single photo link ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â interpret via resolveLogbookMedia helpers */
   photo?: LogbookFileRef;
   sourceMedia?: LogbookFileRef[];
-  resolutionMedia?: LogbookFileRef;
+  resolutionMedia?: LogbookFileRef[];
   /** Append-only list of all submitted resolution proofs (including current). */
   resolutionProofHistory?: LogbookFileRef[];
 }

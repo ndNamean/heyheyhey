@@ -41,6 +41,7 @@ import {
 } from './logbookMetrics';
 import {
   canSubmitResolutionDraft,
+  emptyResolutionDraft,
   hasCorrectionFeedback,
   isSameResolutionAttempt,
   resolveLogbookProofType,
@@ -502,7 +503,7 @@ describe('media separation', () => {
       photo: { id: 'f1', url: 'https://x/a.jpg' },
     });
     expect(resolveSourceMedia(before)).toEqual([{ id: 'f1', url: 'https://x/a.jpg' }]);
-    expect(resolveResolutionMedia(before)).toBeNull();
+    expect(resolveResolutionMedia(before)).toEqual([]);
 
     const after = entry({
       entryType: 'issue',
@@ -510,7 +511,7 @@ describe('media separation', () => {
       photo: { id: 'f1', url: 'https://x/a.jpg' },
     });
     expect(resolveSourceMedia(after)).toEqual([]);
-    expect(resolveResolutionMedia(after)?.id).toBe('f1');
+    expect(resolveResolutionMedia(after).map((f) => f.id)).toEqual(['f1']);
   });
 
   it('prefers explicit sourceMedia / resolutionMedia links', () => {
@@ -519,37 +520,70 @@ describe('media separation', () => {
       resolutionSubmittedAt: '2026-07-21T12:00:00.000Z',
       photo: { id: 'legacy', url: 'https://x/l.jpg' },
       sourceMedia: [{ id: 's1', url: 'https://x/s.jpg' }],
-      resolutionMedia: { id: 'r1', url: 'https://x/r.jpg' },
+      resolutionMedia: [{ id: 'r1', url: 'https://x/r.jpg' }],
     });
     expect(resolveSourceMedia(e)[0]?.id).toBe('s1');
-    expect(resolveResolutionMedia(e)?.id).toBe('r1');
+    expect(resolveResolutionMedia(e).map((f) => f.id)).toEqual(['r1']);
   });
 
-  it('resolveResolutionProofs merges history and current without dupes', () => {
+  it('normalizes legacy single-object resolutionMedia to an array', () => {
+    const e = entry({
+      entryType: 'issue',
+      resolutionSubmittedAt: '2026-07-21T12:00:00.000Z',
+      // Simulate cached Instant "one" shape during rollout
+      resolutionMedia: { id: 'r1', url: 'https://x/r.jpg' } as unknown as LogbookEntry['resolutionMedia'],
+    });
+    expect(resolveResolutionMedia(e).map((f) => f.id)).toEqual(['r1']);
+  });
+
+  it('resolveResolutionMedia returns all current proofs', () => {
+    const e = entry({
+      entryType: 'issue',
+      resolutionSubmittedAt: '2026-07-21T12:00:00.000Z',
+      resolutionMedia: [
+        { id: 'r1', url: 'https://x/r1.jpg' },
+        { id: 'r2', url: 'https://x/r2.jpg' },
+      ],
+    });
+    expect(resolveResolutionMedia(e).map((f) => f.id)).toEqual(['r1', 'r2']);
+  });
+
+  it('resolveResolutionProofs separates current vs history', () => {
     const a = { id: 'a', url: 'https://x/a.jpg' };
     const b = { id: 'b', url: 'https://x/b.jpg' };
+    const c = { id: 'c', url: 'https://x/c.jpg' };
+
     const withHistory = entry({
       entryType: 'issue',
       resolutionSubmittedAt: '2026-07-21T12:00:00.000Z',
-      resolutionProofHistory: [a, b],
-      resolutionMedia: b,
+      resolutionProofHistory: [a, b, c],
+      resolutionMedia: [b, c],
     });
-    expect(resolveResolutionProofs(withHistory).map((f) => f.id)).toEqual(['a', 'b']);
+    expect(resolveResolutionProofs(withHistory)).toEqual({
+      current: [b, c],
+      history: [a],
+    });
 
     const currentOnly = entry({
       entryType: 'issue',
       resolutionSubmittedAt: '2026-07-21T12:00:00.000Z',
-      resolutionMedia: b,
+      resolutionMedia: [b, c],
     });
-    expect(resolveResolutionProofs(currentOnly).map((f) => f.id)).toEqual(['b']);
+    expect(resolveResolutionProofs(currentOnly)).toEqual({
+      current: [b, c],
+      history: [],
+    });
 
     const historyMissingCurrent = entry({
       entryType: 'issue',
       resolutionSubmittedAt: '2026-07-21T12:00:00.000Z',
       resolutionProofHistory: [a],
-      resolutionMedia: b,
+      resolutionMedia: [b],
     });
-    expect(resolveResolutionProofs(historyMissingCurrent).map((f) => f.id)).toEqual(['a', 'b']);
+    expect(resolveResolutionProofs(historyMissingCurrent)).toEqual({
+      current: [b],
+      history: [a],
+    });
   });
 });
 
@@ -561,13 +595,36 @@ describe('resolution proof types', () => {
     );
   });
 
+  it('emptyResolutionDraft starts with empty media array', () => {
+    expect(emptyResolutionDraft()).toEqual({
+      note: '',
+      numberValue: '',
+      checked: false,
+      media: [],
+    });
+    expect(
+      emptyResolutionDraft(
+        entry({
+          resolutionNote: 'prior',
+          resolutionNumber: '3',
+          resolutionChecked: true,
+        }),
+      ),
+    ).toEqual({
+      note: 'prior',
+      numberValue: '3',
+      checked: true,
+      media: [],
+    });
+  });
+
   it('validates draft requirements per proof type', () => {
     expect(
       canSubmitResolutionDraft('tick', {
         note: '',
         numberValue: '',
         checked: true,
-        media: null,
+        media: [],
       }),
     ).toBe(true);
     expect(
@@ -575,7 +632,7 @@ describe('resolution proof types', () => {
         note: '',
         numberValue: '',
         checked: false,
-        media: null,
+        media: [],
       }),
     ).toBe(false);
     expect(
@@ -583,7 +640,7 @@ describe('resolution proof types', () => {
         note: 'done',
         numberValue: '',
         checked: false,
-        media: null,
+        media: [],
       }),
     ).toBe(true);
     expect(
@@ -591,7 +648,7 @@ describe('resolution proof types', () => {
         note: 'done',
         numberValue: '',
         checked: false,
-        media: null,
+        media: [],
       }),
     ).toBe(false);
     expect(
@@ -599,14 +656,41 @@ describe('resolution proof types', () => {
         note: 'done',
         numberValue: '',
         checked: false,
-        media: {
-          mediaRecordId: 'm1',
-          fileId: 'f1',
-          url: 'https://example.com/a.jpg',
-          fileName: 'a.jpg',
-          photoCode: 'x',
-          capturedAt: '2026-07-21T12:00:00.000Z',
-        },
+        media: [
+          {
+            mediaRecordId: 'm1',
+            fileId: 'f1',
+            url: 'https://example.com/a.jpg',
+            fileName: 'a.jpg',
+            photoCode: 'x',
+            capturedAt: '2026-07-21T12:00:00.000Z',
+          },
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      canSubmitResolutionDraft('photo', {
+        note: '',
+        numberValue: '',
+        checked: false,
+        media: [
+          {
+            mediaRecordId: 'm1',
+            fileId: 'f1',
+            url: 'https://example.com/a.jpg',
+            fileName: 'a.jpg',
+            photoCode: 'x',
+            capturedAt: '2026-07-21T12:00:00.000Z',
+          },
+          {
+            mediaRecordId: 'm2',
+            fileId: 'f2',
+            url: 'https://example.com/b.jpg',
+            fileName: 'b.jpg',
+            photoCode: 'y',
+            capturedAt: '2026-07-21T12:01:00.000Z',
+          },
+        ],
       }),
     ).toBe(true);
   });

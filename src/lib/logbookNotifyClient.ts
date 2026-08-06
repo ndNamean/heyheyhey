@@ -44,10 +44,16 @@ export async function postLogbookSubmitResolution(params: {
   note: string;
   resolutionNumber: string;
   resolutionChecked: boolean;
+  /** Preferred: all proof file ids for this attempt. */
+  fileIds?: string[];
+  /** Legacy single-file submit; coerced to fileIds on the server. */
   fileId?: string;
 }): Promise<LogbookSubmitResolutionResult> {
   try {
     const headers = await getAuthHeaders();
+    const fileIds =
+      params.fileIds?.filter(Boolean) ??
+      (params.fileId ? [params.fileId] : []);
     const resp = await fetch('/api/logbook-notify', {
       method: 'POST',
       headers,
@@ -58,7 +64,9 @@ export async function postLogbookSubmitResolution(params: {
         note: params.note,
         resolutionNumber: params.resolutionNumber,
         resolutionChecked: params.resolutionChecked,
-        fileId: params.fileId || '',
+        fileIds,
+        // Keep legacy key for older clients / debugging.
+        fileId: fileIds[0] || '',
       }),
     });
     const data = (await resp.json().catch(() => ({}))) as {

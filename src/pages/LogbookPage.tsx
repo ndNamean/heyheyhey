@@ -639,7 +639,7 @@ export default function LogbookPage({
       setSubmitError(t.logbook.resolutionIncomplete);
       return;
     }
-    if (needsMedia(proofType) && !draft.media) {
+    if (needsMedia(proofType) && draft.media.length === 0) {
       setSubmitError(t.logbook.resolutionIncomplete);
       return;
     }
@@ -661,7 +661,7 @@ export default function LogbookPage({
       note,
       resolutionNumber: draft.numberValue.trim(),
       resolutionChecked: draft.checked,
-      fileId: draft.media?.fileId,
+      fileIds: draft.media.map((m) => m.fileId),
     });
     if (!stageA.ok) {
       const raw = stageA.message;
@@ -1856,58 +1856,78 @@ export default function LogbookPage({
               <div className="small" style={{ marginBottom: 4 }}>
                 {t.logbook.resolutionProof} *
               </div>
-              {draft.media ? (
+              {draft.media.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                  {draft.media.map((media) => (
+                    <div key={media.fileId} style={{ minWidth: 120 }}>
+                      <ProofPhoto
+                        media={{
+                          id: media.fileId,
+                          url: media.url,
+                          fileName: media.fileName,
+                          mimeType: media.mimeType,
+                        }}
+                      />
+                      <p className="small">
+                        {media.capturedAt
+                          ? new Date(media.capturedAt).toLocaleString()
+                          : ''}
+                      </p>
+                      <button
+                        type="button"
+                        className="secondary"
+                        style={{ marginTop: 6 }}
+                        onClick={() =>
+                          setDraft((d) => ({
+                            ...d,
+                            media: d.media.filter((m) => m.fileId !== media.fileId),
+                          }))
+                        }
+                      >
+                        {t.logbook.removeProof}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!showCamera ? (
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setShowCamera(true)}
+                >
+                  {t.logbook.addSourceMedia}
+                </button>
+              ) : (
                 <div>
-                  <ProofPhoto
-                    media={{
-                      id: draft.media.fileId,
-                      url: draft.media.url,
-                      fileName: draft.media.fileName,
-                      mimeType: draft.media.mimeType,
+                  <TimemarkCamera
+                    store={proofStore}
+                    itemTitle={`Logbook Issue · ${proofEntry.content.slice(0, 40)}`}
+                    reportDate={proofEntry.date}
+                    proofContext={{
+                      type: 'logbook',
+                      logbookEntryId: proofEntry.id,
+                      storeId: proofEntry.storeId,
+                      content: proofEntry.content,
+                      mediaPurpose: 'resolution_proof',
+                    }}
+                    profile={profile}
+                    proofType={proofType}
+                    existingMedia={[]}
+                    onCapture={(media: UploadedMedia) => {
+                      setDraft((d) => ({ ...d, media: [...d.media, media] }));
+                      setShowCamera(false);
                     }}
                   />
-                  <p className="small">
-                    {draft.media.capturedAt
-                      ? new Date(draft.media.capturedAt).toLocaleString()
-                      : ''}
-                  </p>
-                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() => setDraft({ ...draft, media: null })}
-                    >
-                      {t.camera.retake}
-                    </button>
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() => setDraft({ ...draft, media: null })}
-                    >
-                      {t.logbook.removeProof}
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    className="secondary"
+                    style={{ marginTop: 8 }}
+                    onClick={() => setShowCamera(false)}
+                  >
+                    {t.common.cancel}
+                  </button>
                 </div>
-              ) : (
-                <TimemarkCamera
-                  store={proofStore}
-                  itemTitle={`Logbook Issue · ${proofEntry.content.slice(0, 40)}`}
-                  reportDate={proofEntry.date}
-                  proofContext={{
-                    type: 'logbook',
-                    logbookEntryId: proofEntry.id,
-                    storeId: proofEntry.storeId,
-                    content: proofEntry.content,
-                    mediaPurpose: 'resolution_proof',
-                  }}
-                  profile={profile}
-                  proofType={proofType}
-                  existingMedia={[]}
-                  onCapture={(media: UploadedMedia) => {
-                    setDraft((d) => ({ ...d, media }));
-                    setShowCamera(false);
-                  }}
-                />
               )}
             </div>
           )}
@@ -2241,36 +2261,53 @@ export default function LogbookPage({
                 ))}
               </div>
             )}
-            {resolutionProofs.length > 0 && (
+            {resolutionProofs.current.length + resolutionProofs.history.length > 0 && (
               <div style={{ marginTop: 8 }}>
                 <div className="small">{t.logbook.resolutionProof}</div>
-                <div
-                  style={{
-                    display: 'flex',
-                    gap: 12,
-                    overflowX: 'auto',
-                    paddingBottom: 4,
-                    alignItems: 'flex-start',
-                  }}
-                >
-                  {resolutionProofs.map((m, idx) => {
-                    const isLatest = idx === resolutionProofs.length - 1;
-                    const label =
-                      resolutionProofs.length === 1
-                        ? t.logbook.proofLatest
-                        : isLatest
-                          ? t.logbook.proofLatest
-                          : t.logbook.proofAttempt.replace('{n}', String(idx + 1));
-                    return (
-                      <div key={m.id} style={{ flex: '0 0 auto', minWidth: 120 }}>
-                        <div className="small" style={{ marginBottom: 4 }}>
-                          {label}
+                {resolutionProofs.current.length > 0 && (
+                  <div style={{ marginTop: 6 }}>
+                    <div className="small" style={{ marginBottom: 4 }}>
+                      {t.logbook.proofLatest}
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: 12,
+                        overflowX: 'auto',
+                        paddingBottom: 4,
+                        alignItems: 'flex-start',
+                      }}
+                    >
+                      {resolutionProofs.current.map((m) => (
+                        <div key={m.id} style={{ flex: '0 0 auto', minWidth: 120 }}>
+                          <ProofPhoto media={{ id: m.id, url: m.url }} />
                         </div>
-                        <ProofPhoto media={{ id: m.id, url: m.url }} />
-                      </div>
-                    );
-                  })}
-                </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {resolutionProofs.history.length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <div className="small" style={{ marginBottom: 4 }}>
+                      {t.logbook.proofPrevious}
+                    </div>
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: 12,
+                        overflowX: 'auto',
+                        paddingBottom: 4,
+                        alignItems: 'flex-start',
+                      }}
+                    >
+                      {resolutionProofs.history.map((m) => (
+                        <div key={m.id} style={{ flex: '0 0 auto', minWidth: 120 }}>
+                          <ProofPhoto media={{ id: m.id, url: m.url }} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             {type === 'issue' && (entry.resolutionNote || entry.resolutionNumber || entry.resolutionChecked) && (
