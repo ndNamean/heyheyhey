@@ -49,6 +49,7 @@ export function mockUseLang(overrides?: { lang?: string; isRtl?: boolean }) {
         ...extraCommonEn,
       },
       storeChat: pack.storeChat,
+      floatingAssistant: pack.floatingAssistant,
     },
   };
 }

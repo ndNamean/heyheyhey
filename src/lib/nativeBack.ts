@@ -15,6 +15,8 @@ export const BACK_PRIORITY = {
   PAGE: 10,
   WIZARD: 20,
   MODAL: 30,
+  /** Exit floating-assistant Focus before closing the panel (MODAL). */
+  ASSISTANT_FOCUS: 35,
   CAMERA: 40,
   POST_CAPTURE: 45,
   CAMERA_OPTIONS: 50,

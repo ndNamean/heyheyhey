@@ -1,5 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useLang } from '../../i18n';
 import type { Profile, Store } from '../../types';
+import type { AssistantPanelMode, FormFactor } from './assistantPanelLayout';
 import AssistantTabs, { type AssistantTabId } from './AssistantTabs';
 import AuthorizedStoreSelector from './AuthorizedStoreSelector';
 import KnowledgeAssistantPanel from './KnowledgeAssistantPanel';
@@ -11,10 +13,37 @@ import type {
   ComposerVisualState,
 } from './useComposerVisualState';
 import type { LauncherSide } from './useFloatingLauncherPosition';
+import { useFocusModeA11y } from './useFocusModeA11y';
+import { useMobileSheetSnap } from './useMobileSheetSnap';
+import { usePanelResize } from './usePanelResize';
 import type { UnreadSenderSummary } from './useUnreadStoreChat';
 
 const KNOWLEDGE_PANEL_ID = 'fa-panel-knowledge';
 const STORE_CHAT_PANEL_ID = 'fa-panel-store-chat';
+
+export type PanelLayoutProps = {
+  mode: AssistantPanelMode;
+  formFactor: FormFactor;
+  width: number;
+  height: number;
+  keyboardInset: number;
+  finePointer: boolean;
+  resizing: boolean;
+  sheetDragging: boolean;
+  onExpand: () => void;
+  onCollapse: () => void;
+  onEnterFocus: () => void;
+  onExitFocus: () => void;
+  onResetSize: () => void;
+  onDesktopSize: (width: number, height: number, opts?: { persist?: boolean }) => void;
+  onResizeStart: () => void;
+  onResizeEnd: (width: number, height: number) => void;
+  onSheetHeight: (height: number) => void;
+  onSheetSnap: (mode: 'compact' | 'expanded') => void;
+  onSheetDragStart: () => void;
+  onSheetDragEnd: () => void;
+  onSheetCloseRequest: () => void;
+};
 
 interface Props {
   open: boolean;
@@ -37,6 +66,16 @@ interface Props {
   unreadSendersByStore: Record<string, UnreadSenderSummary[]>;
   initialStoreChatMessageId: string;
   onInitialStoreChatMessageHandled: () => void;
+  layout: PanelLayoutProps;
+}
+
+function ariaForMode(
+  mode: AssistantPanelMode,
+  labels: { ariaCompact: string; ariaExpanded: string; ariaFocus: string },
+): string {
+  if (mode === 'focus') return labels.ariaFocus;
+  if (mode === 'expanded') return labels.ariaExpanded;
+  return labels.ariaCompact;
 }
 
 export default function FloatingAssistantPanel({
@@ -60,45 +99,269 @@ export default function FloatingAssistantPanel({
   unreadSendersByStore,
   initialStoreChatMessageId,
   onInitialStoreChatMessageHandled,
+  layout,
 }: Props) {
+  const { t } = useLang();
+  const fa = t.floatingAssistant;
   const panelRef = useRef<HTMLDivElement>(null);
+  const exitFocusRef = useRef<HTMLButtonElement>(null);
+  const moreWrapRef = useRef<HTMLDivElement>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const wasOpenRef = useRef(false);
+
+  const {
+    mode,
+    formFactor,
+    width,
+    height,
+    keyboardInset,
+    finePointer,
+    resizing,
+    sheetDragging,
+    onExpand,
+    onCollapse,
+    onEnterFocus,
+    onExitFocus,
+    onResetSize,
+    onDesktopSize,
+    onResizeStart,
+    onResizeEnd,
+    onSheetHeight,
+    onSheetSnap,
+    onSheetDragStart,
+    onSheetDragEnd,
+    onSheetCloseRequest,
+  } = layout;
+
+  const isMobile = formFactor === 'mobile';
+  const showResizeGrip = !isMobile && finePointer && mode !== 'focus';
+  const persistableMode = mode === 'focus' ? 'expanded' : mode;
+
+  useFocusModeA11y({
+    enabled: open && mode === 'focus',
+    panelRef,
+    initialFocusRef: exitFocusRef,
+  });
+
+  const { onPointerDown: onResizePointerDown } = usePanelResize({
+    enabled: open && showResizeGrip,
+    dock: side,
+    width,
+    height,
+    onResize: (w, h) => onDesktopSize(w, h, { persist: false }),
+    onResizeStart,
+    onResizeEnd: (w, h) => {
+      onDesktopSize(w, h, { persist: true });
+      onResizeEnd(w, h);
+    },
+  });
+
+  const { onHandlePointerDown } = useMobileSheetSnap({
+    enabled: open && isMobile,
+    mode: persistableMode,
+    viewportHeight: typeof window !== 'undefined' ? window.innerHeight : 800,
+    onHeightChange: onSheetHeight,
+    onSnap: onSheetSnap,
+    onCloseRequest: onSheetCloseRequest,
+    onDragStart: onSheetDragStart,
+    onDragEnd: onSheetDragEnd,
+  });
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      wasOpenRef.current = false;
+      setMoreOpen(false);
+      return;
+    }
+    if (wasOpenRef.current) return;
+    wasOpenRef.current = true;
     const el = panelRef.current;
     if (!el) return;
     const closeBtn = el.querySelector<HTMLElement>('.fa-panel-close');
     (closeBtn ?? el).focus();
   }, [open]);
 
+  useEffect(() => {
+    if (!moreOpen) return;
+    function onDocPointer(event: MouseEvent) {
+      const wrap = moreWrapRef.current;
+      if (!wrap) return;
+      if (event.target instanceof Node && wrap.contains(event.target)) return;
+      setMoreOpen(false);
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMoreOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', onDocPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [moreOpen]);
+
   if (!open) return null;
+
+  const style: CSSProperties = {
+    ['--fa-panel-width' as string]: `${width}px`,
+    ['--fa-panel-height' as string]: `${height}px`,
+    ['--fa-keyboard-inset' as string]: `${keyboardInset}px`,
+  };
+
+  const className = [
+    'fa-panel',
+    `fa-panel--${side}`,
+    resizing ? 'is-resizing' : '',
+    sheetDragging ? 'is-sheet-dragging' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <div
       ref={panelRef}
       id={FLOATING_ASSISTANT_PANEL_ID}
-      className={`fa-panel fa-panel--${side}`}
+      className={className}
+      style={style}
       role="dialog"
-      aria-modal="false"
-      aria-label="Assistant and store chat"
+      aria-modal={mode === 'focus' ? 'true' : 'false'}
+      aria-label={ariaForMode(mode, fa)}
       tabIndex={-1}
       data-panel-state="open"
+      data-mode={mode}
+      data-form-factor={formFactor}
       data-composer-state={composerState}
       data-key-flash={keyFlash ? 'true' : undefined}
     >
+      {isMobile && mode !== 'focus' ? (
+        <div
+          className="fa-panel-sheet-handle"
+          role="separator"
+          aria-label={fa.sheetHandle}
+          onPointerDown={onHandlePointerDown}
+        >
+          <span className="fa-panel-sheet-handle-bar" aria-hidden="true" />
+        </div>
+      ) : null}
+
+      {showResizeGrip ? (
+        <div
+          className={`fa-panel-resize-grip fa-panel-resize-grip--${side === 'right' ? 'tl' : 'tr'}`}
+          aria-hidden="true"
+          onPointerDown={onResizePointerDown}
+        >
+          <span className="fa-panel-resize-grip-glyph" />
+        </div>
+      ) : null}
+
       <header className="fa-panel-header">
         <div className="fa-panel-header-text">
           <h2 className="fa-panel-title">Assistant</h2>
           <p className="fa-panel-subtitle small">Knowledge & store chat</p>
         </div>
-        <button
-          type="button"
-          className="fa-panel-close"
-          aria-label="Close assistant"
-          onClick={onClose}
-        >
-          ×
-        </button>
+        <div className="fa-panel-header-actions">
+          {mode === 'compact' ? (
+            <button
+              type="button"
+              className="fa-panel-action"
+              aria-label={fa.expandPanel}
+              title={fa.expand}
+              onClick={onExpand}
+            >
+              ⤢
+            </button>
+          ) : null}
+          {mode === 'expanded' ? (
+            <>
+              <button
+                type="button"
+                className="fa-panel-action"
+                aria-label={fa.collapsePanel}
+                title={fa.collapse}
+                onClick={onCollapse}
+              >
+                ⤡
+              </button>
+              <button
+                type="button"
+                className="fa-panel-action"
+                aria-label={fa.enterFocusMode}
+                title={fa.focus}
+                onClick={onEnterFocus}
+              >
+                ⛶
+              </button>
+            </>
+          ) : null}
+          {mode === 'focus' ? (
+            <button
+              ref={exitFocusRef}
+              type="button"
+              className="fa-panel-action"
+              aria-label={fa.exitFocusMode}
+              title={fa.exitFocus}
+              onClick={onExitFocus}
+            >
+              ⛶
+            </button>
+          ) : null}
+
+          <div className="fa-panel-more-wrap" ref={moreWrapRef}>
+            <button
+              type="button"
+              className="fa-panel-action"
+              aria-label={fa.morePanelActions}
+              aria-haspopup="menu"
+              aria-expanded={moreOpen}
+              title={fa.morePanelActions}
+              onClick={() => setMoreOpen((v) => !v)}
+            >
+              ⋯
+            </button>
+            {moreOpen ? (
+              <div className="fa-panel-more-menu" role="menu">
+                {!isMobile ? (
+                  <button
+                    type="button"
+                    className="fa-panel-more-item"
+                    role="menuitem"
+                    onClick={() => {
+                      onResetSize();
+                      setMoreOpen(false);
+                    }}
+                  >
+                    {fa.resetPanelSize}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="fa-panel-more-item"
+                    role="menuitem"
+                    onClick={() => {
+                      if (mode === 'expanded') onCollapse();
+                      else onExpand();
+                      setMoreOpen(false);
+                    }}
+                  >
+                    {mode === 'expanded' ? fa.collapsePanel : fa.expandPanel}
+                  </button>
+                )}
+              </div>
+            ) : null}
+          </div>
+
+          <button
+            type="button"
+            className="fa-panel-close"
+            aria-label="Close assistant"
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </div>
       </header>
 
       <div className="fa-panel-store">

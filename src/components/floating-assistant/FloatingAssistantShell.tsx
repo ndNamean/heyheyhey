@@ -10,6 +10,7 @@ import { OPEN_LOGBOOK_EVENT } from '../../lib/logbookDeepLink';
 import FloatingAssistantLauncher from './FloatingAssistantLauncher';
 import FloatingAssistantPanel from './FloatingAssistantPanel';
 import { type AssistantTabId } from './AssistantTabs';
+import { useAssistantPanelLayout } from './useAssistantPanelLayout';
 import { useAuthorizedChatStores } from './useAuthorizedChatStores';
 import { useComposerVisualState } from './useComposerVisualState';
 import { useFloatingLauncherPosition } from './useFloatingLauncherPosition';
@@ -70,6 +71,8 @@ export default function FloatingAssistantShell({ profile }: Props) {
     beginPointerDrag,
   } = useFloatingLauncherPosition();
 
+  const layout = useAssistantPanelLayout(open);
+
   const isViewer = profile.role === 'viewer';
   const canSend = !isViewer;
   const storeChatComposerEnabled = open && activeTab === 'store-chat' && canSend;
@@ -124,6 +127,16 @@ export default function FloatingAssistantShell({ profile }: Props) {
 
   useNativeBack(
     () => {
+      if (!open || layout.mode !== 'focus') return false;
+      layout.exitFocus();
+      return true;
+    },
+    open && layout.mode === 'focus',
+    BACK_PRIORITY.ASSISTANT_FOCUS,
+  );
+
+  useNativeBack(
+    () => {
       if (!open) return false;
       close();
       return true;
@@ -170,6 +183,7 @@ export default function FloatingAssistantShell({ profile }: Props) {
       className="floating-assistant-root"
       data-panel-state={open ? 'open' : 'closed'}
       data-composer-state={composerState}
+      data-fa-mode={layout.mode}
     >
       <FloatingAssistantLauncher
         open={open}
@@ -207,6 +221,29 @@ export default function FloatingAssistantShell({ profile }: Props) {
         unreadSendersByStore={unreadSendersByStore}
         initialStoreChatMessageId={initialStoreChatMessageId}
         onInitialStoreChatMessageHandled={() => setInitialStoreChatMessageId('')}
+        layout={{
+          mode: layout.mode,
+          formFactor: layout.formFactor,
+          width: layout.width,
+          height: layout.height,
+          keyboardInset: layout.keyboardInset,
+          finePointer: layout.finePointer,
+          resizing: layout.resizing,
+          sheetDragging: layout.sheetDragging,
+          onExpand: layout.expand,
+          onCollapse: layout.collapse,
+          onEnterFocus: layout.enterFocus,
+          onExitFocus: layout.exitFocus,
+          onResetSize: layout.resetSize,
+          onDesktopSize: layout.setDesktopSize,
+          onResizeStart: () => layout.setResizing(true),
+          onResizeEnd: () => layout.setResizing(false),
+          onSheetHeight: layout.setMobileHeight,
+          onSheetSnap: layout.snapMobile,
+          onSheetDragStart: () => layout.setSheetDragging(true),
+          onSheetDragEnd: () => layout.setSheetDragging(false),
+          onSheetCloseRequest: close,
+        }}
       />
     </div>
   );
