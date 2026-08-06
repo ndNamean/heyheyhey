@@ -78,6 +78,25 @@ function emptyLogbookNotifFields(storeId, entryId, actionStatus) {
   };
 }
 
+function ensureDeepLinkJson(normalized, entry, roomStoreId) {
+  const existing = String(normalized?.deepLinkJson || '').trim();
+  if (existing) {
+    try {
+      const parsed = JSON.parse(existing);
+      if (parsed?.entryId) return existing;
+    } catch {
+      /* fall through */
+    }
+  }
+  const entryId = String(entry?.id || '').trim();
+  if (!entryId) return existing;
+  return JSON.stringify({
+    entryId,
+    filter: String(normalized?.filter || 'my-assigned'),
+    storeId: roomStoreId || entry.storeId || normalized.storeId || undefined,
+  });
+}
+
 function issueSnippet(entry) {
   return String(entry.content || '').trim().slice(0, 120) || 'Logbook issue';
 }
@@ -535,7 +554,7 @@ async function deliverEvent(req, res, adminDb, actor, body) {
         readAt: '',
         createdAt: nowIso(),
         deliveryKey,
-        deepLinkJson: normalized.deepLinkJson,
+        deepLinkJson: ensureDeepLinkJson(normalized, entry, entry.storeId),
         ...emptyLogbookNotifFields(
           entry.storeId || '',
           entry.id,
@@ -642,7 +661,11 @@ async function deliverEvent(req, res, adminDb, actor, body) {
           logbookEventType: eventType,
           actionType: normalized.actionType,
           targetUserIdsJson: JSON.stringify(roomRecipients),
-          deepLinkJson: normalized.deepLinkJson,
+          deepLinkJson: ensureDeepLinkJson(
+            normalized,
+            entry,
+            roomStoreId || entry.storeId,
+          ),
           statusSnapshot: normalized.statusSnapshot,
           chatDeliveryKey: key,
         }),

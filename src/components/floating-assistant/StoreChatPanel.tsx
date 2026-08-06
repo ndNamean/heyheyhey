@@ -57,7 +57,10 @@ import {
   type StoreChatTranslationState,
 } from '../../lib/storeChatTranslation';
 import { nowIso } from '../../lib/utils';
-import { OPEN_LOGBOOK_EVENT, parseLogbookDeepLinkJson } from '../../lib/logbookDeepLink';
+import {
+  OPEN_LOGBOOK_EVENT,
+  resolveStoreChatLogbookDeepLink,
+} from '../../lib/logbookDeepLink';
 import type { Profile, Store, StoreChatMessage } from '../../types';
 import ProfileAvatar from '../profileAvatar/ProfileAvatar';
 import ProfileAvatarPreview from '../profileAvatar/ProfileAvatarPreview';
@@ -207,6 +210,7 @@ function buildActionContext(params: {
   translationAvailable: boolean;
   isBookmarked: boolean;
   canForward: boolean;
+  isLogbookSystem?: boolean;
 }): StoreChatActionCapabilityContext {
   return {
     isOwn: params.isOwn,
@@ -217,7 +221,18 @@ function buildActionContext(params: {
     translationAvailable: params.translationAvailable,
     isBookmarked: params.isBookmarked,
     canForward: params.canForward,
+    isLogbookSystem: Boolean(params.isLogbookSystem),
   };
+}
+
+function openLogbookFromMessage(message: StoreChatMessage) {
+  const link = resolveStoreChatLogbookDeepLink(message);
+  if (!link) return;
+  window.dispatchEvent(new CustomEvent(OPEN_LOGBOOK_EVENT, { detail: link }));
+}
+
+function isLogbookSystemMessage(message: StoreChatMessage): boolean {
+  return message.messageType === 'logbook_system' || message.sourceType === 'logbook';
 }
 
 function MessageBubble({
@@ -285,8 +300,9 @@ function MessageBubble({
   const sc = t.storeChat;
   const labels = actionLabelsFromT(sc);
   const avatarProfile = avatarFieldsForMessage(message, isOwn, profile);
-  const rowClass = `fa-msg-row${isOwn ? ' fa-msg-row--own' : ''}`;
   const deleted = isDeleted(message);
+  const isLogbookSystem = isLogbookSystemMessage(message);
+  const rowClass = `fa-msg-row${isOwn ? ' fa-msg-row--own' : ''}${isLogbookSystem ? ' fa-msg-row--logbook-system' : ''}`;
   const actionCtx = buildActionContext({
     isOwn,
     deleted,
@@ -296,6 +312,7 @@ function MessageBubble({
     translationAvailable,
     isBookmarked,
     canForward,
+    isLogbookSystem,
   });
   const stripActions = listStoreChatActions('strip', actionCtx, labels);
   const moreActions = listStoreChatActions('moreMenu', actionCtx, labels);
@@ -319,27 +336,6 @@ function MessageBubble({
     return map;
   }, [candidates, message.senderNameSnapshot, message.senderUserId, profile.userId, sc.you]);
 
-  if (message.messageType === 'logbook_system' || message.sourceType === 'logbook') {
-    const link = parseLogbookDeepLinkJson(message.deepLinkJson);
-    return (
-      <div className="fa-msg-row fa-msg-row--logbook-system" data-msg-id={message.id}>
-        <button
-          type="button"
-          className="fa-msg fa-msg--logbook-system"
-          onClick={() => {
-            if (link) window.dispatchEvent(new CustomEvent(OPEN_LOGBOOK_EVENT, { detail: link }));
-          }}
-        >
-          <span className="fa-msg-logbook-label">Logbook</span>
-          <span className={`fa-msg-logbook-status fa-msg-logbook-status--${message.statusSnapshot || 'open'}`}>
-            {message.statusSnapshot || 'open'}
-          </span>
-          <span className="fa-msg-logbook-body">{message.body}</span>
-        </button>
-      </div>
-    );
-  }
-
   if (deleted) {
     if (!isOwn) return null;
     return (
@@ -357,7 +353,11 @@ function MessageBubble({
     );
   }
 
-  const name = isOwn ? sc.you : message.senderNameSnapshot || sc.unknown;
+  const name = isLogbookSystem
+    ? sc.logbookSystemLabel || 'Logbook'
+    : isOwn
+      ? sc.you
+      : message.senderNameSnapshot || sc.unknown;
   const role = message.senderRoleSnapshot?.trim();
   const hasUnicodeReactions = reactionGroups.length > 0;
   const hasGiphyReactions = giphyReactionGroups.length > 0;
@@ -406,11 +406,21 @@ function MessageBubble({
       <span className="fa-msg-avatar">
         <ProfileAvatarPreview profile={avatarProfile} size={28} previewEnabled />
       </span>
-      <div className={`fa-msg${isOwn ? ' fa-msg--own' : ' fa-msg--other'}`}>
-        {isForwarded(message) ? (
+      <div className={`fa-msg${isOwn ? ' fa-msg--own' : ' fa-msg--other'}${isLogbookSystem ? ' fa-msg--logbook-system' : ''}`}>
+        {isLogbookSystem ? (
+          <div className="fa-msg-logbook-chrome">
+            <span className="fa-msg-logbook-label">{sc.logbookSystemLabel || 'Logbook'}</span>
+            <span
+              className={`fa-msg-logbook-status fa-msg-logbook-status--${message.statusSnapshot || 'open'}`}
+            >
+              {message.statusSnapshot || 'open'}
+            </span>
+          </div>
+        ) : null}
+        {!isLogbookSystem && isForwarded(message) ? (
           <span className="fa-msg-forwarded-badge">{sc.forwarded}</span>
         ) : null}
-        {message.replyToMessageId ? (
+        {!isLogbookSystem && message.replyToMessageId ? (
           <button
             type="button"
             className="fa-msg-quote"
@@ -432,19 +442,21 @@ function MessageBubble({
             </span>
           </button>
         ) : null}
-        <div className="fa-msg-meta">
-          <span className="fa-msg-name">{name}</span>
-          {role && !isOwn ? <span className="fa-msg-role">{role}</span> : null}
-          {isBookmarked ? (
-            <span className="fa-msg-bookmark-mark" title={sc.favorited} aria-label={sc.favorited}>
-              ★
-            </span>
-          ) : null}
-          <time className="fa-msg-time" dateTime={message.createdAt}>
-            {formatMessageTime(message.createdAt)}
-          </time>
-        </div>
-        {messageHasMedia && mediaSrc ? (
+        {!isLogbookSystem ? (
+          <div className="fa-msg-meta">
+            <span className="fa-msg-name">{name}</span>
+            {role && !isOwn ? <span className="fa-msg-role">{role}</span> : null}
+            {isBookmarked ? (
+              <span className="fa-msg-bookmark-mark" title={sc.favorited} aria-label={sc.favorited}>
+                ★
+              </span>
+            ) : null}
+            <time className="fa-msg-time" dateTime={message.createdAt}>
+              {formatMessageTime(message.createdAt)}
+            </time>
+          </div>
+        ) : null}
+        {!isLogbookSystem && messageHasMedia && mediaSrc ? (
           <div className="fa-msg-media" data-giphy-kind={message.giphyKind || undefined}>
             <AmbientGlowMedia cacheKey={mediaSrc} breathe enabled={glowEnabled}>
               <img
@@ -463,17 +475,28 @@ function MessageBubble({
             ) : null}
           </div>
         ) : null}
-        {showingTranslated ? (
+        {showingTranslated && !isLogbookSystem ? (
           <p className="fa-msg-body fa-msg-body--translated">{displayBody}</p>
         ) : bodyTrimmed ? (
-          <MentionBody
-            body={message.body}
-            mentionedUserIdsJson={message.mentionedUserIdsJson}
-            mentionAll={message.mentionAll}
-            candidates={candidates}
-          />
+          <div className={isLogbookSystem ? 'fa-msg-logbook-body' : undefined}>
+            <MentionBody
+              body={message.body}
+              mentionedUserIdsJson={message.mentionedUserIdsJson}
+              mentionAll={message.mentionAll}
+              candidates={candidates}
+            />
+          </div>
         ) : null}
-        {translation && translation.status !== 'idle' && translation.status !== 'empty' ? (
+        {isLogbookSystem ? (
+          <button
+            type="button"
+            className="fa-msg-logbook-open"
+            onClick={() => openLogbookFromMessage(message)}
+          >
+            {sc.openLogbook || 'Open Logbook'}
+          </button>
+        ) : null}
+        {!isLogbookSystem && translation && translation.status !== 'idle' && translation.status !== 'empty' ? (
           <div className="fa-msg-translation" role="status">
             {translation.status === 'loading' || translation.status === 'retry' ? (
               <span className="fa-msg-translation-status">{sc.translating}</span>
@@ -1286,6 +1309,7 @@ export default function StoreChatPanel({
   }
 
   async function softDeleteMessage(message: StoreChatMessage) {
+    if (isLogbookSystemMessage(message)) return;
     if (message.senderUserId !== profile.userId) return;
     try {
       await db.transact(
@@ -1479,6 +1503,7 @@ export default function StoreChatPanel({
           translationAvailable,
           isBookmarked: bookmarkByMessageId.has(sheetMessage.id),
           canForward,
+          isLogbookSystem: isLogbookSystemMessage(sheetMessage),
         }),
         actionLabels,
       )

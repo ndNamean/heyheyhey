@@ -86,6 +86,7 @@ import {
   postLogbookNotify,
   postLogbookSubmitResolution,
 } from '../lib/logbookNotifyClient';
+import { resolveLogbookOpenState } from '../lib/logbookDeepLink';
 import {
   buildLogbookAssignmentChangedEvent,
   buildLogbookCreatorUpdateEvent,
@@ -111,6 +112,8 @@ interface Props {
   profile: Profile;
   initialFilter?: string;
   highlightEntryId?: string | null;
+  /** Bumps on every goLogbook so the same entryId still re-highlights. */
+  highlightOpenKey?: number;
 }
 
 function readSession(key: string): string | null {
@@ -164,6 +167,7 @@ export default function LogbookPage({
   profile,
   initialFilter,
   highlightEntryId: highlightProp,
+  highlightOpenKey = 0,
 }: Props) {
   const { t } = useLang();
   const { defs } = useRoleDefinitions();
@@ -174,9 +178,11 @@ export default function LogbookPage({
   const [isMobileFilters, setIsMobileFilters] = useState(() =>
     typeof window !== 'undefined' ? window.matchMedia('(max-width: 720px)').matches : false,
   );
-  const [highlightId] = useState<string | null>(
+  const [highlightId, setHighlightId] = useState<string | null>(
     () => highlightProp || readSession(LOGBOOK_HIGHLIGHT_KEY),
   );
+  const [highlightMiss, setHighlightMiss] = useState(false);
+  const scrolledHighlightRef = useRef<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     entryType: 'note' as LogbookEntryType,
@@ -422,10 +428,28 @@ export default function LogbookPage({
   }, [allEntries, profile, defs, filters, proofEntryId, storeById]);
 
   useEffect(() => {
-    clearSession(LOGBOOK_FILTER_KEY);
-    clearSession(LOGBOOK_HIGHLIGHT_KEY);
     clearSession(openResolutionSessionKey());
   }, []);
+
+  useEffect(() => {
+    const { highlightId: nextHighlight, filterKey } = resolveLogbookOpenState({
+      highlightEntryId: highlightProp,
+      initialFilter,
+      sessionHighlight: readSession(LOGBOOK_HIGHLIGHT_KEY),
+      sessionFilter: readSession(LOGBOOK_FILTER_KEY),
+    });
+    const parsed = parseLogbookInitialFilter(filterKey);
+    if (parsed) {
+      setFilters((prev) => ({ ...prev, ...parsed }));
+    }
+    if (nextHighlight) {
+      setHighlightId(nextHighlight);
+      setHighlightMiss(false);
+      scrolledHighlightRef.current = null;
+    }
+    clearSession(LOGBOOK_FILTER_KEY);
+    clearSession(LOGBOOK_HIGHLIGHT_KEY);
+  }, [highlightProp, initialFilter, highlightOpenKey]);
 
   useEffect(() => {
     if (dueNotifyRan.current || !pageOpen || !allEntries.length) return;
@@ -436,20 +460,35 @@ export default function LogbookPage({
 
   useEffect(() => {
     if (!highlightId) return;
+    if (scrolledHighlightRef.current === highlightId) return;
+
     const el = document.getElementById(`logbook-entry-${highlightId}`);
-    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    const entry = allEntries.find((e) => e.id === highlightId);
-    if (
-      entry &&
-      canActOnAssignedIssue(profile, entry, defs) &&
-      (resolveLogbookIssueStatus(entry) === 'in_progress' ||
-        resolveLogbookIssueStatus(entry) === 'open') &&
-      hasCorrectionFeedback(entry)
-    ) {
-      openResolutionForm(entry);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      scrolledHighlightRef.current = highlightId;
+      setHighlightMiss(false);
+      const entry = allEntries.find((e) => e.id === highlightId);
+      if (
+        entry &&
+        canActOnAssignedIssue(profile, entry, defs) &&
+        (resolveLogbookIssueStatus(entry) === 'in_progress' ||
+          resolveLogbookIssueStatus(entry) === 'open') &&
+        hasCorrectionFeedback(entry)
+      ) {
+        openResolutionForm(entry);
+      }
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- open once on highlight
-  }, [highlightId, allEntries.length]);
+
+    // Wait until entries have loaded before declaring a miss.
+    if (!allEntries.length) return;
+    const entry = allEntries.find((e) => e.id === highlightId);
+    if (!entry || !visibleEntries.some((e) => e.id === highlightId)) {
+      setHighlightMiss(true);
+      scrolledHighlightRef.current = highlightId;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- scroll/open once per highlight open
+  }, [highlightId, allEntries.length, visibleEntries.length, filters]);
 
   function openResolutionForm(entry: LogbookEntry) {
     setProofEntryId(entry.id);
@@ -1306,6 +1345,20 @@ export default function LogbookPage({
           )}
           <button className="secondary" style={{ marginTop: 8, marginLeft: notifySoftFail ? 8 : 0 }} type="button" onClick={() => setSuccessMsg('')}>
             {t.common.cancel}
+          </button>
+        </div>
+      )}
+
+      {highlightMiss && (
+        <div className="card" style={{ borderColor: 'var(--warn-border, #ca8a04)' }}>
+          <p style={{ margin: 0 }}>{t.logbook.entryNotFound}</p>
+          <button
+            className="secondary"
+            style={{ marginTop: 8 }}
+            type="button"
+            onClick={() => setHighlightMiss(false)}
+          >
+            {t.common.close}
           </button>
         </div>
       )}

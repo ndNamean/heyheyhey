@@ -988,6 +988,7 @@ export const sectionsEn = {
     allDay: 'All day',
     requiresAck: 'Requires acknowledgement',
     noEntries: 'No logbook entries for the selected filters.',
+    entryNotFound: 'That logbook entry could not be found.',
     ack: 'ack',
     acks: 'acks',
     ackDetails: 'Acknowledgement details',
@@ -1430,6 +1431,8 @@ export const sectionsEn = {
     couldNotLoadChat: 'Couldn’t load chat',
     checkConnection: 'Check your connection and try again.',
     noMessagesYet: 'No messages yet. Say hello to the store team.',
+    openLogbook: 'Open Logbook',
+    logbookSystemLabel: 'Logbook',
   },
 };
 
@@ -2321,6 +2324,7 @@ export const sectionsVi = {
     allDay: 'Cả ngày',
     requiresAck: 'Yêu cầu xác nhận',
     noEntries: 'Không có mục nhật ký cho bộ lọc đã chọn.',
+    entryNotFound: 'Không tìm thấy mục nhật ký đó.',
     ack: 'xác nhận',
     acks: 'xác nhận',
     ackDetails: 'Chi tiết xác nhận',
@@ -2763,6 +2767,8 @@ export const sectionsVi = {
     couldNotLoadChat: 'Không tải được chat',
     checkConnection: 'Kiểm tra kết nối và thử lại.',
     noMessagesYet: 'Chưa có tin nhắn. Hãy chào nhóm cửa hàng.',
+    openLogbook: 'Mở Nhật ký',
+    logbookSystemLabel: 'Nhật ký',
   },
 };
 

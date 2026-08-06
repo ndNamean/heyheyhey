@@ -41,6 +41,7 @@ export default function AppShell({ profile }: Props) {
   const [proposalPrefill, setProposalPrefill] = useState<ProposalFormPrefill | null>(null);
   const [logbookFilter, setLogbookFilter] = useState<string | undefined>();
   const [logbookHighlightId, setLogbookHighlightId] = useState<string | null>(null);
+  const [logbookHighlightOpenKey, setLogbookHighlightOpenKey] = useState(0);
 
   useNativeBack(
     () => {
@@ -87,6 +88,7 @@ export default function AppShell({ profile }: Props) {
   function goLogbook(opts?: { filter?: string; entryId?: string | null; storeId?: string }) {
     setLogbookFilter(opts?.filter);
     setLogbookHighlightId(opts?.entryId ?? null);
+    setLogbookHighlightOpenKey((k) => k + 1);
     if (opts?.filter) {
       try {
         sessionStorage.setItem('logbookInitialFilter', opts.filter);
@@ -201,6 +203,7 @@ export default function AppShell({ profile }: Props) {
             profile={profile}
             initialFilter={logbookFilter}
             highlightEntryId={logbookHighlightId}
+            highlightOpenKey={logbookHighlightOpenKey}
           />
         );
       default:

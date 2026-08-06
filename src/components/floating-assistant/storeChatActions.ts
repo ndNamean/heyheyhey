@@ -22,6 +22,8 @@ export interface StoreChatActionCapabilityContext {
   isBookmarked: boolean;
   /** At least one other authorized store to forward into. */
   canForward: boolean;
+  /** Logbook system rows: Reply/React ok; hide Forward/Delete. */
+  isLogbookSystem?: boolean;
 }
 
 export interface StoreChatActionDef {
@@ -127,12 +129,14 @@ export function isStoreChatActionAvailable(
     case 'copy':
       return ctx.hasBody;
     case 'forward':
+      if (ctx.isLogbookSystem) return false;
       return ctx.canSend && ctx.canForward && ctx.hasBody;
     case 'favorite':
       return true;
     case 'translate':
       return ctx.translationAvailable && ctx.hasBody;
     case 'delete':
+      if (ctx.isLogbookSystem) return false;
       return ctx.isOwn;
     default: {
       const _exhaustive: never = actionId;

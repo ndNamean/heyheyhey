@@ -6,6 +6,7 @@ import {
   OPEN_STORE_CHAT_EVENT,
   type OpenStoreChatDetail,
 } from '../FeedbackInbox';
+import { OPEN_LOGBOOK_EVENT } from '../../lib/logbookDeepLink';
 import FloatingAssistantLauncher from './FloatingAssistantLauncher';
 import FloatingAssistantPanel from './FloatingAssistantPanel';
 import { type AssistantTabId } from './AssistantTabs';
@@ -155,6 +156,14 @@ export default function FloatingAssistantShell({ profile }: Props) {
     window.addEventListener(OPEN_STORE_CHAT_EVENT, onOpenStoreChat);
     return () => window.removeEventListener(OPEN_STORE_CHAT_EVENT, onOpenStoreChat);
   }, [setSelectedStoreId]);
+
+  useEffect(() => {
+    function onOpenLogbook() {
+      close();
+    }
+    window.addEventListener(OPEN_LOGBOOK_EVENT, onOpenLogbook);
+    return () => window.removeEventListener(OPEN_LOGBOOK_EVENT, onOpenLogbook);
+  }, [close]);
 
   const root = (
     <div

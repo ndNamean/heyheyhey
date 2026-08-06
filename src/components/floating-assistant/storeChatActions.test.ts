@@ -83,4 +83,17 @@ describe('storeChatActions', () => {
     expect(isStoreChatActionAvailable('copy', { ...baseCtx, isDeleted: true })).toBe(false);
     expect(isStoreChatActionAvailable('more', { ...baseCtx, isDeleted: true })).toBe(false);
   });
+
+  it('strips forward and delete for logbook_system context', () => {
+    const ctx = { ...baseCtx, isOwn: true, isLogbookSystem: true };
+    expect(isStoreChatActionAvailable('reply', ctx)).toBe(true);
+    expect(isStoreChatActionAvailable('react', ctx)).toBe(true);
+    expect(isStoreChatActionAvailable('forward', ctx)).toBe(false);
+    expect(isStoreChatActionAvailable('delete', ctx)).toBe(false);
+    const sheet = listStoreChatActions('sheet', ctx).map((a) => a.id);
+    expect(sheet).toContain('reply');
+    expect(sheet).toContain('react');
+    expect(sheet).not.toContain('forward');
+    expect(sheet).not.toContain('delete');
+  });
 });
