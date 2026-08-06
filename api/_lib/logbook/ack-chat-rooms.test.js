@@ -85,7 +85,7 @@ describe('resolveAckChatStoreIds', () => {
   });
 });
 
-describe('recipientsForChatRoom + mentions fan-out', () => {
+describe('recipientsForChatRoom + @all per room', () => {
   const profiles = [
     { userId: 'u1', role: 'staff', stores: [{ id: 's1' }] },
     { userId: 'u2', role: 'staff', stores: [{ id: 's1' }, { id: 's2' }] },
@@ -93,7 +93,7 @@ describe('recipientsForChatRoom + mentions fan-out', () => {
   ];
   const recipients = ['u1', 'u2', 'u3'];
 
-  it('filters room mentions to users with store access', () => {
+  it('filters room target users to store access (metadata; chat uses @all)', () => {
     expect(recipientsForChatRoom(recipients, profiles, 's1')).toEqual([
       'u1',
       'u2',
@@ -105,15 +105,10 @@ describe('recipientsForChatRoom + mentions fan-out', () => {
     expect(hasStoreAccess(profiles[2], 's1')).toBe(false);
   });
 
-  it('caps per-room mentions and builds distinct delivery keys', () => {
-    const many = Array.from({ length: LOGBOOK_MENTION_CAP + 1 }, (_, i) => `u${i}`);
-    const manyProfiles = many.map((userId) => ({
-      userId,
-      role: 'staff',
-      stores: [{ id: 's1' }],
-    }));
-    const room = recipientsForChatRoom(many, manyProfiles, 's1');
-    expect(selectMentionUserIds(room)).toEqual([]);
+  it('builds distinct per-room delivery keys (mentions are @all, not capped users)', () => {
+    // Legacy cap helper still exists for other callers; fan-out no longer uses it.
+    expect(selectMentionUserIds([])).toEqual([]);
+    expect(LOGBOOK_MENTION_CAP).toBeGreaterThan(0);
 
     expect(chatDeliveryKey('e1', 'ack_required', 'v1', 's1')).toBe(
       'logbook-chat:e1:ack_required:v1:s1',

@@ -21,7 +21,6 @@ import {
   chatDeliveryKey,
   deliveryKeyForRecipient,
   isLogbookChatNotifyEnabled,
-  selectMentionUserIds,
 } from './_lib/logbook/notification-content.js';
 import {
   hasStoreAccess,
@@ -591,18 +590,26 @@ async function deliverEvent(req, res, adminDb, actor, body) {
         profiles,
         roomStoreId,
       );
-      const mentioned = selectMentionUserIds(roomRecipients);
+      // Chat copy without per-user @tokens — rooms use @all (mentionAll).
       const roomNormalized = buildNormalizedLogbookNotification({
         entry,
         eventType,
         eventVersion,
-        recipients: roomRecipients,
+        recipients: [],
         note: String(body.note || '').trim(),
         reason: String(body.reason || '').trim(),
         actor,
         profiles,
         storeLabel: normalized.storeLabel,
       });
+      const baseChatBody = String(
+        roomNormalized.copy.chatBody || roomNormalized.body || '',
+      ).trim();
+      const chatBody = /\B@all\b/i.test(baseChatBody)
+        ? baseChatBody
+        : baseChatBody
+          ? `${baseChatBody}\n@all`
+          : '@all';
       chatTxs.push(
         adminDb.tx.storeChatMessages[id()].update({
           storeId: roomStoreId,
@@ -612,14 +619,14 @@ async function deliverEvent(req, res, adminDb, actor, body) {
             actor.displayName || actor.email || 'System',
           senderRoleSnapshot: actor.role || '',
           messageType: 'logbook_system',
-          body: roomNormalized.copy.chatBody || roomNormalized.body,
+          body: chatBody,
           createdAt,
           editedAt: '',
           deletedAt: '',
           status: 'active',
           replyToMessageId: '',
-          mentionedUserIdsJson: JSON.stringify(mentioned),
-          mentionAll: false,
+          mentionedUserIdsJson: '[]',
+          mentionAll: true,
           giphyId: '',
           giphyKind: '',
           giphyTitle: '',
@@ -634,7 +641,7 @@ async function deliverEvent(req, res, adminDb, actor, body) {
           logbookEntryId: entry.id,
           logbookEventType: eventType,
           actionType: normalized.actionType,
-          targetUserIdsJson: JSON.stringify(recipients),
+          targetUserIdsJson: JSON.stringify(roomRecipients),
           deepLinkJson: normalized.deepLinkJson,
           statusSnapshot: normalized.statusSnapshot,
           chatDeliveryKey: key,
