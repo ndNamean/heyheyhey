@@ -27,6 +27,7 @@ import {
   recipientsForChatRoom,
   resolveAckChatStoreIds,
 } from './_lib/logbook/ack-chat-rooms.js';
+import { resolveActorProfileId } from './_lib/logbook/resolve-actor-profile-id.js';
 
 /** Max storeChatMessages updates per Instant transact when fan-out is large. */
 const CHAT_TX_CHUNK = 25;
@@ -578,6 +579,13 @@ async function deliverEvent(req, res, adminDb, actor, body) {
       profiles,
       stores,
     );
+    const senderProfileId = resolveActorProfileId(actor, profiles);
+    if (!senderProfileId) {
+      console.warn(
+        '[logbook-notify] missing actor profileId; chat messages will not link sender',
+        { userId: actor?.userId },
+      );
+    }
     const chatTxs = [];
     const createdAt = nowIso();
     for (const roomStoreId of roomStoreIds) {
@@ -629,47 +637,52 @@ async function deliverEvent(req, res, adminDb, actor, body) {
         : baseChatBody
           ? `${baseChatBody}\n@all`
           : '@all';
-      chatTxs.push(
-        adminDb.tx.storeChatMessages[id()].update({
-          storeId: roomStoreId,
-          senderUserId: actor.userId,
-          senderProfileId: actor.id || '',
-          senderNameSnapshot:
-            actor.displayName || actor.email || 'System',
-          senderRoleSnapshot: actor.role || '',
-          messageType: 'logbook_system',
-          body: chatBody,
-          createdAt,
-          editedAt: '',
-          deletedAt: '',
-          status: 'active',
-          replyToMessageId: '',
-          mentionedUserIdsJson: '[]',
-          mentionAll: true,
-          giphyId: '',
-          giphyKind: '',
-          giphyTitle: '',
-          giphyWidth: '',
-          giphyHeight: '',
-          giphyUrl: '',
-          giphyPreviewUrl: '',
-          forwardedFromMessageId: '',
-          forwardedFromUserId: '',
-          clientMutationId: '',
-          sourceType: 'logbook',
-          logbookEntryId: entry.id,
-          logbookEventType: eventType,
-          actionType: normalized.actionType,
-          targetUserIdsJson: JSON.stringify(roomRecipients),
-          deepLinkJson: ensureDeepLinkJson(
-            normalized,
-            entry,
-            roomStoreId || entry.storeId,
-          ),
-          statusSnapshot: normalized.statusSnapshot,
-          chatDeliveryKey: key,
-        }),
-      );
+      // Match human Store Chat sends: fields + Instant store/sender links.
+      let chatTx = adminDb.tx.storeChatMessages[id()].update({
+        storeId: roomStoreId,
+        senderUserId: actor.userId,
+        senderProfileId: senderProfileId || '',
+        senderNameSnapshot:
+          actor.displayName || actor.email || 'System',
+        senderRoleSnapshot: actor.role || '',
+        messageType: 'logbook_system',
+        body: chatBody,
+        createdAt,
+        editedAt: '',
+        deletedAt: '',
+        status: 'active',
+        replyToMessageId: '',
+        mentionedUserIdsJson: '[]',
+        mentionAll: true,
+        giphyId: '',
+        giphyKind: '',
+        giphyTitle: '',
+        giphyWidth: '',
+        giphyHeight: '',
+        giphyUrl: '',
+        giphyPreviewUrl: '',
+        forwardedFromMessageId: '',
+        forwardedFromUserId: '',
+        clientMutationId: '',
+        sourceType: 'logbook',
+        logbookEntryId: entry.id,
+        logbookEventType: eventType,
+        actionType: normalized.actionType,
+        targetUserIdsJson: JSON.stringify(roomRecipients),
+        deepLinkJson: ensureDeepLinkJson(
+          normalized,
+          entry,
+          roomStoreId || entry.storeId,
+        ),
+        statusSnapshot: normalized.statusSnapshot,
+        chatDeliveryKey: key,
+      });
+      if (senderProfileId) {
+        chatTx = chatTx.link({ store: roomStoreId, sender: senderProfileId });
+      } else {
+        chatTx = chatTx.link({ store: roomStoreId });
+      }
+      chatTxs.push(chatTx);
       chatCreated += 1;
     }
     for (let i = 0; i < chatTxs.length; i += CHAT_TX_CHUNK) {

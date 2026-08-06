@@ -13,7 +13,7 @@ import {
 import { id } from '@instantdb/react';
 import { db } from '../../db';
 import { useLang } from '../../i18n';
-import type { AvatarProfileFields } from '../../lib/avatarDisplay';
+import { avatarFieldsForMessage } from '../../lib/storeChatAvatar';
 import {
   buildMentionCandidates,
   buildMentionMenuItems,
@@ -118,30 +118,6 @@ function isDeleted(m: StoreChatMessage): boolean {
 
 function isForwarded(m: StoreChatMessage): boolean {
   return Boolean(m.forwardedFromMessageId?.trim());
-}
-
-function avatarFieldsForMessage(
-  message: StoreChatMessage,
-  isOwn: boolean,
-  liveProfile: Profile,
-): AvatarProfileFields {
-  if (isOwn) return liveProfile;
-  const sender = message.sender;
-  if (sender) {
-    return {
-      displayName: sender.displayName,
-      email: sender.email,
-      userId: sender.userId,
-      avatarUrl: sender.avatarUrl,
-      avatarPath: sender.avatarPath,
-      avatarFile: sender.avatarFile,
-    };
-  }
-  return {
-    displayName: message.senderNameSnapshot || 'Unknown',
-    email: '',
-    userId: message.senderUserId,
-  };
 }
 
 function quotePreviewText(
@@ -299,7 +275,7 @@ function MessageBubble({
   const { t, isRtl } = useLang();
   const sc = t.storeChat;
   const labels = actionLabelsFromT(sc);
-  const avatarProfile = avatarFieldsForMessage(message, isOwn, profile);
+  const avatarProfile = avatarFieldsForMessage(message, isOwn, profile, candidates);
   const deleted = isDeleted(message);
   const isLogbookSystem = isLogbookSystemMessage(message);
   const rowClass = `fa-msg-row${isOwn ? ' fa-msg-row--own' : ''}${isLogbookSystem ? ' fa-msg-row--logbook-system' : ''}`;
