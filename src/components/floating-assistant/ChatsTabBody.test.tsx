@@ -163,7 +163,7 @@ describe('ChatsTabBody room navigation', () => {
     renderBody('compact');
 
     fireEvent.click(screen.getByRole('button', { name: /A1 · Alpha/ }));
-    fireEvent.click(screen.getByRole('button', { name: '+ New group' }));
+    fireEvent.click(screen.getByRole('button', { name: 'New group' }));
 
     expect(screen.getByTestId('create-group-modal')).toBeTruthy();
   });
