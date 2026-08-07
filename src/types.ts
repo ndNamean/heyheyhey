@@ -36,6 +36,12 @@ export interface RoleDefinitionSeed {
   canFinalApproveTemplateItemProposal?: boolean;
   canPublishTemplateItemProposal?: boolean;
   canRequestUserChanges?: boolean;
+  /** Create private Custom Group Chat rooms. */
+  canCreateGroupChat?: boolean;
+  /** Invite members outside assigned stores into a group. */
+  canCreateCrossStoreGroupChat?: boolean;
+  /** Send in group rooms when also a member (Instant still blocks viewer). */
+  canSendGroupChat?: boolean;
   /** Schema/migration marker; Owner-editable fields are never rewritten by ensure. */
   roleDefinitionVersion?: number;
   approvesSubmitterRolesJson: string;
@@ -902,6 +908,101 @@ export interface StoreChatBookmark {
   messageId: string;
   userId: string;
   createdAt: string;
+}
+
+export type GroupChatRoomStatus = 'active' | 'archived';
+export type GroupChatRoomRole = 'owner' | 'admin' | 'member';
+export type GroupChatInviteStatus =
+  | 'pending'
+  | 'accepted'
+  | 'declined'
+  | 'expired'
+  | 'cancelled';
+export type GroupChatMessageType = 'text' | 'giphy_media' | 'text_giphy' | 'system';
+
+/** InstantDB groupChatRooms — private invite-accept; room key is entity id. */
+export interface GroupChatRoom {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  privacy: 'private' | string;
+  status: GroupChatRoomStatus | string;
+  createdByUserId: string;
+  createdByProfileId: string;
+  createdAt: string;
+  updatedAt: string;
+  lastMessageAt: string;
+  similarNameKey: string;
+  members?: GroupChatMember[];
+  invites?: GroupChatInvite[];
+}
+
+export interface GroupChatMember {
+  id: string;
+  roomId: string;
+  userId: string;
+  profileId: string;
+  roomRole: GroupChatRoomRole | string;
+  joinedAt: string;
+  notificationMode: string;
+  lastReadAt: string;
+  muted: boolean;
+  pinned: boolean;
+  profile?: Pick<
+    Profile,
+    'id' | 'userId' | 'displayName' | 'email' | 'role' | 'avatarUrl' | 'avatarPath' | 'avatarFile' | 'stores'
+  >;
+  room?: GroupChatRoom;
+}
+
+export interface GroupChatInvite {
+  id: string;
+  roomId: string;
+  inviteeUserId: string;
+  inviteeProfileId: string;
+  inviterUserId: string;
+  inviterProfileId: string;
+  status: GroupChatInviteStatus | string;
+  historyMode: 'full' | string;
+  roomNameSnapshot?: string;
+  roomDescriptionSnapshot?: string;
+  inviterNameSnapshot?: string;
+  createdAt: string;
+  respondedAt: string;
+  expiresAt: string;
+  room?: Pick<GroupChatRoom, 'id' | 'name' | 'description' | 'icon' | 'status' | 'privacy'>;
+  inviter?: Pick<Profile, 'id' | 'userId' | 'displayName' | 'email'>;
+}
+
+export interface GroupChatMessage {
+  id: string;
+  roomId: string;
+  senderUserId: string;
+  senderProfileId: string;
+  senderNameSnapshot: string;
+  senderRoleSnapshot: string;
+  messageType: GroupChatMessageType | string;
+  body: string;
+  createdAt: string;
+  editedAt: string;
+  deletedAt: string;
+  status: string;
+  replyToMessageId: string;
+  mentionedUserIdsJson?: string;
+  mentionAll?: boolean;
+  giphyId?: string;
+  giphyKind?: string;
+  giphyTitle?: string;
+  giphyWidth?: string;
+  giphyHeight?: string;
+  giphyUrl?: string;
+  giphyPreviewUrl?: string;
+  clientMutationId?: string;
+  sender?: Pick<
+    Profile,
+    'id' | 'userId' | 'displayName' | 'email' | 'avatarUrl' | 'avatarPath' | 'avatarFile'
+  >;
 }
 
 export type ExportJobStatus = 'pending' | 'processing' | 'completed' | 'failed';

@@ -505,6 +505,12 @@ const _schema = i.schema({
       canFinalApproveTemplateItemProposal: i.boolean().optional(),
       canPublishTemplateItemProposal: i.boolean().optional(),
       canRequestUserChanges: i.boolean().optional(),
+      /** Custom Group Chat — create private invite-accept rooms. */
+      canCreateGroupChat: i.boolean().optional(),
+      /** Invite members outside the actor's assigned stores. */
+      canCreateCrossStoreGroupChat: i.boolean().optional(),
+      /** Send messages in group rooms when also a member (viewer stays blocked in Instant). */
+      canSendGroupChat: i.boolean().optional(),
       roleDefinitionVersion: i.number().optional(),
       approvesSubmitterRolesJson: i.string(),
       createdAt: i.string(),
@@ -621,6 +627,77 @@ const _schema = i.schema({
       messageId: i.string().indexed(),
       userId: i.string().indexed(), // auth.id — ownership for rules
       createdAt: i.string().indexed(),
+    }),
+
+    // ─── Custom Group Chat rooms (room key = room id; private invite-accept) ─
+    // Separate from storeChat* — never reuse storeId; no Logbook delivery.
+    groupChatRooms: i.entity({
+      name: i.string(),
+      description: i.string().clientRequired(),
+      icon: i.string().clientRequired(),
+      privacy: i.string(), // 'private' only in v1
+      status: i.string().indexed(), // 'active' | 'archived'
+      createdByUserId: i.string().indexed(),
+      createdByProfileId: i.string().indexed(),
+      createdAt: i.string().indexed(),
+      updatedAt: i.string(),
+      lastMessageAt: i.string().indexed().clientRequired(),
+      similarNameKey: i.string().indexed().clientRequired(),
+    }),
+
+    groupChatMembers: i.entity({
+      roomId: i.string().indexed(), // denormalized for auth.ref membership
+      userId: i.string().indexed(),
+      profileId: i.string().indexed(),
+      roomRole: i.string(), // 'owner' | 'admin' | 'member'
+      joinedAt: i.string().indexed(),
+      notificationMode: i.string().clientRequired(), // 'all' | 'mentions' | 'muted'
+      lastReadAt: i.string().clientRequired(),
+      muted: i.boolean().clientRequired(),
+      pinned: i.boolean().clientRequired(),
+    }),
+
+    groupChatInvites: i.entity({
+      roomId: i.string().indexed(),
+      inviteeUserId: i.string().indexed(),
+      inviteeProfileId: i.string().indexed(),
+      inviterUserId: i.string().indexed(),
+      inviterProfileId: i.string().indexed(),
+      status: i.string().indexed(), // pending|accepted|declined|expired|cancelled
+      historyMode: i.string(), // 'full' only in v1
+      /** Denormalized so invitees can preview without room membership view. */
+      roomNameSnapshot: i.string(),
+      roomDescriptionSnapshot: i.string().clientRequired(),
+      inviterNameSnapshot: i.string().clientRequired(),
+      createdAt: i.string().indexed(),
+      respondedAt: i.string().clientRequired(),
+      expiresAt: i.string().clientRequired(),
+    }),
+
+    // Mirror safe Store Chat fields with roomId (not storeId). No logbook fields.
+    groupChatMessages: i.entity({
+      roomId: i.string().indexed(),
+      senderUserId: i.string().indexed(),
+      senderProfileId: i.string().indexed(),
+      senderNameSnapshot: i.string(),
+      senderRoleSnapshot: i.string(),
+      messageType: i.string(), // 'text' | 'giphy_media' | 'text_giphy' | 'system'
+      body: i.string(),
+      createdAt: i.string().indexed(),
+      editedAt: i.string().clientRequired(),
+      deletedAt: i.string().clientRequired(),
+      status: i.string(), // 'active' | 'deleted'
+      replyToMessageId: i.string().clientRequired(),
+      mentionedUserIdsJson: i.string().clientRequired(),
+      mentionAll: i.boolean().clientRequired(),
+      giphyId: i.string().clientRequired(),
+      giphyKind: i.string().clientRequired(),
+      giphyTitle: i.string().clientRequired(),
+      giphyWidth: i.string().clientRequired(),
+      giphyHeight: i.string().clientRequired(),
+      giphyUrl: i.string().clientRequired(),
+      giphyPreviewUrl: i.string().clientRequired(),
+      clientMutationId: i.string().clientRequired(),
     }),
   },
 
@@ -870,6 +947,38 @@ const _schema = i.schema({
     storeChatBookmarkMessage: {
       forward: { on: 'storeChatBookmarks', has: 'one', label: 'message' },
       reverse: { on: 'storeChatMessages', has: 'many', label: 'bookmarks' },
+    },
+
+    // ─── Custom Group Chat — membership graph for auth.ref ───────────────────
+    // Traversal: data.roomId in auth.ref('$user.profile.groupChatMemberships.roomId')
+    // Mirrors store chat membership via profile.stores.id (not elevated roles).
+    groupChatMemberRoom: {
+      forward: { on: 'groupChatMembers', has: 'one', label: 'room' },
+      reverse: { on: 'groupChatRooms', has: 'many', label: 'members' },
+    },
+    groupChatMemberProfile: {
+      forward: { on: 'groupChatMembers', has: 'one', label: 'profile' },
+      reverse: { on: 'profiles', has: 'many', label: 'groupChatMemberships' },
+    },
+    groupChatInviteRoom: {
+      forward: { on: 'groupChatInvites', has: 'one', label: 'room' },
+      reverse: { on: 'groupChatRooms', has: 'many', label: 'invites' },
+    },
+    groupChatInviteInvitee: {
+      forward: { on: 'groupChatInvites', has: 'one', label: 'invitee' },
+      reverse: { on: 'profiles', has: 'many', label: 'groupChatInvitesReceived' },
+    },
+    groupChatInviteInviter: {
+      forward: { on: 'groupChatInvites', has: 'one', label: 'inviter' },
+      reverse: { on: 'profiles', has: 'many', label: 'groupChatInvitesSent' },
+    },
+    groupChatMessageRoom: {
+      forward: { on: 'groupChatMessages', has: 'one', label: 'room' },
+      reverse: { on: 'groupChatRooms', has: 'many', label: 'messages' },
+    },
+    groupChatMessageSender: {
+      forward: { on: 'groupChatMessages', has: 'one', label: 'sender' },
+      reverse: { on: 'profiles', has: 'many', label: 'groupChatMessages' },
     },
   },
 });

@@ -25,6 +25,9 @@ export const DEFAULT_ROLE_DEFINITIONS: RoleDefinitionSeed[] = [
     canFinalApproveTemplateItemProposal: true,
     canPublishTemplateItemProposal: true,
     canRequestUserChanges: false,
+    canCreateGroupChat: true,
+    canCreateCrossStoreGroupChat: true,
+    canSendGroupChat: true,
     approvesSubmitterRolesJson: '[]',
   },
   {
@@ -50,6 +53,9 @@ export const DEFAULT_ROLE_DEFINITIONS: RoleDefinitionSeed[] = [
     canFinalApproveTemplateItemProposal: true,
     canPublishTemplateItemProposal: true,
     canRequestUserChanges: false,
+    canCreateGroupChat: true,
+    canCreateCrossStoreGroupChat: true,
+    canSendGroupChat: true,
     approvesSubmitterRolesJson: '["leader","subleader","manager"]',
   },
   {
@@ -75,6 +81,9 @@ export const DEFAULT_ROLE_DEFINITIONS: RoleDefinitionSeed[] = [
     canFinalApproveTemplateItemProposal: true,
     canPublishTemplateItemProposal: true,
     canRequestUserChanges: false,
+    canCreateGroupChat: true,
+    canCreateCrossStoreGroupChat: true,
+    canSendGroupChat: true,
     approvesSubmitterRolesJson: '["leader","subleader","manager"]',
   },
   {
@@ -100,6 +109,9 @@ export const DEFAULT_ROLE_DEFINITIONS: RoleDefinitionSeed[] = [
     canFinalApproveTemplateItemProposal: false,
     canPublishTemplateItemProposal: false,
     canRequestUserChanges: true,
+    canCreateGroupChat: true,
+    canCreateCrossStoreGroupChat: true,
+    canSendGroupChat: true,
     approvesSubmitterRolesJson: '["staff","hybrid"]',
   },
   {
@@ -125,6 +137,9 @@ export const DEFAULT_ROLE_DEFINITIONS: RoleDefinitionSeed[] = [
     canFinalApproveTemplateItemProposal: false,
     canPublishTemplateItemProposal: false,
     canRequestUserChanges: true,
+    canCreateGroupChat: true,
+    canCreateCrossStoreGroupChat: true,
+    canSendGroupChat: true,
     approvesSubmitterRolesJson: '["staff","hybrid"]',
   },
   {
@@ -150,6 +165,9 @@ export const DEFAULT_ROLE_DEFINITIONS: RoleDefinitionSeed[] = [
     canFinalApproveTemplateItemProposal: false,
     canPublishTemplateItemProposal: false,
     canRequestUserChanges: false,
+    canCreateGroupChat: true,
+    canCreateCrossStoreGroupChat: false,
+    canSendGroupChat: true,
     approvesSubmitterRolesJson: '["staff","hybrid"]',
   },
   {
@@ -175,6 +193,9 @@ export const DEFAULT_ROLE_DEFINITIONS: RoleDefinitionSeed[] = [
     canFinalApproveTemplateItemProposal: false,
     canPublishTemplateItemProposal: false,
     canRequestUserChanges: false,
+    canCreateGroupChat: false,
+    canCreateCrossStoreGroupChat: false,
+    canSendGroupChat: true,
     approvesSubmitterRolesJson: '["staff"]',
   },
   {
@@ -200,6 +221,9 @@ export const DEFAULT_ROLE_DEFINITIONS: RoleDefinitionSeed[] = [
     canFinalApproveTemplateItemProposal: false,
     canPublishTemplateItemProposal: false,
     canRequestUserChanges: false,
+    canCreateGroupChat: false,
+    canCreateCrossStoreGroupChat: false,
+    canSendGroupChat: true,
     approvesSubmitterRolesJson: '[]',
   },
   {
@@ -225,6 +249,9 @@ export const DEFAULT_ROLE_DEFINITIONS: RoleDefinitionSeed[] = [
     canFinalApproveTemplateItemProposal: false,
     canPublishTemplateItemProposal: false,
     canRequestUserChanges: false,
+    canCreateGroupChat: false,
+    canCreateCrossStoreGroupChat: false,
+    canSendGroupChat: false,
     approvesSubmitterRolesJson: '[]',
   },
 ];

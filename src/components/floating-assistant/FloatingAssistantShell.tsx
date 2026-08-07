@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { BACK_PRIORITY, useNativeBack } from '../../lib/nativeBack';
+import { isGroupChatEnabled } from '../../lib/groupChatFlag';
 import type { Profile } from '../../types';
 import {
   OPEN_STORE_CHAT_EVENT,
@@ -48,9 +49,11 @@ export default function FloatingAssistantShell({ profile }: Props) {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<AssistantTabId>('knowledge');
   const [initialStoreChatMessageId, setInitialStoreChatMessageId] = useState('');
+  const [conversationUnread, setConversationUnread] = useState(0);
   const launcherRef = useRef<HTMLButtonElement>(null);
   const wasOpenRef = useRef(false);
   const offline = useOfflineFlag();
+  const groupChatOn = isGroupChatEnabled();
 
   const {
     authorizedStores,
@@ -178,6 +181,11 @@ export default function FloatingAssistantShell({ profile }: Props) {
     return () => window.removeEventListener(OPEN_LOGBOOK_EVENT, onOpenLogbook);
   }, [close]);
 
+  const launcherUnread = groupChatOn ? conversationUnread || totalUnread : totalUnread;
+  const launcherHasUnread = groupChatOn
+    ? conversationUnread > 0 || hasUnread
+    : hasUnread;
+
   const root = (
     <div
       className="floating-assistant-root"
@@ -191,8 +199,8 @@ export default function FloatingAssistantShell({ profile }: Props) {
         dragging={dragging}
         dragX={dragX}
         dragEnabled={dragEnabled}
-        unreadCount={totalUnread}
-        hasUnread={hasUnread}
+        unreadCount={launcherUnread}
+        hasUnread={launcherHasUnread}
         onToggle={toggle}
         onDockLeft={dockLeft}
         onDockRight={dockRight}
@@ -217,6 +225,8 @@ export default function FloatingAssistantShell({ profile }: Props) {
         keyFlash={keyFlash}
         composerVisual={composerVisual}
         storeChatUnread={totalUnread}
+        conversationUnread={conversationUnread}
+        onConversationUnreadChange={setConversationUnread}
         unreadByStore={unreadByStore}
         unreadSendersByStore={unreadSendersByStore}
         initialStoreChatMessageId={initialStoreChatMessageId}

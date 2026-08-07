@@ -25,6 +25,14 @@ vi.mock('./StoreChatPanel', () => ({
   ),
 }));
 
+vi.mock('./ChatsTabBody', () => ({
+  default: ({ hidden }: { hidden: boolean }) => (
+    <div data-testid="chats-tab-body" hidden={hidden}>
+      Chats
+    </div>
+  ),
+}));
+
 vi.mock('./AuthorizedStoreSelector', () => ({
   default: () => <div data-testid="store-selector">Store</div>,
 }));

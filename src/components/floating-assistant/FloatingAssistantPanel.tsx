@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useLang } from '../../i18n';
+import { isGroupChatEnabled } from '../../lib/groupChatFlag';
 import type { Profile, Store } from '../../types';
 import type { AssistantPanelMode, FormFactor } from './assistantPanelLayout';
 import AssistantTabs, { type AssistantTabId } from './AssistantTabs';
 import AuthorizedStoreSelector from './AuthorizedStoreSelector';
+import ChatsTabBody from './ChatsTabBody';
 import KnowledgeAssistantPanel from './KnowledgeAssistantPanel';
 import StoreChatPanel from './StoreChatPanel';
 import FloatingAssistantLoader from './FloatingAssistantLoader';
@@ -66,6 +68,8 @@ interface Props {
   unreadSendersByStore: Record<string, UnreadSenderSummary[]>;
   initialStoreChatMessageId: string;
   onInitialStoreChatMessageHandled: () => void;
+  conversationUnread?: number;
+  onConversationUnreadChange?: (n: number) => void;
   layout: PanelLayoutProps;
 }
 
@@ -99,10 +103,13 @@ export default function FloatingAssistantPanel({
   unreadSendersByStore,
   initialStoreChatMessageId,
   onInitialStoreChatMessageHandled,
+  conversationUnread,
+  onConversationUnreadChange,
   layout,
 }: Props) {
   const { t } = useLang();
   const fa = t.floatingAssistant;
+  const groupChatOn = isGroupChatEnabled();
   const panelRef = useRef<HTMLDivElement>(null);
   const exitFocusRef = useRef<HTMLButtonElement>(null);
   const moreWrapRef = useRef<HTMLDivElement>(null);
@@ -260,7 +267,9 @@ export default function FloatingAssistantPanel({
       <header className="fa-panel-header">
         <div className="fa-panel-header-text">
           <h2 className="fa-panel-title">Assistant</h2>
-          <p className="fa-panel-subtitle small">Knowledge & store chat</p>
+          <p className="fa-panel-subtitle small">
+            {groupChatOn ? 'Knowledge & chats' : 'Knowledge & store chat'}
+          </p>
         </div>
         <div className="fa-panel-header-actions">
           {mode === 'compact' ? (
@@ -364,19 +373,21 @@ export default function FloatingAssistantPanel({
         </div>
       </header>
 
-      <div className="fa-panel-store">
-        {storesLoading ? (
-          <FloatingAssistantLoader label="Loading stores…" />
-        ) : (
-          <AuthorizedStoreSelector
-            stores={stores}
-            selectedStoreId={selectedStoreId}
-            onChange={onStoreChange}
-            unreadByStore={unreadByStore}
-            unreadSendersByStore={unreadSendersByStore}
-          />
-        )}
-      </div>
+      {!groupChatOn || activeTab === 'knowledge' ? (
+        <div className="fa-panel-store">
+          {storesLoading ? (
+            <FloatingAssistantLoader label="Loading stores…" />
+          ) : (
+            <AuthorizedStoreSelector
+              stores={stores}
+              selectedStoreId={selectedStoreId}
+              onChange={onStoreChange}
+              unreadByStore={unreadByStore}
+              unreadSendersByStore={unreadSendersByStore}
+            />
+          )}
+        </div>
+      ) : null}
 
       <AssistantTabs
         activeTab={activeTab}
@@ -384,6 +395,7 @@ export default function FloatingAssistantPanel({
         knowledgePanelId={KNOWLEDGE_PANEL_ID}
         storeChatPanelId={STORE_CHAT_PANEL_ID}
         storeChatUnread={storeChatUnread}
+        conversationUnread={conversationUnread}
       />
 
       <div className="fa-panel-body">
@@ -393,18 +405,40 @@ export default function FloatingAssistantPanel({
           labelledBy="fa-tab-knowledge"
           hidden={activeTab !== 'knowledge'}
         />
-        <StoreChatPanel
-          store={selectedStore}
-          profile={profile}
-          panelId={STORE_CHAT_PANEL_ID}
-          labelledBy="fa-tab-store-chat"
-          hidden={activeTab !== 'store-chat'}
-          canSend={canSend}
-          authorizedStores={stores}
-          composerVisual={composerVisual}
-          initialTargetMessageId={initialStoreChatMessageId}
-          onInitialTargetHandled={onInitialStoreChatMessageHandled}
-        />
+        {groupChatOn ? (
+          <ChatsTabBody
+            profile={profile}
+            stores={stores}
+            selectedStoreId={selectedStoreId}
+            onStoreChange={onStoreChange}
+            selectedStore={selectedStore}
+            storesLoading={storesLoading}
+            canSendStore={canSend}
+            composerVisual={composerVisual}
+            panelId={STORE_CHAT_PANEL_ID}
+            labelledBy="fa-tab-store-chat"
+            hidden={activeTab !== 'store-chat'}
+            mode={mode}
+            unreadByStore={unreadByStore}
+            unreadSendersByStore={unreadSendersByStore}
+            initialStoreChatMessageId={initialStoreChatMessageId}
+            onInitialStoreChatMessageHandled={onInitialStoreChatMessageHandled}
+            onConversationUnreadChange={onConversationUnreadChange}
+          />
+        ) : (
+          <StoreChatPanel
+            store={selectedStore}
+            profile={profile}
+            panelId={STORE_CHAT_PANEL_ID}
+            labelledBy="fa-tab-store-chat"
+            hidden={activeTab !== 'store-chat'}
+            canSend={canSend}
+            authorizedStores={stores}
+            composerVisual={composerVisual}
+            initialTargetMessageId={initialStoreChatMessageId}
+            onInitialTargetHandled={onInitialStoreChatMessageHandled}
+          />
+        )}
       </div>
     </div>
   );

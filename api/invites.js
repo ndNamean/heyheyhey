@@ -1,6 +1,8 @@
 /**
- * Opaque-token invitations API.
- * Actions: create | validate | accept | resend | revoke | list | remove-user
+ * Opaque-token invitations API + Custom Group Chat Admin actions (Hobby fold).
+ * Invite actions: create | validate | accept | resend | revoke | list | remove-user
+ * Group chat actions: groupChatCreate | groupChatInvite | groupChatAccept | …
+ * (gated by VITE_GROUP_CHAT / GROUP_CHAT; default off)
  */
 
 import { id } from '@instantdb/admin';
@@ -19,6 +21,10 @@ import {
   isExpired,
 } from './_lib/invite-crypto.js';
 import { validateRemoveUserTarget } from './_lib/remove-user-guards.js';
+import {
+  handleGroupChatRequest,
+  isGroupChatAction,
+} from './_lib/group-chat/handler.js';
 
 function normalizeOrigin(raw) {
   const fallback = getAppOrigin();
@@ -552,6 +558,10 @@ async function removeUser(req, res) {
 
 export default async function handler(req, res) {
   const action = String(req.query?.action || req.body?.action || '').trim();
+
+  if (isGroupChatAction(action)) {
+    return handleGroupChatRequest(req, res);
+  }
 
   try {
     if (req.method === 'GET' && (action === 'validate' || req.query?.token)) {

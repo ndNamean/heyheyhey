@@ -55,6 +55,19 @@ export function canRequestUserChanges(role: Role, defs?: RoleDefinition[]): bool
   return capability(role, defsOrDefault(defs), 'canRequestUserChanges');
 }
 
+export function canCreateGroupChat(role: Role, defs?: RoleDefinition[]): boolean {
+  return capability(role, defsOrDefault(defs), 'canCreateGroupChat');
+}
+
+export function canCreateCrossStoreGroupChat(role: Role, defs?: RoleDefinition[]): boolean {
+  return capability(role, defsOrDefault(defs), 'canCreateCrossStoreGroupChat');
+}
+
+export function canSendGroupChat(role: Role, defs?: RoleDefinition[]): boolean {
+  if (role === 'viewer') return false;
+  return capability(role, defsOrDefault(defs), 'canSendGroupChat');
+}
+
 /**
  * Final access approve / reject / request-manager — matches Instant `profiles`
  * isAdmin (owner | admin | areaManager). Managers may only pre-approve.

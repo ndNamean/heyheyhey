@@ -33,6 +33,9 @@ type CapabilityKey = keyof Pick<
   | 'canFinalApproveTemplateItemProposal'
   | 'canPublishTemplateItemProposal'
   | 'canRequestUserChanges'
+  | 'canCreateGroupChat'
+  | 'canCreateCrossStoreGroupChat'
+  | 'canSendGroupChat'
 >;
 
 const CAPABILITY_KEYS: CapabilityKey[] = [
@@ -53,6 +56,9 @@ const CAPABILITY_KEYS: CapabilityKey[] = [
   'canFinalApproveTemplateItemProposal',
   'canPublishTemplateItemProposal',
   'canRequestUserChanges',
+  'canCreateGroupChat',
+  'canCreateCrossStoreGroupChat',
+  'canSendGroupChat',
 ];
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed';
@@ -73,7 +79,15 @@ function slugifyKey(raw: string): string {
 
 function staffTemplate(): RoleDefinitionSeed {
   const t = DEFAULT_ROLE_DEFINITIONS.find((d) => d.key === 'staff')!;
-  return { ...t, key: '', label: '', isSystem: false };
+  return {
+    ...t,
+    key: '',
+    label: '',
+    isSystem: false,
+    canCreateGroupChat: false,
+    canCreateCrossStoreGroupChat: false,
+    canSendGroupChat: true,
+  };
 }
 
 export default function RolesPermissionsPanel({

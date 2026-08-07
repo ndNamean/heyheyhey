@@ -682,6 +682,123 @@ const rules = {
     },
   },
 
+  // ── Custom Group Chat rooms (Admin SDK lifecycle; members view) ───────────
+  // Elevated Store Chat roles MUST NOT appear here — private groups only.
+  groupChatRooms: {
+    allow: {
+      view: 'isActiveMember',
+      create: 'false',
+      update: 'isActiveMember && onlyRoomActivityFields',
+      delete: 'false',
+      link: {
+        members: 'false',
+        invites: 'false',
+        messages: 'false',
+      },
+      unlink: {
+        members: 'false',
+        invites: 'false',
+        messages: 'false',
+      },
+    },
+    bind: {
+      ...LEGACY_BIND,
+      isActiveMember:
+        "isApproved && data.id in auth.ref('$user.profile.groupChatMemberships.roomId')",
+      onlyRoomActivityFields:
+        "request.modifiedFields.all(f, f in ['lastMessageAt', 'updatedAt'])",
+    },
+  },
+
+  // ── Custom Group Chat members (Admin create; own lastReadAt/mute updates) ─
+  groupChatMembers: {
+    allow: {
+      view: 'isActiveMemberOfRoom',
+      create: 'false',
+      update: 'isOwnMembership && onlySelfMemberFields',
+      delete: 'false',
+      link: {
+        room: 'false',
+        profile: 'false',
+      },
+      unlink: {
+        room: 'false',
+        profile: 'false',
+      },
+    },
+    bind: {
+      ...LEGACY_BIND,
+      isActiveMemberOfRoom:
+        "isApproved && data.roomId in auth.ref('$user.profile.groupChatMemberships.roomId')",
+      isOwnMembership: 'auth.id != null && data.userId == auth.id',
+      onlySelfMemberFields:
+        "request.modifiedFields.all(f, f in ['lastReadAt', 'notificationMode', 'muted', 'pinned'])",
+    },
+  },
+
+  // ── Custom Group Chat invites (invitee view; accept/decline via Admin) ─────
+  groupChatInvites: {
+    allow: {
+      view: 'isInvitee',
+      create: 'false',
+      update: 'false',
+      delete: 'false',
+      link: {
+        room: 'false',
+        invitee: 'false',
+        inviter: 'false',
+      },
+      unlink: {
+        room: 'false',
+        invitee: 'false',
+        inviter: 'false',
+      },
+    },
+    bind: {
+      ...LEGACY_BIND,
+      isInvitee: 'isApproved && auth.id != null && data.inviteeUserId == auth.id',
+    },
+  },
+
+  // ── Custom Group Chat messages (membership-only; no elevated Store Chat) ──
+  groupChatMessages: {
+    allow: {
+      view: 'canViewGroupMessage',
+      create:
+        "canSendGroupMessage && data.senderUserId == auth.id && isOwnSenderProfile && roomIdValid && data.status == 'active' && messageTypeValid && bodySizeValid && mediaCoherent && data.messageType != 'logbook_system'",
+      update: 'isOwnMessage && onlyDeletedFields && softDeleteValid',
+      delete: 'false',
+      link: {
+        room: 'canSendGroupMessage',
+        sender: 'canSendGroupMessage && isOwnSenderProfile',
+      },
+      unlink: {
+        room: 'false',
+        sender: 'false',
+      },
+    },
+    bind: {
+      ...LEGACY_BIND,
+      roomIdValid: "data.roomId != ''",
+      // Explicit: no hasAllStoreChatAccess — Owner/Admin/AM cannot auto-read private groups.
+      isRoomMember:
+        "data.roomId in auth.ref('$user.profile.groupChatMemberships.roomId')",
+      canViewGroupMessage: 'isApproved && roomIdValid && isRoomMember',
+      isViewer: "'viewer' in auth.ref('$user.profile.role')",
+      canSendGroupMessage: 'canViewGroupMessage && !isViewer',
+      isOwnMessage: 'auth.id != null && data.senderUserId == auth.id',
+      isOwnSenderProfile: "data.senderProfileId in auth.ref('$user.profile.id')",
+      onlyDeletedFields:
+        "request.modifiedFields.all(f, f in ['deletedAt', 'status'])",
+      softDeleteValid: "newData.status == 'deleted' && newData.deletedAt != ''",
+      messageTypeValid:
+        "data.messageType == 'text' || data.messageType == 'giphy_media' || data.messageType == 'text_giphy' || data.messageType == 'system'",
+      bodySizeValid: 'size(data.body) <= 2000',
+      mediaCoherent:
+        "((data.messageType == 'text' || data.messageType == 'system') && size(data.body) > 0 && data.giphyId == '') || (data.messageType == 'giphy_media' && data.giphyId != '' && data.giphyUrl != '') || (data.messageType == 'text_giphy' && size(data.body) > 0 && data.giphyId != '' && data.giphyUrl != '')",
+    },
+  },
+
   // ── User change requests ──────────────────────────────────────────────────
   userChangeRequests: {
     allow: {

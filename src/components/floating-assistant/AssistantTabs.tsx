@@ -1,3 +1,5 @@
+import { isGroupChatEnabled } from '../../lib/groupChatFlag';
+
 export type AssistantTabId = 'knowledge' | 'store-chat';
 
 interface Props {
@@ -6,16 +8,9 @@ interface Props {
   knowledgePanelId: string;
   storeChatPanelId: string;
   storeChatUnread?: number;
+  /** When group chat is on, badge = unread conversations (+ pending invites). */
+  conversationUnread?: number;
 }
-
-const TABS: {
-  id: AssistantTabId;
-  label: string;
-  controls: keyof Pick<Props, 'knowledgePanelId' | 'storeChatPanelId'>;
-}[] = [
-  { id: 'knowledge', label: 'Knowledge', controls: 'knowledgePanelId' },
-  { id: 'store-chat', label: 'Store Chat', controls: 'storeChatPanelId' },
-];
 
 export default function AssistantTabs({
   activeTab,
@@ -23,14 +18,29 @@ export default function AssistantTabs({
   knowledgePanelId,
   storeChatPanelId,
   storeChatUnread = 0,
+  conversationUnread,
 }: Props) {
+  const groupChatOn = isGroupChatEnabled();
+  const chatsLabel = groupChatOn ? 'Chats' : 'Store Chat';
+  const badgeCount = groupChatOn
+    ? conversationUnread ?? storeChatUnread
+    : storeChatUnread;
   const ids = { knowledgePanelId, storeChatPanelId };
+
+  const tabs: {
+    id: AssistantTabId;
+    label: string;
+    controls: keyof Pick<Props, 'knowledgePanelId' | 'storeChatPanelId'>;
+  }[] = [
+    { id: 'knowledge', label: 'Knowledge', controls: 'knowledgePanelId' },
+    { id: 'store-chat', label: chatsLabel, controls: 'storeChatPanelId' },
+  ];
 
   return (
     <div className="fa-tabs" role="tablist" aria-label="Assistant panels">
-      {TABS.map((tab) => {
+      {tabs.map((tab) => {
         const selected = activeTab === tab.id;
-        const showBadge = tab.id === 'store-chat' && storeChatUnread > 0;
+        const showBadge = tab.id === 'store-chat' && badgeCount > 0;
         return (
           <button
             key={tab.id}
@@ -53,9 +63,13 @@ export default function AssistantTabs({
             {showBadge ? (
               <span
                 className="fa-tab-badge"
-                aria-label={`${storeChatUnread} unread store chat ${storeChatUnread === 1 ? 'message' : 'messages'}`}
+                aria-label={
+                  groupChatOn
+                    ? `${badgeCount} unread conversations`
+                    : `${badgeCount} unread store chat ${badgeCount === 1 ? 'message' : 'messages'}`
+                }
               >
-                {storeChatUnread > 99 ? '99+' : storeChatUnread}
+                {badgeCount > 99 ? '99+' : badgeCount}
               </span>
             ) : null}
           </button>

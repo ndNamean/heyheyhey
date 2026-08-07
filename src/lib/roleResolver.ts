@@ -15,6 +15,9 @@ const OPTIONAL_CAPABILITY_KEYS = [
   'canFinalApproveTemplateItemProposal',
   'canPublishTemplateItemProposal',
   'canRequestUserChanges',
+  'canCreateGroupChat',
+  'canCreateCrossStoreGroupChat',
+  'canSendGroupChat',
 ] as const satisfies ReadonlyArray<keyof RoleDefinitionSeed>;
 
 export function parseApprovesSubmitterRoles(json: string | undefined): string[] {
@@ -85,6 +88,9 @@ export function capability(
     | 'canFinalApproveTemplateItemProposal'
     | 'canPublishTemplateItemProposal'
     | 'canRequestUserChanges'
+    | 'canCreateGroupChat'
+    | 'canCreateCrossStoreGroupChat'
+    | 'canSendGroupChat'
   >,
 ): boolean {
   return getRoleDef(role, defs)?.[flag] ?? false;
