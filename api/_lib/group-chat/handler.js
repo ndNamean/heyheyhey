@@ -55,6 +55,8 @@ function emptyMessageSystemFields() {
     giphyHeight: '',
     giphyUrl: '',
     giphyPreviewUrl: '',
+    forwardedFromMessageId: '',
+    forwardedFromUserId: '',
     clientMutationId: '',
   };
 }

@@ -998,11 +998,41 @@ export interface GroupChatMessage {
   giphyHeight?: string;
   giphyUrl?: string;
   giphyPreviewUrl?: string;
+  /** Source message id when this row is a forward; '' otherwise. */
+  forwardedFromMessageId?: string;
+  /** Original author userId when forwarded; '' otherwise. Forwarder is senderUserId. */
+  forwardedFromUserId?: string;
   clientMutationId?: string;
   sender?: Pick<
     Profile,
     'id' | 'userId' | 'displayName' | 'email' | 'avatarUrl' | 'avatarPath' | 'avatarFile'
   >;
+}
+
+/** InstantDB groupChatReactions — room key is roomId; membership-only. */
+export interface GroupChatReaction {
+  id: string;
+  roomId: string;
+  messageId: string;
+  userId: string;
+  reactionType: StoreChatReactionType | string;
+  unicode: string;
+  giphyId: string;
+  giphyKind: string;
+  giphyTitle: string;
+  giphyUrl?: string;
+  giphyPreviewUrl?: string;
+  createdAt: string;
+  clientMutationId: string;
+}
+
+/** InstantDB groupChatBookmarks — per-viewer favorites; room key is roomId. */
+export interface GroupChatBookmark {
+  id: string;
+  roomId: string;
+  messageId: string;
+  userId: string;
+  createdAt: string;
 }
 
 export type ExportJobStatus = 'pending' | 'processing' | 'completed' | 'failed';

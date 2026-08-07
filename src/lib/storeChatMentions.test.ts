@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Profile, Store } from '../types';
 import {
   buildMentionCandidates,
+  buildGroupMentionCandidates,
   buildMentionMenuItems,
   expandMentionRecipients,
   filterMentionCandidates,
@@ -74,6 +75,30 @@ describe('buildMentionCandidates', () => {
     const c = buildMentionCandidates(profiles, 's1', 'me');
     expect(c.map((x) => x.userId).sort()).toEqual(['u1', 'u3']);
     expect(c.find((x) => x.userId === 'u1')?.label).toBe('Ada');
+  });
+});
+
+describe('buildGroupMentionCandidates', () => {
+  it('uses active members only; excludes self; sorts by label', () => {
+    const c = buildGroupMentionCandidates(
+      [
+        {
+          userId: 'me',
+          profile: { userId: 'me', displayName: 'Me', email: 'me@x.com' },
+        },
+        {
+          userId: 'u2',
+          profile: { userId: 'u2', displayName: 'Zoe', email: 'z@x.com' },
+        },
+        {
+          userId: 'u1',
+          profile: { userId: 'u1', displayName: 'Ada', email: 'a@x.com' },
+        },
+      ],
+      'me',
+    );
+    expect(c.map((x) => x.userId)).toEqual(['u1', 'u2']);
+    expect(c[0]?.label).toBe('Ada');
   });
 });
 

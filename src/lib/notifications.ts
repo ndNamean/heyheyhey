@@ -895,6 +895,10 @@ export function isStoreChatMentionNotificationType(type: string): boolean {
   return type === 'store_chat_mention' || type === 'store_chat_mention_all';
 }
 
+export function isGroupChatMentionNotificationType(type: string): boolean {
+  return type === 'group_chat_mention' || type === 'group_chat_mention_all';
+}
+
 export function buildLogbookNoteAnnouncementNotifications(
   entry: LogbookEntry,
   actor: Profile,
@@ -994,6 +998,67 @@ export function buildStoreChatMentionNotifications(opts: {
         readAt: '',
         createdAt: nowIso(),
         ...emptyStoreChatNotifFields(storeId, messageId),
+      }),
+    );
+  }
+  return txs;
+}
+
+function emptyGroupChatNotifFields(messageId: string, roomId: string) {
+  return {
+    reportId: messageId,
+    reportResponseId: '',
+    storeId: '',
+    itemTitle: '',
+    completionPercent: 0,
+    compliancePercent: 0,
+    actionStatus: '',
+    deliveryKey: '',
+    deepLinkJson: JSON.stringify({ kind: 'groupChat', roomId, messageId }),
+  };
+}
+
+/**
+ * In-app notifications for Group Chat @mentions / @all.
+ * `reportId` stores the message id (same reuse pattern as store chat).
+ * Room id lives in `deepLinkJson` (storeId stays empty).
+ */
+export function buildGroupChatMentionNotifications(opts: {
+  messageId: string;
+  roomId: string;
+  roomName: string;
+  body: string;
+  actor: Profile;
+  recipientUserIds: string[];
+  mentionAll: boolean;
+}) {
+  const { messageId, roomId, roomName, body, actor, recipientUserIds, mentionAll } = opts;
+  const actorName = actor.displayName?.trim() || actor.email?.split('@')[0] || 'Someone';
+  const preview = storeChatPreview(body);
+  const roomPart = roomName.trim() || roomId;
+  const type = mentionAll ? 'group_chat_mention_all' : 'group_chat_mention';
+  const title = mentionAll
+    ? `${actorName} mentioned everyone in Group Chat`
+    : `${actorName} mentioned you in Group Chat`;
+  const notifBody = [`Group: ${roomPart}`, preview].filter(Boolean).join('\n');
+
+  const seen = new Set<string>();
+  const txs = [];
+  for (const uid of recipientUserIds) {
+    if (!uid || uid === actor.userId) continue;
+    if (seen.has(uid)) continue;
+    seen.add(uid);
+    txs.push(
+      db.tx.notifications[id()].update({
+        recipientUserId: uid,
+        type,
+        title,
+        body: notifBody,
+        actorUserId: actor.userId,
+        actorRole: actor.role,
+        readAt: '',
+        createdAt: nowIso(),
+        ...emptyGroupChatNotifFields(messageId, roomId),
       }),
     );
   }

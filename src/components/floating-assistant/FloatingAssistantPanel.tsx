@@ -68,6 +68,10 @@ interface Props {
   unreadSendersByStore: Record<string, UnreadSenderSummary[]>;
   initialStoreChatMessageId: string;
   onInitialStoreChatMessageHandled: () => void;
+  pendingGroupChatRoomId?: string;
+  onPendingGroupChatRoomHandled?: () => void;
+  initialGroupChatMessageId?: string;
+  onInitialGroupChatMessageHandled?: () => void;
   conversationUnread?: number;
   onConversationUnreadChange?: (n: number) => void;
   layout: PanelLayoutProps;
@@ -103,6 +107,10 @@ export default function FloatingAssistantPanel({
   unreadSendersByStore,
   initialStoreChatMessageId,
   onInitialStoreChatMessageHandled,
+  pendingGroupChatRoomId = '',
+  onPendingGroupChatRoomHandled,
+  initialGroupChatMessageId = '',
+  onInitialGroupChatMessageHandled,
   conversationUnread,
   onConversationUnreadChange,
   layout,
@@ -423,6 +431,10 @@ export default function FloatingAssistantPanel({
             unreadSendersByStore={unreadSendersByStore}
             initialStoreChatMessageId={initialStoreChatMessageId}
             onInitialStoreChatMessageHandled={onInitialStoreChatMessageHandled}
+            pendingGroupChatRoomId={pendingGroupChatRoomId}
+            onPendingGroupChatRoomHandled={onPendingGroupChatRoomHandled}
+            initialGroupChatMessageId={initialGroupChatMessageId}
+            onInitialGroupChatMessageHandled={onInitialGroupChatMessageHandled}
             onConversationUnreadChange={onConversationUnreadChange}
           />
         ) : (

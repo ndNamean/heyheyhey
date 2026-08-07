@@ -8,6 +8,7 @@ import {
   tabToMediaKind,
 } from './giphyClient';
 import {
+  buildGroupChatMediaPayload,
   buildStoreChatMediaPayload,
   canSendStoreChatMedia,
   emptyStoreChatGiphyFields,
@@ -47,6 +48,19 @@ describe('storeChatMediaPayload', () => {
     expect(payload.sourceType).toBe('');
     expect(payload.logbookEntryId).toBe('');
     expect(payload.chatDeliveryKey).toBe('');
+  });
+
+  it('buildGroupChatMediaPayload omits logbook keys but keeps forward fields', () => {
+    const payload = buildGroupChatMediaPayload({
+      body: 'hi',
+      forwardedFromMessageId: 'm1',
+      forwardedFromUserId: 'u9',
+    });
+    expect(payload.messageType).toBe('text');
+    expect(payload.forwardedFromMessageId).toBe('m1');
+    expect(payload.forwardedFromUserId).toBe('u9');
+    expect('sourceType' in payload).toBe(false);
+    expect('logbookEntryId' in payload).toBe(false);
   });
 
   it('builds giphy_media when only media is selected', () => {

@@ -5,6 +5,7 @@
  * Empty-string defaults keep clientRequired schema fields safe for text-only sends.
  * StoreChatPanel `sendMessage` uses `buildStoreChatMediaPayload`; picker selection
  * stages into composer preview first (no auto-send).
+ * GroupChatPanel uses `buildGroupChatMediaPayload` (same media/social fields, no logbook).
  */
 
 import type { GiphyMediaItem, GiphyMediaKind } from './giphyClient';
@@ -51,11 +52,8 @@ export interface StoreChatMediaPayloadInput {
   clientMutationId?: string | null;
 }
 
-/** Full Instant update blob for storeChatMessages (media + social metadata). */
-export interface StoreChatMediaMessageAttrs
-  extends StoreChatGiphyFields,
-    StoreChatForwardFields,
-    StoreChatLogbookFields {
+/** Shared social/media attrs (Store + Group). */
+export interface ChatMediaSocialAttrs extends StoreChatGiphyFields, StoreChatForwardFields {
   messageType: StoreChatMediaMessageType;
   body: string;
   replyToMessageId: string;
@@ -63,6 +61,14 @@ export interface StoreChatMediaMessageAttrs
   mentionAll: boolean;
   clientMutationId: string;
 }
+
+/** Full Instant update blob for storeChatMessages (media + social metadata). */
+export interface StoreChatMediaMessageAttrs
+  extends ChatMediaSocialAttrs,
+    StoreChatLogbookFields {}
+
+/** Instant update blob for groupChatMessages (no logbook fields). */
+export type GroupChatMediaMessageAttrs = ChatMediaSocialAttrs;
 
 export const EMPTY_GIPHY_FIELDS: StoreChatGiphyFields = {
   giphyId: '',
@@ -124,21 +130,14 @@ export function hasGiphyMedia(fields: Pick<StoreChatGiphyFields, 'giphyId' | 'gi
   return Boolean(fields.giphyId?.trim() || fields.giphyUrl?.trim());
 }
 
-/**
- * Compose InstantDB message attributes for text / giphy / text+giphy,
- * including optional reply + mention + forward metadata.
- */
-export function buildStoreChatMediaPayload(
+/** Compose shared media/social attrs for Store or Group chat sends. */
+export function buildChatMediaSocialPayload(
   input: StoreChatMediaPayloadInput,
-): StoreChatMediaMessageAttrs {
+): ChatMediaSocialAttrs {
   const body = String(input.body ?? '');
   const giphy = input.giphy ?? null;
   const giphyFields = giphy ? giphyItemToFields(giphy) : emptyStoreChatGiphyFields();
   const messageType = normalizeStoreChatMessageType(body, Boolean(giphy));
-
-  if (messageType === 'giphy_media' && !body.trim()) {
-    // Keep body non-null; Instant requires string. Empty is fine for media-only.
-  }
 
   return {
     messageType,
@@ -150,14 +149,36 @@ export function buildStoreChatMediaPayload(
     forwardedFromMessageId: String(input.forwardedFromMessageId ?? '').trim(),
     forwardedFromUserId: String(input.forwardedFromUserId ?? '').trim(),
     ...giphyFields,
+  };
+}
+
+/**
+ * Compose InstantDB message attributes for text / giphy / text+giphy,
+ * including optional reply + mention + forward metadata.
+ */
+export function buildStoreChatMediaPayload(
+  input: StoreChatMediaPayloadInput,
+): StoreChatMediaMessageAttrs {
+  return {
+    ...buildChatMediaSocialPayload(input),
     ...EMPTY_LOGBOOK_FIELDS,
   };
+}
+
+/** Group Chat message attrs — same social/media fields, no logbook keys. */
+export function buildGroupChatMediaPayload(
+  input: StoreChatMediaPayloadInput,
+): GroupChatMediaMessageAttrs {
+  return buildChatMediaSocialPayload(input);
 }
 
 /** True when the composer can send (text and/or selected GIPHY). */
 export function canSendStoreChatMedia(body: string, giphy: GiphyMediaItem | null | undefined): boolean {
   return Boolean(body.trim() || giphy?.id);
 }
+
+/** Alias for group composer send gate. */
+export const canSendGroupChatMedia = canSendStoreChatMedia;
 
 /** Human label for reply quotes / notifications. */
 export function storeChatMediaLabel(
@@ -173,3 +194,5 @@ export function storeChatMediaLabel(
   if (type === 'text_giphy') return 'GIF + text';
   return 'GIF';
 }
+
+export const groupChatMediaLabel = storeChatMediaLabel;

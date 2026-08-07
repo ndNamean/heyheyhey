@@ -51,6 +51,30 @@ export function canAccessStoreChatRoom(
   return (profile.stores ?? []).some((s) => s.id === storeId);
 }
 
+function profileToMentionCandidate(p: Profile): MentionCandidate {
+  const label = mentionDisplayLabel(p);
+  return {
+    userId: p.userId,
+    label,
+    email: p.email ?? '',
+    profile: {
+      displayName: p.displayName,
+      email: p.email,
+      userId: p.userId,
+      avatarUrl: p.avatarUrl,
+      avatarPath: p.avatarPath,
+      avatarFile: p.avatarFile,
+    },
+  };
+}
+
+/** Sort mention candidates by label then email. */
+export function sortMentionCandidates(candidates: MentionCandidate[]): MentionCandidate[] {
+  return candidates
+    .slice()
+    .sort((a, b) => a.label.localeCompare(b.label) || a.email.localeCompare(b.email));
+}
+
 /** Approved profiles who can see the store room, excluding the sender. */
 export function buildMentionCandidates(
   profiles: Profile[],
@@ -62,22 +86,49 @@ export function buildMentionCandidates(
     if (p.approvalStatus !== 'approved') continue;
     if (!p.userId || p.userId === excludeUserId) continue;
     if (!canAccessStoreChatRoom(p, storeId)) continue;
-    const label = mentionDisplayLabel(p);
+    out.push(profileToMentionCandidate(p));
+  }
+  return sortMentionCandidates(out);
+}
+
+/**
+ * Group Chat mention candidates from active room members (+ optional @all via menu builder).
+ * Excludes `excludeUserId`. Uses linked member profiles when present.
+ */
+export function buildGroupMentionCandidates(
+  members: Array<{
+    userId: string;
+    profile?: Pick<Profile, 'displayName' | 'email' | 'userId' | 'avatarUrl' | 'avatarPath' | 'avatarFile' | 'approvalStatus'> | null;
+  }>,
+  excludeUserId: string,
+): MentionCandidate[] {
+  const out: MentionCandidate[] = [];
+  const seen = new Set<string>();
+  for (const m of members) {
+    const userId = (m.userId || m.profile?.userId || '').trim();
+    if (!userId || userId === excludeUserId || seen.has(userId)) continue;
+    if (m.profile?.approvalStatus && m.profile.approvalStatus !== 'approved') continue;
+    seen.add(userId);
+    const p = m.profile;
+    const label = mentionDisplayLabel({
+      displayName: p?.displayName ?? '',
+      email: p?.email ?? '',
+    });
     out.push({
-      userId: p.userId,
+      userId,
       label,
-      email: p.email ?? '',
+      email: p?.email ?? '',
       profile: {
-        displayName: p.displayName,
-        email: p.email,
-        userId: p.userId,
-        avatarUrl: p.avatarUrl,
-        avatarPath: p.avatarPath,
-        avatarFile: p.avatarFile,
+        displayName: p?.displayName,
+        email: p?.email,
+        userId,
+        avatarUrl: p?.avatarUrl,
+        avatarPath: p?.avatarPath,
+        avatarFile: p?.avatarFile,
       },
     });
   }
-  return out.sort((a, b) => a.label.localeCompare(b.label) || a.email.localeCompare(b.email));
+  return sortMentionCandidates(out);
 }
 
 /**

@@ -37,6 +37,10 @@ interface Props {
   unreadSendersByStore: Record<string, UnreadSenderSummary[]>;
   initialStoreChatMessageId: string;
   onInitialStoreChatMessageHandled: () => void;
+  pendingGroupChatRoomId?: string;
+  onPendingGroupChatRoomHandled?: () => void;
+  initialGroupChatMessageId?: string;
+  onInitialGroupChatMessageHandled?: () => void;
   onConversationUnreadChange?: (conversationUnread: number) => void;
 }
 
@@ -74,6 +78,10 @@ export default function ChatsTabBody({
   unreadSendersByStore,
   initialStoreChatMessageId,
   onInitialStoreChatMessageHandled,
+  pendingGroupChatRoomId = '',
+  onPendingGroupChatRoomHandled,
+  initialGroupChatMessageId = '',
+  onInitialGroupChatMessageHandled,
   onConversationUnreadChange,
 }: Props) {
   const { defs } = useRoleDefinitions();
@@ -141,6 +149,21 @@ export default function ChatsTabBody({
       writeStoredRoom(ref);
     }
   }, [selected, selectedStoreId]);
+
+  useEffect(() => {
+    const roomId = pendingGroupChatRoomId.trim();
+    if (!roomId) return;
+    selectRoom({ kind: 'group', id: roomId });
+    onPendingGroupChatRoomHandled?.();
+  }, [pendingGroupChatRoomId, selectRoom, onPendingGroupChatRoomHandled]);
+
+  useEffect(() => {
+    const messageId = initialStoreChatMessageId.trim();
+    const storeId = selectedStoreId.trim();
+    if (!messageId || !storeId) return;
+    if (selected?.kind === 'store' && selected.id === storeId) return;
+    selectRoom({ kind: 'store', id: storeId });
+  }, [initialStoreChatMessageId, selectedStoreId, selected, selectRoom]);
 
   const canCreate = canCreateGroupChat(profile.role, defs);
   const canCross = canCreateCrossStoreGroupChat(profile.role, defs);
@@ -216,8 +239,13 @@ export default function ChatsTabBody({
             hidden={hidden}
             canSend={canSendGroup}
             composerVisual={composerVisual}
+            authorizedStores={stores}
+            groupRooms={rooms}
+            canCrossStore={canCross}
             showBack={false}
             onBack={fallbackAfterLeave}
+            initialTargetMessageId={initialGroupChatMessageId}
+            onInitialTargetHandled={onInitialGroupChatMessageHandled}
           />
         ) : (
           <StoreChatPanel

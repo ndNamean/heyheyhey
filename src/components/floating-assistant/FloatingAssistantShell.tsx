@@ -4,7 +4,9 @@ import { BACK_PRIORITY, useNativeBack } from '../../lib/nativeBack';
 import { isGroupChatEnabled } from '../../lib/groupChatFlag';
 import type { Profile } from '../../types';
 import {
+  OPEN_GROUP_CHAT_EVENT,
   OPEN_STORE_CHAT_EVENT,
+  type OpenGroupChatDetail,
   type OpenStoreChatDetail,
 } from '../FeedbackInbox';
 import { OPEN_LOGBOOK_EVENT } from '../../lib/logbookDeepLink';
@@ -49,6 +51,8 @@ export default function FloatingAssistantShell({ profile }: Props) {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<AssistantTabId>('knowledge');
   const [initialStoreChatMessageId, setInitialStoreChatMessageId] = useState('');
+  const [pendingGroupChatRoomId, setPendingGroupChatRoomId] = useState('');
+  const [initialGroupChatMessageId, setInitialGroupChatMessageId] = useState('');
   const [conversationUnread, setConversationUnread] = useState(0);
   const launcherRef = useRef<HTMLButtonElement>(null);
   const wasOpenRef = useRef(false);
@@ -174,6 +178,21 @@ export default function FloatingAssistantShell({ profile }: Props) {
   }, [setSelectedStoreId]);
 
   useEffect(() => {
+    function onOpenGroupChat(event: Event) {
+      if (!isGroupChatEnabled()) return;
+      const detail = (event as CustomEvent<OpenGroupChatDetail>).detail;
+      const roomId = detail?.roomId?.trim();
+      if (!roomId) return;
+      setPendingGroupChatRoomId(roomId);
+      setInitialGroupChatMessageId(detail?.messageId?.trim() || '');
+      setActiveTab('store-chat');
+      setOpen(true);
+    }
+    window.addEventListener(OPEN_GROUP_CHAT_EVENT, onOpenGroupChat);
+    return () => window.removeEventListener(OPEN_GROUP_CHAT_EVENT, onOpenGroupChat);
+  }, []);
+
+  useEffect(() => {
     function onOpenLogbook() {
       close();
     }
@@ -231,6 +250,10 @@ export default function FloatingAssistantShell({ profile }: Props) {
         unreadSendersByStore={unreadSendersByStore}
         initialStoreChatMessageId={initialStoreChatMessageId}
         onInitialStoreChatMessageHandled={() => setInitialStoreChatMessageId('')}
+        pendingGroupChatRoomId={pendingGroupChatRoomId}
+        onPendingGroupChatRoomHandled={() => setPendingGroupChatRoomId('')}
+        initialGroupChatMessageId={initialGroupChatMessageId}
+        onInitialGroupChatMessageHandled={() => setInitialGroupChatMessageId('')}
         layout={{
           mode: layout.mode,
           formFactor: layout.formFactor,

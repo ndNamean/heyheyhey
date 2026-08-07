@@ -96,4 +96,19 @@ describe('storeChatActions', () => {
     expect(sheet).not.toContain('forward');
     expect(sheet).not.toContain('delete');
   });
+
+  it('strips forward and delete for isSystemMessage (group system)', () => {
+    const ctx = { ...baseCtx, isOwn: true, isSystemMessage: true };
+    expect(isStoreChatActionAvailable('reply', ctx)).toBe(true);
+    expect(isStoreChatActionAvailable('react', ctx)).toBe(true);
+    expect(isStoreChatActionAvailable('favorite', ctx)).toBe(true);
+    expect(isStoreChatActionAvailable('forward', ctx)).toBe(false);
+    expect(isStoreChatActionAvailable('delete', ctx)).toBe(false);
+    const sheet = listStoreChatActions('sheet', ctx).map((a) => a.id);
+    expect(sheet).toContain('reply');
+    expect(sheet).toContain('react');
+    expect(sheet).toContain('favorite');
+    expect(sheet).not.toContain('forward');
+    expect(sheet).not.toContain('delete');
+  });
 });

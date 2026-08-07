@@ -1,5 +1,6 @@
 /**
- * Unified Store Chat message action registry: capabilities, labels, keyboard maps.
+ * Unified chat message action registry (Store Chat + Group Chat).
+ * Capabilities, labels, keyboard maps — room-agnostic.
  */
 
 export type StoreChatActionId =
@@ -12,6 +13,9 @@ export type StoreChatActionId =
   | 'delete'
   | 'more';
 
+/** Alias for Group Chat / shared panels. */
+export type ChatActionId = StoreChatActionId;
+
 export interface StoreChatActionCapabilityContext {
   isOwn: boolean;
   isDeleted: boolean;
@@ -20,11 +24,15 @@ export interface StoreChatActionCapabilityContext {
   hasBody: boolean;
   translationAvailable: boolean;
   isBookmarked: boolean;
-  /** At least one other authorized store to forward into. */
+  /** At least one other authorized destination to forward into. */
   canForward: boolean;
-  /** Logbook system rows: Reply/React ok; hide Forward/Delete. */
+  /** Logbook/system rows: Reply/React ok; hide Forward/Delete. */
   isLogbookSystem?: boolean;
+  /** Group system messages — same spirit as logbook cards. */
+  isSystemMessage?: boolean;
 }
+
+export type ChatActionCapabilityContext = StoreChatActionCapabilityContext;
 
 export interface StoreChatActionDef {
   id: StoreChatActionId;
@@ -57,6 +65,8 @@ export const STORE_CHAT_ACTIONS: readonly StoreChatActionDef[] = [
   },
 ] as const;
 
+export const CHAT_ACTIONS = STORE_CHAT_ACTIONS;
+
 const ACTION_BY_ID = new Map(STORE_CHAT_ACTIONS.map((a) => [a.id, a]));
 
 export function getStoreChatAction(id: StoreChatActionId): StoreChatActionDef {
@@ -64,6 +74,8 @@ export function getStoreChatAction(id: StoreChatActionId): StoreChatActionDef {
   if (!def) throw new Error(`Unknown store chat action: ${id}`);
   return def;
 }
+
+export const getChatAction = getStoreChatAction;
 
 export type StoreChatActionLabelCopy = {
   reply: string;
@@ -105,6 +117,12 @@ export function storeChatActionLabel(
   return copy[id] ?? getStoreChatAction(id).label;
 }
 
+export const chatActionLabel = storeChatActionLabel;
+
+function isProtectedSystem(ctx: StoreChatActionCapabilityContext): boolean {
+  return Boolean(ctx.isLogbookSystem || ctx.isSystemMessage);
+}
+
 /**
  * Whether an action is available for the given message/viewer context.
  * `more` is a UI affordance and is available when any moreMenu action is.
@@ -129,14 +147,14 @@ export function isStoreChatActionAvailable(
     case 'copy':
       return ctx.hasBody;
     case 'forward':
-      if (ctx.isLogbookSystem) return false;
+      if (isProtectedSystem(ctx)) return false;
       return ctx.canSend && ctx.canForward && ctx.hasBody;
     case 'favorite':
       return true;
     case 'translate':
       return ctx.translationAvailable && ctx.hasBody;
     case 'delete':
-      if (ctx.isLogbookSystem) return false;
+      if (isProtectedSystem(ctx)) return false;
       return ctx.isOwn;
     default: {
       const _exhaustive: never = actionId;
@@ -144,6 +162,8 @@ export function isStoreChatActionAvailable(
     }
   }
 }
+
+export const isChatActionAvailable = isStoreChatActionAvailable;
 
 export function listStoreChatActions(
   surface: 'strip' | 'sheet' | 'moreMenu',
@@ -161,6 +181,8 @@ export function listStoreChatActions(
   }));
 }
 
+export const listChatActions = listStoreChatActions;
+
 /** Map a bare key (no modifiers) to an action id when the message row is focused. */
 export function resolveStoreChatActionKeyboard(
   key: string,
@@ -174,3 +196,5 @@ export function resolveStoreChatActionKeyboard(
   }
   return null;
 }
+
+export const resolveChatActionKeyboard = resolveStoreChatActionKeyboard;

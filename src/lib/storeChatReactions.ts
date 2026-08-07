@@ -1,5 +1,8 @@
 import type { GiphyMediaItem } from './giphyClient';
-import type { StoreChatReaction } from '../types';
+import type { GroupChatReaction, StoreChatReaction } from '../types';
+
+/** Reaction shape shared by Store and Group chat (room key differs). */
+export type ChatReaction = StoreChatReaction | GroupChatReaction;
 
 /** Quick-tray Unicode set for Phase 2 (GIPHY reactions land in Phase 5). */
 export const QUICK_UNICODE_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'] as const;
@@ -85,7 +88,7 @@ export interface UnicodeReactionGroup {
   reactedByMe: boolean;
   myReactionId: string | null;
   /** Oldest-first for stable chip order within a group. */
-  reactions: StoreChatReaction[];
+  reactions: ChatReaction[];
 }
 
 export interface GiphyReactionGroup {
@@ -98,7 +101,7 @@ export interface GiphyReactionGroup {
   userIds: string[];
   reactedByMe: boolean;
   myReactionId: string | null;
-  reactions: StoreChatReaction[];
+  reactions: ChatReaction[];
 }
 
 function normalizeUnicode(unicode: string): string {
@@ -164,19 +167,19 @@ export function buildGiphyReactionMutationId(
   return `${action}:${buildGiphyReactionIdentityKey(messageId, userId, giphyId)}`;
 }
 
-export function isUnicodeReaction(reaction: Pick<StoreChatReaction, 'reactionType' | 'unicode'>): boolean {
+export function isUnicodeReaction(reaction: Pick<ChatReaction, 'reactionType' | 'unicode'>): boolean {
   return reaction.reactionType === 'unicode' && Boolean(normalizeUnicode(reaction.unicode || ''));
 }
 
 export function isGiphyReaction(
-  reaction: Pick<StoreChatReaction, 'reactionType' | 'giphyId'>,
+  reaction: Pick<ChatReaction, 'reactionType' | 'giphyId'>,
 ): boolean {
   return reaction.reactionType === 'giphy' && Boolean((reaction.giphyId || '').trim());
 }
 
 /** Fallback CDN preview when historical rows lack stored URLs. */
 export function giphyReactionDisplayUrl(
-  reaction: Pick<StoreChatReaction, 'giphyId' | 'giphyUrl' | 'giphyPreviewUrl'>,
+  reaction: Pick<ChatReaction, 'giphyId' | 'giphyUrl' | 'giphyPreviewUrl'>,
 ): string {
   const preview = (reaction.giphyPreviewUrl || '').trim();
   if (preview) return preview;
@@ -187,11 +190,11 @@ export function giphyReactionDisplayUrl(
 }
 
 export function findOwnUnicodeReaction(
-  reactions: StoreChatReaction[],
+  reactions: ChatReaction[],
   messageId: string,
   userId: string,
   unicode: string,
-): StoreChatReaction | undefined {
+): ChatReaction | undefined {
   const normalized = normalizeUnicode(unicode);
   return reactions.find(
     (r) =>
@@ -203,11 +206,11 @@ export function findOwnUnicodeReaction(
 }
 
 export function findOwnGiphyReaction(
-  reactions: StoreChatReaction[],
+  reactions: ChatReaction[],
   messageId: string,
   userId: string,
   giphyId: string,
-): StoreChatReaction | undefined {
+): ChatReaction | undefined {
   const id = giphyId.trim();
   return reactions.find(
     (r) =>
@@ -223,7 +226,7 @@ export function findOwnGiphyReaction(
  * remove it; otherwise add. Identity is message+user+unicode.
  */
 export function resolveUnicodeReactionToggle(
-  existing: StoreChatReaction[],
+  existing: ChatReaction[],
   params: { messageId: string; userId: string; unicode: string },
 ): UnicodeReactionToggleDecision {
   const messageId = params.messageId.trim();
@@ -264,7 +267,7 @@ export function resolveUnicodeReactionToggle(
  * Pass the staged picker item on add; remove only needs giphyId.
  */
 export function resolveGiphyReactionToggle(
-  existing: StoreChatReaction[],
+  existing: ChatReaction[],
   params: {
     messageId: string;
     userId: string;
@@ -347,9 +350,9 @@ export function resolveGiphyReactionToggle(
 
 /** Room-batched reactions → per-message lists (stable createdAt ascending). */
 export function mapReactionsByMessageId(
-  reactions: StoreChatReaction[],
-): Map<string, StoreChatReaction[]> {
-  const map = new Map<string, StoreChatReaction[]>();
+  reactions: ChatReaction[],
+): Map<string, ChatReaction[]> {
+  const map = new Map<string, ChatReaction[]>();
   for (const reaction of reactions) {
     if (!reaction.messageId) continue;
     const list = map.get(reaction.messageId);
@@ -367,10 +370,10 @@ export function mapReactionsByMessageId(
  * count / reactedByMe derived from membership.
  */
 export function groupUnicodeReactions(
-  reactions: StoreChatReaction[],
+  reactions: ChatReaction[],
   currentUserId: string,
 ): UnicodeReactionGroup[] {
-  const byUnicode = new Map<string, StoreChatReaction[]>();
+  const byUnicode = new Map<string, ChatReaction[]>();
   for (const reaction of reactions) {
     if (!isUnicodeReaction(reaction)) continue;
     const key = normalizeUnicode(reaction.unicode);
@@ -410,10 +413,10 @@ export function groupUnicodeReactions(
  * count / reactedByMe derived from membership.
  */
 export function groupGiphyReactions(
-  reactions: StoreChatReaction[],
+  reactions: ChatReaction[],
   currentUserId: string,
 ): GiphyReactionGroup[] {
-  const byId = new Map<string, StoreChatReaction[]>();
+  const byId = new Map<string, ChatReaction[]>();
   for (const reaction of reactions) {
     if (!isGiphyReaction(reaction)) continue;
     const key = (reaction.giphyId || '').trim();

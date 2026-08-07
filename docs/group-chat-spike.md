@@ -9,7 +9,7 @@ Prove `auth.ref` membership traversal for group message view without granting el
 | Concern | Store Chat | Custom Group Chat |
 |--------|------------|-------------------|
 | Room key | `storeId` | `roomId` (entity id of `groupChatRooms`) |
-| Membership | `profileStores` → `auth.ref('$user.profile.stores.id')` | `groupChatMemberProfile` → `auth.ref('$user.profile.groupChatMemberships.roomId')` |
+| Membership | `profileStores` → `auth.ref('$user.profile.stores.id')` | `groupChatMemberProfile` → `auth.ref('$user.profile.groupChatMemberships.room.id')` |
 | Elevated bypass | `hasAllStoreChatAccess` | **None** (explicit in `instant.perms.ts`) |
 | Lifecycle writes | Client Instant (messages) | Admin SDK for room/member/invite; client for messages |
 
@@ -17,7 +17,10 @@ Prove `auth.ref` membership traversal for group message view without granting el
 
 - `groupChatMembers.roomId` denormalized + linked `room`
 - `groupChatMembers` → `profiles` with reverse label **`groupChatMemberships`**
+- Membership binds use **linked room id**: `$user.profile.groupChatMemberships.room.id` (not the denormalized `roomId` attribute)
+- Keep denormalized `roomId` on members/messages for `data.roomId` comparisons
 - `$users` ← `profileUser` → `profiles` (existing)
+- Room reverse `messages` / `reactions` / `bookmarks` links allowed for members (send/react/favorite)
 
 ## Verification checklist (real Instant identities)
 
@@ -27,6 +30,8 @@ Prove `auth.ref` membership traversal for group message view without granting el
 4. Owner/Admin/AM without membership cannot view private group messages.
 5. Viewer member can view but not create messages (`!isViewer`).
 6. Store Chat rules unchanged — regression on store room send/view.
+7. Member can react / bookmark; soft-delete own message; forward to authorized store or other group.
+8. Room `lastMessageAt` update succeeds in the same client txn as send.
 
 ## History policy (v1)
 
@@ -34,4 +39,4 @@ Full history after accept. Instant cannot securely enforce per-member `historyVi
 
 ## Push schema/perms
 
-After deploy: `npx instant-cli push` (schema) and push perms when ready. Flag `VITE_GROUP_CHAT` stays off until go/no-go.
+Pushed to Hey Pelo Ops Web (`f7ac027e-2079-41eb-8f34-aa0e4543ca71`): membership `.room.id` binds, room `messages`/`reactions`/`bookmarks` reverse links, `groupChatReactions` / `groupChatBookmarks`, message `forwardedFrom*`. Flag `VITE_GROUP_CHAT` stays off until go/no-go.

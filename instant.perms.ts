@@ -684,6 +684,8 @@ const rules = {
 
   // ── Custom Group Chat rooms (Admin SDK lifecycle; members view) ───────────
   // Elevated Store Chat roles MUST NOT appear here — private groups only.
+  // Membership bind uses linked room id (Store-parallel: profile.stores.id),
+  // not the denormalized roomId attribute on the member row.
   groupChatRooms: {
     allow: {
       view: 'isActiveMember',
@@ -693,18 +695,24 @@ const rules = {
       link: {
         members: 'false',
         invites: 'false',
-        messages: 'false',
+        // Allow reverse half of message→room link on send (mirrors message link.room).
+        messages: 'isActiveMember && !isViewer',
+        reactions: 'isActiveMember',
+        bookmarks: 'isActiveMember',
       },
       unlink: {
         members: 'false',
         invites: 'false',
         messages: 'false',
+        reactions: 'false',
+        bookmarks: 'false',
       },
     },
     bind: {
       ...LEGACY_BIND,
       isActiveMember:
-        "isApproved && data.id in auth.ref('$user.profile.groupChatMemberships.roomId')",
+        "isApproved && data.id in auth.ref('$user.profile.groupChatMemberships.room.id')",
+      isViewer: "'viewer' in auth.ref('$user.profile.role')",
       onlyRoomActivityFields:
         "request.modifiedFields.all(f, f in ['lastMessageAt', 'updatedAt'])",
     },
@@ -729,7 +737,7 @@ const rules = {
     bind: {
       ...LEGACY_BIND,
       isActiveMemberOfRoom:
-        "isApproved && data.roomId in auth.ref('$user.profile.groupChatMemberships.roomId')",
+        "isApproved && data.roomId in auth.ref('$user.profile.groupChatMemberships.room.id')",
       isOwnMembership: 'auth.id != null && data.userId == auth.id',
       onlySelfMemberFields:
         "request.modifiedFields.all(f, f in ['lastReadAt', 'notificationMode', 'muted', 'pinned'])",
@@ -781,8 +789,9 @@ const rules = {
       ...LEGACY_BIND,
       roomIdValid: "data.roomId != ''",
       // Explicit: no hasAllStoreChatAccess — Owner/Admin/AM cannot auto-read private groups.
+      // Bind via membership→room link id (Store-parallel), keep data.roomId for comparisons.
       isRoomMember:
-        "data.roomId in auth.ref('$user.profile.groupChatMemberships.roomId')",
+        "data.roomId in auth.ref('$user.profile.groupChatMemberships.room.id')",
       canViewGroupMessage: 'isApproved && roomIdValid && isRoomMember',
       isViewer: "'viewer' in auth.ref('$user.profile.role')",
       canSendGroupMessage: 'canViewGroupMessage && !isViewer',
@@ -796,6 +805,64 @@ const rules = {
       bodySizeValid: 'size(data.body) <= 2000',
       mediaCoherent:
         "((data.messageType == 'text' || data.messageType == 'system') && size(data.body) > 0 && data.giphyId == '') || (data.messageType == 'giphy_media' && data.giphyId != '' && data.giphyUrl != '') || (data.messageType == 'text_giphy' && size(data.body) > 0 && data.giphyId != '' && data.giphyUrl != '')",
+    },
+  },
+
+  // ── Custom Group Chat reactions (membership-only; no elevated Store Chat) ─
+  groupChatReactions: {
+    allow: {
+      view: 'canAccessReactionRoom',
+      create:
+        "canAccessReactionRoom && isOwnReaction && roomIdValid && messageIdValid && (unicodeReactionValid || giphyReactionValid)",
+      update: 'false',
+      delete: 'canAccessReactionRoom && isOwnReaction',
+      link: {
+        room: 'canAccessReactionRoom && isOwnReaction',
+        message: 'canAccessReactionRoom && isOwnReaction',
+      },
+      unlink: {
+        room: 'false',
+        message: 'false',
+      },
+    },
+    bind: {
+      ...LEGACY_BIND,
+      roomIdValid: "data.roomId != ''",
+      messageIdValid: "data.messageId != ''",
+      canAccessReactionRoom:
+        "isApproved && roomIdValid && data.roomId in auth.ref('$user.profile.groupChatMemberships.room.id')",
+      isOwnReaction: 'auth.id != null && data.userId == auth.id',
+      unicodeReactionValid:
+        "data.reactionType == 'unicode' && data.unicode != '' && data.giphyId == ''",
+      giphyReactionValid:
+        "data.reactionType == 'giphy' && data.giphyId != '' && data.unicode == '' && data.giphyUrl != ''",
+    },
+  },
+
+  // ── Custom Group Chat bookmarks (membership-only; actor-owned) ────────────
+  groupChatBookmarks: {
+    allow: {
+      view: 'canAccessBookmarkRoom',
+      create:
+        'canAccessBookmarkRoom && isOwnBookmark && roomIdValid && messageIdValid',
+      update: 'false',
+      delete: 'canAccessBookmarkRoom && isOwnBookmark',
+      link: {
+        room: 'canAccessBookmarkRoom && isOwnBookmark',
+        message: 'canAccessBookmarkRoom && isOwnBookmark',
+      },
+      unlink: {
+        room: 'false',
+        message: 'false',
+      },
+    },
+    bind: {
+      ...LEGACY_BIND,
+      roomIdValid: "data.roomId != ''",
+      messageIdValid: "data.messageId != ''",
+      canAccessBookmarkRoom:
+        "isApproved && roomIdValid && data.roomId in auth.ref('$user.profile.groupChatMemberships.room.id')",
+      isOwnBookmark: 'auth.id != null && data.userId == auth.id',
     },
   },
 

@@ -5,6 +5,7 @@ import { statusLabel } from '../lib/i18nUtils';
 import { badgeClass, nowIso } from '../lib/utils';
 import { formatIsoToLocalTime } from '../lib/proofTime';
 import {
+  isGroupChatMentionNotificationType,
   isLogbookNotificationType,
   isStoreChatMentionNotificationType,
 } from '../lib/notifications';
@@ -14,11 +15,32 @@ import type { Notification, Profile, Report, ReviewEvent } from '../types';
 import { parseLogbookDeepLinkJson } from '../lib/logbookDeepLink';
 
 export const OPEN_STORE_CHAT_EVENT = 'heyPelo:openStoreChat';
+export const OPEN_GROUP_CHAT_EVENT = 'heyPelo:openGroupChat';
 
 export type OpenStoreChatDetail = {
   storeId: string;
   messageId?: string;
 };
+
+export type OpenGroupChatDetail = {
+  roomId: string;
+  messageId?: string;
+};
+
+function parseGroupChatDeepLink(deepLinkJson: string | undefined): OpenGroupChatDetail | null {
+  const raw = String(deepLinkJson ?? '').trim();
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { kind?: string; roomId?: string; messageId?: string };
+    if (parsed?.kind !== 'groupChat') return null;
+    const roomId = String(parsed.roomId ?? '').trim();
+    if (!roomId) return null;
+    const messageId = String(parsed.messageId ?? '').trim();
+    return messageId ? { roomId, messageId } : { roomId };
+  } catch {
+    return null;
+  }
+}
 
 interface Props {
   userId: string;
@@ -78,6 +100,7 @@ export default function FeedbackInbox({
     for (const n of all) {
       if (!n.reportId || isLogbookNotificationType(n.type)) continue;
       if (isStoreChatMentionNotificationType(n.type)) continue;
+      if (isGroupChatMentionNotificationType(n.type)) continue;
       const list = map.get(n.reportId) ?? [];
       list.push(n);
       map.set(n.reportId, list);
@@ -104,10 +127,26 @@ export default function FeedbackInbox({
     window.dispatchEvent(new CustomEvent(OPEN_STORE_CHAT_EVENT, { detail }));
   }
 
+  function openGroupChat(n: Notification) {
+    if (typeof window === 'undefined') return;
+    const fromLink = parseGroupChatDeepLink(n.deepLinkJson);
+    const roomId = fromLink?.roomId?.trim();
+    if (!roomId) return;
+    const detail: OpenGroupChatDetail = {
+      roomId,
+      messageId: fromLink?.messageId || n.reportId || undefined,
+    };
+    window.dispatchEvent(new CustomEvent(OPEN_GROUP_CHAT_EVENT, { detail }));
+  }
+
   function handleClick(n: Notification) {
     void markRead(n);
     if (isStoreChatMentionNotificationType(n.type) && n.storeId) {
       openStoreChat(n);
+      return;
+    }
+    if (isGroupChatMentionNotificationType(n.type)) {
+      openGroupChat(n);
       return;
     }
     if (isLogbookNotificationType(n.type) && n.reportId && onOpenLogbookEntry) {
@@ -132,7 +171,8 @@ export default function FeedbackInbox({
         {notifications.map((n) => {
           const isLogbook = isLogbookNotificationType(n.type);
           const isStoreChatMention = isStoreChatMentionNotificationType(n.type);
-          const skipReportChrome = isLogbook || isStoreChatMention;
+          const isGroupChatMention = isGroupChatMentionNotificationType(n.type);
+          const skipReportChrome = isLogbook || isStoreChatMention || isGroupChatMention;
           const report = !skipReportChrome && n.reportId ? reportById.get(n.reportId) : undefined;
           const showTimeline = expandedReportId === n.reportId && report;
           const actorProfile = n.actorUserId
@@ -193,6 +233,9 @@ export default function FeedbackInbox({
               )}
               {isStoreChatMention && n.storeId && (
                 <div className="feedback-item-cta">Open in Store Chat</div>
+              )}
+              {isGroupChatMention && (
+                <div className="feedback-item-cta">Open in Group Chat</div>
               )}
               {n.reportId && report && (
                 <div className="feedback-item-timeline" onClick={(e) => e.stopPropagation()}>

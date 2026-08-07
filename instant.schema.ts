@@ -697,7 +697,34 @@ const _schema = i.schema({
       giphyHeight: i.string().clientRequired(),
       giphyUrl: i.string().clientRequired(),
       giphyPreviewUrl: i.string().clientRequired(),
+      // Forward metadata (empty = not forwarded). Sender remains the forwarder.
+      forwardedFromMessageId: i.string().clientRequired(),
+      forwardedFromUserId: i.string().clientRequired(),
       clientMutationId: i.string().clientRequired(),
+    }),
+
+    // Group Chat reactions (room key = roomId; membership-only, no elevated bypass)
+    groupChatReactions: i.entity({
+      roomId: i.string().indexed(),
+      messageId: i.string().indexed(),
+      userId: i.string().indexed(),
+      reactionType: i.string(), // 'unicode' | 'giphy'
+      unicode: i.string().clientRequired(),
+      giphyId: i.string().clientRequired(),
+      giphyKind: i.string().clientRequired(),
+      giphyTitle: i.string().clientRequired(),
+      giphyUrl: i.string().clientRequired(),
+      giphyPreviewUrl: i.string().clientRequired(),
+      createdAt: i.string().indexed(),
+      clientMutationId: i.string().clientRequired(),
+    }),
+
+    // Group Chat bookmarks / favorites (per viewer; membership-only)
+    groupChatBookmarks: i.entity({
+      roomId: i.string().indexed(),
+      messageId: i.string().indexed(),
+      userId: i.string().indexed(),
+      createdAt: i.string().indexed(),
     }),
   },
 
@@ -950,7 +977,7 @@ const _schema = i.schema({
     },
 
     // ─── Custom Group Chat — membership graph for auth.ref ───────────────────
-    // Traversal: data.roomId in auth.ref('$user.profile.groupChatMemberships.roomId')
+    // Traversal: data.roomId in auth.ref('$user.profile.groupChatMemberships.room.id')
     // Mirrors store chat membership via profile.stores.id (not elevated roles).
     groupChatMemberRoom: {
       forward: { on: 'groupChatMembers', has: 'one', label: 'room' },
@@ -979,6 +1006,22 @@ const _schema = i.schema({
     groupChatMessageSender: {
       forward: { on: 'groupChatMessages', has: 'one', label: 'sender' },
       reverse: { on: 'profiles', has: 'many', label: 'groupChatMessages' },
+    },
+    groupChatReactionRoom: {
+      forward: { on: 'groupChatReactions', has: 'one', label: 'room' },
+      reverse: { on: 'groupChatRooms', has: 'many', label: 'reactions' },
+    },
+    groupChatReactionMessage: {
+      forward: { on: 'groupChatReactions', has: 'one', label: 'message' },
+      reverse: { on: 'groupChatMessages', has: 'many', label: 'reactions' },
+    },
+    groupChatBookmarkRoom: {
+      forward: { on: 'groupChatBookmarks', has: 'one', label: 'room' },
+      reverse: { on: 'groupChatRooms', has: 'many', label: 'bookmarks' },
+    },
+    groupChatBookmarkMessage: {
+      forward: { on: 'groupChatBookmarks', has: 'one', label: 'message' },
+      reverse: { on: 'groupChatMessages', has: 'many', label: 'bookmarks' },
     },
   },
 });
