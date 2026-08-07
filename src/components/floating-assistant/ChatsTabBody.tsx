@@ -9,7 +9,6 @@ import { groupChatApi } from '../../lib/groupChatApi';
 import { canCreateCrossStoreGroupChat, canCreateGroupChat, canSendGroupChat } from '../../lib/roles';
 import { useRoleDefinitions } from '../../contexts/RoleDefinitionsContext';
 import type { Profile, Store } from '../../types';
-import ChatsRoomList from './ChatsRoomList';
 import ChatsRoomSelector from './ChatsRoomSelector';
 import CreateGroupModal from './CreateGroupModal';
 import GroupChatPanel from './GroupChatPanel';
@@ -71,7 +70,6 @@ export default function ChatsTabBody({
   panelId,
   labelledBy,
   hidden,
-  mode,
   unreadByStore,
   unreadSendersByStore,
   initialStoreChatMessageId,
@@ -144,8 +142,6 @@ export default function ChatsTabBody({
     }
   }, [selected, selectedStoreId]);
 
-  const isCompact = mode === 'compact';
-
   const canCreate = canCreateGroupChat(profile.role, defs);
   const canCross = canCreateCrossStoreGroupChat(profile.role, defs);
   const canSendGroup =
@@ -182,54 +178,29 @@ export default function ChatsTabBody({
       role="tabpanel"
       aria-labelledby={labelledBy}
       hidden={hidden}
-      className={`fa-chats-body${isCompact ? ' is-compact' : ' is-split'}`}
+      className="fa-chats-body"
     >
-      {/* Always render one nav slot so conversation stays a stable sibling (mount contract). */}
-      {isCompact ? (
-        <div className="fa-chats-room-bar" hidden={hidden}>
-          {roomsLoading ? (
-            <p className="small">Loading chats…</p>
-          ) : (
-            <ChatsRoomSelector
-              stores={stores}
-              groups={rooms}
-              pendingInvites={pendingInvites}
-              selected={selected}
-              onSelect={selectRoom}
-              unreadByStore={unreadByStore}
-              unreadSendersByStore={unreadSendersByStore}
-              unreadByGroup={unreadByRoom}
-              canCreate={canCreate}
-              onCreateClick={() => setCreateOpen(true)}
-              onAcceptInvite={(id) => void acceptInvite(id)}
-              onDeclineInvite={(id) => void declineInvite(id)}
-              inviteBusyId={inviteBusyId}
-            />
-          )}
-        </div>
-      ) : (
-        <div className="fa-chats-pane fa-chats-pane--list" aria-label="Chat room list" hidden={hidden}>
-          {roomsLoading ? (
-            <p className="small">Loading chats…</p>
-          ) : (
-            <ChatsRoomList
-              stores={stores}
-              groups={rooms}
-              pendingInvites={pendingInvites}
-              selected={selected}
-              onSelect={selectRoom}
-              unreadByStore={unreadByStore}
-              unreadSendersByStore={unreadSendersByStore}
-              unreadByGroup={unreadByRoom}
-              canCreate={canCreate}
-              onCreateClick={() => setCreateOpen(true)}
-              onAcceptInvite={(id) => void acceptInvite(id)}
-              onDeclineInvite={(id) => void declineInvite(id)}
-              inviteBusyId={inviteBusyId}
-            />
-          )}
-        </div>
-      )}
+      <div className="fa-chats-room-bar" hidden={hidden}>
+        {roomsLoading ? (
+          <p className="small">Loading chats…</p>
+        ) : (
+          <ChatsRoomSelector
+            stores={stores}
+            groups={rooms}
+            pendingInvites={pendingInvites}
+            selected={selected}
+            onSelect={selectRoom}
+            unreadByStore={unreadByStore}
+            unreadSendersByStore={unreadSendersByStore}
+            unreadByGroup={unreadByRoom}
+            canCreate={canCreate}
+            onCreateClick={() => setCreateOpen(true)}
+            onAcceptInvite={(id) => void acceptInvite(id)}
+            onDeclineInvite={(id) => void declineInvite(id)}
+            inviteBusyId={inviteBusyId}
+          />
+        )}
+      </div>
 
       <div
         className="fa-chats-pane fa-chats-pane--conversation"

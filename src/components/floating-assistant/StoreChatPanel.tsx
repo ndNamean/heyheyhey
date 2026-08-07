@@ -1687,7 +1687,7 @@ export default function StoreChatPanel({
     ? sc.selectStoreToChat
     : !canSend
       ? sc.viewOnlyPlaceholder
-      : sc.messagePlaceholder;
+      : sc.messagePlaceholder.replace('{name}', store.name);
 
   const visibleMessages = messages.filter((m) => !isDeleted(m) || m.senderUserId === profile.userId);
 

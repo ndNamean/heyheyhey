@@ -229,7 +229,11 @@ export default function GroupChatPanel({
             onKeyDown={onComposerKey}
             rows={2}
             maxLength={GROUP_CHAT_MAX_BODY}
-            placeholder="Message the group…"
+            placeholder={
+              room?.name
+                ? `Message ${room.name}… (@ to mention)`
+                : 'Message the group… (@ to mention)'
+            }
           />
           <button type="submit" disabled={!draft.trim()}>
             Send

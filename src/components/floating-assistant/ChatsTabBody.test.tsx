@@ -163,18 +163,25 @@ describe('ChatsTabBody room navigation', () => {
     renderBody('compact');
 
     fireEvent.click(screen.getByRole('button', { name: /A1 · Alpha/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'New group' }));
+    fireEvent.click(screen.getByRole('button', { name: '+ New group' }));
 
     expect(screen.getByTestId('create-group-modal')).toBeTruthy();
   });
 
-  it('expanded: shows list pane with compact New group', () => {
+  it('expanded: shows room selector and hides list pane', () => {
     renderBody('expanded');
 
-    expect(screen.getByLabelText('Chat room list')).toBeTruthy();
-    expect(document.getElementById('fa-chats-room-selector')).toBeNull();
-    expect(screen.getByRole('button', { name: 'New group' })).toBeTruthy();
-    expect(document.querySelector('.fa-chats-new-group--compact')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /A1 · Alpha/ })).toBeTruthy();
+    expect(document.getElementById('fa-chats-room-selector')).toBeTruthy();
+    expect(screen.queryByLabelText('Chat room list')).toBeNull();
+    expect(screen.getByTestId('store-chat-panel')).toBeTruthy();
+  });
+
+  it('focus: shows room selector and hides list pane', () => {
+    renderBody('focus');
+
+    expect(document.getElementById('fa-chats-room-selector')).toBeTruthy();
+    expect(screen.queryByLabelText('Chat room list')).toBeNull();
   });
 
   it('keeps conversation panels mounted when hidden (tab switch)', () => {
@@ -231,6 +238,7 @@ describe('ChatsTabBody room navigation', () => {
     );
 
     expect(screen.getByTestId('store-chat-panel')).toBe(storePanel);
-    expect(screen.getByLabelText('Chat room list')).toBeTruthy();
+    expect(document.getElementById('fa-chats-room-selector')).toBeTruthy();
+    expect(screen.queryByLabelText('Chat room list')).toBeNull();
   });
 });

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
+import { BACK_PRIORITY, useNativeBack } from '../../lib/nativeBack';
 import type { ChatRoomRef } from '../../lib/chatRoomKeys';
 import type { GroupChatInvite, GroupChatRoom, Store } from '../../types';
 import ProfileAvatarPreview from '../profileAvatar/ProfileAvatarPreview';
@@ -17,6 +18,34 @@ function formatUnreadDisplay(count: number): string {
 
 function storeTitle(store: Store): string {
   return `${store.code} · ${store.name}`;
+}
+
+function useSheetPresentation(): boolean {
+  const [sheet, setSheet] = useState(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return false;
+    }
+    return (
+      window.matchMedia('(max-width: 720px)').matches ||
+      window.matchMedia('(hover: none), (pointer: coarse)').matches
+    );
+  });
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const narrow = window.matchMedia('(max-width: 720px)');
+    const coarse = window.matchMedia('(hover: none), (pointer: coarse)');
+    const sync = () => setSheet(narrow.matches || coarse.matches);
+    sync();
+    narrow.addEventListener('change', sync);
+    coarse.addEventListener('change', sync);
+    return () => {
+      narrow.removeEventListener('change', sync);
+      coarse.removeEventListener('change', sync);
+    };
+  }, []);
+
+  return sheet;
 }
 
 type RoomOption =
@@ -100,9 +129,15 @@ export default function ChatsRoomSelector({
   id = 'fa-chats-room-selector',
 }: Props) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const restoreFocusRef = useRef(false);
   const listboxId = useId();
+  const searchId = useId();
+  const useSheet = useSheetPresentation();
 
   const roomOptions = useMemo((): RoomOption[] => {
     const list: RoomOption[] = [];
@@ -129,6 +164,29 @@ export default function ChatsRoomSelector({
     return list;
   }, [stores, groups, unreadByStore, unreadSendersByStore, unreadByGroup]);
 
+  const needle = query.trim().toLowerCase();
+
+  const filteredOptions = useMemo(() => {
+    if (!needle) return roomOptions;
+    return roomOptions.filter((o) => {
+      if (o.kind === 'store') {
+        return (
+          o.title.toLowerCase().includes(needle) ||
+          o.subtitle.toLowerCase().includes(needle)
+        );
+      }
+      return o.title.toLowerCase().includes(needle) || o.subtitle.toLowerCase().includes(needle);
+    });
+  }, [roomOptions, needle]);
+
+  const filteredInvites = useMemo(() => {
+    if (!needle) return pendingInvites;
+    return pendingInvites.filter((inv) => {
+      const { title, subtitle } = inviteLabels(inv);
+      return title.toLowerCase().includes(needle) || subtitle.toLowerCase().includes(needle);
+    });
+  }, [pendingInvites, needle]);
+
   const selectedOption = useMemo(() => {
     if (!selected) return null;
     return (
@@ -140,26 +198,44 @@ export default function ChatsRoomSelector({
   const selectedSenders = selectedOption?.senders ?? [];
   const isLocked = disabled || (roomOptions.length <= 1 && !pendingInvites.length && !canCreate);
 
-  const close = useCallback(() => setOpen(false), []);
+  const close = useCallback(() => {
+    setOpen(false);
+    setQuery('');
+    restoreFocusRef.current = true;
+  }, []);
 
   const selectRoom = useCallback(
     (ref: ChatRoomRef) => {
       onSelect(ref);
       setOpen(false);
+      setQuery('');
+      restoreFocusRef.current = true;
     },
     [onSelect],
   );
 
   useEffect(() => {
+    if (open || !restoreFocusRef.current) return;
+    restoreFocusRef.current = false;
+    triggerRef.current?.focus();
+  }, [open]);
+
+  useEffect(() => {
     if (!open) return;
     const idx = Math.max(
       0,
-      roomOptions.findIndex(
+      filteredOptions.findIndex(
         (o) => selected && o.kind === selected.kind && o.id === selected.id,
       ),
     );
     setActiveIndex(idx >= 0 ? idx : 0);
-  }, [open, roomOptions, selected]);
+  }, [open, filteredOptions, selected]);
+
+  useEffect(() => {
+    if (!open) return;
+    const t = window.setTimeout(() => searchRef.current?.focus(), 0);
+    return () => window.clearTimeout(t);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -184,9 +260,19 @@ export default function ChatsRoomSelector({
     };
   }, [open, close]);
 
+  useNativeBack(
+    () => {
+      if (!open) return false;
+      close();
+      return true;
+    },
+    open && !isLocked,
+    BACK_PRIORITY.MODAL,
+  );
+
   function moveActive(delta: number) {
-    if (!roomOptions.length) return;
-    setActiveIndex((prev) => (prev + delta + roomOptions.length) % roomOptions.length);
+    if (!filteredOptions.length) return;
+    setActiveIndex((prev) => (prev + delta + filteredOptions.length) % filteredOptions.length);
   }
 
   function onTriggerKeyDown(e: ReactKeyboardEvent<HTMLButtonElement>) {
@@ -210,20 +296,54 @@ export default function ChatsRoomSelector({
           return;
         }
         {
-          const opt = roomOptions[activeIndex];
+          const opt = filteredOptions[activeIndex];
           if (opt) selectRoom({ kind: opt.kind, id: opt.id });
         }
         break;
       case 'Home':
-        if (open && roomOptions.length) {
+        if (open && filteredOptions.length) {
           e.preventDefault();
           setActiveIndex(0);
         }
         break;
       case 'End':
-        if (open && roomOptions.length) {
+        if (open && filteredOptions.length) {
           e.preventDefault();
-          setActiveIndex(roomOptions.length - 1);
+          setActiveIndex(filteredOptions.length - 1);
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  function onSearchKeyDown(e: ReactKeyboardEvent<HTMLInputElement>) {
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        moveActive(1);
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        moveActive(-1);
+        break;
+      case 'Enter':
+        e.preventDefault();
+        {
+          const opt = filteredOptions[activeIndex];
+          if (opt) selectRoom({ kind: opt.kind, id: opt.id });
+        }
+        break;
+      case 'Home':
+        if (filteredOptions.length) {
+          e.preventDefault();
+          setActiveIndex(0);
+        }
+        break;
+      case 'End':
+        if (filteredOptions.length) {
+          e.preventDefault();
+          setActiveIndex(filteredOptions.length - 1);
         }
         break;
       default:
@@ -287,33 +407,49 @@ export default function ChatsRoomSelector({
     );
   }
 
-  const storeOptions = roomOptions.filter((o) => o.kind === 'store');
-  const groupOptions = roomOptions.filter((o) => o.kind === 'group');
+  const storeOptions = filteredOptions.filter((o) => o.kind === 'store');
+  const groupOptions = filteredOptions.filter((o) => o.kind === 'group');
   const storeStartIndex = 0;
   const groupStartIndex = storeOptions.length;
 
+  const menuClass = [
+    'fa-chats-room-selector-menu',
+    useSheet ? 'fa-chats-room-selector-menu--sheet' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
     <div
-      className={`fa-chats-room-selector${open && !isLocked ? ' fa-chats-room-selector--open' : ''}`}
+      className={`fa-chats-room-selector${open && !isLocked ? ' fa-chats-room-selector--open' : ''}${
+        useSheet && open && !isLocked ? ' fa-chats-room-selector--sheet' : ''
+      }`}
       ref={rootRef}
     >
       <button
         type="button"
         id={id}
+        ref={triggerRef}
         className={`fa-chats-room-selector-trigger${selectedUnread > 0 ? ' has-unread' : ''}`}
         disabled={isLocked}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
         aria-activedescendant={
-          open && roomOptions[activeIndex]
-            ? `${id}-option-${roomOptions[activeIndex].kind}-${roomOptions[activeIndex].id}`
+          open && filteredOptions[activeIndex]
+            ? `${id}-option-${filteredOptions[activeIndex].kind}-${filteredOptions[activeIndex].id}`
             : undefined
         }
         aria-label={triggerAria}
         onClick={() => {
           if (isLocked) return;
-          setOpen((prev) => !prev);
+          setOpen((prev) => {
+            if (prev) {
+              setQuery('');
+              restoreFocusRef.current = true;
+            }
+            return !prev;
+          });
         }}
         onKeyDown={onTriggerKeyDown}
       >
@@ -338,86 +474,135 @@ export default function ChatsRoomSelector({
       </button>
 
       {open && !isLocked ? (
-        <div className="fa-chats-room-selector-menu" id={listboxId}>
-          {pendingInvites.length ? (
-            <div className="fa-chats-room-selector-section" role="group" aria-label="Pending invites">
-              <div className="fa-chats-room-selector-section-label">Invites</div>
-              <ul className="fa-chats-room-selector-invites">
-                {pendingInvites.map((inv) => {
-                  const { title, subtitle } = inviteLabels(inv);
-                  return (
-                    <li key={inv.id} className="fa-chats-list-item--invite fa-chats-room-invite">
-                      <div className="fa-chats-list-item-main">
-                        <div className="fa-chats-list-title">{title}</div>
-                        <div className="fa-chats-list-sub">{subtitle}</div>
-                      </div>
-                      <div className="fa-chats-invite-actions">
-                        <button
-                          type="button"
-                          className="fa-chats-invite-accept"
-                          disabled={inviteBusyId === inv.id}
-                          onClick={() => onAcceptInvite(inv.id)}
-                        >
-                          Accept
-                        </button>
-                        <button
-                          type="button"
-                          className="fa-chats-invite-decline"
-                          disabled={inviteBusyId === inv.id}
-                          onClick={() => onDeclineInvite(inv.id)}
-                        >
-                          Decline
-                        </button>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
+        <>
+          {useSheet ? (
+            <div
+              className="fa-chats-room-selector-backdrop"
+              role="presentation"
+              onClick={close}
+            />
           ) : null}
-
-          <ul
-            className="fa-chats-room-selector-list"
-            role="listbox"
-            aria-label="Chat rooms"
-            tabIndex={-1}
+          <div
+            className={menuClass}
+            id={listboxId}
+            role={useSheet ? 'dialog' : undefined}
+            aria-label={useSheet ? 'Select conversation' : undefined}
           >
-            {storeOptions.length ? (
-              <>
-                <li className="fa-chats-room-selector-section-label" role="presentation">
-                  Stores
-                </li>
-                {storeOptions.map((opt, i) => renderRoomOption(opt, storeStartIndex + i))}
-              </>
+            {useSheet ? (
+              <div className="fa-chats-room-selector-sheet-title">Select conversation</div>
             ) : null}
-            {groupOptions.length ? (
-              <>
-                <li className="fa-chats-room-selector-section-label" role="presentation">
-                  Groups
-                </li>
-                {groupOptions.map((opt, i) => renderRoomOption(opt, groupStartIndex + i))}
-              </>
-            ) : null}
-            {!roomOptions.length ? (
-              <li className="fa-chats-list-empty" role="presentation">
-                No chats yet.
-              </li>
-            ) : null}
-          </ul>
 
-          {canCreate ? (
-            <button
-              type="button"
-              className="fa-chats-room-selector-new-group"
-              onClick={() => {
-                setOpen(false);
-                onCreateClick();
-              }}
+            <div className="fa-chats-room-selector-toolbar">
+              <label className="sr-only" htmlFor={searchId}>
+                Search chats
+              </label>
+              <input
+                ref={searchRef}
+                id={searchId}
+                type="search"
+                className="fa-chats-room-selector-search"
+                placeholder="Search chats…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={onSearchKeyDown}
+                autoComplete="off"
+              />
+              {canCreate ? (
+                <button
+                  type="button"
+                  className="fa-chats-room-selector-add"
+                  aria-label="New group"
+                  title="New group"
+                  onClick={() => {
+                    close();
+                    onCreateClick();
+                  }}
+                >
+                  +
+                </button>
+              ) : null}
+            </div>
+
+            {filteredInvites.length ? (
+              <div className="fa-chats-room-selector-section" role="group" aria-label="Pending invites">
+                <div className="fa-chats-room-selector-section-label">Invites</div>
+                <ul className="fa-chats-room-selector-invites">
+                  {filteredInvites.map((inv) => {
+                    const { title, subtitle } = inviteLabels(inv);
+                    return (
+                      <li key={inv.id} className="fa-chats-list-item--invite fa-chats-room-invite">
+                        <div className="fa-chats-list-item-main">
+                          <div className="fa-chats-list-title">{title}</div>
+                          <div className="fa-chats-list-sub">{subtitle}</div>
+                        </div>
+                        <div className="fa-chats-invite-actions">
+                          <button
+                            type="button"
+                            className="fa-chats-invite-accept"
+                            disabled={inviteBusyId === inv.id}
+                            onClick={() => onAcceptInvite(inv.id)}
+                          >
+                            Accept
+                          </button>
+                          <button
+                            type="button"
+                            className="fa-chats-invite-decline"
+                            disabled={inviteBusyId === inv.id}
+                            onClick={() => onDeclineInvite(inv.id)}
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
+
+            <ul
+              className="fa-chats-room-selector-list"
+              role="listbox"
+              aria-label="Chat rooms"
+              tabIndex={-1}
             >
-              New group
-            </button>
-          ) : null}
-        </div>
+              {storeOptions.length ? (
+                <>
+                  <li className="fa-chats-room-selector-section-label" role="presentation">
+                    Stores
+                  </li>
+                  {storeOptions.map((opt, i) => renderRoomOption(opt, storeStartIndex + i))}
+                </>
+              ) : null}
+              {groupOptions.length ? (
+                <>
+                  <li className="fa-chats-room-selector-section-label" role="presentation">
+                    Groups
+                  </li>
+                  {groupOptions.map((opt, i) => renderRoomOption(opt, groupStartIndex + i))}
+                </>
+              ) : null}
+              {!filteredOptions.length ? (
+                <li className="fa-chats-list-empty" role="presentation">
+                  {needle ? 'No matching chats.' : 'No chats yet.'}
+                </li>
+              ) : null}
+            </ul>
+
+            {canCreate ? (
+              <button
+                type="button"
+                className="fa-chats-room-selector-new-group"
+                onClick={() => {
+                  close();
+                  onCreateClick();
+                }}
+              >
+                + New group
+              </button>
+            ) : null}
+          </div>
+        </>
       ) : null}
     </div>
   );
