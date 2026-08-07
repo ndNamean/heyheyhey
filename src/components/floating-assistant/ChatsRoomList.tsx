@@ -3,6 +3,9 @@ import type { ChatRoomRef } from '../../lib/chatRoomKeys';
 import type { GroupChatInvite, GroupChatRoom, Store } from '../../types';
 import type { UnreadSenderSummary } from './useUnreadStoreChat';
 
+/** Show always-visible search when room count exceeds this. */
+const SEARCH_VISIBLE_THRESHOLD = 6;
+
 export type ChatListItem =
   | {
       kind: 'store';
@@ -62,6 +65,11 @@ export default function ChatsRoomList({
   inviteBusyId,
 }: Props) {
   const [q, setQ] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  const totalRooms = stores.length + groups.length + pendingInvites.length;
+  const showSearchInput =
+    searchOpen || q.trim().length > 0 || totalRooms > SEARCH_VISIBLE_THRESHOLD;
 
   const items = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -119,24 +127,37 @@ export default function ChatsRoomList({
   return (
     <div className="fa-chats-list" role="navigation" aria-label="Chat rooms">
       <div className="fa-chats-list-toolbar">
-        <label className="fa-chats-search">
-          <span className="sr-only">Search chats</span>
-          <input
-            type="search"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search chats"
+        {showSearchInput ? (
+          <label className="fa-chats-search">
+            <span className="sr-only">Search chats</span>
+            <input
+              type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search chats"
+              aria-label="Search chats"
+              autoFocus={searchOpen && totalRooms <= SEARCH_VISIBLE_THRESHOLD}
+            />
+          </label>
+        ) : (
+          <button
+            type="button"
+            className="fa-chats-search-toggle"
+            onClick={() => setSearchOpen(true)}
             aria-label="Search chats"
-          />
-        </label>
+          >
+            ⌕
+          </button>
+        )}
         {canCreate ? (
           <button
             type="button"
-            className="fa-chats-new-group"
+            className="fa-chats-new-group fa-chats-new-group--compact"
             onClick={onCreateClick}
             aria-label="New group"
+            title="New group"
           >
-            New group
+            <span aria-hidden="true">+</span>
           </button>
         ) : null}
       </div>

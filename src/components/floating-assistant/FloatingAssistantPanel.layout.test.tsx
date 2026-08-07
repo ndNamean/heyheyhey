@@ -147,12 +147,14 @@ describe('FloatingAssistantPanel layout', () => {
     cleanup();
   });
 
-  it('keeps Knowledge and StoreChat mounted across mode changes', () => {
+  it('keeps Knowledge and Chats panels mounted across mode changes', () => {
     const layout = baseLayout({ mode: 'compact' });
     const { rerender } = renderPanel(layout);
 
     const knowledge = screen.getByTestId('knowledge-panel');
-    const storeChat = screen.getByTestId('store-chat-panel');
+    // Group chat on → ChatsTabBody; off → StoreChatPanel. Both stay mounted.
+    const chats =
+      screen.queryByTestId('chats-tab-body') ?? screen.getByTestId('store-chat-panel');
 
     rerender(
       <FloatingAssistantPanel
@@ -191,7 +193,9 @@ describe('FloatingAssistantPanel layout', () => {
     );
 
     expect(screen.getByTestId('knowledge-panel')).toBe(knowledge);
-    expect(screen.getByTestId('store-chat-panel')).toBe(storeChat);
+    const chatsAfter =
+      screen.queryByTestId('chats-tab-body') ?? screen.getByTestId('store-chat-panel');
+    expect(chatsAfter).toBe(chats);
   });
 
   it('exposes Expand in compact and Focus only in expanded; sets aria-modal in focus', () => {

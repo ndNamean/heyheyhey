@@ -10,6 +10,7 @@ import { canCreateCrossStoreGroupChat, canCreateGroupChat, canSendGroupChat } fr
 import { useRoleDefinitions } from '../../contexts/RoleDefinitionsContext';
 import type { Profile, Store } from '../../types';
 import ChatsRoomList from './ChatsRoomList';
+import ChatsRoomSelector from './ChatsRoomSelector';
 import CreateGroupModal from './CreateGroupModal';
 import GroupChatPanel from './GroupChatPanel';
 import StoreChatPanel from './StoreChatPanel';
@@ -81,7 +82,6 @@ export default function ChatsTabBody({
   const [selected, setSelected] = useState<ChatRoomRef | null>(() =>
     readStoredRoom(selectedStoreId),
   );
-  const [compactShowList, setCompactShowList] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [inviteBusyId, setInviteBusyId] = useState<string | null>(null);
 
@@ -118,10 +118,23 @@ export default function ChatsTabBody({
       setSelected(ref);
       writeStoredRoom(ref);
       if (ref.kind === 'store') onStoreChange(ref.id);
-      setCompactShowList(false);
     },
     [onStoreChange],
   );
+
+  const fallbackAfterLeave = useCallback(() => {
+    if (selectedStoreId) {
+      selectRoom({ kind: 'store', id: selectedStoreId });
+      return;
+    }
+    const first = stores[0];
+    if (first) {
+      selectRoom({ kind: 'store', id: first.id });
+      return;
+    }
+    setSelected(null);
+    writeStoredRoom(null);
+  }, [selectedStoreId, stores, selectRoom]);
 
   useEffect(() => {
     if (!selected && selectedStoreId) {
@@ -132,8 +145,6 @@ export default function ChatsTabBody({
   }, [selected, selectedStoreId]);
 
   const isCompact = mode === 'compact';
-  const showList = !isCompact || compactShowList || !selected;
-  const showConversation = !isCompact || !compactShowList;
 
   const canCreate = canCreateGroupChat(profile.role, defs);
   const canCross = canCreateCrossStoreGroupChat(profile.role, defs);
@@ -163,56 +174,42 @@ export default function ChatsTabBody({
     }
   }
 
-  if (hidden) {
-    return (
-      <section
-        id={panelId}
-        role="tabpanel"
-        aria-labelledby={labelledBy}
-        hidden
-        className={`fa-chats-body${isCompact ? ' is-compact' : ' is-split'}`}
-      >
-        {/* Keep store/group panels mounted across Knowledge tab switches (layout contract). */}
-        <div className="fa-chats-pane fa-chats-pane--conversation" hidden>
-          {selected?.kind === 'group' ? (
-            <GroupChatPanel
-              roomId={selected.id}
-              profile={profile}
-              panelId={`${panelId}-group`}
-              labelledBy={labelledBy}
-              hidden
-              canSend={canSendGroup}
-              composerVisual={composerVisual}
-            />
-          ) : (
-            <StoreChatPanel
-              store={selectedStore}
-              profile={profile}
-              panelId={`${panelId}-store`}
-              labelledBy={labelledBy}
-              hidden
-              canSend={canSendStore}
-              authorizedStores={stores}
-              composerVisual={composerVisual}
-              initialTargetMessageId={initialStoreChatMessageId}
-              onInitialTargetHandled={onInitialStoreChatMessageHandled}
-            />
-          )}
-        </div>
-      </section>
-    );
-  }
+  const roomsLoading = storesLoading || groupsLoading;
 
   return (
     <section
       id={panelId}
       role="tabpanel"
       aria-labelledby={labelledBy}
+      hidden={hidden}
       className={`fa-chats-body${isCompact ? ' is-compact' : ' is-split'}`}
     >
-      {showList ? (
-        <div className="fa-chats-pane fa-chats-pane--list" aria-label="Chat room list">
-          {storesLoading || groupsLoading ? (
+      {/* Always render one nav slot so conversation stays a stable sibling (mount contract). */}
+      {isCompact ? (
+        <div className="fa-chats-room-bar" hidden={hidden}>
+          {roomsLoading ? (
+            <p className="small">Loading chats…</p>
+          ) : (
+            <ChatsRoomSelector
+              stores={stores}
+              groups={rooms}
+              pendingInvites={pendingInvites}
+              selected={selected}
+              onSelect={selectRoom}
+              unreadByStore={unreadByStore}
+              unreadSendersByStore={unreadSendersByStore}
+              unreadByGroup={unreadByRoom}
+              canCreate={canCreate}
+              onCreateClick={() => setCreateOpen(true)}
+              onAcceptInvite={(id) => void acceptInvite(id)}
+              onDeclineInvite={(id) => void declineInvite(id)}
+              inviteBusyId={inviteBusyId}
+            />
+          )}
+        </div>
+      ) : (
+        <div className="fa-chats-pane fa-chats-pane--list" aria-label="Chat room list" hidden={hidden}>
+          {roomsLoading ? (
             <p className="small">Loading chats…</p>
           ) : (
             <ChatsRoomList
@@ -232,53 +229,43 @@ export default function ChatsTabBody({
             />
           )}
         </div>
-      ) : null}
+      )}
 
-      {showConversation ? (
-        <div className="fa-chats-pane fa-chats-pane--conversation" aria-label="Conversation">
-          {selected?.kind === 'group' ? (
-            <GroupChatPanel
-              roomId={selected.id}
-              profile={profile}
-              panelId={`${panelId}-group`}
-              labelledBy={labelledBy}
-              hidden={false}
-              canSend={canSendGroup}
-              composerVisual={composerVisual}
-              showBack={isCompact}
-              onBack={() => setCompactShowList(true)}
-            />
-          ) : (
-            <div className="fa-chats-store-wrap">
-              {isCompact ? (
-                <button
-                  type="button"
-                  className="fa-chats-back"
-                  onClick={() => setCompactShowList(true)}
-                  aria-label="Back to chats"
-                >
-                  ← Chats
-                </button>
-              ) : null}
-              <StoreChatPanel
-                store={selectedStore}
-                profile={profile}
-                panelId={`${panelId}-store`}
-                labelledBy={labelledBy}
-                hidden={false}
-                canSend={canSendStore}
-                authorizedStores={stores}
-                composerVisual={composerVisual}
-                initialTargetMessageId={initialStoreChatMessageId}
-                onInitialTargetHandled={onInitialStoreChatMessageHandled}
-              />
-            </div>
-          )}
-        </div>
-      ) : null}
+      <div
+        className="fa-chats-pane fa-chats-pane--conversation"
+        aria-label="Conversation"
+        hidden={hidden}
+      >
+        {selected?.kind === 'group' ? (
+          <GroupChatPanel
+            roomId={selected.id}
+            profile={profile}
+            panelId={`${panelId}-group`}
+            labelledBy={labelledBy}
+            hidden={hidden}
+            canSend={canSendGroup}
+            composerVisual={composerVisual}
+            showBack={false}
+            onBack={fallbackAfterLeave}
+          />
+        ) : (
+          <StoreChatPanel
+            store={selectedStore}
+            profile={profile}
+            panelId={`${panelId}-store`}
+            labelledBy={labelledBy}
+            hidden={hidden}
+            canSend={canSendStore}
+            authorizedStores={stores}
+            composerVisual={composerVisual}
+            initialTargetMessageId={initialStoreChatMessageId}
+            onInitialTargetHandled={onInitialStoreChatMessageHandled}
+          />
+        )}
+      </div>
 
       <CreateGroupModal
-        open={createOpen}
+        open={createOpen && !hidden}
         onClose={() => setCreateOpen(false)}
         profile={profile}
         authorizedStores={stores}
