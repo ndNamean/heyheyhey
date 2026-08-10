@@ -170,3 +170,64 @@ export async function deliverLogbookEvent(params: {
     return { ok: false, softFail: true, message: e instanceof Error ? e.message : 'Notify failed' };
   }
 }
+
+export type RemindOverdueChatResult =
+  | { ok: true; chatCreated: number; deduped?: boolean }
+  | {
+      ok: false;
+      softFail?: boolean;
+      skipped?: boolean;
+      reason?: string;
+      message: string;
+    };
+
+/** Explicit once-only overdue remind → Store Chat (Admin). */
+export async function remindOverdueToStoreChat(params: {
+  entryId: string;
+}): Promise<RemindOverdueChatResult> {
+  try {
+    const headers = await getAuthHeaders();
+    const resp = await fetch('/api/logbook-notify', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ type: 'remind_overdue_chat', entryId: params.entryId }),
+    });
+    const json = (await resp.json().catch(() => ({}))) as Record<string, unknown>;
+    const reason = typeof json.reason === 'string' ? json.reason : undefined;
+    const skipped = Boolean(json.skipped);
+
+    if (resp.ok && (json.ok || skipped)) {
+      if (skipped) {
+        return {
+          ok: false,
+          skipped: true,
+          reason,
+          message: reason || 'Remind skipped',
+        };
+      }
+      return {
+        ok: true,
+        chatCreated: typeof json.chatCreated === 'number' ? json.chatCreated : 0,
+        deduped: Boolean(json.deduped),
+      };
+    }
+
+    const message =
+      typeof json.error === 'string'
+        ? json.error
+        : `Remind failed (${resp.status})`;
+    return {
+      ok: false,
+      softFail: resp.status >= 500,
+      skipped,
+      reason,
+      message,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      softFail: true,
+      message: e instanceof Error ? e.message : 'Remind failed',
+    };
+  }
+}

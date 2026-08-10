@@ -720,6 +720,8 @@ export interface LogbookEntry {
   recallReason?: string;
   dueSoonNotifiedAt?: string;
   overdueNotifiedAt?: string;
+  /** Set by Admin remind path only — once-only Store Chat overdue remind. */
+  overdueChatRemindedAt?: string;
   store?: Store;
   /** Legacy single photo link ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â interpret via resolveLogbookMedia helpers */
   photo?: LogbookFileRef;

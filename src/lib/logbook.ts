@@ -80,7 +80,7 @@ export const LOGBOOK_FILTER_KEY = 'logbookInitialFilter';
 
 const DUE_SOON_MS = 2 * 60 * 60 * 1000;
 
-function profileStoreIds(profile: Profile): string[] {
+export function profileStoreIds(profile: Profile): string[] {
   return (profile.stores ?? []).map((s) => s.id);
 }
 
@@ -443,6 +443,7 @@ export function emptyLogbookIssueFields() {
     recallReason: '',
     dueSoonNotifiedAt: '',
     overdueNotifiedAt: '',
+    overdueChatRemindedAt: '',
   };
 }
 
@@ -483,6 +484,7 @@ export function issueCreateFields(
     recallReason: '',
     dueSoonNotifiedAt: '',
     overdueNotifiedAt: '',
+    overdueChatRemindedAt: '',
   };
 }
 

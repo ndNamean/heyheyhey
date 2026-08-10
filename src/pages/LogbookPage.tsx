@@ -85,7 +85,15 @@ import {
   deliverLogbookEvent,
   postLogbookNotify,
   postLogbookSubmitResolution,
+  remindOverdueToStoreChat,
 } from '../lib/logbookNotifyClient';
+import {
+  canRemindOverdueToStoreChat,
+  listLogbookAssigneeMentionLabels,
+  listLogbookAssigneeRecipientUserIds,
+  overdueChatRemindState,
+} from '../lib/logbookOverdueRemind';
+import OverdueRemindPanel from '../components/OverdueRemindPanel';
 import { resolveLogbookOpenState } from '../lib/logbookDeepLink';
 import {
   buildLogbookAssignmentChangedEvent,
@@ -234,6 +242,8 @@ export default function LogbookPage({
   });
   const [changeAssignSaving, setChangeAssignSaving] = useState(false);
   const [resolvedDetailOpenIds, setResolvedDetailOpenIds] = useState<Record<string, boolean>>({});
+  const [remindDismissedIds, setRemindDismissedIds] = useState<Record<string, boolean>>({});
+  const [remindBusyId, setRemindBusyId] = useState<string | null>(null);
   const dueNotifyRan = useRef(false);
 
   const { data } = db.useQuery({
@@ -1069,6 +1079,32 @@ export default function LogbookPage({
     if (state === 'missing_deadline') return t.logbook.configMissingDeadline;
     if (state === 'missing_resolution_requirement') return t.logbook.configMissingRequirement;
     return '';
+  }
+
+  async function confirmOverdueRemind(entry: LogbookEntry) {
+    setRemindBusyId(entry.id);
+    try {
+      const result = await remindOverdueToStoreChat({ entryId: entry.id });
+      if (result.ok) {
+        setSuccessMsg(t.logbook.overdueRemindSuccess);
+        return;
+      }
+      if (result.skipped) {
+        if (result.reason === 'no_longer_overdue') {
+          setSuccessMsg(t.logbook.overdueRemindSkipNoLonger);
+        } else if (result.reason === 'already_reminded') {
+          setSuccessMsg(t.logbook.overdueRemindSkipAlready);
+        } else if (result.reason === 'missing_assignment') {
+          setSuccessMsg(t.logbook.overdueRemindSkipUnassigned);
+        } else {
+          setSuccessMsg(result.message || t.logbook.overdueRemindFailed);
+        }
+        return;
+      }
+      alert(result.message || t.logbook.overdueRemindFailed);
+    } finally {
+      setRemindBusyId(null);
+    }
   }
 
   const detailedCount = countActiveDetailedFilters(filters);
@@ -2093,6 +2129,44 @@ export default function LogbookPage({
                 )}
               </div>
             )}
+
+            {highlighted &&
+              overdue &&
+              !remindDismissedIds[entry.id] &&
+              canRemindOverdueToStoreChat(profile, entry, defs) &&
+              (() => {
+                const assigneeCount = listLogbookAssigneeRecipientUserIds(
+                  entry,
+                  allProfiles,
+                  defs,
+                ).length;
+                const remindState = overdueChatRemindState(entry, assigneeCount);
+                if (remindState === 'not_eligible_status') return null;
+                const mentions = listLogbookAssigneeMentionLabels(entry, allProfiles, defs);
+                return (
+                  <OverdueRemindPanel
+                    state={remindState}
+                    mentionLabels={mentions}
+                    remindedAt={entry.overdueChatRemindedAt}
+                    storeId={entry.storeId}
+                    busy={remindBusyId === entry.id}
+                    copy={{
+                      assignedTo: t.logbook.overdueRemindAssignedTo,
+                      unassignedBlock: t.logbook.overdueRemindUnassigned,
+                      askRemind: t.logbook.overdueRemindAsk,
+                      confirmRemind: t.logbook.overdueRemindConfirm,
+                      notNow: t.logbook.overdueRemindNotNow,
+                      alreadyReminded: t.logbook.overdueRemindAlready,
+                      openStoreChat: t.logbook.overdueRemindOpenChat,
+                      reminding: t.logbook.overdueRemindBusy,
+                    }}
+                    onConfirm={() => void confirmOverdueRemind(entry)}
+                    onDismiss={() =>
+                      setRemindDismissedIds((prev) => ({ ...prev, [entry.id]: true }))
+                    }
+                  />
+                );
+              })()}
 
             {setupEntryId === entry.id && (
               <div style={{ marginTop: 10, padding: 10, border: '1px solid var(--border, #e5e7eb)' }}>

@@ -3,6 +3,7 @@
  * - type submit_resolution: Stage A (status + resolutionMedia + timeline)
  * - type resolution_submitted | creator_update | issue_recalled: Stage B inbox
  * - type deliver_event: Logbook inbox + Store Chat
+ * - type remind_overdue_chat: once-only overdue Store Chat remind (explicit)
  * - type deliver_report_event: Report Store Chat handoffs (+ mention inbox)
  *
  * Kept as one function so Hobby stays under the serverless function limit.
@@ -32,6 +33,12 @@ import {
   resolveAckChatStoreIds,
 } from './_lib/logbook/ack-chat-rooms.js';
 import { resolveActorProfileId } from './_lib/logbook/resolve-actor-profile-id.js';
+import {
+  canActorRemindOverdueChat,
+  evaluateRemindOverdueGuards,
+  getAssigneeRecipientUserIds,
+  overdueRemindChatDeliveryKey,
+} from './_lib/logbook/overdue-remind.js';
 import {
   buildNormalizedReportNotification,
   isReportChatNotifyEnabled,
@@ -727,6 +734,179 @@ async function deliverEvent(req, res, adminDb, actor, body) {
   });
 }
 
+async function handleRemindOverdueChat(req, res, adminDb, actor, body) {
+  const entryId = String(body.entryId || '').trim();
+  if (!entryId) {
+    return res.status(400).json({ error: 'Missing entryId' });
+  }
+
+  let entry;
+  let profiles;
+  let defs;
+  let stores;
+  try {
+    const [eq, pq, dq, sq] = await Promise.all([
+      adminDb.query({ logbookEntries: { $: { where: { id: entryId } } } }),
+      adminDb.query({ profiles: { stores: {} } }),
+      loadRoleDefinitions(adminDb),
+      adminDb.query({ stores: {} }),
+    ]);
+    entry = eq.logbookEntries?.[0];
+    profiles = pq.profiles ?? [];
+    defs = dq;
+    stores = sq.stores ?? [];
+  } catch (e) {
+    return res.status(500).json({
+      error: e instanceof Error ? e.message : 'Failed to load remind context',
+    });
+  }
+
+  if (!entry) {
+    return res.status(404).json({ error: 'Entry not found', reason: 'not_found' });
+  }
+
+  const authOk = canActorRemindOverdueChat(actor, entry, defs, {
+    hasStoreAccess,
+    canReviewRole,
+    rankOf,
+  });
+  if (!authOk) {
+    return res.status(403).json({ error: 'Not authorized to remind overdue', reason: 'forbidden' });
+  }
+
+  const assigneeRecipients = getAssigneeRecipientUserIds(entry, profiles, hasStoreAccess);
+  const guard = evaluateRemindOverdueGuards(entry, assigneeRecipients, {
+    chatNotifyEnabled: isLogbookChatNotifyEnabled(),
+  });
+  if (!guard.ok) {
+    const status = guard.status || 200;
+    return res.status(status).json({
+      ok: false,
+      skipped: Boolean(guard.skipped),
+      reason: guard.reason,
+      error: guard.reason,
+      chatCreated: 0,
+      deduped: guard.reason === 'already_reminded',
+    });
+  }
+
+  const storeId = String(entry.storeId || '').trim();
+  const key = overdueRemindChatDeliveryKey(entryId, storeId);
+  let chatExists = false;
+  try {
+    chatExists = Boolean(
+      (
+        await adminDb.query({
+          storeChatMessages: { $: { where: { chatDeliveryKey: key } } },
+        })
+      ).storeChatMessages?.length,
+    );
+  } catch {
+    /* migration fallback */
+  }
+
+  const stampedAt = nowIso();
+  const senderProfileId = resolveActorProfileId(actor, profiles);
+  if (!senderProfileId) {
+    console.warn(
+      '[logbook-notify] missing actor profileId; overdue remind chat will not link sender',
+      { userId: actor?.userId },
+    );
+  }
+
+  const stampTx = adminDb.tx.logbookEntries[entryId].update({
+    overdueChatRemindedAt: stampedAt,
+    updatedAt: stampedAt,
+  });
+
+  if (chatExists) {
+    try {
+      await adminDb.transact([stampTx]);
+    } catch (e) {
+      return res.status(500).json({
+        error: e instanceof Error ? e.message : 'Failed to stamp overdue remind',
+      });
+    }
+    return res.status(200).json({
+      ok: true,
+      chatCreated: 0,
+      chatDeduped: 1,
+      deduped: true,
+      reason: 'already_reminded',
+    });
+  }
+
+  const mentionMode = resolveChatMentionMode('overdue');
+  const normalized = buildNormalizedLogbookNotification({
+    entry,
+    eventType: 'overdue',
+    eventVersion: 'once',
+    recipients: assigneeRecipients,
+    actor,
+    profiles,
+    storeLabel: storeLabelFor(entry, stores),
+    chatMentionMode: mentionMode,
+  });
+  const chatBody = String(normalized.copy.chatBody || normalized.body || '').trim();
+  const mentionedUserIdsJson = JSON.stringify(assigneeRecipients);
+
+  let chatTx = adminDb.tx.storeChatMessages[id()].update({
+    storeId,
+    senderUserId: actor.userId,
+    senderProfileId: senderProfileId || '',
+    senderNameSnapshot: actor.displayName || actor.email || 'System',
+    senderRoleSnapshot: actor.role || '',
+    messageType: 'logbook_system',
+    body: chatBody,
+    createdAt: stampedAt,
+    editedAt: '',
+    deletedAt: '',
+    status: 'active',
+    replyToMessageId: '',
+    mentionedUserIdsJson,
+    mentionAll: false,
+    giphyId: '',
+    giphyKind: '',
+    giphyTitle: '',
+    giphyWidth: '',
+    giphyHeight: '',
+    giphyUrl: '',
+    giphyPreviewUrl: '',
+    forwardedFromMessageId: '',
+    forwardedFromUserId: '',
+    clientMutationId: '',
+    sourceType: 'logbook',
+    logbookEntryId: entry.id,
+    reportId: '',
+    logbookEventType: 'overdue',
+    actionType: normalized.actionType,
+    targetUserIdsJson: JSON.stringify(assigneeRecipients),
+    deepLinkJson: ensureDeepLinkJson(normalized, entry, storeId),
+    statusSnapshot: normalized.statusSnapshot,
+    chatDeliveryKey: key,
+  });
+  if (senderProfileId) {
+    chatTx = chatTx.link({ store: storeId, sender: senderProfileId });
+  } else {
+    chatTx = chatTx.link({ store: storeId });
+  }
+
+  try {
+    await adminDb.transact([chatTx, stampTx]);
+  } catch (e) {
+    return res.status(500).json({
+      error: e instanceof Error ? e.message : 'Remind transaction failed',
+    });
+  }
+
+  return res.status(200).json({
+    ok: true,
+    chatCreated: 1,
+    chatDeduped: 0,
+    deduped: false,
+  });
+}
+
 function storeLabelForReport(report, stores) {
   const code = String(report?.storeCode || '').trim();
   const name = String(report?.storeName || '').trim();
@@ -1087,6 +1267,10 @@ export default async function handler(req, res) {
 
   if (type === 'deliver_event') {
     return deliverEvent(req, res, adminDb, actor, body);
+  }
+
+  if (type === 'remind_overdue_chat') {
+    return handleRemindOverdueChat(req, res, adminDb, actor, body);
   }
 
   if (type === 'deliver_report_event') {
