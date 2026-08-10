@@ -3,7 +3,7 @@ import { db } from '../db';
 import FeedbackInbox from '../components/FeedbackInbox';
 import {
   filterForLogbookNotificationType,
-  shouldOpenLogbookResolutionFromNotification,
+  shouldAutoOpenLogbookResolutionForViewer,
 } from '../lib/logbookNotificationContent';
 import ExportModal from '../components/ExportModal';
 import FailureCorrectionHistory from '../components/FailureCorrectionHistory';
@@ -270,7 +270,8 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
           try {
             sessionStorage.setItem('logbookHighlightEntryId', entryId);
             sessionStorage.setItem('logbookInitialFilter', filter);
-            if (shouldOpenLogbookResolutionFromNotification(type || '')) {
+            const entry = allLogbookEntries.find((e) => e.id === entryId);
+            if (shouldAutoOpenLogbookResolutionForViewer(type || '', profile, entry, defs)) {
               sessionStorage.setItem('logbookOpenResolutionEntryId', entryId);
             } else {
               sessionStorage.removeItem('logbookOpenResolutionEntryId');

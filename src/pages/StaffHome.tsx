@@ -19,7 +19,7 @@ import {
 } from '../lib/logbook';
 import {
   filterForLogbookNotificationType,
-  shouldOpenLogbookResolutionFromNotification,
+  shouldAutoOpenLogbookResolutionForViewer,
 } from '../lib/logbookNotificationContent';
 import type { Page } from '../components/Nav';
 import type { LogbookEntry, Profile } from '../types';
@@ -96,7 +96,8 @@ export default function StaffHome({
     try {
       sessionStorage.setItem('logbookHighlightEntryId', entryId);
       sessionStorage.setItem('logbookInitialFilter', filter);
-      if (shouldOpenLogbookResolutionFromNotification(type || '')) {
+      const entry = logbookEntries.find((e) => e.id === entryId);
+      if (shouldAutoOpenLogbookResolutionForViewer(type || '', profile, entry, defs)) {
         sessionStorage.setItem('logbookOpenResolutionEntryId', entryId);
       } else {
         sessionStorage.removeItem('logbookOpenResolutionEntryId');

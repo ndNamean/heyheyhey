@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_ROLE_DEFINITIONS } from './defaultRoleDefinitions';
 import {
   LOGBOOK_CHAT_MENTION_MODE,
   LOGBOOK_MENTION_CAP,
@@ -11,8 +12,10 @@ import {
   isLogbookChatNotifyEnabled,
   resolveChatMentionMode,
   selectMentionUserIds,
+  shouldAutoOpenLogbookResolutionForViewer,
   shouldOpenLogbookResolutionFromNotification,
 } from './logbookNotificationContent';
+import type { LogbookEntry, Profile } from '../types';
 
 describe('logbookNotificationContent', () => {
   const baseEntry = {
@@ -98,6 +101,75 @@ describe('logbookNotificationContent', () => {
     expect(shouldOpenLogbookResolutionFromNotification('logbook_issue_recalled')).toBe(
       false,
     );
+  });
+
+  it('auto-opens resolution only for assignees, not owner/reviewer-only viewers', () => {
+    const defs = DEFAULT_ROLE_DEFINITIONS;
+    const issue = {
+      ...baseEntry,
+      assigneeRole: 'staff',
+      assigneeUserIdsJson: '["staff-1"]',
+      authorUserId: 'owner-1',
+      date: '2026-08-10',
+      shift: 'AM',
+      createdAt: '2026-08-10T00:00:00.000Z',
+      updatedAt: '2026-08-10T00:00:00.000Z',
+      requiresAck: false,
+      isAnnouncement: false,
+    } as LogbookEntry;
+
+    const staff: Profile = {
+      id: 'p-staff',
+      userId: 'staff-1',
+      email: 'staff@example.com',
+      displayName: 'Staff',
+      role: 'staff',
+      approvalStatus: 'approved',
+      stores: [{ id: 'store-1', code: 'S1', name: 'Store 1' } as never],
+    } as Profile;
+
+    const owner: Profile = {
+      id: 'p-owner',
+      userId: 'owner-1',
+      email: 'owner@example.com',
+      displayName: 'Owner',
+      role: 'owner',
+      approvalStatus: 'approved',
+      stores: [{ id: 'store-1', code: 'S1', name: 'Store 1' } as never],
+    } as Profile;
+
+    expect(
+      shouldAutoOpenLogbookResolutionForViewer(
+        'logbook_issue_overdue',
+        staff,
+        issue,
+        defs,
+      ),
+    ).toBe(true);
+    expect(
+      shouldAutoOpenLogbookResolutionForViewer(
+        'logbook_issue_overdue',
+        owner,
+        issue,
+        defs,
+      ),
+    ).toBe(false);
+    expect(
+      shouldAutoOpenLogbookResolutionForViewer(
+        'logbook_issue_overdue',
+        owner,
+        null,
+        defs,
+      ),
+    ).toBe(false);
+    expect(
+      shouldAutoOpenLogbookResolutionForViewer(
+        'logbook_resolution_submitted',
+        staff,
+        issue,
+        defs,
+      ),
+    ).toBe(false);
   });
 
   it('caps mentions and drops all when over cap', () => {

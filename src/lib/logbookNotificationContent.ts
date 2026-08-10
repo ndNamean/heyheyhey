@@ -3,6 +3,8 @@
  * Server twin: api/_lib/logbook/notification-content.js — keep in sync.
  */
 
+import { canActOnAssignedIssue } from './logbook';
+
 export const LOGBOOK_MENTION_CAP = 15;
 export const LOGBOOK_CHAT_MENTION_MODE = {
   NAMED: 'named',
@@ -294,7 +296,7 @@ export function filterForLogbookNotificationType(type: string): LogbookDeepLinkF
   return 'my-assigned';
 }
 
-/** True only for issue notifications that should auto-open Submit resolution. */
+/** True for notification types that *may* auto-open Submit resolution (assignees only). */
 export function shouldOpenLogbookResolutionFromNotification(type: string): boolean {
   return (
     type === 'logbook_issue_assigned' ||
@@ -302,6 +304,21 @@ export function shouldOpenLogbookResolutionFromNotification(type: string): boole
     type === 'logbook_issue_overdue' ||
     type === 'logbook_issue_reopened'
   );
+}
+
+/**
+ * Auto-open Submit resolution only when the notification type asks for it
+ * and the viewer can act as an assignee on that entry (not owner/reviewer-only).
+ */
+export function shouldAutoOpenLogbookResolutionForViewer(
+  type: string,
+  profile: Parameters<typeof canActOnAssignedIssue>[0],
+  entry: Parameters<typeof canActOnAssignedIssue>[1] | null | undefined,
+  defs: Parameters<typeof canActOnAssignedIssue>[2],
+): boolean {
+  if (!shouldOpenLogbookResolutionFromNotification(type)) return false;
+  if (!entry) return false;
+  return canActOnAssignedIssue(profile, entry, defs);
 }
 
 function resolveEntryType(

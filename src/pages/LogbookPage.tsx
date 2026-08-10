@@ -453,11 +453,14 @@ export default function LogbookPage({
     if (!proofEntryId || !allEntries.length) return;
     const entry = allEntries.find((e) => e.id === proofEntryId);
     if (!entry) return;
-    if (resolveLogbookEntryType(entry) !== 'issue') {
+    if (
+      resolveLogbookEntryType(entry) !== 'issue' ||
+      !canActOnAssignedIssue(profile, entry, defs)
+    ) {
       setProofEntryId(null);
       clearSession(openResolutionSessionKey());
     }
-  }, [proofEntryId, allEntries]);
+  }, [proofEntryId, allEntries, profile, defs]);
 
   useEffect(() => {
     const { highlightId: nextHighlight, filterKey } = resolveLogbookOpenState({
