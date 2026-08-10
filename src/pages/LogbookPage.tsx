@@ -2265,44 +2265,89 @@ export default function LogbookPage({
               </div>
             )}
 
-            {status === 'resolved' && (
+            {(status === 'resolved' || status === 'recalled') && (
               <div style={{ marginTop: 8 }}>
-                {entry.resolvedAt && (
-                  <p className="small" style={{ margin: '0 0 4px' }}>
-                    {new Date(entry.resolvedAt).toLocaleString()}
-                  </p>
+                {status === 'resolved' && (
+                  <>
+                    {entry.resolvedAt && (
+                      <p className="small" style={{ margin: '0 0 4px' }}>
+                        {new Date(entry.resolvedAt).toLocaleString()}
+                      </p>
+                    )}
+                    {(() => {
+                      const approvedEv = [...entryEvents]
+                        .reverse()
+                        .find((ev) => ev.eventType === 'resolution_approved');
+                      const reviewer =
+                        allProfiles.find((p) => p.userId === entry.reviewedByUserId) || null;
+                      const name =
+                        (approvedEv?.actorDisplayNameSnapshot || '').trim() ||
+                        reviewer?.displayName?.trim() ||
+                        reviewer?.email?.split('@')[0] ||
+                        '';
+                      const role =
+                        (approvedEv?.actorRole || '').trim() || reviewer?.role || '';
+                      const byLine = [name, role ? `(${role})` : ''].filter(Boolean).join(' ');
+                      return (
+                        <p className="small" style={{ margin: 0 }}>
+                          <strong>{t.timeline.resolutionApproved}</strong>
+                          {byLine ? (
+                            <>
+                              {' '}
+                              {t.timeline.by}{' '}
+                              <IdentityWithAvatar profile={reviewer}>{byLine}</IdentityWithAvatar>
+                            </>
+                          ) : null}
+                        </p>
+                      );
+                    })()}
+                    {entry.reviewNote?.trim() && (
+                      <p className="small" style={{ margin: '4px 0 0' }}>
+                        {entry.reviewNote.trim()}
+                      </p>
+                    )}
+                  </>
                 )}
-                {(() => {
-                  const approvedEv = [...entryEvents]
-                    .reverse()
-                    .find((ev) => ev.eventType === 'resolution_approved');
-                  const reviewer =
-                    allProfiles.find((p) => p.userId === entry.reviewedByUserId) || null;
-                  const name =
-                    (approvedEv?.actorDisplayNameSnapshot || '').trim() ||
-                    reviewer?.displayName?.trim() ||
-                    reviewer?.email?.split('@')[0] ||
-                    '';
-                  const role =
-                    (approvedEv?.actorRole || '').trim() || reviewer?.role || '';
-                  const byLine = [name, role ? `(${role})` : ''].filter(Boolean).join(' ');
-                  return (
-                    <p className="small" style={{ margin: 0 }}>
-                      <strong>{t.timeline.resolutionApproved}</strong>
-                      {byLine ? (
-                        <>
-                          {' '}
-                          {t.timeline.by}{' '}
-                          <IdentityWithAvatar profile={reviewer}>{byLine}</IdentityWithAvatar>
-                        </>
-                      ) : null}
-                    </p>
-                  );
-                })()}
-                {entry.reviewNote?.trim() && (
-                  <p className="small" style={{ margin: '4px 0 0' }}>
-                    {entry.reviewNote.trim()}
-                  </p>
+                {status === 'recalled' && (
+                  <>
+                    {entry.recalledAt && (
+                      <p className="small" style={{ margin: '0 0 4px' }}>
+                        {new Date(entry.recalledAt).toLocaleString()}
+                      </p>
+                    )}
+                    {(() => {
+                      const recalledEv = [...entryEvents]
+                        .reverse()
+                        .find((ev) => ev.eventType === 'issue_recalled');
+                      const actor =
+                        allProfiles.find((p) => p.userId === entry.recalledByUserId) || null;
+                      const name =
+                        (recalledEv?.actorDisplayNameSnapshot || '').trim() ||
+                        actor?.displayName?.trim() ||
+                        actor?.email?.split('@')[0] ||
+                        '';
+                      const role =
+                        (recalledEv?.actorRole || '').trim() || actor?.role || '';
+                      const byLine = [name, role ? `(${role})` : ''].filter(Boolean).join(' ');
+                      return (
+                        <p className="small" style={{ margin: 0 }}>
+                          <strong>{t.timeline.issueRecalled ?? t.logbook.statusRecalled}</strong>
+                          {byLine ? (
+                            <>
+                              {' '}
+                              {t.timeline.by}{' '}
+                              <IdentityWithAvatar profile={actor}>{byLine}</IdentityWithAvatar>
+                            </>
+                          ) : null}
+                        </p>
+                      );
+                    })()}
+                    {entry.recallReason?.trim() && (
+                      <p className="small" style={{ margin: '4px 0 0' }}>
+                        {entry.recallReason.trim()}
+                      </p>
+                    )}
+                  </>
                 )}
                 <button
                   type="button"
@@ -2322,7 +2367,8 @@ export default function LogbookPage({
               </div>
             )}
 
-            {(status !== 'resolved' || resolvedDetailOpenIds[entry.id]) && (
+            {((status !== 'resolved' && status !== 'recalled') ||
+              resolvedDetailOpenIds[entry.id]) && (
               <>
             {sourceMedia.length > 0 && (
               <div style={{ marginTop: 8 }}>
