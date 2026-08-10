@@ -58,6 +58,7 @@ import {
   translationDisplayText,
   type StoreChatTranslationState,
 } from '../../lib/storeChatTranslation';
+import { avatarFieldsForMessage } from '../../lib/storeChatAvatar';
 import { nowIso } from '../../lib/utils';
 import type {
   GroupChatMember,
@@ -67,6 +68,7 @@ import type {
   Store,
 } from '../../types';
 import ProfileAvatar from '../profileAvatar/ProfileAvatar';
+import ProfileAvatarPreview from '../profileAvatar/ProfileAvatarPreview';
 import { AmbientGlowMedia } from './AmbientGlowMedia';
 import FloatingAssistantLoader from './FloatingAssistantLoader';
 import { GiphyMediaPreview } from './GiphyMediaPreview';
@@ -291,6 +293,7 @@ function GroupMessageRow({
   const { t, isRtl } = useLang();
   const sc = t.storeChat;
   const labels = actionLabelsFromT(sc);
+  const avatarProfile = avatarFieldsForMessage(message, isOwn, profile, candidates);
   const deleted = isDeleted(message);
   const isSystem = isSystemMessage(message);
   const rowClass = `fa-msg-row${isOwn ? ' fa-msg-row--own' : ''}${isSystem ? ' fa-msg-row--system' : ''}`;
@@ -334,6 +337,9 @@ function GroupMessageRow({
         className={`${rowClass}${highlighted ? ' fa-msg-row--highlighted' : ''}`}
         data-msg-id={message.id}
       >
+        <span className="fa-msg-avatar">
+          <ProfileAvatarPreview profile={avatarProfile} size={28} previewEnabled />
+        </span>
         <div className="fa-msg fa-msg--own fa-msg--deleted">
           <p className="fa-msg-deleted">{sc.messageDeleted}</p>
         </div>
@@ -384,6 +390,11 @@ function GroupMessageRow({
         onAction(actionId, message.id);
       }}
     >
+      {!isSystem ? (
+        <span className="fa-msg-avatar">
+          <ProfileAvatarPreview profile={avatarProfile} size={28} previewEnabled />
+        </span>
+      ) : null}
       <div className={`fa-msg${isOwn ? ' fa-msg--own' : ' fa-msg--other'}${isSystem ? ' fa-msg--system' : ''}`}>
         {isForwarded(message) && !isSystem ? (
           <span className="fa-msg-forwarded-badge">{sc.forwarded}</span>

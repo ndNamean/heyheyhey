@@ -1,14 +1,24 @@
 import type { AvatarProfileFields } from './avatarDisplay';
 import type { MentionCandidate } from './storeChatMentions';
-import type { Profile, StoreChatMessage } from '../types';
+import type { Profile } from '../types';
+
+/** Minimal message shape for avatar resolution (Store Chat + Group Chat). */
+export type MessageAvatarSource = {
+  senderUserId: string;
+  senderNameSnapshot: string;
+  sender?: Pick<
+    Profile,
+    'id' | 'userId' | 'displayName' | 'email' | 'avatarUrl' | 'avatarPath' | 'avatarFile'
+  >;
+};
 
 /**
- * Avatar fields for a Store Chat row.
+ * Avatar fields for a chat message row.
  * Prefer linked `message.sender`; else room candidates by senderUserId
- * (covers historical unlinked logbook_system rows); else name snapshot.
+ * (covers historical unlinked system rows); else name snapshot.
  */
 export function avatarFieldsForMessage(
-  message: StoreChatMessage,
+  message: MessageAvatarSource,
   isOwn: boolean,
   liveProfile: Profile,
   candidates?: MentionCandidate[],
