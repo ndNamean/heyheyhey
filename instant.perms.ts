@@ -695,10 +695,13 @@ const rules = {
       link: {
         members: 'false',
         invites: 'false',
-        // Allow reverse half of message→room link on send (mirrors message link.room).
-        messages: 'isActiveMember && !isViewer',
-        reactions: 'isActiveMember',
-        bookmarks: 'isActiveMember',
+        // Reverse link half: Instant evaluates these in an empty bind container, so
+        // named binds like isActiveMember fail with "undeclared reference". Gate
+        // membership on the child entity forward links (messages/reactions/bookmarks
+        // .link.room) — same pattern as Store Chat (stores has no reverse chat links).
+        messages: 'true',
+        reactions: 'true',
+        bookmarks: 'true',
       },
       unlink: {
         members: 'false',
@@ -712,7 +715,6 @@ const rules = {
       ...LEGACY_BIND,
       isActiveMember:
         "isApproved && data.id in auth.ref('$user.profile.groupChatMemberships.room.id')",
-      isViewer: "'viewer' in auth.ref('$user.profile.role')",
       onlyRoomActivityFields:
         "request.modifiedFields.all(f, f in ['lastMessageAt', 'updatedAt'])",
     },
