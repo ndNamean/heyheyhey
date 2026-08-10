@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
@@ -17,6 +17,7 @@ import {
   buildReportFinalizedEvent,
 } from '../lib/reviewEvents';
 import { deliverLogbookEvent } from '../lib/logbookNotifyClient';
+import { deliverReportEvent } from '../lib/reportNotifyClient';
 import { resolveActorDisplay } from '../lib/actorDisplay';
 import { badgeClass, nowIso } from '../lib/utils';
 import ProofPhoto from '../components/ProofPhoto';
@@ -50,6 +51,10 @@ import type {
 
 interface Props {
   profile: Profile;
+  /** Deep-link: force Reports surface and highlight a report card. */
+  highlightReportId?: string | null;
+  highlightOpenKey?: number;
+  initialSurface?: 'reports' | 'logbook';
 }
 
 interface PendingFeedback {
@@ -60,11 +65,24 @@ interface PendingFeedback {
 
 type ReviewSurface = 'reports' | 'logbook';
 
-export default function ReviewPage({ profile }: Props) {
+export default function ReviewPage({
+  profile,
+  highlightReportId = null,
+  highlightOpenKey = 0,
+  initialSurface = 'reports',
+}: Props) {
   const { t } = useLang();
   const { defs } = useRoleDefinitions();
   const [pendingFeedback, setPendingFeedback] = useState<PendingFeedback | null>(null);
-  const [surface, setSurface] = useState<ReviewSurface>('reports');
+  const [surface, setSurface] = useState<ReviewSurface>(initialSurface);
+
+  useEffect(() => {
+    if (highlightReportId) {
+      setSurface('reports');
+    } else if (initialSurface) {
+      setSurface(initialSurface);
+    }
+  }, [highlightReportId, highlightOpenKey, initialSurface]);
 
   const { data } = db.useQuery({
     reports: {
@@ -76,6 +94,19 @@ export default function ReviewPage({ profile }: Props) {
     profiles: { stores: {}, avatarFile: {} },
     reviewEvents: {},
   });
+
+  useEffect(() => {
+    if (!highlightReportId) return;
+    const el = document.querySelector(`[data-report-id="${highlightReportId}"]`);
+    if (el instanceof HTMLElement) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('report-card--highlight');
+      const timer = window.setTimeout(() => {
+        el.classList.remove('report-card--highlight');
+      }, 2500);
+      return () => window.clearTimeout(timer);
+    }
+  }, [highlightReportId, highlightOpenKey, data?.reports, surface]);
 
   const allProfiles: Profile[] = (data?.profiles ?? []) as Profile[];
   const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];
@@ -202,6 +233,19 @@ export default function ReviewPage({ profile }: Props) {
       ...notificationTxs,
     ]);
     schedulePushDeliveryFromTxs(notificationTxs);
+
+    // First reject/correction in a waiting cycle → Store Chat handoff (server-deduped).
+    if (status === 'rejected' || status === 'need_correction') {
+      const cycleKey = String(report.updatedAt || report.submittedAt || now).trim() || now;
+      void deliverReportEvent({
+        reportId: report.id,
+        eventType: 'report_action_required',
+        eventVersion: cycleKey,
+        note: reason,
+        itemTitle: response.title,
+        responseId: response.id,
+      });
+    }
   }
 
   async function handleFeedbackConfirm(result: FeedbackResult) {
@@ -247,6 +291,18 @@ export default function ReviewPage({ profile }: Props) {
       ...notificationTxs,
     ]);
     schedulePushDeliveryFromTxs(notificationTxs);
+
+    // Finalize-with-issues only; server skips if action_required already delivered this cycle.
+    if (newStatus === 'rejected') {
+      const cycleKey =
+        String(report.updatedAt || report.submittedAt || nowIso()).trim() || nowIso();
+      void deliverReportEvent({
+        reportId: report.id,
+        eventType: 'report_finalized',
+        eventVersion: cycleKey,
+        reportStatus: newStatus,
+      });
+    }
   }
 
   return (
@@ -467,7 +523,11 @@ export default function ReviewPage({ profile }: Props) {
         );
 
         return (
-          <div className="card" key={report.id}>
+          <div
+            className={`card${highlightReportId === report.id ? ' report-card--highlight' : ''}`}
+            key={report.id}
+            data-report-id={report.id}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{ flex: 1 }}>
                 <h2 style={{ margin: 0 }}>

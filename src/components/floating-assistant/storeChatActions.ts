@@ -26,7 +26,7 @@ export interface StoreChatActionCapabilityContext {
   isBookmarked: boolean;
   /** At least one other authorized destination to forward into. */
   canForward: boolean;
-  /** Logbook/system rows: Reply/React ok; hide Forward/Delete. */
+  /** Logbook/report system rows: Reply/React ok; hide Forward/Delete. */
   isLogbookSystem?: boolean;
   /** Group system messages — same spirit as logbook cards. */
   isSystemMessage?: boolean;

@@ -47,6 +47,7 @@ describe('storeChatMediaPayload', () => {
     expect(payload.clientMutationId).toBe('');
     expect(payload.sourceType).toBe('');
     expect(payload.logbookEntryId).toBe('');
+    expect(payload.reportId).toBe('');
     expect(payload.chatDeliveryKey).toBe('');
   });
 

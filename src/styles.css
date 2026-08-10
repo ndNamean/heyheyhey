@@ -401,6 +401,27 @@ textarea { min-height: 88px; resize: vertical; }
   -webkit-backdrop-filter: var(--glass-blur);
 }
 
+.card.report-card--highlight {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .card.report-card--highlight {
+    animation: report-card-highlight-pulse 1.2s ease-in-out 2;
+  }
+}
+
+@keyframes report-card-highlight-pulse {
+  0%,
+  100% {
+    outline-color: var(--accent);
+  }
+  50% {
+    outline-color: transparent;
+  }
+}
+
 .narrow { max-width: 420px; width: 100%; }
 
 /* ── Top navigation ───────────────────────────────────────────────────────── */

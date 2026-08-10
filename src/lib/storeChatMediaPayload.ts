@@ -29,10 +29,11 @@ export interface StoreChatForwardFields {
   forwardedFromUserId: string;
 }
 
-/** Admin logbook system-card fields — empty on human client messages. */
+/** Admin logbook/report system-card fields — empty on human client messages. */
 export interface StoreChatLogbookFields {
   sourceType: string;
   logbookEntryId: string;
+  reportId: string;
   logbookEventType: string;
   actionType: string;
   targetUserIdsJson: string;
@@ -88,6 +89,7 @@ export const EMPTY_FORWARD_FIELDS: StoreChatForwardFields = {
 export const EMPTY_LOGBOOK_FIELDS: StoreChatLogbookFields = {
   sourceType: '',
   logbookEntryId: '',
+  reportId: '',
   logbookEventType: '',
   actionType: '',
   targetUserIdsJson: '',

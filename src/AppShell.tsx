@@ -28,6 +28,12 @@ import {
   parseLogbookDeepLinkFromSearch,
   parseLogbookDeepLinkJson,
 } from './lib/logbookDeepLink';
+import {
+  OPEN_REVIEW_REPORT_EVENT,
+  parseReportDeepLinkFromSearch,
+  parseReportDeepLinkJson,
+  type ReportDeepLink,
+} from './lib/reportDeepLink';
 
 interface Props {
   profile: Profile;
@@ -42,6 +48,8 @@ export default function AppShell({ profile }: Props) {
   const [logbookFilter, setLogbookFilter] = useState<string | undefined>();
   const [logbookHighlightId, setLogbookHighlightId] = useState<string | null>(null);
   const [logbookHighlightOpenKey, setLogbookHighlightOpenKey] = useState(0);
+  const [reviewHighlightId, setReviewHighlightId] = useState<string | null>(null);
+  const [reviewHighlightOpenKey, setReviewHighlightOpenKey] = useState(0);
 
   useNativeBack(
     () => {
@@ -106,21 +114,43 @@ export default function AppShell({ profile }: Props) {
     setPage('logbook');
   }
 
+  function goReviewReport(link: ReportDeepLink) {
+    setReviewHighlightId(link.reportId);
+    setReviewHighlightOpenKey((k) => k + 1);
+    setPage('review');
+  }
+
   useEffect(() => {
-    const initial = parseLogbookDeepLinkFromSearch(window.location.search);
-    if (initial) {
-      goLogbook(initial);
+    const initialLogbook = parseLogbookDeepLinkFromSearch(window.location.search);
+    const initialReview = parseReportDeepLinkFromSearch(window.location.search);
+    if (initialLogbook) {
+      goLogbook(initialLogbook);
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (initialReview) {
+      goReviewReport(initialReview);
       window.history.replaceState({}, '', window.location.pathname);
     }
-    const onOpen = (event: Event) => {
+    const onOpenLogbook = (event: Event) => {
       const detail = (event as CustomEvent<unknown>).detail;
       const link = typeof detail === 'string' ? parseLogbookDeepLinkJson(detail) : detail;
       if (link && typeof link === 'object' && 'entryId' in link) {
         goLogbook(link as { entryId: string; filter?: string; storeId?: string });
       }
     };
-    window.addEventListener(OPEN_LOGBOOK_EVENT, onOpen);
-    return () => window.removeEventListener(OPEN_LOGBOOK_EVENT, onOpen);
+    const onOpenReview = (event: Event) => {
+      const detail = (event as CustomEvent<unknown>).detail;
+      const link =
+        typeof detail === 'string' ? parseReportDeepLinkJson(detail) : (detail as ReportDeepLink);
+      if (link && typeof link === 'object' && link.reportId) {
+        goReviewReport(link);
+      }
+    };
+    window.addEventListener(OPEN_LOGBOOK_EVENT, onOpenLogbook);
+    window.addEventListener(OPEN_REVIEW_REPORT_EVENT, onOpenReview);
+    return () => {
+      window.removeEventListener(OPEN_LOGBOOK_EVENT, onOpenLogbook);
+      window.removeEventListener(OPEN_REVIEW_REPORT_EVENT, onOpenReview);
+    };
   }, []);
 
   function renderPage() {
@@ -156,7 +186,13 @@ export default function AppShell({ profile }: Props) {
           />
         );
       case 'review':
-        return <ReviewPage profile={profile} />;
+        return (
+          <ReviewPage
+            profile={profile}
+            highlightReportId={reviewHighlightId}
+            highlightOpenKey={reviewHighlightOpenKey}
+          />
+        );
       case 'profile':
         return <ProfilePage profile={profile} />;
       case 'stores':

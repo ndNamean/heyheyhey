@@ -1,7 +1,9 @@
 /**
- * Vercel Serverless â€” Logbook Admin SDK actions.
+ * Vercel Serverless — Logbook + Report Admin SDK actions.
  * - type submit_resolution: Stage A (status + resolutionMedia + timeline)
  * - type resolution_submitted | creator_update | issue_recalled: Stage B inbox
+ * - type deliver_event: Logbook inbox + Store Chat
+ * - type deliver_report_event: Report Store Chat handoffs (+ mention inbox)
  *
  * Kept as one function so Hobby stays under the serverless function limit.
  */
@@ -30,6 +32,18 @@ import {
   resolveAckChatStoreIds,
 } from './_lib/logbook/ack-chat-rooms.js';
 import { resolveActorProfileId } from './_lib/logbook/resolve-actor-profile-id.js';
+import {
+  buildNormalizedReportNotification,
+  isReportChatNotifyEnabled,
+  reportActionRequiredChatKey,
+  reportChatDeliveryKey,
+  shouldEmitReportFinalizedChat,
+} from './_lib/report/notification-content.js';
+import {
+  selectReportActionRecipients,
+  selectReportFinalizedRecipients,
+  selectReportSubmittedRecipients,
+} from './_lib/report/recipients.js';
 
 /** Max storeChatMessages updates per Instant transact when fan-out is large. */
 const CHAT_TX_CHUNK = 25;
@@ -667,6 +681,7 @@ async function deliverEvent(req, res, adminDb, actor, body) {
         clientMutationId: '',
         sourceType: 'logbook',
         logbookEntryId: entry.id,
+        reportId: '',
         logbookEventType: eventType,
         actionType: normalized.actionType,
         targetUserIdsJson: JSON.stringify(roomRecipients),
@@ -712,6 +727,333 @@ async function deliverEvent(req, res, adminDb, actor, body) {
   });
 }
 
+function storeLabelForReport(report, stores) {
+  const code = String(report?.storeCode || '').trim();
+  const name = String(report?.storeName || '').trim();
+  if (code || name) return [code, name].filter(Boolean).join(' — ');
+  const storeId = String(report?.storeId || '').trim();
+  if (!storeId) return 'Unknown store';
+  const match = (stores || []).find((s) => s.id === storeId);
+  if (match) {
+    return [match.code, match.name].filter(Boolean).join(' — ') || storeId;
+  }
+  return storeId;
+}
+
+function emptyStoreChatMentionNotifFields(storeId, messageId) {
+  return {
+    reportId: messageId,
+    reportResponseId: '',
+    storeId,
+    itemTitle: '',
+    completionPercent: 0,
+    compliancePercent: 0,
+    actionStatus: '',
+    deliveryKey: '',
+    deepLinkJson: '',
+  };
+}
+
+async function deliverReportEvent(req, res, adminDb, actor, body) {
+  const reportId = String(body.reportId || '').trim();
+  const eventType = String(body.eventType || '').trim();
+  const eventVersion = String(body.eventVersion || '').trim();
+  const responseId = String(body.responseId || '').trim();
+  const reportStatusHint = String(body.reportStatus || '').trim();
+
+  if (!reportId || !eventType || !eventVersion) {
+    return res.status(400).json({
+      error: 'Missing reportId, eventType, or eventVersion',
+    });
+  }
+  if (
+    eventType !== 'report_submitted' &&
+    eventType !== 'report_action_required' &&
+    eventType !== 'report_finalized'
+  ) {
+    return res.status(400).json({ error: 'Unsupported report event type' });
+  }
+
+  if (!isReportChatNotifyEnabled()) {
+    return res.status(200).json({
+      ok: true,
+      created: 0,
+      chatCreated: 0,
+      chatDeduped: 0,
+      deduped: 0,
+      skipped: true,
+      reason: 'report_chat_notify_disabled',
+    });
+  }
+
+  let report;
+  let responses;
+  let profiles;
+  let defs;
+  let stores;
+  try {
+    const [reportResult, profilesResult, roleDefs, storesResult] = await Promise.all([
+      adminDb.query({
+        reports: {
+          $: { where: { id: reportId } },
+          responses: {},
+        },
+      }),
+      adminDb.query({
+        profiles: { stores: {} },
+      }),
+      loadRoleDefinitions(adminDb),
+      adminDb.query({ stores: {} }),
+    ]);
+    report = reportResult.reports?.[0];
+    responses = report?.responses ?? [];
+    profiles = profilesResult.profiles ?? [];
+    defs = roleDefs;
+    stores = storesResult.stores ?? [];
+  } catch (e) {
+    return res.status(500).json({
+      error: e instanceof Error ? e.message : 'Failed to load report',
+    });
+  }
+
+  if (!report) {
+    return res.status(404).json({ error: 'Report not found' });
+  }
+
+  const storeId = String(report.storeId || '').trim();
+  if (!storeId) {
+    return res.status(400).json({ error: 'Report has no storeId' });
+  }
+
+  let recipients = [];
+  let itemTitle = String(body.itemTitle || '').trim();
+  let response = null;
+  if (responseId) {
+    response = responses.find((r) => r.id === responseId) || null;
+    if (response && !itemTitle) itemTitle = String(response.title || '').trim();
+  }
+
+  if (eventType === 'report_submitted') {
+    recipients = selectReportSubmittedRecipients(
+      report,
+      responses,
+      profiles,
+      actor.userId,
+      defs,
+    );
+  } else if (eventType === 'report_action_required') {
+    if (!response) {
+      response =
+        responses.find(
+          (r) => r.status === 'rejected' || r.status === 'need_correction',
+        ) || null;
+    }
+    if (!response) {
+      return res.status(200).json({
+        ok: true,
+        created: 0,
+        chatCreated: 0,
+        chatDeduped: 0,
+        deduped: 0,
+        skipped: true,
+        reason: 'no_actionable_response',
+      });
+    }
+    recipients = selectReportActionRecipients(
+      report,
+      response,
+      actor,
+      profiles,
+      defs,
+    );
+  } else {
+    // report_finalized — skip chat when action_required already delivered this cycle
+    const actionKey = reportActionRequiredChatKey(reportId, eventVersion, storeId);
+    let actionRequiredExists = false;
+    try {
+      actionRequiredExists = Boolean(
+        (
+          await adminDb.query({
+            storeChatMessages: { $: { where: { chatDeliveryKey: actionKey } } },
+          })
+        ).storeChatMessages?.length,
+      );
+    } catch {
+      /* migration fallback */
+    }
+    const statusForPolicy =
+      reportStatusHint || String(report.status || '').trim() || 'rejected';
+    if (
+      !shouldEmitReportFinalizedChat({
+        reportStatus: statusForPolicy,
+        actionRequiredAlreadyDelivered: actionRequiredExists,
+      })
+    ) {
+      return res.status(200).json({
+        ok: true,
+        created: 0,
+        chatCreated: 0,
+        chatDeduped: actionRequiredExists ? 1 : 0,
+        deduped: actionRequiredExists ? 1 : 0,
+        skipped: true,
+        reason: actionRequiredExists
+          ? 'action_required_already_delivered'
+          : 'clean_or_non_issue_finalize',
+      });
+    }
+    recipients = selectReportFinalizedRecipients(report, actor, profiles, defs);
+  }
+
+  if (!recipients.length) {
+    return res.status(200).json({
+      ok: true,
+      created: 0,
+      chatCreated: 0,
+      chatDeduped: 0,
+      deduped: 0,
+      skipped: true,
+      reason: 'no_recipients',
+    });
+  }
+
+  const key = reportChatDeliveryKey(reportId, eventType, eventVersion, storeId);
+  let exists = false;
+  try {
+    exists = Boolean(
+      (
+        await adminDb.query({
+          storeChatMessages: { $: { where: { chatDeliveryKey: key } } },
+        })
+      ).storeChatMessages?.length,
+    );
+  } catch {
+    /* migration fallback */
+  }
+  if (exists) {
+    return res.status(200).json({
+      ok: true,
+      created: 0,
+      chatCreated: 0,
+      chatDeduped: 1,
+      deduped: 1,
+      dedupedFully: true,
+    });
+  }
+
+  const normalized = buildNormalizedReportNotification({
+    report,
+    eventType,
+    eventVersion,
+    recipients,
+    note: String(body.note || '').trim(),
+    itemTitle,
+    actor,
+    profiles,
+    storeLabel: storeLabelForReport(report, stores),
+  });
+
+  const senderProfileId = resolveActorProfileId(actor, profiles);
+  if (!senderProfileId) {
+    console.warn(
+      '[logbook-notify] missing actor profileId; report chat will not link sender',
+      { userId: actor?.userId },
+    );
+  }
+
+  const chatBody = String(normalized.copy.chatBody || normalized.body || '').trim();
+  const mentionedUserIdsJson = JSON.stringify(recipients);
+  const messageId = id();
+  const createdAt = nowIso();
+
+  let chatTx = adminDb.tx.storeChatMessages[messageId].update({
+    storeId,
+    senderUserId: actor.userId,
+    senderProfileId: senderProfileId || '',
+    senderNameSnapshot: actor.displayName || actor.email || 'System',
+    senderRoleSnapshot: actor.role || '',
+    messageType: 'report_system',
+    body: chatBody,
+    createdAt,
+    editedAt: '',
+    deletedAt: '',
+    status: 'active',
+    replyToMessageId: '',
+    mentionedUserIdsJson,
+    mentionAll: false,
+    giphyId: '',
+    giphyKind: '',
+    giphyTitle: '',
+    giphyWidth: '',
+    giphyHeight: '',
+    giphyUrl: '',
+    giphyPreviewUrl: '',
+    forwardedFromMessageId: '',
+    forwardedFromUserId: '',
+    clientMutationId: '',
+    sourceType: 'report',
+    logbookEntryId: '',
+    reportId,
+    logbookEventType: eventType,
+    actionType: normalized.actionType,
+    targetUserIdsJson: JSON.stringify(recipients),
+    deepLinkJson: normalized.deepLinkJson,
+    statusSnapshot: normalized.statusSnapshot,
+    chatDeliveryKey: key,
+  });
+  if (senderProfileId) {
+    chatTx = chatTx.link({ store: storeId, sender: senderProfileId });
+  } else {
+    chatTx = chatTx.link({ store: storeId });
+  }
+
+  await adminDb.transact([chatTx]);
+
+  // Phase 4 — Store Chat mention inbox + push for named recipients
+  const notificationIds = [];
+  const mentionTxs = [];
+  const actorName =
+    actor.displayName?.trim() || actor.email?.split('@')[0] || 'Someone';
+  const preview = chatBody.replace(/\s+/g, ' ').slice(0, 120);
+  const storePart = normalized.storeLabel || storeId;
+  for (const uid of recipients) {
+    if (!uid || uid === actor.userId) continue;
+    const notificationId = id();
+    notificationIds.push(notificationId);
+    mentionTxs.push(
+      adminDb.tx.notifications[notificationId].update({
+        recipientUserId: uid,
+        type: 'store_chat_mention',
+        title: `${actorName} mentioned you in Store Chat`,
+        body: [`Store: ${storePart}`, preview].filter(Boolean).join('\n'),
+        actorUserId: actor.userId,
+        actorRole: actor.role,
+        readAt: '',
+        createdAt,
+        ...emptyStoreChatMentionNotifFields(storeId, messageId),
+      }),
+    );
+  }
+  if (mentionTxs.length) {
+    await adminDb.transact(mentionTxs);
+    void deliverPushForNotificationIds(notificationIds, { adminDb }).catch(
+      (err) => {
+        console.warn(
+          '[logbook-notify] report mention push skipped',
+          err?.message || err,
+        );
+      },
+    );
+  }
+
+  return res.status(200).json({
+    ok: true,
+    created: mentionTxs.length,
+    chatCreated: 1,
+    chatDeduped: 0,
+    deduped: 0,
+  });
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -745,6 +1087,10 @@ export default async function handler(req, res) {
 
   if (type === 'deliver_event') {
     return deliverEvent(req, res, adminDb, actor, body);
+  }
+
+  if (type === 'deliver_report_event') {
+    return deliverReportEvent(req, res, adminDb, actor, body);
   }
 
   const entryId = String(body.entryId || '').trim();

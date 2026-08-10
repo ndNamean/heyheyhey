@@ -573,7 +573,7 @@ const _schema = i.schema({
       senderProfileId: i.string().indexed(),
       senderNameSnapshot: i.string(),
       senderRoleSnapshot: i.string(),
-      messageType: i.string(),                 // 'text' | 'giphy_media' | 'text_giphy' | 'logbook_system'
+      messageType: i.string(),                 // 'text' | 'giphy_media' | 'text_giphy' | 'logbook_system' | 'report_system'
       body: i.string(),
       createdAt: i.string().indexed(),
       editedAt: i.string().clientRequired(),   // '' unused in v1
@@ -594,9 +594,12 @@ const _schema = i.schema({
       forwardedFromMessageId: i.string().clientRequired(),
       forwardedFromUserId: i.string().clientRequired(),
       clientMutationId: i.string().clientRequired(),
-      // Admin-created Logbook system cards (empty defaults for client messages).
-      sourceType: i.string().clientRequired(),
+      // Admin-created Logbook / Report system cards (empty defaults for client messages).
+      sourceType: i.string().clientRequired(), // '' | 'logbook' | 'report'
       logbookEntryId: i.string().clientRequired(),
+      // Report id for report_system rows (symmetry with logbookEntryId); '' otherwise.
+      reportId: i.string().clientRequired(),
+      // Logbook event name, or report event: report_submitted | report_action_required | report_finalized
       logbookEventType: i.string().clientRequired(),
       actionType: i.string().clientRequired(),
       targetUserIdsJson: i.string().clientRequired(),

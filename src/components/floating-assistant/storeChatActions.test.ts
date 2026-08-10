@@ -97,6 +97,12 @@ describe('storeChatActions', () => {
     expect(sheet).not.toContain('delete');
   });
 
+  it('strips forward and delete for report_system context (same protected flag)', () => {
+    const ctx = { ...baseCtx, isOwn: true, isLogbookSystem: true };
+    expect(isStoreChatActionAvailable('forward', ctx)).toBe(false);
+    expect(isStoreChatActionAvailable('delete', ctx)).toBe(false);
+  });
+
   it('strips forward and delete for isSystemMessage (group system)', () => {
     const ctx = { ...baseCtx, isOwn: true, isSystemMessage: true };
     expect(isStoreChatActionAvailable('reply', ctx)).toBe(true);

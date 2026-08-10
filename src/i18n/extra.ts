@@ -1453,6 +1453,8 @@ export const sectionsEn = {
     noMessagesYet: 'No messages yet. Say hello to the store team.',
     openLogbook: 'Open Logbook',
     logbookSystemLabel: 'Logbook',
+    openReview: 'Open Review',
+    reportSystemLabel: 'Report',
   },
 };
 
@@ -2809,6 +2811,8 @@ export const sectionsVi = {
     noMessagesYet: 'Chưa có tin nhắn. Hãy chào nhóm cửa hàng.',
     openLogbook: 'Mở Nhật ký',
     logbookSystemLabel: 'Nhật ký',
+    openReview: 'Mở Duyệt',
+    reportSystemLabel: 'Báo cáo',
   },
 };
 

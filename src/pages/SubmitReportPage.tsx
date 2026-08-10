@@ -16,6 +16,7 @@ import {
   buildItemResubmittedEvents,
   buildReportSubmittedEvents,
 } from '../lib/reviewEvents';
+import { deliverReportEvent } from '../lib/reportNotifyClient';
 import {
   buildScheduleCaptureForItem,
   findDuplicateOccurrenceKeys,
@@ -516,6 +517,11 @@ export default function SubmitReportPage({
       );
 
       await db.transact([reportTx, ...responseTxs, ...mediaLinkTxs, ...reviewEventTxs]);
+      void deliverReportEvent({
+        reportId: activeReportId,
+        eventType: 'report_submitted',
+        eventVersion: now,
+      });
       setSubmitted(true);
     } catch (e) {
       alert(e instanceof Error ? e.message : t.submit.submissionFailed);
@@ -598,6 +604,11 @@ export default function SubmitReportPage({
       );
 
       await db.transact([reportTx, ...responseUpdateTxs, ...mediaLinkTxs, ...reviewEventTxs]);
+      void deliverReportEvent({
+        reportId: correctionReport.id,
+        eventType: 'report_submitted',
+        eventVersion: now,
+      });
       setSubmitted(true);
     } catch (e) {
       alert(e instanceof Error ? e.message : t.validation.resubmitFailed);

@@ -587,7 +587,7 @@ const rules = {
     allow: {
       view: 'canAccessMessageStore',
       create:
-        "canSendStoreChat && data.senderUserId == auth.id && isOwnSenderProfile && storeIdValid && data.status == 'active' && messageTypeValid && bodySizeValid && mediaCoherent && data.messageType != 'logbook_system'",
+        "canSendStoreChat && data.senderUserId == auth.id && isOwnSenderProfile && storeIdValid && data.status == 'active' && messageTypeValid && bodySizeValid && mediaCoherent && data.messageType != 'logbook_system' && data.messageType != 'report_system'",
       update: 'isOwnMessage && onlyDeletedFields && softDeleteValid',
       delete: 'false',
       link: {
@@ -614,11 +614,11 @@ const rules = {
         "request.modifiedFields.all(f, f in ['deletedAt', 'status'])",
       softDeleteValid: "newData.status == 'deleted' && newData.deletedAt != ''",
       messageTypeValid:
-        "data.messageType == 'text' || data.messageType == 'giphy_media' || data.messageType == 'text_giphy' || data.messageType == 'logbook_system'",
+        "data.messageType == 'text' || data.messageType == 'giphy_media' || data.messageType == 'text_giphy' || data.messageType == 'logbook_system' || data.messageType == 'report_system'",
       bodySizeValid: 'size(data.body) <= 2000',
-      // text / logbook_system / text_giphy need body; giphy_media may be body-empty; giphy types need media ids.
+      // text / logbook_system / report_system / text_giphy need body; giphy_media may be body-empty; giphy types need media ids.
       mediaCoherent:
-        "((data.messageType == 'text' || data.messageType == 'logbook_system') && size(data.body) > 0 && data.giphyId == '') || (data.messageType == 'giphy_media' && data.giphyId != '' && data.giphyUrl != '') || (data.messageType == 'text_giphy' && size(data.body) > 0 && data.giphyId != '' && data.giphyUrl != '')",
+        "((data.messageType == 'text' || data.messageType == 'logbook_system' || data.messageType == 'report_system') && size(data.body) > 0 && data.giphyId == '') || (data.messageType == 'giphy_media' && data.giphyId != '' && data.giphyUrl != '') || (data.messageType == 'text_giphy' && size(data.body) > 0 && data.giphyId != '' && data.giphyUrl != '')",
     },
   },
 

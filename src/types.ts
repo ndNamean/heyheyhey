@@ -825,7 +825,12 @@ export interface Notification {
   deepLinkJson?: string;
 }
 
-export type StoreChatMessageType = 'text' | 'giphy_media' | 'text_giphy' | 'logbook_system';
+export type StoreChatMessageType =
+  | 'text'
+  | 'giphy_media'
+  | 'text_giphy'
+  | 'logbook_system'
+  | 'report_system';
 export type StoreChatMessageStatus = 'active' | 'deleted';
 /** Phase 4 GIPHY kinds; '' when message has no media. */
 export type StoreChatGiphyKind = 'gif' | 'sticker' | 'meme' | 'emoji' | '';
@@ -868,6 +873,8 @@ export interface StoreChatMessage {
   clientMutationId?: string;
   sourceType?: string;
   logbookEntryId?: string;
+  /** Report id for report_system rows; '' otherwise. */
+  reportId?: string;
   logbookEventType?: string;
   actionType?: string;
   targetUserIdsJson?: string;

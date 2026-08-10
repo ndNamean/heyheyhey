@@ -200,3 +200,67 @@ describe('StoreChatPanel logbook_system row', () => {
     expect(screen.queryByRole('menuitem', { name: /delete/i })).toBeNull();
   });
 });
+
+describe('StoreChatPanel report_system row', () => {
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    currentMessages = [
+      {
+        id: 'rp1',
+        storeId: 's1',
+        senderUserId: 'actor',
+        senderProfileId: 'p-actor',
+        senderNameSnapshot: 'Ada',
+        senderRoleSnapshot: 'staff',
+        messageType: 'report_system',
+        sourceType: 'report',
+        body: 'Report ready for review\n@Manager',
+        createdAt: '2026-08-04T00:00:00.000Z',
+        editedAt: '',
+        deletedAt: '',
+        status: 'active',
+        replyToMessageId: '',
+        mentionAll: false,
+        mentionedUserIdsJson: '["mgr1"]',
+        reportId: 'report-99',
+        logbookEntryId: '',
+        logbookEventType: 'report_submitted',
+        deepLinkJson: JSON.stringify({
+          page: 'review',
+          surface: 'reports',
+          reportId: 'report-99',
+          storeId: 's1',
+        }),
+        statusSnapshot: 'waiting_approval',
+      },
+    ];
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: vi.fn(),
+    });
+  });
+
+  it('dispatches OPEN_REVIEW_REPORT_EVENT on Open Review', async () => {
+    const { OPEN_REVIEW_REPORT_EVENT } = await import('../../lib/reportDeepLink');
+    const seen: unknown[] = [];
+    const handler = (event: Event) => {
+      seen.push((event as CustomEvent).detail);
+    };
+    window.addEventListener(OPEN_REVIEW_REPORT_EVENT, handler);
+    try {
+      renderPanel();
+      fireEvent.click(screen.getByRole('button', { name: /open review/i }));
+      expect(seen).toEqual([
+        {
+          page: 'review',
+          surface: 'reports',
+          reportId: 'report-99',
+          storeId: 's1',
+        },
+      ]);
+    } finally {
+      window.removeEventListener(OPEN_REVIEW_REPORT_EVENT, handler);
+    }
+  });
+});

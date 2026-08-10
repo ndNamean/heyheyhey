@@ -19,16 +19,48 @@ Historical rows stay readable without backfill. Empty `replyToMessageId` / GIPHY
 | `VITE_GIPHY_API_KEY` | Composer GIF button and GIPHY reaction search stay hidden/disabled. |
 | `VITE_STORE_CHAT_TRANSLATION` | Translate action stays unavailable even if a provider exists. |
 | `TRANSLATION_PROVIDER` (+ optional `TRANSLATION_API_KEY`) | `/api/translate-store-chat` reports unsupported when unset; `mymemory` works keyless. |
+| `VITE_REPORT_CHAT_NOTIFY` / `REPORT_CHAT_NOTIFY` | Report → Store Chat handoffs **default OFF** (opt-in). Unset/`0`/`false`/`off` → no `report_system` writes. Set `1`/`true`/`on` to enable. Does not change Logbook chat notify. |
 
-Hobby note: Vercel Hobby allows ≤12 serverless functions. Translation is its own route; `/api/media-url` was folded into `/api/image-proxy` (with a rewrite) to stay under the limit.
+Hobby note: Vercel Hobby allows ≤12 serverless functions. Translation is its own route; `/api/media-url` was folded into `/api/image-proxy` (with a rewrite) to stay under the limit. Report chat reuses `/api/logbook-notify` (`type: deliver_report_event`) — no new function.
 | Ambient glow | Controlled by `src/config/ambientMediaEffects.ts` (`enabled`); reduced-motion users get sustained color only. |
 
 Reply UI, Unicode reactions, copy/forward/favorite/delete do not require the GIPHY or translation flags.
+
+## Report → Store Chat (handoff)
+
+Checklist Report events post at most three `report_system` Store Chat rows per waiting cycle (named mentions only, never `@all`):
+
+| Event | When |
+| --- | --- |
+| `report_submitted` | Submit or correction resubmit |
+| `report_action_required` | First reject/correction in the cycle |
+| `report_finalized` | Finalize with issues **only if** no prior `report_action_required` for that cycle |
+
+Clean all-approved finalize never writes chat. Per-item approve stays inbox-only.
+
+### Rollout / rollback
+
+1. Deploy schema (`storeChatMessages.reportId`) + perms (`report_system` Admin-only create).
+2. Ship code with flag **off** (default).
+3. Pilot: set `VITE_REPORT_CHAT_NOTIFY=1` and `REPORT_CHAT_NOTIFY=1` on one environment / cohort, redeploy.
+4. Rollback: unset both env vars (or set `0`/`false`/`off`) and redeploy — zero new `report_system` writes; Logbook chat unchanged.
+
+### QA checklist
+
+- [ ] Flag off: zero `report_system` writes; Logbook chat unchanged.
+- [ ] Submit → one chat @reviewers; Open Review deep-links to Review → Reports.
+- [ ] Approve N items → no new chat.
+- [ ] First correction → one @submitter; second correction same cycle → no new chat.
+- [ ] Resubmit → one new ready-for-review.
+- [ ] Finalize clean approve → no chat; finalize with issues after action_required → no duplicate.
+- [ ] Perms: client cannot create `report_system`.
+- [ ] Mention inbox/push opens Store Chat for named recipients.
 
 ## Independent disable / rollback
 
 - **GIPHY:** remove or blank `VITE_GIPHY_API_KEY` (redeploy). Existing media messages still render; new picks stop.
 - **Translation:** unset `VITE_STORE_CHAT_TRANSLATION` and/or server translation envs. No schema rollback.
+- **Report chat:** unset `VITE_REPORT_CHAT_NOTIFY` / `REPORT_CHAT_NOTIFY` (redeploy). No schema rollback.
 - **Ambient glow:** set `ambientMediaEffects.enabled = false` (or gate behind a future env if added).
 - **Reactions / bookmarks UI:** revert UI commits; leave schema/perms in place (safe additive).
 - **Reply UI:** revert UI only; field already existed and empty string remains “no reply”.
