@@ -1942,9 +1942,10 @@ export default function LogbookPage({
           )}
 
           {needsTick(proofType) && (
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <label className="ui-checkbox-label logbook-resolution-tick">
               <input
                 type="checkbox"
+                className="ui-checkbox logbook-resolution-tick__box"
                 checked={draft.checked}
                 onChange={(e) => setDraft({ ...draft, checked: e.target.checked })}
               />
