@@ -67,7 +67,7 @@ export default function StaffHome({
       store: {},
     },
     logbookEntries: { store: {} },
-    profiles: { stores: {} },
+    profiles: { stores: {}, avatarFile: {} },
   });
 
   const slots = data?.reportSlots ?? [];

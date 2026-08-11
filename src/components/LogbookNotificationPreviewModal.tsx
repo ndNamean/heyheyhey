@@ -28,6 +28,7 @@ import {
 import { badgeClass } from '../lib/utils';
 import type { LogbookEntry, Profile, RoleDefinition } from '../types';
 import OverdueRemindPanel from './OverdueRemindPanel';
+import IdentityWithAvatar from './profileAvatar/IdentityWithAvatar';
 
 export type LogbookNotificationClickDecision = 'navigate' | 'preview';
 
@@ -67,6 +68,28 @@ function actorDisplayName(
   if (!id) return fallback;
   const p = profiles.find((x) => x.userId === id);
   return profileMentionLabel(p || { userId: id });
+}
+
+function profileForUserId(userId: string | undefined | null, profiles: Profile[]): Profile | undefined {
+  const id = (userId ?? '').trim();
+  if (!id) return undefined;
+  return profiles.find((x) => x.userId === id);
+}
+
+function IdentityChip({
+  profile,
+  label,
+  testId,
+}: {
+  profile: Profile | undefined;
+  label: string;
+  testId?: string;
+}) {
+  return (
+    <IdentityWithAvatar profile={profile}>
+      <span data-testid={testId}>{label}</span>
+    </IdentityWithAvatar>
+  );
 }
 
 type Props = {
@@ -133,10 +156,20 @@ export default function LogbookNotificationPreviewModal({
     return listLogbookAssigneeMentionLabels(entryForRemind, profiles, defs);
   }, [entryForRemind, profiles, defs]);
 
-  const assigneeCount = useMemo(() => {
-    if (!entryForRemind) return 0;
-    return listLogbookAssigneeRecipientUserIds(entryForRemind, profiles, defs).length;
+  const assigneeProfiles = useMemo(() => {
+    if (!entryForRemind) return [];
+    const ids = listLogbookAssigneeRecipientUserIds(entryForRemind, profiles, defs);
+    return ids.map((userId) => {
+      const p = profileForUserId(userId, profiles);
+      return {
+        userId,
+        profile: p,
+        label: profileMentionLabel(p || { userId }),
+      };
+    });
   }, [entryForRemind, profiles, defs]);
+
+  const assigneeCount = assigneeProfiles.length;
 
   if (!open) return null;
 
@@ -229,6 +262,21 @@ export default function LogbookNotificationPreviewModal({
                 <dd style={{ display: 'inline', margin: 0 }} data-testid="logbook-notif-preview-id">
                   {entryDisplayId(entry.id)}
                 </dd>
+                <span style={{ margin: '0 6px' }}>·</span>
+                <dt style={{ display: 'inline', fontWeight: 600 }}>{t.logbook.previewCreatedBy}: </dt>
+                <dd
+                  style={{ display: 'inline', margin: 0 }}
+                  data-testid="logbook-notif-preview-created-by"
+                >
+                  <IdentityChip
+                    profile={profileForUserId(entry.authorUserId, profiles)}
+                    label={actorDisplayName(
+                      entry.authorUserId,
+                      profiles,
+                      t.logbook.previewUnknownActor,
+                    )}
+                  />
+                </dd>
               </div>
               <div>
                 <dt style={{ display: 'inline', fontWeight: 600 }}>{t.common.store}: </dt>
@@ -263,9 +311,17 @@ export default function LogbookNotificationPreviewModal({
                     <dt style={{ display: 'inline', fontWeight: 600 }}>{t.logbook.previewAssignee}: </dt>
                     <dd style={{ display: 'inline', margin: 0 }} data-testid="logbook-notif-preview-assignee">
                       {(entry.assigneeRole || '').trim() || '—'}
-                      {mentionLabels.length > 0
-                        ? ` · ${mentionLabels.map((m) => `@${m}`).join(' ')}`
-                        : ''}
+                      {assigneeProfiles.length > 0 ? (
+                        <span>
+                          {' · '}
+                          {assigneeProfiles.map((a, i) => (
+                            <span key={a.userId}>
+                              {i > 0 ? ' ' : ''}
+                              <IdentityChip profile={a.profile} label={`@${a.label}`} />
+                            </span>
+                          ))}
+                        </span>
+                      ) : null}
                     </dd>
                   </div>
                 </>
@@ -273,14 +329,25 @@ export default function LogbookNotificationPreviewModal({
             </dl>
 
             {status === 'resolved' && (
-              <p className="small" style={{ margin: '12px 0 0' }} data-testid="logbook-notif-preview-resolved">
-                {t.logbook.previewAlreadyResolved.replace('{name}', resolvedActor)}
-              </p>
+              <div className="small" style={{ margin: '12px 0 0' }} data-testid="logbook-notif-preview-resolved">
+                {t.logbook.previewAlreadyResolved.replace('{name}', '').trim()}{' '}
+                <IdentityChip
+                  profile={profileForUserId(
+                    entry.reviewedByUserId || entry.resolvedByUserId,
+                    profiles,
+                  )}
+                  label={resolvedActor}
+                />
+              </div>
             )}
             {status === 'recalled' && (
-              <p className="small" style={{ margin: '12px 0 0' }} data-testid="logbook-notif-preview-recalled">
-                {t.logbook.previewAlreadyRecalled.replace('{name}', recalledActor)}
-              </p>
+              <div className="small" style={{ margin: '12px 0 0' }} data-testid="logbook-notif-preview-recalled">
+                {t.logbook.previewAlreadyRecalled.replace('{name}', '').trim()}{' '}
+                <IdentityChip
+                  profile={profileForUserId(entry.recalledByUserId, profiles)}
+                  label={recalledActor}
+                />
+              </div>
             )}
 
             {showRemind && entryForRemind && (

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { defaultDefinitionsAsEntities } from '../lib/roleResolver';
 import type { LogbookEntry, Profile, Store } from '../types';
 import LogbookNotificationPreviewModal, {
@@ -22,6 +22,7 @@ vi.mock('../i18n', () => ({
       logbook: {
         previewTitle: 'Logbook entry',
         previewEntryId: 'Entry ID',
+        previewCreatedBy: 'Created by',
         previewCreated: 'Created',
         previewDue: 'Due',
         previewStatus: 'Status',
@@ -122,6 +123,21 @@ const owner = profile({ userId: 'owner-1', role: 'owner', displayName: 'Olivia O
 const staff = profile({ userId: 'staff-1', role: 'staff', displayName: 'Sam Staff' });
 const reviewer = profile({ userId: 'mgr-1', role: 'manager', displayName: 'Morgan Manager' });
 
+beforeEach(() => {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: vi.fn().mockImplementation(() => ({
+      matches: true,
+      media: '(hover: hover) and (pointer: fine)',
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+});
+
 afterEach(() => {
   cleanup();
   remindMock.mockReset();
@@ -176,7 +192,10 @@ describe('LogbookNotificationPreviewModal', () => {
       />,
     );
     expect(screen.getByTestId('logbook-notif-preview-resolved').textContent).toContain(
-      'Already resolved by Morgan Manager',
+      'Already resolved by',
+    );
+    expect(screen.getByTestId('logbook-notif-preview-resolved').textContent).toContain(
+      'Morgan Manager',
     );
     expect(screen.queryByTestId('overdue-remind-panel')).toBeNull();
   });
@@ -246,6 +265,32 @@ describe('LogbookNotificationPreviewModal', () => {
     expect(screen.getByTestId('logbook-notif-preview-remind-msg').textContent).toContain(
       'Overdue reminded',
     );
+  });
+
+  it('shows created-by and assignee identities with avatars', () => {
+    render(
+      <LogbookNotificationPreviewModal
+        open
+        entry={entry({
+          authorUserId: 'owner-1',
+          assigneeRole: 'staff',
+          assigneeUserIdsJson: '["staff-1"]',
+        })}
+        profile={owner}
+        profiles={[owner, staff]}
+        defs={defs}
+        onClose={vi.fn()}
+        onOpenFullEntry={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('logbook-notif-preview-id').textContent).toContain('#abcdef');
+    expect(screen.getByTestId('logbook-notif-preview-created-by').textContent).toContain(
+      'Olivia Owner',
+    );
+    expect(screen.getByTestId('logbook-notif-preview-assignee').textContent).toContain(
+      '@Sam Staff',
+    );
+    expect(document.querySelectorAll('.identity-with-avatar').length).toBeGreaterThanOrEqual(2);
   });
 
   it('open full entry callback fires', () => {
