@@ -3,6 +3,7 @@ import type { Profile, Store } from '../types';
 import {
   buildMentionCandidates,
   buildGroupMentionCandidates,
+  buildStoreChatRoomMembers,
   buildMentionMenuItems,
   expandMentionRecipients,
   filterMentionCandidates,
@@ -75,6 +76,31 @@ describe('buildMentionCandidates', () => {
     const c = buildMentionCandidates(profiles, 's1', 'me');
     expect(c.map((x) => x.userId).sort()).toEqual(['u1', 'u3']);
     expect(c.find((x) => x.userId === 'u1')?.label).toBe('Ada');
+  });
+});
+
+describe('buildStoreChatRoomMembers', () => {
+  const s1 = store('s1');
+  const s2 = store('s2');
+
+  it('includes assigned staff, all-store roles, and self; excludes pending', () => {
+    const profiles = [
+      profile({ userId: 'me', role: 'staff', stores: [s1], displayName: 'Me' }),
+      profile({ userId: 'u1', role: 'staff', stores: [s1], displayName: 'Ada' }),
+      profile({ userId: 'u2', role: 'staff', stores: [s2], displayName: 'Bob' }),
+      profile({ userId: 'u3', role: 'owner', displayName: 'Owner' }),
+      profile({
+        userId: 'u4',
+        role: 'staff',
+        stores: [s1],
+        displayName: 'Pending',
+        approvalStatus: 'pending',
+      }),
+    ];
+    const c = buildStoreChatRoomMembers(profiles, 's1');
+    expect(c.map((x) => x.userId)).toEqual(['u1', 'me', 'u3']);
+    expect(c.find((x) => x.userId === 'me')?.role).toBe('staff');
+    expect(c.find((x) => x.userId === 'u3')?.role).toBe('owner');
   });
 });
 

@@ -1784,6 +1784,9 @@ body.wizard-active .floating-assistant-root {
 /* Room switcher bar (conversation-first in all modes) */
 .fa-chats-room-bar {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   flex-shrink: 0;
   padding: 8px 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -1791,6 +1794,38 @@ body.wizard-active .floating-assistant-root {
 }
 .fa-chats-room-bar:has(.fa-chats-room-selector--open) {
   z-index: 40;
+}
+.fa-chats-room-bar > .fa-chats-room-selector {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.fa-chats-room-info {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  min-width: 28px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-secondary, rgba(255, 255, 255, 0.55));
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+}
+.fa-chats-room-info:hover:not(:disabled) {
+  color: var(--text-primary, inherit);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+}
+.fa-chats-room-info:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 .fa-chats-room-selector {
   position: relative;

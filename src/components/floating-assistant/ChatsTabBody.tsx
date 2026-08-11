@@ -12,6 +12,7 @@ import type { Profile, Store } from '../../types';
 import ChatsRoomSelector from './ChatsRoomSelector';
 import CreateGroupModal from './CreateGroupModal';
 import GroupChatPanel from './GroupChatPanel';
+import StoreChatDetailsModal from './StoreChatDetailsModal';
 import StoreChatPanel from './StoreChatPanel';
 import { useGroupChatRoomsSummary } from './useGroupChatRoomsSummary';
 import { useGroupChatUnread } from './useGroupChatUnread';
@@ -91,6 +92,7 @@ export default function ChatsTabBody({
     readStoredRoom(selectedStoreId),
   );
   const [createOpen, setCreateOpen] = useState(false);
+  const [storeDetailsOpen, setStoreDetailsOpen] = useState(false);
   const [inviteBusyId, setInviteBusyId] = useState<string | null>(null);
 
   const { rooms, memberships, pendingInvites, isLoading: groupsLoading } =
@@ -196,6 +198,11 @@ export default function ChatsTabBody({
   }
 
   const roomsLoading = storesLoading || groupsLoading;
+  const showStoreDetails = selected?.kind === 'store' && Boolean(selectedStore);
+
+  useEffect(() => {
+    if (selected?.kind !== 'store') setStoreDetailsOpen(false);
+  }, [selected?.kind, selected?.id]);
 
   return (
     <section
@@ -209,21 +216,33 @@ export default function ChatsTabBody({
         {roomsLoading ? (
           <p className="small">Loading chats…</p>
         ) : (
-          <ChatsRoomSelector
-            stores={stores}
-            groups={rooms}
-            pendingInvites={pendingInvites}
-            selected={selected}
-            onSelect={selectRoom}
-            unreadByStore={unreadByStore}
-            unreadSendersByStore={unreadSendersByStore}
-            unreadByGroup={unreadByRoom}
-            canCreate={canCreate}
-            onCreateClick={() => setCreateOpen(true)}
-            onAcceptInvite={(id) => void acceptInvite(id)}
-            onDeclineInvite={(id) => void declineInvite(id)}
-            inviteBusyId={inviteBusyId}
-          />
+          <>
+            <ChatsRoomSelector
+              stores={stores}
+              groups={rooms}
+              pendingInvites={pendingInvites}
+              selected={selected}
+              onSelect={selectRoom}
+              unreadByStore={unreadByStore}
+              unreadSendersByStore={unreadSendersByStore}
+              unreadByGroup={unreadByRoom}
+              canCreate={canCreate}
+              onCreateClick={() => setCreateOpen(true)}
+              onAcceptInvite={(id) => void acceptInvite(id)}
+              onDeclineInvite={(id) => void declineInvite(id)}
+              inviteBusyId={inviteBusyId}
+            />
+            {showStoreDetails ? (
+              <button
+                type="button"
+                className="fa-chats-room-info"
+                aria-label="Store details"
+                onClick={() => setStoreDetailsOpen(true)}
+              >
+                ℹ
+              </button>
+            ) : null}
+          </>
         )}
       </div>
 
@@ -274,6 +293,12 @@ export default function ChatsTabBody({
         canCrossStore={canCross}
         existingGroupNames={rooms.map((r) => r.name)}
         onCreated={(roomId) => selectRoom({ kind: 'group', id: roomId })}
+      />
+
+      <StoreChatDetailsModal
+        open={storeDetailsOpen && showStoreDetails && !hidden}
+        onClose={() => setStoreDetailsOpen(false)}
+        store={selectedStore}
       />
     </section>
   );

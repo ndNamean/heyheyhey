@@ -75,6 +75,14 @@ export function sortMentionCandidates(candidates: MentionCandidate[]): MentionCa
     .sort((a, b) => a.label.localeCompare(b.label) || a.email.localeCompare(b.email));
 }
 
+export interface StoreChatRoomMember extends MentionCandidate {
+  role: Role;
+}
+
+function isApprovedStoreChatMember(p: Profile, storeId: string): boolean {
+  return p.approvalStatus === 'approved' && Boolean(p.userId) && canAccessStoreChatRoom(p, storeId);
+}
+
 /** Approved profiles who can see the store room, excluding the sender. */
 export function buildMentionCandidates(
   profiles: Profile[],
@@ -83,12 +91,27 @@ export function buildMentionCandidates(
 ): MentionCandidate[] {
   const out: MentionCandidate[] = [];
   for (const p of profiles) {
-    if (p.approvalStatus !== 'approved') continue;
-    if (!p.userId || p.userId === excludeUserId) continue;
-    if (!canAccessStoreChatRoom(p, storeId)) continue;
+    if (!isApprovedStoreChatMember(p, storeId)) continue;
+    if (p.userId === excludeUserId) continue;
     out.push(profileToMentionCandidate(p));
   }
   return sortMentionCandidates(out);
+}
+
+/** Approved profiles who can see the store room, including the current user. */
+export function buildStoreChatRoomMembers(
+  profiles: Profile[],
+  storeId: string,
+): StoreChatRoomMember[] {
+  const out: StoreChatRoomMember[] = [];
+  for (const p of profiles) {
+    if (!isApprovedStoreChatMember(p, storeId)) continue;
+    out.push({
+      ...profileToMentionCandidate(p),
+      role: p.role,
+    });
+  }
+  return sortMentionCandidates(out) as StoreChatRoomMember[];
 }
 
 /**

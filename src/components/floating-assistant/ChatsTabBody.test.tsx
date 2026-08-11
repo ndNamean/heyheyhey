@@ -212,6 +212,32 @@ describe('ChatsTabBody room navigation', () => {
     expect(screen.getByTestId('store-chat-panel')).toBe(storePanel);
   });
 
+  it('shows store details on the room bar when a store is selected', () => {
+    renderBody('compact');
+
+    expect(screen.getByRole('button', { name: 'Store details' })).toBeTruthy();
+  });
+
+  it('opens a Members dialog from the store details button', () => {
+    renderBody('compact');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Store details' }));
+
+    expect(screen.getByRole('dialog', { name: 'Store details' })).toBeTruthy();
+    expect(screen.getByText('Members')).toBeTruthy();
+    expect(screen.getByText(/Store chat ·/)).toBeTruthy();
+  });
+
+  it('does not show a room-bar info button when a group is selected', () => {
+    renderBody('compact');
+
+    fireEvent.click(screen.getByRole('button', { name: /A1 · Alpha/ }));
+    fireEvent.click(screen.getByRole('option', { name: /Ops huddle/ }));
+
+    expect(screen.queryByRole('button', { name: 'Store details' })).toBeNull();
+    expect(screen.getByTestId('group-chat-panel')).toBeTruthy();
+  });
+
   it('keeps conversation panels mounted across mode changes', () => {
     const { rerender } = renderBody('compact');
     const storePanel = screen.getByTestId('store-chat-panel');
