@@ -61,12 +61,14 @@ import {
 import { avatarFieldsForMessage } from '../../lib/storeChatAvatar';
 import { nowIso } from '../../lib/utils';
 import type {
+  GroupChatInvite,
   GroupChatMember,
   GroupChatMessage,
   GroupChatRoom,
   Profile,
   Store,
 } from '../../types';
+import IdentityWithAvatar from '../profileAvatar/IdentityWithAvatar';
 import ProfileAvatar from '../profileAvatar/ProfileAvatar';
 import ProfileAvatarPreview from '../profileAvatar/ProfileAvatarPreview';
 import { AmbientGlowMedia } from './AmbientGlowMedia';
@@ -111,12 +113,20 @@ interface Props {
 }
 
 type MemberProfileLike = NonNullable<GroupChatMember['profile']>;
+type InviteeProfileLike = NonNullable<GroupChatInvite['invitee']>;
 
 function memberProfile(m: {
   profile?: MemberProfileLike | MemberProfileLike[] | null;
 }): MemberProfileLike | null {
   if (!m.profile) return null;
   return Array.isArray(m.profile) ? m.profile[0] ?? null : m.profile;
+}
+
+function inviteeProfile(inv: {
+  invitee?: InviteeProfileLike | InviteeProfileLike[] | null;
+}): InviteeProfileLike | null {
+  if (!inv.invitee) return null;
+  return Array.isArray(inv.invitee) ? inv.invitee[0] ?? null : inv.invitee;
 }
 
 function messageHasGiphy(message: GroupChatMessage): boolean {
@@ -2348,7 +2358,7 @@ export default function GroupChatPanel({
               <ul className="fa-group-members-list">
                 {members.map((m) => {
                   const p = memberProfile(m);
-                  const label = (p?.displayName || p?.email || m.userId) + ` · ${m.roomRole}`;
+                  const name = p?.displayName || p?.email || m.userId;
                   const canRemove =
                     canManage &&
                     m.userId !== profile.userId &&
@@ -2356,16 +2366,22 @@ export default function GroupChatPanel({
                     m.roomRole !== 'owner';
                   return (
                     <li key={m.id} className="fa-group-member-row">
-                      <span>{label}</span>
+                      <span className="fa-group-member-identity">
+                        <IdentityWithAvatar profile={p} size={20}>
+                          {name} · {m.roomRole}
+                        </IdentityWithAvatar>
+                      </span>
                       {canRemove ? (
-                        <button
-                          type="button"
-                          className="fa-btn-secondary"
-                          disabled={busy}
-                          onClick={() => void removeMember(m.userId)}
-                        >
-                          Remove
-                        </button>
+                        <span className="fa-group-member-actions">
+                          <button
+                            type="button"
+                            className="fa-btn-secondary fa-btn-compact"
+                            disabled={busy}
+                            onClick={() => void removeMember(m.userId)}
+                          >
+                            Remove
+                          </button>
+                        </span>
                       ) : null}
                     </li>
                   );
@@ -2377,31 +2393,38 @@ export default function GroupChatPanel({
                   <h4 className="fa-group-members-heading">Pending invites</h4>
                   <ul className="fa-group-members-list">
                     {pendingInvites.map((inv) => {
+                      const p = inviteeProfile(inv);
                       const name =
-                        inv.invitee?.displayName ||
-                        inv.invitee?.email ||
+                        p?.displayName ||
+                        p?.email ||
                         profileLabelById.get(inv.inviteeProfileId) ||
                         inv.inviteeProfileId ||
                         inv.inviteeUserId;
                       return (
                         <li key={inv.id} className="fa-group-member-row">
-                          <span>{name} · pending</span>
-                          <button
-                            type="button"
-                            className="fa-btn-secondary"
-                            disabled={busy}
-                            onClick={() => void remindPendingInvite(inv.id)}
-                          >
-                            Remind
-                          </button>
-                          <button
-                            type="button"
-                            className="fa-btn-secondary"
-                            disabled={busy}
-                            onClick={() => void cancelPendingInvite(inv.id)}
-                          >
-                            Cancel
-                          </button>
+                          <span className="fa-group-member-identity">
+                            <IdentityWithAvatar profile={p} size={20}>
+                              {name} · pending
+                            </IdentityWithAvatar>
+                          </span>
+                          <span className="fa-group-member-actions">
+                            <button
+                              type="button"
+                              className="fa-btn-secondary fa-btn-compact"
+                              disabled={busy}
+                              onClick={() => void remindPendingInvite(inv.id)}
+                            >
+                              Remind
+                            </button>
+                            <button
+                              type="button"
+                              className="fa-btn-secondary fa-btn-compact"
+                              disabled={busy}
+                              onClick={() => void cancelPendingInvite(inv.id)}
+                            >
+                              Cancel
+                            </button>
+                          </span>
                         </li>
                       );
                     })}
@@ -2491,7 +2514,7 @@ export default function GroupChatPanel({
               <div className="fa-modal-actions">
                 <button
                   type="button"
-                  className="fa-btn-secondary"
+                  className="fa-btn-secondary fa-btn-compact"
                   disabled={busy}
                   onClick={() => void leaveOrArchive()}
                 >

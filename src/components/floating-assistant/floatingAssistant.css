@@ -2383,6 +2383,24 @@ body.wizard-active .floating-assistant-root {
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: transparent;
 }
+.fa-btn-primary.fa-btn-compact,
+.fa-btn-secondary.fa-btn-compact {
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+  box-shadow: none;
+}
+.fa-btn-primary.fa-btn-compact:hover:not(:disabled),
+.fa-btn-secondary.fa-btn-compact:hover:not(:disabled) {
+  box-shadow: none;
+  border-color: rgba(255, 255, 255, 0.28);
+}
+.fa-btn-primary.fa-btn-compact:focus-visible,
+.fa-btn-secondary.fa-btn-compact:focus-visible {
+  box-shadow: var(--focus-ring);
+}
 .fa-field {
   display: flex;
   flex-direction: column;
@@ -2430,8 +2448,35 @@ body.wizard-active .floating-assistant-root {
   margin: 0;
 }
 .fa-group-members-list {
+  list-style: none;
   margin: 0;
-  padding-left: 18px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.fa-group-member-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fa-group-member-identity {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.fa-group-member-identity .identity-with-avatar {
+  min-width: 0;
+}
+.fa-group-member-identity .identity-with-avatar-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fa-group-member-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 .sr-only {
   position: absolute;

@@ -983,7 +983,10 @@ export interface GroupChatInvite {
   respondedAt: string;
   expiresAt: string;
   room?: Pick<GroupChatRoom, 'id' | 'name' | 'description' | 'icon' | 'status' | 'privacy'>;
-  invitee?: Pick<Profile, 'id' | 'userId' | 'displayName' | 'email'>;
+  invitee?: Pick<
+    Profile,
+    'id' | 'userId' | 'displayName' | 'email' | 'avatarUrl' | 'avatarPath' | 'avatarFile'
+  >;
   inviter?: Pick<Profile, 'id' | 'userId' | 'displayName' | 'email'>;
 }
 
