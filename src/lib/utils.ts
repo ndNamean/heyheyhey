@@ -18,7 +18,7 @@ export function nowIso(): string {
 }
 
 export function badgeClass(status: string): string {
-  if (status === 'approved' || status === 'verified' || status === 'accepted') return 'badge good';
+  if (status === 'approved' || status === 'verified' || status === 'accepted' || status === 'resolved') return 'badge good';
   if (['rejected', 'missed', 'late', 'overdue', 'revoked', 'expired', 'invalid'].includes(status)) return 'badge bad';
   if (['waiting_approval', 'need_correction', 'pending', 'open', 'in_progress', 'manager_review', 'needs_manager_recheck', 'opened'].includes(status))
     return 'badge warn';
