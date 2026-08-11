@@ -27,7 +27,7 @@ export function useGroupChatRoom(roomId: string | null | undefined, currentUserI
         groupChatRooms: {
           $: { where: { id: roomId } },
           members: { profile: { avatarFile: {} } },
-          invites: {},
+          invites: { invitee: {} },
         },
         groupChatMessages: {
           $: {

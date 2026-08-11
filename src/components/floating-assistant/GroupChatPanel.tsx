@@ -1866,6 +1866,18 @@ export default function GroupChatPanel({
     }
   }
 
+  async function remindPendingInvite(inviteId: string) {
+    setBusy(true);
+    setManageError(null);
+    try {
+      await groupChatApi('groupChatRemind', { inviteId });
+    } catch (err) {
+      setManageError(err instanceof Error ? err.message : 'Remind failed');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function removeMember(memberUserId: string) {
     if (!roomId || !canManage) return;
     if (memberUserId === profile.userId) {
@@ -2365,13 +2377,23 @@ export default function GroupChatPanel({
                   <h4 className="fa-group-members-heading">Pending invites</h4>
                   <ul className="fa-group-members-list">
                     {pendingInvites.map((inv) => {
-                      const label =
+                      const name =
+                        inv.invitee?.displayName ||
+                        inv.invitee?.email ||
                         profileLabelById.get(inv.inviteeProfileId) ||
                         inv.inviteeProfileId ||
                         inv.inviteeUserId;
                       return (
                         <li key={inv.id} className="fa-group-member-row">
-                          <span>{label}</span>
+                          <span>{name} · pending</span>
+                          <button
+                            type="button"
+                            className="fa-btn-secondary"
+                            disabled={busy}
+                            onClick={() => void remindPendingInvite(inv.id)}
+                          >
+                            Remind
+                          </button>
                           <button
                             type="button"
                             className="fa-btn-secondary"

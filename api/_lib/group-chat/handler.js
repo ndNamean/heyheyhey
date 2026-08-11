@@ -3,8 +3,8 @@
  * Mounted from api/invites.js (Hobby function budget — do not add a new Vercel function).
  *
  * Actions: groupChatCreate | groupChatInvite | groupChatAccept | groupChatDecline |
- *          groupChatCancel | groupChatArchive | groupChatRename | groupChatRemoveMember |
- *          groupChatLeave | groupChatListPending
+ *          groupChatCancel | groupChatRemind | groupChatArchive | groupChatRename |
+ *          groupChatRemoveMember | groupChatLeave | groupChatListPending
  */
 
 import { id } from '@instantdb/admin';
@@ -22,8 +22,12 @@ import {
   assertInviteeEligible,
   memberIsRoomOwnerOrAdmin,
 } from './capabilities.js';
-
-const INVITE_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+import {
+  INVITE_TTL_MS,
+  evaluateRemindInviteGuards,
+  inviteRemindDeliveryKey,
+  nextInviteExpiresAt,
+} from './remind.js';
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -90,7 +94,16 @@ async function findActorMembership(adminDb, roomId, userId) {
   return result.groupChatMembers?.[0] ?? null;
 }
 
-function buildInviteNotification({ inviteId, roomId, roomName, actor, inviteeUserId, now }) {
+function buildInviteNotification({
+  inviteId,
+  roomId,
+  roomName,
+  actor,
+  inviteeUserId,
+  now,
+  deliveryKey,
+  body,
+}) {
   return {
     recipientUserId: inviteeUserId,
     type: 'group_chat_invite',
@@ -98,7 +111,9 @@ function buildInviteNotification({ inviteId, roomId, roomName, actor, inviteeUse
     reportResponseId: '',
     storeId: '',
     title: 'Group chat invitation',
-    body: `${actor.displayName || actor.email || 'Someone'} invited you to “${roomName}”. Full history is visible after you accept.`,
+    body:
+      body ||
+      `${actor.displayName || actor.email || 'Someone'} invited you to “${roomName}”. Full history is visible after you accept.`,
     itemTitle: roomName,
     completionPercent: 0,
     compliancePercent: 0,
@@ -107,7 +122,7 @@ function buildInviteNotification({ inviteId, roomId, roomName, actor, inviteeUse
     actorRole: actor.role || '',
     readAt: '',
     createdAt: now,
-    deliveryKey: `group-chat-invite:${inviteId}`,
+    deliveryKey: deliveryKey || `group-chat-invite:${inviteId}`,
     deepLinkJson: JSON.stringify({ kind: 'groupChatInvite', inviteId, roomId }),
   };
 }
@@ -465,6 +480,56 @@ async function cancelInvite(req, res) {
   return res.status(200).json({ ok: true });
 }
 
+async function remindInvite(req, res) {
+  const ctx = await requireApprovedUser(req);
+  const body = parseBody(req.body) || {};
+  const inviteId = String(body.inviteId || '').trim();
+  if (!inviteId) return res.status(400).json({ error: 'inviteId required' });
+
+  const adminDb = getAdminDb();
+  const result = await adminDb.query({
+    groupChatInvites: {
+      $: { where: { id: inviteId } },
+      room: {},
+    },
+  });
+  const invite = result.groupChatInvites?.[0];
+  const membership = invite
+    ? await findActorMembership(adminDb, invite.roomId, ctx.userId)
+    : null;
+  const nowIso = new Date().toISOString();
+  const guard = evaluateRemindInviteGuards({
+    invite,
+    actorUserId: ctx.userId,
+    membership,
+    nowIso,
+  });
+  if (!guard.ok) throw httpError(guard.status, guard.error);
+
+  const room = Array.isArray(invite.room) ? invite.room[0] : invite.room;
+  const roomName = room?.name || invite.roomNameSnapshot || 'group chat';
+  const nowMs = Date.now();
+  const expiresAt = nextInviteExpiresAt(nowMs);
+
+  await adminDb.transact([
+    adminDb.tx.groupChatInvites[inviteId].update({ expiresAt }),
+    adminDb.tx.notifications[id()].update(
+      buildInviteNotification({
+        inviteId,
+        roomId: invite.roomId,
+        roomName,
+        actor: ctx,
+        inviteeUserId: invite.inviteeUserId,
+        now: nowIso,
+        deliveryKey: inviteRemindDeliveryKey(inviteId, nowMs),
+        body: `${ctx.displayName || ctx.email || 'Someone'} reminded you about “${roomName}”. The invite is still pending.`,
+      }),
+    ),
+  ]);
+
+  return res.status(200).json({ ok: true, expiresAt });
+}
+
 async function archiveRoom(req, res) {
   const ctx = await requireApprovedUser(req);
   const body = parseBody(req.body) || {};
@@ -612,6 +677,9 @@ export async function handleGroupChatRequest(req, res) {
     }
     if (req.method === 'POST' && action === 'groupChatCancel') {
       return await cancelInvite(req, res);
+    }
+    if (req.method === 'POST' && action === 'groupChatRemind') {
+      return await remindInvite(req, res);
     }
     if (req.method === 'POST' && action === 'groupChatArchive') {
       return await archiveRoom(req, res);

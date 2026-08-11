@@ -10,6 +10,7 @@ export type GroupChatApiAction =
   | 'groupChatAccept'
   | 'groupChatDecline'
   | 'groupChatCancel'
+  | 'groupChatRemind'
   | 'groupChatArchive'
   | 'groupChatRename'
   | 'groupChatRemoveMember'

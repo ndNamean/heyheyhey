@@ -746,10 +746,10 @@ const rules = {
     },
   },
 
-  // ── Custom Group Chat invites (invitee view; accept/decline via Admin) ─────
+  // ── Custom Group Chat invites (invitee or room member view; accept/decline via Admin) ─────
   groupChatInvites: {
     allow: {
-      view: 'isInvitee',
+      view: 'isInvitee || isRoomMemberOfInviteRoom',
       create: 'false',
       update: 'false',
       delete: 'false',
@@ -767,6 +767,8 @@ const rules = {
     bind: {
       ...LEGACY_BIND,
       isInvitee: 'isApproved && auth.id != null && data.inviteeUserId == auth.id',
+      isRoomMemberOfInviteRoom:
+        "isApproved && data.roomId in auth.ref('$user.profile.groupChatMemberships.room.id')",
     },
   },
 
