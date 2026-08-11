@@ -11,6 +11,7 @@ vi.mock('@instantdb/react', () => ({ id: () => 'msg-new' }));
 vi.mock('../../db', () => ({
   db: {
     useQuery: (...args: unknown[]) => useQueryMock(...args),
+    queryOnce: vi.fn(async () => ({ data: { storeChatMessages: [] } })),
     transact: (...args: unknown[]) => transactMock(...args),
     tx: {
       storeChatMessages: new Proxy(
@@ -205,6 +206,7 @@ describe('StoreChatPanel reply flow', () => {
     const handled = vi.fn();
     renderPanel({ initialTargetMessageId: 'm1', onInitialTargetHandled: handled });
     expect(handled).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('status')).toBeNull();
 
     const row = document.querySelector('[data-msg-id="m1"]') as HTMLElement;
     fireEvent.keyDown(row, { key: 'r' });
@@ -213,5 +215,24 @@ describe('StoreChatPanel reply flow', () => {
     act(() => {
       vi.advanceTimersByTime(1800);
     });
+  });
+
+  it('opens reply preview when initialTargetMessageId and initialStartReply', () => {
+    const handled = vi.fn();
+    renderPanel({
+      initialTargetMessageId: 'm1',
+      initialStartReply: true,
+      onInitialTargetHandled: handled,
+    });
+    expect(handled).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('status')).toBeTruthy();
+    expect(screen.getAllByText(/Replying to Alice/i).length).toBeGreaterThan(0);
+  });
+
+  it('does not auto-reply for mention-style focus without initialStartReply', () => {
+    const handled = vi.fn();
+    renderPanel({ initialTargetMessageId: 'm1', onInitialTargetHandled: handled });
+    expect(handled).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('status')).toBeNull();
   });
 });

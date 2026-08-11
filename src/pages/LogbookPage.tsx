@@ -2169,6 +2169,8 @@ export default function LogbookPage({
                     mentionLabels={mentions}
                     remindedAt={entry.overdueChatRemindedAt}
                     storeId={entry.storeId}
+                    entryId={entry.id}
+                    remindMessageId={entry.overdueChatRemindMessageId}
                     busy={remindBusyId === entry.id}
                     copy={{
                       assignedTo: t.logbook.overdueRemindAssignedTo,

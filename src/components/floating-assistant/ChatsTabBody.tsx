@@ -36,6 +36,7 @@ interface Props {
   unreadByStore: Record<string, number>;
   unreadSendersByStore: Record<string, UnreadSenderSummary[]>;
   initialStoreChatMessageId: string;
+  initialStoreChatStartReply?: boolean;
   onInitialStoreChatMessageHandled: () => void;
   pendingGroupChatRoomId?: string;
   onPendingGroupChatRoomHandled?: () => void;
@@ -77,6 +78,7 @@ export default function ChatsTabBody({
   unreadByStore,
   unreadSendersByStore,
   initialStoreChatMessageId,
+  initialStoreChatStartReply = false,
   onInitialStoreChatMessageHandled,
   pendingGroupChatRoomId = '',
   onPendingGroupChatRoomHandled,
@@ -258,6 +260,7 @@ export default function ChatsTabBody({
             authorizedStores={stores}
             composerVisual={composerVisual}
             initialTargetMessageId={initialStoreChatMessageId}
+            initialStartReply={initialStoreChatStartReply}
             onInitialTargetHandled={onInitialStoreChatMessageHandled}
           />
         )}

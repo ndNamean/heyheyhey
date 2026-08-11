@@ -3,9 +3,10 @@
  * Store Chat send itself is Admin-only (`remind_overdue_chat`).
  */
 
+import { db } from '../db';
 import { rankOf } from './roleResolver';
 import { canReview, userCanAccessStore } from './roles';
-import { profileMentionLabel } from './logbookNotificationContent';
+import { chatDeliveryKey, profileMentionLabel } from './logbookNotificationContent';
 import {
   isIssueOverdue,
   isLogbookIssue,
@@ -21,6 +22,35 @@ export type OverdueChatRemindState =
   | 'not_reminded'
   | 'reminded'
   | 'not_eligible_status';
+
+export const OVERDUE_REMIND_EVENT = 'overdue_remind';
+export const OVERDUE_REMIND_VERSION = 'once';
+
+/** Same formula as `api/_lib/logbook/overdue-remind.js`. */
+export function overdueRemindChatDeliveryKey(entryId: string, storeId: string): string {
+  return chatDeliveryKey(entryId, OVERDUE_REMIND_EVENT, OVERDUE_REMIND_VERSION, storeId || '');
+}
+
+export async function resolveOverdueRemindMessageId(opts: {
+  entryId: string;
+  storeId: string;
+  stampedMessageId?: string;
+}): Promise<string> {
+  const stamped = (opts.stampedMessageId ?? '').trim();
+  if (stamped) return stamped;
+  const entryId = (opts.entryId ?? '').trim();
+  const storeId = (opts.storeId ?? '').trim();
+  if (!entryId || !storeId) return '';
+  const key = overdueRemindChatDeliveryKey(entryId, storeId);
+  try {
+    const { data } = await db.queryOnce({
+      storeChatMessages: { $: { where: { chatDeliveryKey: key } } },
+    });
+    return String(data?.storeChatMessages?.[0]?.id ?? '').trim();
+  } catch {
+    return '';
+  }
+}
 
 function hasStoreAccess(profile: Profile, storeId: string, defs: RoleDefinition[]): boolean {
   if (!storeId) return false;

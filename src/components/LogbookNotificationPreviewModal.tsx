@@ -356,6 +356,8 @@ export default function LogbookNotificationPreviewModal({
                 mentionLabels={mentionLabels}
                 remindedAt={entryForRemind.overdueChatRemindedAt}
                 storeId={entryForRemind.storeId}
+                entryId={entryForRemind.id}
+                remindMessageId={entryForRemind.overdueChatRemindMessageId}
                 busy={remindBusy}
                 copy={{
                   assignedTo: t.logbook.overdueRemindAssignedTo,

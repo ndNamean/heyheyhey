@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../db', () => ({
+  db: {
+    queryOnce: vi.fn(async () => ({ data: { storeChatMessages: [] } })),
+  },
+}));
+
 import OverdueRemindPanel from './OverdueRemindPanel';
 
 const copy = {
@@ -25,6 +32,7 @@ describe('OverdueRemindPanel', () => {
       <OverdueRemindPanel
         state="unassigned"
         mentionLabels={[]}
+        entryId="e1"
         copy={copy}
         onConfirm={onConfirm}
         onDismiss={vi.fn()}
@@ -45,6 +53,7 @@ describe('OverdueRemindPanel', () => {
       <OverdueRemindPanel
         state="not_reminded"
         mentionLabels={['Ada', 'Bob']}
+        entryId="e1"
         copy={copy}
         onConfirm={onConfirm}
         onDismiss={onDismiss}
@@ -59,7 +68,7 @@ describe('OverdueRemindPanel', () => {
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
-  it('shows already-reminded branch and optional open chat', () => {
+  it('shows already-reminded branch and optional open chat', async () => {
     const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
     render(
       <OverdueRemindPanel
@@ -67,6 +76,7 @@ describe('OverdueRemindPanel', () => {
         mentionLabels={['Ada']}
         remindedAt="2026-08-10T11:00:00.000Z"
         storeId="store-a"
+        entryId="e1"
         copy={copy}
         onConfirm={vi.fn()}
         onDismiss={vi.fn()}
@@ -76,7 +86,39 @@ describe('OverdueRemindPanel', () => {
       'Already reminded once',
     );
     fireEvent.click(screen.getByTestId('overdue-remind-open-chat'));
-    expect(dispatchSpy).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(dispatchSpy).toHaveBeenCalled();
+    });
+    dispatchSpy.mockRestore();
+  });
+
+  it('dispatches messageId and startReply when remind id is known', async () => {
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+    render(
+      <OverdueRemindPanel
+        state="reminded"
+        mentionLabels={['Ada']}
+        remindedAt="2026-08-10T11:00:00.000Z"
+        storeId="store-a"
+        entryId="e1"
+        remindMessageId="msg-remind"
+        copy={copy}
+        onConfirm={vi.fn()}
+        onDismiss={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('overdue-remind-open-chat'));
+    await waitFor(() => {
+      const evt = dispatchSpy.mock.calls
+        .map(([arg]) => arg)
+        .find((arg): arg is CustomEvent => arg instanceof CustomEvent);
+      expect(evt?.type).toBe('heyPelo:openStoreChat');
+      expect(evt?.detail).toEqual({
+        storeId: 'store-a',
+        messageId: 'msg-remind',
+        startReply: true,
+      });
+    });
     dispatchSpy.mockRestore();
   });
 });

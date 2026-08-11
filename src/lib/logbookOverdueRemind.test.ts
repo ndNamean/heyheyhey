@@ -1,9 +1,22 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { queryOnceMock } = vi.hoisted(() => ({
+  queryOnceMock: vi.fn(),
+}));
+
+vi.mock('../db', () => ({
+  db: {
+    queryOnce: (...args: unknown[]) => queryOnceMock(...args),
+  },
+}));
+
 import {
   canRemindOverdueToStoreChat,
   listLogbookAssigneeMentionLabels,
   listLogbookAssigneeRecipientUserIds,
   overdueChatRemindState,
+  overdueRemindChatDeliveryKey,
+  resolveOverdueRemindMessageId,
 } from './logbookOverdueRemind';
 import { defaultDefinitionsAsEntities } from './roleResolver';
 import type { LogbookEntry, Profile, Store } from '../types';
@@ -125,5 +138,56 @@ describe('listLogbookAssigneeMentionLabels', () => {
       's1',
       's2',
     ]);
+  });
+});
+
+describe('overdueRemindChatDeliveryKey', () => {
+  it('matches the Admin once key', () => {
+    expect(overdueRemindChatDeliveryKey('e1', 'store-a')).toBe(
+      'logbook-chat:e1:overdue_remind:once:store-a',
+    );
+  });
+});
+
+describe('resolveOverdueRemindMessageId', () => {
+  beforeEach(() => {
+    queryOnceMock.mockReset();
+  });
+
+  it('returns stamped id without querying Instant', async () => {
+    await expect(
+      resolveOverdueRemindMessageId({
+        entryId: 'e1',
+        storeId: 'store-a',
+        stampedMessageId: 'msg-stamped',
+      }),
+    ).resolves.toBe('msg-stamped');
+    expect(queryOnceMock).not.toHaveBeenCalled();
+  });
+
+  it('looks up chatDeliveryKey when stamp is missing', async () => {
+    queryOnceMock.mockResolvedValue({
+      data: { storeChatMessages: [{ id: 'msg-from-key' }] },
+    });
+    await expect(
+      resolveOverdueRemindMessageId({ entryId: 'e1', storeId: 'store-a' }),
+    ).resolves.toBe('msg-from-key');
+    expect(queryOnceMock).toHaveBeenCalledWith({
+      storeChatMessages: {
+        $: { where: { chatDeliveryKey: 'logbook-chat:e1:overdue_remind:once:store-a' } },
+      },
+    });
+  });
+
+  it('returns empty when lookup finds nothing or fails', async () => {
+    queryOnceMock.mockResolvedValue({ data: { storeChatMessages: [] } });
+    await expect(
+      resolveOverdueRemindMessageId({ entryId: 'e1', storeId: 'store-a' }),
+    ).resolves.toBe('');
+
+    queryOnceMock.mockRejectedValue(new Error('offline'));
+    await expect(
+      resolveOverdueRemindMessageId({ entryId: 'e1', storeId: 'store-a' }),
+    ).resolves.toBe('');
   });
 });

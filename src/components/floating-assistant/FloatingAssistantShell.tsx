@@ -51,6 +51,7 @@ export default function FloatingAssistantShell({ profile }: Props) {
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<AssistantTabId>('knowledge');
   const [initialStoreChatMessageId, setInitialStoreChatMessageId] = useState('');
+  const [initialStoreChatStartReply, setInitialStoreChatStartReply] = useState(false);
   const [pendingGroupChatRoomId, setPendingGroupChatRoomId] = useState('');
   const [initialGroupChatMessageId, setInitialGroupChatMessageId] = useState('');
   const [conversationUnread, setConversationUnread] = useState(0);
@@ -168,7 +169,9 @@ export default function FloatingAssistantShell({ profile }: Props) {
       const detail = (event as CustomEvent<OpenStoreChatDetail>).detail;
       const storeId = detail?.storeId?.trim();
       if (!storeId) return;
-      setInitialStoreChatMessageId(detail?.messageId?.trim() || '');
+      const messageId = detail?.messageId?.trim() || '';
+      setInitialStoreChatMessageId(messageId);
+      setInitialStoreChatStartReply(Boolean(detail?.startReply) && Boolean(messageId));
       setSelectedStoreId(storeId);
       setActiveTab('store-chat');
       setOpen(true);
@@ -249,7 +252,11 @@ export default function FloatingAssistantShell({ profile }: Props) {
         unreadByStore={unreadByStore}
         unreadSendersByStore={unreadSendersByStore}
         initialStoreChatMessageId={initialStoreChatMessageId}
-        onInitialStoreChatMessageHandled={() => setInitialStoreChatMessageId('')}
+        initialStoreChatStartReply={initialStoreChatStartReply}
+        onInitialStoreChatMessageHandled={() => {
+          setInitialStoreChatMessageId('');
+          setInitialStoreChatStartReply(false);
+        }}
         pendingGroupChatRoomId={pendingGroupChatRoomId}
         onPendingGroupChatRoomHandled={() => setPendingGroupChatRoomId('')}
         initialGroupChatMessageId={initialGroupChatMessageId}

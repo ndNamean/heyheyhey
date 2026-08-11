@@ -792,18 +792,20 @@ async function handleRemindOverdueChat(req, res, adminDb, actor, body) {
 
   const storeId = String(entry.storeId || '').trim();
   const key = overdueRemindChatDeliveryKey(entryId, storeId);
-  let chatExists = false;
+  let existingChatMessage = null;
   try {
-    chatExists = Boolean(
+    existingChatMessage =
       (
         await adminDb.query({
           storeChatMessages: { $: { where: { chatDeliveryKey: key } } },
         })
-      ).storeChatMessages?.length,
-    );
+      ).storeChatMessages?.[0] ?? null;
   } catch {
     /* migration fallback */
   }
+  const chatExists = Boolean(existingChatMessage);
+  const existingMessageId = String(existingChatMessage?.id || '').trim();
+  const alreadyStampedMessageId = String(entry.overdueChatRemindMessageId || '').trim();
 
   const stampedAt = nowIso();
   const senderProfileId = resolveActorProfileId(actor, profiles);
@@ -814,14 +816,16 @@ async function handleRemindOverdueChat(req, res, adminDb, actor, body) {
     );
   }
 
-  const stampTx = adminDb.tx.logbookEntries[entryId].update({
-    overdueChatRemindedAt: stampedAt,
-    updatedAt: stampedAt,
-  });
-
   if (chatExists) {
+    const stampPayload = {
+      overdueChatRemindedAt: stampedAt,
+      updatedAt: stampedAt,
+    };
+    if (existingMessageId && !alreadyStampedMessageId) {
+      stampPayload.overdueChatRemindMessageId = existingMessageId;
+    }
     try {
-      await adminDb.transact([stampTx]);
+      await adminDb.transact([adminDb.tx.logbookEntries[entryId].update(stampPayload)]);
     } catch (e) {
       return res.status(500).json({
         error: e instanceof Error ? e.message : 'Failed to stamp overdue remind',
@@ -849,8 +853,14 @@ async function handleRemindOverdueChat(req, res, adminDb, actor, body) {
   });
   const chatBody = String(normalized.copy.chatBody || normalized.body || '').trim();
   const mentionedUserIdsJson = JSON.stringify(assigneeRecipients);
+  const messageId = id();
+  const stampTx = adminDb.tx.logbookEntries[entryId].update({
+    overdueChatRemindedAt: stampedAt,
+    overdueChatRemindMessageId: messageId,
+    updatedAt: stampedAt,
+  });
 
-  let chatTx = adminDb.tx.storeChatMessages[id()].update({
+  let chatTx = adminDb.tx.storeChatMessages[messageId].update({
     storeId,
     senderUserId: actor.userId,
     senderProfileId: senderProfileId || '',

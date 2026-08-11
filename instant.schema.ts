@@ -310,6 +310,8 @@ const _schema = i.schema({
       overdueNotifiedAt: i.string().clientRequired(),
       /** Admin-only stamp: overdue Store Chat remind sent once. Client cannot forge. */
       overdueChatRemindedAt: i.string().clientRequired(),
+      /** Admin-stamped Instant id of the overdue remind Store Chat message; '' until sent. */
+      overdueChatRemindMessageId: i.string().clientRequired(),
     }),
 
     // ─── Review audit trail ──────────────────────────────────────────────────

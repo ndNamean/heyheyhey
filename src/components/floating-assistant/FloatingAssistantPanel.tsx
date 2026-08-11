@@ -67,6 +67,7 @@ interface Props {
   unreadByStore: Record<string, number>;
   unreadSendersByStore: Record<string, UnreadSenderSummary[]>;
   initialStoreChatMessageId: string;
+  initialStoreChatStartReply?: boolean;
   onInitialStoreChatMessageHandled: () => void;
   pendingGroupChatRoomId?: string;
   onPendingGroupChatRoomHandled?: () => void;
@@ -106,6 +107,7 @@ export default function FloatingAssistantPanel({
   unreadByStore,
   unreadSendersByStore,
   initialStoreChatMessageId,
+  initialStoreChatStartReply = false,
   onInitialStoreChatMessageHandled,
   pendingGroupChatRoomId = '',
   onPendingGroupChatRoomHandled,
@@ -430,6 +432,7 @@ export default function FloatingAssistantPanel({
             unreadByStore={unreadByStore}
             unreadSendersByStore={unreadSendersByStore}
             initialStoreChatMessageId={initialStoreChatMessageId}
+            initialStoreChatStartReply={initialStoreChatStartReply}
             onInitialStoreChatMessageHandled={onInitialStoreChatMessageHandled}
             pendingGroupChatRoomId={pendingGroupChatRoomId}
             onPendingGroupChatRoomHandled={onPendingGroupChatRoomHandled}
@@ -448,6 +451,7 @@ export default function FloatingAssistantPanel({
             authorizedStores={stores}
             composerVisual={composerVisual}
             initialTargetMessageId={initialStoreChatMessageId}
+            initialStartReply={initialStoreChatStartReply}
             onInitialTargetHandled={onInitialStoreChatMessageHandled}
           />
         )}

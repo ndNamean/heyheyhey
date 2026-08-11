@@ -2,7 +2,10 @@
  * Compact overdue → Store Chat remind strip for highlighted Logbook issues.
  */
 
-import type { OverdueChatRemindState } from '../lib/logbookOverdueRemind';
+import {
+  resolveOverdueRemindMessageId,
+  type OverdueChatRemindState,
+} from '../lib/logbookOverdueRemind';
 
 /** Keep in sync with FeedbackInbox OPEN_STORE_CHAT_EVENT. */
 const OPEN_STORE_CHAT_EVENT = 'heyPelo:openStoreChat';
@@ -23,6 +26,8 @@ type Props = {
   mentionLabels: string[];
   remindedAt?: string;
   storeId?: string;
+  entryId: string;
+  remindMessageId?: string;
   busy?: boolean;
   copy: OverdueRemindPanelCopy;
   onConfirm: () => void;
@@ -46,6 +51,8 @@ export default function OverdueRemindPanel({
   mentionLabels,
   remindedAt,
   storeId,
+  entryId,
+  remindMessageId,
   busy = false,
   copy,
   onConfirm,
@@ -58,12 +65,18 @@ export default function OverdueRemindPanel({
       ? mentionLabels.map((l) => `@${l}`).join(' ')
       : '';
 
-  function openChat() {
+  async function openChat() {
     const sid = (storeId ?? '').trim();
     if (!sid || typeof window === 'undefined') return;
-    window.dispatchEvent(
-      new CustomEvent(OPEN_STORE_CHAT_EVENT, { detail: { storeId: sid } }),
-    );
+    const messageId = await resolveOverdueRemindMessageId({
+      entryId,
+      storeId: sid,
+      stampedMessageId: remindMessageId,
+    });
+    const detail = messageId
+      ? { storeId: sid, messageId, startReply: true }
+      : { storeId: sid };
+    window.dispatchEvent(new CustomEvent(OPEN_STORE_CHAT_EVENT, { detail }));
   }
 
   return (
@@ -124,7 +137,7 @@ export default function OverdueRemindPanel({
           ) : null}
           {(storeId ?? '').trim() ? (
             <div style={{ marginTop: 8 }}>
-              <button type="button" className="secondary" onClick={openChat} data-testid="overdue-remind-open-chat">
+              <button type="button" className="secondary" onClick={() => void openChat()} data-testid="overdue-remind-open-chat">
                 {copy.openStoreChat}
               </button>
             </div>

@@ -57,7 +57,11 @@ vi.mock('../lib/nativeBack', () => ({
   useNativeBack: () => undefined,
 }));
 
-vi.mock('../db', () => ({ db: {} }));
+vi.mock('../db', () => ({
+  db: {
+    queryOnce: vi.fn(async () => ({ data: { storeChatMessages: [] } })),
+  },
+}));
 
 const { remindMock } = vi.hoisted(() => ({ remindMock: vi.fn() }));
 vi.mock('../lib/logbookNotifyClient', () => ({

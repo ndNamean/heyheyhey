@@ -444,6 +444,7 @@ export function emptyLogbookIssueFields() {
     dueSoonNotifiedAt: '',
     overdueNotifiedAt: '',
     overdueChatRemindedAt: '',
+    overdueChatRemindMessageId: '',
   };
 }
 
@@ -485,6 +486,7 @@ export function issueCreateFields(
     dueSoonNotifiedAt: '',
     overdueNotifiedAt: '',
     overdueChatRemindedAt: '',
+    overdueChatRemindMessageId: '',
   };
 }
 

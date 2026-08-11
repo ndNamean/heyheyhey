@@ -101,6 +101,8 @@ interface Props {
   authorizedStores?: Store[];
   composerVisual: ComposerVisualHandlers;
   initialTargetMessageId?: string;
+  /** When true with initialTargetMessageId, enter reply after focus. Mention deep links omit this. */
+  initialStartReply?: boolean;
   onInitialTargetHandled?: () => void;
 }
 
@@ -845,6 +847,7 @@ export default function StoreChatPanel({
   authorizedStores = [],
   composerVisual,
   initialTargetMessageId = '',
+  initialStartReply = false,
   onInitialTargetHandled,
 }: Props) {
   const { lang, t } = useLang();
@@ -905,6 +908,7 @@ export default function StoreChatPanel({
   const [mentionIndex, setMentionIndex] = useState(0);
   const [caret, setCaret] = useState(0);
   const [replyTargetMessageId, setReplyTargetMessageId] = useState('');
+  const [pinnedTargetMessage, setPinnedTargetMessage] = useState<StoreChatMessage | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState('');
   const highlightTimeoutRef = useRef<number | null>(null);
   const [reactionTrayMessageId, setReactionTrayMessageId] = useState('');
@@ -992,6 +996,7 @@ export default function StoreChatPanel({
     setMentionOpen(false);
     setMentionIndex(0);
     setReplyTargetMessageId('');
+    setPinnedTargetMessage(null);
     setHighlightedMessageId('');
     setReactionTrayMessageId('');
     setWhoReactedMessageId('');
@@ -1083,11 +1088,19 @@ export default function StoreChatPanel({
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [reactionTrayMessageId]);
 
+  const displayMessages = useMemo(() => {
+    if (!pinnedTargetMessage) return messages;
+    if (messages.some((m) => m.id === pinnedTargetMessage.id)) return messages;
+    return [...messages, pinnedTargetMessage].sort((a, b) =>
+      a.createdAt.localeCompare(b.createdAt),
+    );
+  }, [messages, pinnedTargetMessage]);
+
   const messageById = useMemo(() => {
     const map = new Map<string, StoreChatMessage>();
-    for (const message of messages) map.set(message.id, message);
+    for (const message of displayMessages) map.set(message.id, message);
     return map;
-  }, [messages]);
+  }, [displayMessages]);
 
   const scrollToMessage = useCallback((messageId: string) => {
     if (!messageId || !listRef.current) return false;
@@ -1103,21 +1116,68 @@ export default function StoreChatPanel({
     return true;
   }, []);
 
-  useEffect(() => {
-    if (!initialTargetMessageId || hidden || !storeId) return;
-    if (scrollToMessage(initialTargetMessageId)) {
-      onInitialTargetHandled?.();
-    }
-  }, [hidden, initialTargetMessageId, onInitialTargetHandled, scrollToMessage, storeId]);
-
-  function startReply(messageId: string) {
+  const startReply = useCallback((messageId: string) => {
     if (!messageById.has(messageId)) return;
     setReplyTargetMessageId(messageId);
     setReactionTrayMessageId('');
     setMoreMenuMessageId('');
     setActionSheetMessageId('');
     textareaRef.current?.focus();
-  }
+  }, [messageById]);
+
+  useEffect(() => {
+    const targetId = initialTargetMessageId.trim();
+    if (!targetId || hidden || !storeId) return;
+    if (isLoading && messages.length === 0) return;
+    if (messageById.has(targetId)) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data } = await db.queryOnce({
+          storeChatMessages: { $: { where: { id: targetId } } },
+        });
+        if (cancelled) return;
+        const found = (data?.storeChatMessages ?? [])[0] as StoreChatMessage | undefined;
+        if (found) {
+          setPinnedTargetMessage(found);
+        } else {
+          onInitialTargetHandled?.();
+        }
+      } catch {
+        if (!cancelled) onInitialTargetHandled?.();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    hidden,
+    initialTargetMessageId,
+    isLoading,
+    messageById,
+    messages.length,
+    onInitialTargetHandled,
+    storeId,
+  ]);
+
+  useEffect(() => {
+    const targetId = initialTargetMessageId.trim();
+    if (!targetId || hidden || !storeId) return;
+    if (scrollToMessage(targetId)) {
+      if (initialStartReply) startReply(targetId);
+      onInitialTargetHandled?.();
+    }
+  }, [
+    displayMessages.length,
+    hidden,
+    initialStartReply,
+    initialTargetMessageId,
+    onInitialTargetHandled,
+    scrollToMessage,
+    startReply,
+    storeId,
+  ]);
 
   function toggleReactionTray(messageId: string) {
     setReactionTrayMessageId((prev) => (prev === messageId ? '' : messageId));
@@ -1725,7 +1785,7 @@ export default function StoreChatPanel({
       ? sc.viewOnlyPlaceholder
       : sc.messagePlaceholder.replace('{name}', store.name);
 
-  const visibleMessages = messages.filter((m) => !isDeleted(m) || m.senderUserId === profile.userId);
+  const visibleMessages = displayMessages.filter((m) => !isDeleted(m) || m.senderUserId === profile.userId);
 
   let bodyContent: ReactNode;
   if (!store) {
@@ -1735,9 +1795,9 @@ export default function StoreChatPanel({
         <p className="fa-store-chat-empty-body">{sc.selectAuthorizedStore}</p>
       </div>
     );
-  } else if (isLoading && messages.length === 0) {
+  } else if (isLoading && displayMessages.length === 0) {
     bodyContent = <FloatingAssistantLoader label={sc.loadingMessages} />;
-  } else if (error && messages.length === 0) {
+  } else if (error && displayMessages.length === 0) {
     bodyContent = (
       <div className="fa-store-chat-empty" role="alert">
         <p className="fa-store-chat-empty-title">{sc.couldNotLoadChat}</p>

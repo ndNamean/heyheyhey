@@ -722,6 +722,8 @@ export interface LogbookEntry {
   overdueNotifiedAt?: string;
   /** Set by Admin remind path only — once-only Store Chat overdue remind. */
   overdueChatRemindedAt?: string;
+  /** Instant id of the overdue remind Store Chat message; '' until stamped. */
+  overdueChatRemindMessageId?: string;
   store?: Store;
   /** Legacy single photo link ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â interpret via resolveLogbookMedia helpers */
   photo?: LogbookFileRef;

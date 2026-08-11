@@ -20,6 +20,8 @@ export const OPEN_GROUP_CHAT_EVENT = 'heyPelo:openGroupChat';
 export type OpenStoreChatDetail = {
   storeId: string;
   messageId?: string;
+  /** When true with messageId, Store Chat enters reply mode after focus. Mention opens omit this. */
+  startReply?: boolean;
 };
 
 export type OpenGroupChatDetail = {
