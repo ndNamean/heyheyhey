@@ -121,6 +121,30 @@ export function emptyLogbookFilterState(
   };
 }
 
+/**
+ * Widen filters so a deep-linked entry that the viewer can see is not hidden by
+ * quick view / lifecycle / store chips (e.g. owner + overdue under my-assigned).
+ */
+export function widenLogbookFiltersForHighlight(
+  filters: LogbookFilterState,
+): LogbookFilterState {
+  return {
+    ...filters,
+    quickView: 'all_visible',
+    storeId: 'all',
+    entryType: 'all',
+    dateFrom: '',
+    dateTo: '',
+    search: '',
+    issueLifecycles: [],
+    severities: [],
+    assigneeRoles: [],
+    proofTypes: [],
+    dateBasedOn: 'created',
+    ackStatuses: [],
+  };
+}
+
 /** staff/hybrid â†’ assigned; manager+ â†’ needs_my_action; others â†’ all_visible */
 export function defaultLogbookQuickView(
   profile: Profile,

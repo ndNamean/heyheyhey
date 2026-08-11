@@ -10,6 +10,7 @@ import {
   needsMyLogbookAction,
   parseLogbookInitialFilter,
   defaultLogbookQuickView,
+  widenLogbookFiltersForHighlight,
 } from './logbookFilters';
 import { isIssueOverdue } from './logbook';
 import { defaultDefinitionsAsEntities } from './roleResolver';
@@ -311,6 +312,18 @@ describe('logbookFilters', () => {
       quickView: 'all_visible',
       issueLifecycles: ['correction_requested'],
     });
+  });
+
+  it('widenLogbookFiltersForHighlight clears restrictive chips', () => {
+    const narrowed = emptyLogbookFilterState('assigned_to_my_role');
+    narrowed.storeId = 'store-a';
+    narrowed.issueLifecycles = ['open'];
+    narrowed.ackStatuses = ['requires_ack'];
+    narrowed.search = 'fridge';
+    narrowed.entryType = 'issue';
+    expect(widenLogbookFiltersForHighlight(narrowed)).toEqual(
+      emptyLogbookFilterState('all_visible'),
+    );
   });
 
   it('defaultLogbookQuickView by role', () => {

@@ -8,6 +8,7 @@ import {
   deliveryKeyForRecipient,
   deliveryKeyPrefix,
   entryDisplayId,
+  filterForLogbookNotificationOpen,
   filterForLogbookNotificationType,
   isLogbookChatNotifyEnabled,
   resolveChatMentionMode,
@@ -66,6 +67,90 @@ describe('logbookNotificationContent', () => {
     expect(filterForLogbookNotificationType('logbook_note_created')).toBe(
       'requires_ack',
     );
+  });
+
+  it('filterForLogbookNotificationOpen keeps assignee filters and widens for viewers', () => {
+    const defs = DEFAULT_ROLE_DEFINITIONS;
+    const issue = {
+      ...baseEntry,
+      assigneeRole: 'staff',
+      assigneeUserIdsJson: '["staff-1"]',
+      authorUserId: 'owner-1',
+      date: '2026-08-10',
+      shift: 'AM',
+      createdAt: '2026-08-10T00:00:00.000Z',
+      updatedAt: '2026-08-10T00:00:00.000Z',
+      requiresAck: false,
+      isAnnouncement: false,
+    } as LogbookEntry;
+
+    const overdueIssue = {
+      ...issue,
+      dueAt: '2000-01-01T00:00:00.000Z',
+    } as LogbookEntry;
+
+    const staff: Profile = {
+      id: 'p-staff',
+      userId: 'staff-1',
+      email: 'staff@example.com',
+      displayName: 'Staff',
+      role: 'staff',
+      approvalStatus: 'approved',
+      stores: [{ id: 'store-1', code: 'S1', name: 'Store 1' } as never],
+    } as Profile;
+
+    const owner: Profile = {
+      id: 'p-owner',
+      userId: 'owner-1',
+      email: 'owner@example.com',
+      displayName: 'Owner',
+      role: 'owner',
+      approvalStatus: 'approved',
+      stores: [{ id: 'store-1', code: 'S1', name: 'Store 1' } as never],
+    } as Profile;
+
+    expect(
+      filterForLogbookNotificationOpen(
+        'logbook_issue_overdue',
+        staff,
+        overdueIssue,
+        defs,
+      ),
+    ).toBe('my-assigned');
+    expect(
+      filterForLogbookNotificationOpen(
+        'logbook_issue_overdue',
+        owner,
+        overdueIssue,
+        defs,
+        'my-assigned',
+      ),
+    ).toBe('overdue');
+    expect(
+      filterForLogbookNotificationOpen(
+        'logbook_issue_assigned',
+        owner,
+        issue,
+        defs,
+      ),
+    ).toBe('all');
+    expect(
+      filterForLogbookNotificationOpen(
+        'logbook_resolution_submitted',
+        owner,
+        { ...issue, status: 'waiting_approval' } as LogbookEntry,
+        defs,
+      ),
+    ).toBe('waiting_approval');
+    expect(
+      filterForLogbookNotificationOpen(
+        'logbook_issue_assigned',
+        owner,
+        null,
+        defs,
+        'my-assigned',
+      ),
+    ).toBe('all');
   });
 
   it('opens resolution only for issue-resolve notification types', () => {

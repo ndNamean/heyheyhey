@@ -3,7 +3,8 @@
  * Server twin: api/_lib/logbook/notification-content.js — keep in sync.
  */
 
-import { canActOnAssignedIssue } from './logbook';
+import { canActOnAssignedIssue, isIssueOverdue } from './logbook';
+import type { LogbookEntry, Profile, RoleDefinition } from '../types';
 
 export const LOGBOOK_MENTION_CAP = 15;
 export const LOGBOOK_CHAT_MENTION_MODE = {
@@ -294,6 +295,43 @@ export function filterForLogbookNotificationType(type: string): LogbookDeepLinkF
     return 'requires_ack';
   }
   return 'my-assigned';
+}
+
+/**
+ * Viewer-aware Logbook deep-link filter for opening an entry from a notification.
+ * Assignees keep the action filter (`my-assigned`, etc.). Non-assignees who can
+ * only view get a `parseLogbookInitialFilter`-compatible key that will include
+ * the entry (e.g. overdue → `overdue`, otherwise `all`) — never a stuck
+ * `my-assigned` miss for owners/reviewers.
+ */
+export function filterForLogbookNotificationOpen(
+  type: string,
+  profile: Profile,
+  entry: LogbookEntry | null | undefined,
+  defs: RoleDefinition[],
+  preferredFilter?: string | null,
+): string {
+  const preferred = String(preferredFilter || '').trim();
+  const typeFilter = preferred || filterForLogbookNotificationType(type);
+
+  if (entry && canActOnAssignedIssue(profile, entry, defs)) {
+    return typeFilter;
+  }
+
+  // waiting_approval / requires_ack already expand to all_visible + detail filter
+  if (typeFilter === 'waiting_approval' || typeFilter === 'requires_ack') {
+    return typeFilter;
+  }
+
+  // Avoid my-assigned / assigned_to_my_role for non-assignees (and when entry unknown)
+  if (typeFilter === 'my-assigned' || typeFilter === 'assigned_to_my_role') {
+    if (type === 'logbook_issue_overdue' || (entry && isIssueOverdue(entry))) {
+      return 'overdue';
+    }
+    return 'all';
+  }
+
+  return typeFilter;
 }
 
 /** True for notification types that *may* auto-open Submit resolution (assignees only). */

@@ -58,6 +58,7 @@ import {
   parseLogbookInitialFilter,
   removeDetailedFilterChip,
   toggleMultiValue,
+  widenLogbookFiltersForHighlight,
   type LogbookAckFilter,
   type LogbookDateBasedOn,
   type LogbookFilterChip,
@@ -191,6 +192,7 @@ export default function LogbookPage({
   );
   const [highlightMiss, setHighlightMiss] = useState(false);
   const scrolledHighlightRef = useRef<string | null>(null);
+  const highlightWidenRef = useRef<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     entryType: 'note' as LogbookEntryType,
@@ -477,6 +479,7 @@ export default function LogbookPage({
       setHighlightId(nextHighlight);
       setHighlightMiss(false);
       scrolledHighlightRef.current = null;
+      highlightWidenRef.current = null;
     }
     clearSession(LOGBOOK_FILTER_KEY);
     clearSession(LOGBOOK_HIGHLIGHT_KEY);
@@ -514,9 +517,22 @@ export default function LogbookPage({
     // Wait until entries have loaded before declaring a miss.
     if (!allEntries.length) return;
     const entry = allEntries.find((e) => e.id === highlightId);
-    if (!entry || !visibleEntries.some((e) => e.id === highlightId)) {
+    if (!entry || !canViewLogbookEntry(profile, entry, defs)) {
       setHighlightMiss(true);
       scrolledHighlightRef.current = highlightId;
+      return;
+    }
+
+    // Entry is viewable but hidden by filters — widen once, then scroll on next pass.
+    if (!visibleEntries.some((e) => e.id === highlightId)) {
+      if (highlightWidenRef.current !== highlightId) {
+        highlightWidenRef.current = highlightId;
+        setFilters((prev) => widenLogbookFiltersForHighlight(prev));
+        setHighlightMiss(false);
+      } else {
+        setHighlightMiss(true);
+        scrolledHighlightRef.current = highlightId;
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- scroll/open once per highlight open
   }, [highlightId, allEntries.length, visibleEntries.length, filters]);

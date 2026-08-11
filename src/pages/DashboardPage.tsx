@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../db';
 import FeedbackInbox from '../components/FeedbackInbox';
+import LogbookNotificationPreviewModal, {
+  decideLogbookNotificationClick,
+} from '../components/LogbookNotificationPreviewModal';
 import {
-  filterForLogbookNotificationType,
+  filterForLogbookNotificationOpen,
   shouldAutoOpenLogbookResolutionForViewer,
 } from '../lib/logbookNotificationContent';
 import ExportModal from '../components/ExportModal';
@@ -70,6 +73,11 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
   const [issueAssigneeFilter, setIssueAssigneeFilter] = useState('all');
   const [issueOverdueOnly, setIssueOverdueOnly] = useState(false);
   const [issueWaitingMyReview, setIssueWaitingMyReview] = useState(false);
+  const [logbookPreview, setLogbookPreview] = useState<{
+    entryId: string;
+    type?: string;
+    deepLinkFilter?: string;
+  } | null>(null);
   const dueNotifyRan = useRef(false);
 
   const { data } = db.useQuery({
@@ -260,26 +268,63 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
     ? stores
     : (profile.stores ?? []);
 
+  const previewEntry = logbookPreview
+    ? allLogbookEntries.find((e) => e.id === logbookPreview.entryId) ?? null
+    : null;
+
+  function navigateToLogbookEntry(
+    entryId: string,
+    type: string | undefined,
+    deepLinkFilter: string | undefined,
+    entry: LogbookEntry | undefined,
+  ) {
+    const filter = filterForLogbookNotificationOpen(
+      type || '',
+      profile,
+      entry,
+      defs,
+      deepLinkFilter,
+    );
+    try {
+      sessionStorage.setItem('logbookHighlightEntryId', entryId);
+      sessionStorage.setItem('logbookInitialFilter', filter);
+      if (shouldAutoOpenLogbookResolutionForViewer(type || '', profile, entry, defs)) {
+        sessionStorage.setItem('logbookOpenResolutionEntryId', entryId);
+      } else {
+        sessionStorage.removeItem('logbookOpenResolutionEntryId');
+      }
+    } catch {
+      /* ignore */
+    }
+    onOpenLogbook?.(filter);
+  }
+
   return (
     <div>
       <FeedbackInbox
         userId={profile.userId}
         title={t.dashboard.teamFeedback}
         onOpenLogbookEntry={(entryId, type, deepLinkFilter) => {
-          const filter = deepLinkFilter || filterForLogbookNotificationType(type || '');
-          try {
-            sessionStorage.setItem('logbookHighlightEntryId', entryId);
-            sessionStorage.setItem('logbookInitialFilter', filter);
-            const entry = allLogbookEntries.find((e) => e.id === entryId);
-            if (shouldAutoOpenLogbookResolutionForViewer(type || '', profile, entry, defs)) {
-              sessionStorage.setItem('logbookOpenResolutionEntryId', entryId);
-            } else {
-              sessionStorage.removeItem('logbookOpenResolutionEntryId');
-            }
-          } catch {
-            /* ignore */
+          const entry = allLogbookEntries.find((e) => e.id === entryId);
+          if (decideLogbookNotificationClick(type || '', profile, entry, defs) === 'preview') {
+            setLogbookPreview({ entryId, type, deepLinkFilter });
+            return;
           }
-          onOpenLogbook?.(filter);
+          navigateToLogbookEntry(entryId, type, deepLinkFilter, entry);
+        }}
+      />
+
+      <LogbookNotificationPreviewModal
+        open={!!logbookPreview}
+        entry={previewEntry}
+        profile={profile}
+        profiles={profiles as Profile[]}
+        defs={defs}
+        onClose={() => setLogbookPreview(null)}
+        onOpenFullEntry={(entry) => {
+          const meta = logbookPreview;
+          setLogbookPreview(null);
+          navigateToLogbookEntry(entry.id, meta?.type, meta?.deepLinkFilter, entry);
         }}
       />
 

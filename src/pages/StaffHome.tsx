@@ -1,6 +1,9 @@
 import { useCallback, useMemo, useState } from 'react';
 import { db } from '../db';
 import FeedbackInbox from '../components/FeedbackInbox';
+import LogbookNotificationPreviewModal, {
+  decideLogbookNotificationClick,
+} from '../components/LogbookNotificationPreviewModal';
 import MyReportsPanel from '../components/MyReportsPanel';
 import NotesAnnouncementsCard from '../components/NotesAnnouncementsCard';
 import ReportReviewStatusPanel from '../components/ReportReviewStatusPanel';
@@ -18,7 +21,7 @@ import {
   isAssignedUnresolvedIssue,
 } from '../lib/logbook';
 import {
-  filterForLogbookNotificationType,
+  filterForLogbookNotificationOpen,
   shouldAutoOpenLogbookResolutionForViewer,
 } from '../lib/logbookNotificationContent';
 import type { Page } from '../components/Nav';
@@ -47,6 +50,11 @@ export default function StaffHome({
   const { defs } = useRoleDefinitions();
   const today = new Date().toISOString().slice(0, 10);
   const [highlightNoteId, setHighlightNoteId] = useState<string | null>(null);
+  const [logbookPreview, setLogbookPreview] = useState<{
+    entryId: string;
+    type?: string;
+    deepLinkFilter?: string;
+  } | null>(null);
 
   const { data } = db.useQuery({
     reportSlots: {
@@ -59,6 +67,7 @@ export default function StaffHome({
       store: {},
     },
     logbookEntries: { store: {} },
+    profiles: { stores: {} },
   });
 
   const slots = data?.reportSlots ?? [];
@@ -67,6 +76,7 @@ export default function StaffHome({
   );
 
   const logbookEntries = (data?.logbookEntries ?? []) as LogbookEntry[];
+  const profiles = (data?.profiles ?? []) as Profile[];
   const assignedCount = useMemo(
     () => countAssignedOpenOrOverdue(profile, logbookEntries, defs),
     [profile, logbookEntries, defs],
@@ -91,12 +101,22 @@ export default function StaffHome({
     setHighlightNoteId(null);
   }, []);
 
-  function handleOpenLogbookEntry(entryId: string, type?: string, deepLinkFilter?: string) {
-    const filter = deepLinkFilter || filterForLogbookNotificationType(type || '');
+  function navigateToLogbookEntry(
+    entryId: string,
+    type: string | undefined,
+    deepLinkFilter: string | undefined,
+    entry: LogbookEntry | undefined,
+  ) {
+    const filter = filterForLogbookNotificationOpen(
+      type || '',
+      profile,
+      entry,
+      defs,
+      deepLinkFilter,
+    );
     try {
       sessionStorage.setItem('logbookHighlightEntryId', entryId);
       sessionStorage.setItem('logbookInitialFilter', filter);
-      const entry = logbookEntries.find((e) => e.id === entryId);
       if (shouldAutoOpenLogbookResolutionForViewer(type || '', profile, entry, defs)) {
         sessionStorage.setItem('logbookOpenResolutionEntryId', entryId);
       } else {
@@ -109,10 +129,37 @@ export default function StaffHome({
     else setPage('logbook');
   }
 
+  function handleOpenLogbookEntry(entryId: string, type?: string, deepLinkFilter?: string) {
+    const entry = logbookEntries.find((e) => e.id === entryId);
+    if (decideLogbookNotificationClick(type || '', profile, entry, defs) === 'preview') {
+      setLogbookPreview({ entryId, type, deepLinkFilter });
+      return;
+    }
+    navigateToLogbookEntry(entryId, type, deepLinkFilter, entry);
+  }
+
+  const previewEntry = logbookPreview
+    ? logbookEntries.find((e) => e.id === logbookPreview.entryId) ?? null
+    : null;
+
   return (
     <div>
       <MyReportsPanel profile={profile} onFixReport={onFixReport} />
       <FeedbackInbox userId={profile.userId} onOpenLogbookEntry={handleOpenLogbookEntry} />
+
+      <LogbookNotificationPreviewModal
+        open={!!logbookPreview}
+        entry={previewEntry}
+        profile={profile}
+        profiles={profiles}
+        defs={defs}
+        onClose={() => setLogbookPreview(null)}
+        onOpenFullEntry={(entry) => {
+          const meta = logbookPreview;
+          setLogbookPreview(null);
+          navigateToLogbookEntry(entry.id, meta?.type, meta?.deepLinkFilter, entry);
+        }}
+      />
 
       {canReview(profile.role, defs) && !canEditMaster(profile.role, defs) && (
         <ReportReviewStatusPanel profile={profile} />
