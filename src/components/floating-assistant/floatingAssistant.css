@@ -1389,9 +1389,14 @@ body.wizard-active .floating-assistant-root {
   display: grid;
   grid-template-columns: 1fr auto auto;
   gap: 8px;
+  align-items: end;
   padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--card-border);
   background: var(--bg-gradient);
+}
+
+.fa-composer.fa-composer--with-attach {
+  grid-template-columns: auto 1fr auto auto;
 }
 
 .fa-composer-input-wrap {
@@ -1587,13 +1592,22 @@ body.wizard-active .floating-assistant-root {
 
 .fa-composer-send {
   align-self: end;
-  min-width: 64px;
+  box-sizing: border-box;
+  min-width: 48px;
+  width: auto;
+  height: 48px;
   min-height: 48px;
+  max-height: 48px;
+  padding: 0 10px;
   border-radius: var(--radius-btn);
   border: none;
   background: var(--accent);
   color: var(--text-on-accent);
+  font: inherit;
+  font-size: 12px;
   font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
   cursor: pointer;
 }
 
@@ -1604,8 +1618,12 @@ body.wizard-active .floating-assistant-root {
 
 .fa-composer-media {
   align-self: end;
+  box-sizing: border-box;
   min-width: 48px;
+  width: auto;
+  height: 48px;
   min-height: 48px;
+  max-height: 48px;
   padding: 0 10px;
   border-radius: var(--radius-btn);
   border: 1px solid var(--card-border);
@@ -1615,6 +1633,7 @@ body.wizard-active .floating-assistant-root {
   font-weight: 700;
   font-size: 12px;
   letter-spacing: 0.04em;
+  line-height: 1;
   cursor: pointer;
 }
 
