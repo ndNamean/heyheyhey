@@ -30,10 +30,6 @@
       "maxDuration": 60,
       "memory": 512
     },
-    "api/upload-chat-attachment.js": {
-      "maxDuration": 30,
-      "memory": 512
-    },
     "api/image-proxy.js": {
       "maxDuration": 15,
       "memory": 256
@@ -51,6 +47,7 @@
     }
   },
   "rewrites": [
+    { "source": "/api/upload-chat-attachment", "destination": "/api/upload-photo?action=chat_attachment" },
     { "source": "/api/media-url", "destination": "/api/image-proxy" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
