@@ -3,7 +3,9 @@
  * Callable in-process from /api/wifi-push?action=deliver and /api/logbook-notify.
  *
  * Gates (all must pass): active session, unexpired, subscription valid,
- * store/wifi active, recipient store access, storeId match.
+ * store active, recipient store access, storeId match.
+ * wifi_ip (legacy default): wifi IP active + id match.
+ * geofence: skip wifiIp; require non-empty non-expired expiresAt.
  * Never mutates inbox notification rows.
  */
 
@@ -11,6 +13,7 @@ import { id } from '@instantdb/admin';
 import { getAdminDb } from '../export/instant-admin.js';
 import { loadProfileContext } from '../export/auth.js';
 import { userHasStoreAccess } from '../wifi-notify/access.js';
+import { resolveNotificationActivationMethod } from '../wifi-notify/recognize.js';
 import { evaluateDeliveryGates } from './deliver-gate.js';
 
 function nowIso() {
@@ -239,13 +242,19 @@ export async function deliverPushForNotificationIds(notificationIds, opts = {}) 
       let wifiIp = null;
       let subscription = null;
       try {
-        const meta = await adminDb.query({
+        const method = resolveNotificationActivationMethod(session);
+        const wifiIpId = String(session.wifiIpId || '').trim();
+        const metaQuery = {
           stores: { $: { where: { id: session.storeId } } },
-          storeWifiIps: { $: { where: { id: session.wifiIpId } } },
           pushSubscriptions: {
             $: { where: { id: session.subscriptionId } },
           },
-        });
+        };
+        // Geofence sessions have empty wifiIpId — do not query / fail closed on it.
+        if (method !== 'geofence' && wifiIpId) {
+          metaQuery.storeWifiIps = { $: { where: { id: wifiIpId } } };
+        }
+        const meta = await adminDb.query(metaQuery);
         store = meta.stores?.[0] ?? null;
         wifiIp = meta.storeWifiIps?.[0] ?? null;
         subscription = meta.pushSubscriptions?.[0] ?? null;

@@ -2,7 +2,12 @@
  * Pure delivery-gate evaluation for Web Push (no inbox mutation).
  */
 
-import { isSessionTimeExpired } from '../wifi-notify/recognize.js';
+import {
+  isSessionTimeExpired,
+  resolveNotificationActivationMethod,
+} from '../wifi-notify/recognize.js';
+
+export { resolveNotificationActivationMethod };
 
 /**
  * @typedef {object} DeliveryContext
@@ -27,6 +32,7 @@ export function evaluateDeliveryGates(ctx) {
   const subscription = ctx.subscription;
   const wifiIp = ctx.wifiIp;
   const store = ctx.store;
+  const method = resolveNotificationActivationMethod(session || {});
 
   if (!session) {
     return { allow: false, reason: 'no_active_session' };
@@ -35,6 +41,10 @@ export function evaluateDeliveryGates(ctx) {
     return { allow: false, reason: 'no_active_session' };
   }
   if (isSessionTimeExpired(session.expiresAt, now)) {
+    return { allow: false, reason: 'session_expired' };
+  }
+  // Geofence sessions must have a real TTL (empty expiresAt is wifi_ip-only).
+  if (method === 'geofence' && !String(session.expiresAt ?? '').trim()) {
     return { allow: false, reason: 'session_expired' };
   }
 
@@ -56,11 +66,13 @@ export function evaluateDeliveryGates(ctx) {
     return { allow: false, reason: 'store_inactive' };
   }
 
-  if (!wifiIp || wifiIp.active === false) {
-    return { allow: false, reason: 'wifi_ip_inactive' };
-  }
-  if (session.wifiIpId && wifiIp.id !== session.wifiIpId) {
-    return { allow: false, reason: 'wifi_ip_inactive' };
+  if (method !== 'geofence') {
+    if (!wifiIp || wifiIp.active === false) {
+      return { allow: false, reason: 'wifi_ip_inactive' };
+    }
+    if (session.wifiIpId && wifiIp.id !== session.wifiIpId) {
+      return { allow: false, reason: 'wifi_ip_inactive' };
+    }
   }
 
   if (!ctx.hasStoreAccess) {

@@ -7,6 +7,7 @@
 import { getClientPublicIp } from './request-ip.js';
 import { findMatchingActiveWifiIp } from './match.js';
 import { userHasStoreAccess } from './access.js';
+import { isLocationSupplied, verifyStoreGeofence } from './geofence.js';
 
 /**
  * True when a session should be treated as time-expired.
@@ -21,16 +22,39 @@ export function isSessionTimeExpired(expiresAt, now = new Date()) {
 }
 
 /**
- * True when status refresh should end an activation session because the device
- * is no longer on that session's store Wi‑Fi (unrecognized or different store).
+ * Infer activation method for current + legacy sessions.
+ * Missing / empty `activationMethod` + non-empty `wifiIpId` → `wifi_ip`.
+ * Mirrors `resolveNotificationActivationMethod` in src/types.ts.
+ */
+export function resolveNotificationActivationMethod(session) {
+  const method = String(session?.activationMethod ?? '').trim();
+  if (method === 'wifi_ip' || method === 'geofence') return method;
+  if (String(session?.wifiIpId ?? '').trim()) return 'wifi_ip';
+  return '';
+}
+
+/**
+ * True when status refresh should end an activation session because presence
+ * is not recognized for that session's store (IP or geo). An IP miss alone
+ * must not kill a still-valid geofence session when coords were not attempted.
  */
 export function shouldDeactivateSessionForNetwork(session, recognition) {
   if (!session) return false;
-  if (!recognition?.recognized) return true;
-  const sessionStoreId = String(session.storeId || '').trim();
-  const recognitionStoreId = String(recognition.store?.id || '').trim();
-  if (!sessionStoreId || !recognitionStoreId) return true;
-  return sessionStoreId !== recognitionStoreId;
+  if (recognition?.recognized) {
+    const sessionStoreId = String(session.storeId || '').trim();
+    const recognitionStoreId = String(recognition.store?.id || '').trim();
+    if (!sessionStoreId || !recognitionStoreId) return true;
+    return sessionStoreId !== recognitionStoreId;
+  }
+  // Unrecognized: geofence sessions survive IP-only miss (method !== geofence).
+  // Geo was attempted when recognition.method === 'geofence'.
+  if (
+    resolveNotificationActivationMethod(session) === 'geofence' &&
+    recognition?.method !== 'geofence'
+  ) {
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -107,6 +131,68 @@ export async function recognizeStoreWifi(req, adminDb, ctx) {
     shift: null,
     expiresAt: '',
   };
+}
+
+function withPresenceFields(recognition, extra = {}) {
+  return {
+    ...recognition,
+    method: extra.method !== undefined ? extra.method : recognition.method ?? null,
+    distanceM: extra.distanceM !== undefined ? extra.distanceM : recognition.distanceM ?? null,
+    accuracyM: extra.accuracyM !== undefined ? extra.accuracyM : recognition.accuracyM ?? null,
+    geofenceRadiusM:
+      extra.geofenceRadiusM !== undefined
+        ? extra.geofenceRadiusM
+        : recognition.geofenceRadiusM ?? null,
+  };
+}
+
+/**
+ * Geofence-only recognition (no IP match). Loads stores and verifies location.
+ * `extras.publicIp` may carry the IP from a prior recognizeStoreWifi attempt.
+ */
+export async function recognizeStoreGeofence(adminDb, ctx, location, extras = {}) {
+  const data = await adminDb.query({
+    stores: {},
+  });
+  const verified = verifyStoreGeofence(location, data.stores ?? [], ctx);
+  return withPresenceFields(
+    {
+      recognized: verified.recognized,
+      reason: verified.reason,
+      publicIp: extras.publicIp ?? null,
+      wifiIp: null,
+      store: verified.store,
+      shift: null,
+      expiresAt: '',
+    },
+    {
+      method: 'geofence',
+      distanceM: verified.distanceM,
+      accuracyM: verified.accuracyM,
+      geofenceRadiusM: verified.geofenceRadiusM,
+    },
+  );
+}
+
+/**
+ * IP first, geofence fallback. Keep recognizeStoreWifi return shape intact;
+ * this wrapper adds `method` plus optional `distanceM` / `accuracyM`.
+ *
+ * @param {object} req
+ * @param {object} adminDb
+ * @param {object} ctx
+ * @param {object | null | undefined} [location] `{ latitude, longitude, accuracy }`
+ *   (also accepts lat/lng/accuracyM). Omit / empty → do not attempt geofence.
+ */
+export async function recognizeStorePresence(req, adminDb, ctx, location) {
+  const wifi = await recognizeStoreWifi(req, adminDb, ctx);
+  if (wifi.recognized) {
+    return withPresenceFields(wifi, { method: 'wifi_ip' });
+  }
+  if (!isLocationSupplied(location)) {
+    return withPresenceFields(wifi, { method: null });
+  }
+  return recognizeStoreGeofence(adminDb, ctx, location, { publicIp: wifi.publicIp });
 }
 
 /**

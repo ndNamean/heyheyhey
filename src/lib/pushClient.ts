@@ -3,24 +3,38 @@
  */
 
 import { db } from '../db';
+import type { NotificationActivationMethod } from '../types';
 import { getOrCreateWifiNotifyDeviceId } from './deviceId';
 
 export type PushPermissionState = NotificationPermission | 'unsupported';
 
+/** Optional body fields for wifi-push status / activate (geofence fallback). */
+export type WifiNotifyLocationPayload = {
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+};
+
 export type WifiNotifyStatusResponse = {
   recognized: boolean;
   reason?: string | null;
+  method?: NotificationActivationMethod | null;
   storeId?: string | null;
   storeCode?: string | null;
   shiftId?: string | null;
   expiresAt?: string | null;
   sessionActive?: boolean;
   matchedPublicIp?: string | null;
+  distanceM?: number | null;
+  accuracyM?: number | null;
+  geofenceRadiusM?: number | null;
+  presenceVerifiedAt?: string | null;
   activeSession?: {
     id: string;
     storeId: string;
     storeCode: string;
     expiresAt: string;
+    activationMethod?: NotificationActivationMethod | '' | null;
   } | null;
 };
 
@@ -32,6 +46,7 @@ export type ActivateWifiNotifyResult = {
   shiftId?: string;
   subscriptionId?: string;
   sessionId?: string;
+  method?: NotificationActivationMethod;
   error?: string;
   reason?: string;
 };
@@ -72,6 +87,35 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const out = new Uint8Array(raw.length);
   for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
   return out;
+}
+
+function parseActivationMethod(value: unknown): NotificationActivationMethod | null {
+  const s = String(value ?? '').trim();
+  if (s === 'wifi_ip' || s === 'geofence') return s;
+  return null;
+}
+
+function parseOptionalNumber(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseOptionalString(value: unknown): string | null {
+  if (value == null) return null;
+  const s = String(value).trim();
+  return s ? s : null;
+}
+
+function locationBodyFields(
+  location?: WifiNotifyLocationPayload | null,
+): Partial<WifiNotifyLocationPayload> {
+  if (!location) return {};
+  const latitude = Number(location.latitude);
+  const longitude = Number(location.longitude);
+  const accuracy = Number(location.accuracy);
+  if (![latitude, longitude, accuracy].every(Number.isFinite)) return {};
+  return { latitude, longitude, accuracy };
 }
 
 function subscriptionToJson(sub: PushSubscription) {
@@ -241,6 +285,7 @@ export async function sendTestPush(
 /** Activate store Wi-Fi notifications: subscribe + create activation session. */
 export async function activateWifiNotify(
   deviceId?: string,
+  location?: WifiNotifyLocationPayload | null,
 ): Promise<ActivateWifiNotifyResult> {
   try {
     if (!isPushSupported()) {
@@ -278,6 +323,7 @@ export async function activateWifiNotify(
       body: JSON.stringify({
         deviceId: id,
         subscription: subscriptionToJson(subscription),
+        ...locationBodyFields(location),
       }),
     });
 
@@ -307,6 +353,7 @@ export async function activateWifiNotify(
       shiftId: data.shiftId ? String(data.shiftId) : undefined,
       subscriptionId: data.subscriptionId ? String(data.subscriptionId) : undefined,
       sessionId: data.sessionId ? String(data.sessionId) : undefined,
+      method: parseActivationMethod(data.method) ?? undefined,
     };
   } catch (e) {
     return {
@@ -338,19 +385,36 @@ export async function deactivateWifiNotify(
 
 export async function fetchWifiNotifyStatus(
   deviceId?: string,
+  location?: WifiNotifyLocationPayload | null,
 ): Promise<WifiNotifyStatusResponse> {
   const id = (deviceId || getOrCreateWifiNotifyDeviceId()).trim();
   const headers = await authHeaders();
   const resp = await fetch('/api/wifi-push?action=status', {
     method: 'POST',
     headers,
-    body: JSON.stringify({ deviceId: id }),
+    body: JSON.stringify({
+      deviceId: id,
+      ...locationBodyFields(location),
+    }),
   });
   const data = await parseJson(resp);
-  const activeSession =
+  const diagnostics =
+    data.diagnostics && typeof data.diagnostics === 'object'
+      ? (data.diagnostics as Record<string, unknown>)
+      : data;
+  const rawSession =
     data.activeSession && typeof data.activeSession === 'object'
-      ? (data.activeSession as WifiNotifyStatusResponse['activeSession'])
+      ? (data.activeSession as Record<string, unknown>)
       : null;
+  const activeSession = rawSession
+    ? {
+        id: String(rawSession.id || ''),
+        storeId: String(rawSession.storeId || ''),
+        storeCode: String(rawSession.storeCode || ''),
+        expiresAt: String(rawSession.expiresAt || ''),
+        activationMethod: parseActivationMethod(rawSession.activationMethod) ?? '',
+      }
+    : null;
 
   const sessionActive = Boolean(
     data.sessionActive === true || activeSession,
@@ -359,6 +423,10 @@ export async function fetchWifiNotifyStatus(
   return {
     recognized: Boolean(data.recognized),
     reason: data.reason != null ? String(data.reason) : null,
+    method:
+      parseActivationMethod(data.method) ??
+      parseActivationMethod(activeSession?.activationMethod) ??
+      null,
     storeId: data.storeId != null ? String(data.storeId) : null,
     storeCode:
       (data.storeCode != null ? String(data.storeCode) : null) ||
@@ -372,6 +440,13 @@ export async function fetchWifiNotifyStatus(
     sessionActive,
     matchedPublicIp:
       data.matchedPublicIp != null ? String(data.matchedPublicIp) : null,
+    distanceM: parseOptionalNumber(data.distanceM ?? diagnostics.distanceM),
+    accuracyM: parseOptionalNumber(data.accuracyM ?? diagnostics.accuracyM),
+    geofenceRadiusM: parseOptionalNumber(
+      data.geofenceRadiusM ?? diagnostics.geofenceRadiusM,
+    ),
+    presenceVerifiedAt:
+      parseOptionalString(data.presenceVerifiedAt ?? diagnostics.presenceVerifiedAt),
     activeSession,
   };
 }

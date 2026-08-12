@@ -549,15 +549,22 @@ const _schema = i.schema({
       userId: i.string().indexed(),
       deviceId: i.string().indexed(),
       storeId: i.string().indexed(),
-      wifiIpId: i.string(),
+      wifiIpId: i.string(),               // real id for wifi_ip; '' for geofence
       shiftId: i.string(),
       subscriptionId: i.string(),
-      matchedPublicIp: i.string(),
+      matchedPublicIp: i.string(),        // public IP for wifi_ip; '' for geofence
       storeCode: i.string(),
       activatedAt: i.string(),
-      expiresAt: i.string().indexed(),
+      expiresAt: i.string().indexed(),    // '' = no TTL (wifi_ip); ISO now+5m (geofence)
       deactivatedAt: i.string(),          // '' = active
       deactivateReason: i.string(),
+      // Additive Admin-SDK fields: '' when unused. clientRequired so legacy sessions (null) stay valid.
+      activationMethod: i.string().clientRequired(),       // 'wifi_ip' | 'geofence'; ''/missing on legacy → treat as wifi_ip if wifiIpId set
+      verifiedLat: i.string().clientRequired(),            // stringified number for geofence; '' for wifi_ip
+      verifiedLng: i.string().clientRequired(),            // stringified number for geofence; '' for wifi_ip
+      locationAccuracyM: i.string().clientRequired(),      // string number for geofence; '' for wifi_ip
+      distanceFromStoreM: i.string().clientRequired(),     // string number for geofence; '' for wifi_ip
+      presenceVerifiedAt: i.string().clientRequired(),     // ISO for geofence; '' for wifi_ip
     }),
 
     // ─── Push delivery / suppression audit (Admin SDK writes only) ───────────

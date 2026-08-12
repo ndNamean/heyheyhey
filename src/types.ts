@@ -299,6 +299,8 @@ export type PushDeactivateReason =
   | 'replaced'
   | 'network_left';
 
+export type NotificationActivationMethod = 'wifi_ip' | 'geofence';
+
 export interface PushSubscriptionRecord {
   id: string;
   userId: string;
@@ -312,20 +314,50 @@ export interface PushSubscriptionRecord {
   revokedAt: string;
 }
 
+/**
+ * Device activation session (Admin SDK writes). Instant string fields;
+ * unused / wifi_ip-only values are `''`.
+ *
+ * Legacy sessions may omit `activationMethod`. Callers should treat missing or
+ * empty as `wifi_ip` when `wifiIpId` is non-empty — see
+ * `resolveNotificationActivationMethod`.
+ */
 export interface NotificationActivationSession {
   id: string;
   userId: string;
   deviceId: string;
   storeId: string;
+  /** Real wifi IP id for `wifi_ip`; `''` for geofence. */
   wifiIpId: string;
   shiftId: string;
   subscriptionId: string;
+  /** Matched public IP for `wifi_ip`; `''` for geofence. */
   matchedPublicIp: string;
   storeCode: string;
   activatedAt: string;
+  /** `''` = no TTL (`wifi_ip`); ISO now+5m for geofence. */
   expiresAt: string;
   deactivatedAt: string;
   deactivateReason: PushDeactivateReason | string;
+  /** `'wifi_ip' | 'geofence'`; `''` / missing on legacy sessions. */
+  activationMethod?: NotificationActivationMethod | '';
+  /** Stringified number for geofence; `''` for wifi_ip / unused. */
+  verifiedLat?: string;
+  verifiedLng?: string;
+  locationAccuracyM?: string;
+  distanceFromStoreM?: string;
+  /** ISO for geofence; `''` for wifi_ip / unused. */
+  presenceVerifiedAt?: string;
+}
+
+/** Infer activation method for current + legacy sessions. */
+export function resolveNotificationActivationMethod(
+  session: Pick<NotificationActivationSession, 'activationMethod' | 'wifiIpId'>,
+): NotificationActivationMethod | '' {
+  const method = String(session.activationMethod ?? '').trim();
+  if (method === 'wifi_ip' || method === 'geofence') return method;
+  if (String(session.wifiIpId ?? '').trim()) return 'wifi_ip';
+  return '';
 }
 
 export type PushDeliveryOutcome = 'sent' | 'suppressed';

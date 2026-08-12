@@ -706,14 +706,34 @@ export const sectionsEn = {
       'Network not recognized. You can continue using the app, but store push notifications are inactive on this device.',
     showDetails: 'Show details',
     hideDetails: 'Hide details',
-    recognizedTitle: 'Store Wi-Fi recognized: {storeCode}',
+    recognizedTitle: 'Store recognized: {storeCode}',
+    verifiedByWifi: 'Verified by Store Wi-Fi',
+    verifiedByLocation: 'Verified by Location',
+    checkingLocation: 'Checking store location…',
+    locationInaccurate:
+      'Location accuracy is too low to verify this store. Try again near the entrance or outdoors.',
+    locationDenied:
+      'Location permission is off. Enable it to verify store presence when Wi‑Fi is not recognized.',
+    locationPermissionRequired:
+      'Allow location once to verify you are at the store when Wi‑Fi is not recognized.',
+    locationUnavailable: 'Could not read device location. Try again in a moment.',
+    outsideGeofence: 'You appear to be outside the store area. Store notifications stay inactive.',
+    ambiguousStore:
+      'More than one nearby store matches this location. Store notifications stay inactive.',
+    diagMethod: 'Method: {method}',
+    diagDistance: 'Distance: {distance} m',
+    diagAccuracy: 'Accuracy: {accuracy} m',
+    diagRadius: 'Geofence radius: {radius} m',
+    diagLastVerified: 'Last verified: {time}',
+    diagMethodWifi: 'Store Wi-Fi',
+    diagMethodLocation: 'Location',
     enableHint:
-      'Enable store notifications once on this device while on store Wi-Fi. Later visits activate automatically when permission is already allowed.',
+      'Enable store notifications once on this device while at the store (Wi‑Fi or location). Later visits activate automatically when permission is already allowed.',
     enable: 'Enable store notifications',
     enabling: 'Enabling…',
-    active: 'Store Wi-Fi recognized: {storeCode}. Notifications are active on this device.',
+    active: 'Store recognized: {storeCode}. Notifications are active on this device.',
     activeUntil:
-      'Store Wi-Fi recognized: {storeCode}. Notifications active on this device until {time}.',
+      'Store recognized: {storeCode}. Notifications active on this device until {time}.',
     sendTest: 'Send test notification',
     testSent:
       'Test notification sent. Sound and vibration depend on your device settings (Silent / Focus / DND).',
@@ -726,7 +746,7 @@ export const sectionsEn = {
     iosInstallFirst:
       'On iPhone/iPad, add Hey Pelo Ops to your Home Screen first, then open it from there to enable store notifications.',
     limitation:
-      'Public IP is re-checked when the app is open (on load, focus, or when you come online). Leaving store Wi‑Fi ends the session. A closed or backgrounded app cannot prove network continuously until the next refresh.',
+      'Store presence is re-checked when the app is open (on load, focus, or when you come online). Leaving store Wi‑Fi or the store area ends the session. A closed or backgrounded app cannot prove presence continuously until the next refresh.',
   },
   users: {
     title: 'Users & Access',
@@ -2097,14 +2117,34 @@ export const sectionsVi = {
       'Không nhận diện được mạng. Bạn vẫn dùng được ứng dụng, nhưng thông báo đẩy cửa hàng đang tắt trên thiết bị này.',
     showDetails: 'Hiện chi tiết',
     hideDetails: 'Ẩn chi tiết',
-    recognizedTitle: 'Đã nhận diện Wi-Fi cửa hàng: {storeCode}',
+    recognizedTitle: 'Đã nhận diện cửa hàng: {storeCode}',
+    verifiedByWifi: 'Xác minh bằng Wi-Fi cửa hàng',
+    verifiedByLocation: 'Xác minh bằng vị trí',
+    checkingLocation: 'Đang kiểm tra vị trí cửa hàng…',
+    locationInaccurate:
+      'Độ chính xác vị trí quá thấp để xác minh cửa hàng. Hãy thử lại gần lối vào hoặc ngoài trời.',
+    locationDenied:
+      'Quyền vị trí đang tắt. Hãy bật để xác minh cửa hàng khi Wi‑Fi không được nhận diện.',
+    locationPermissionRequired:
+      'Cho phép vị trí một lần để xác minh bạn đang ở cửa hàng khi Wi‑Fi không được nhận diện.',
+    locationUnavailable: 'Không đọc được vị trí thiết bị. Hãy thử lại sau.',
+    outsideGeofence: 'Bạn đang ở ngoài khu vực cửa hàng. Thông báo cửa hàng vẫn tắt.',
+    ambiguousStore:
+      'Nhiều cửa hàng gần đây khớp vị trí này. Thông báo cửa hàng vẫn tắt.',
+    diagMethod: 'Phương thức: {method}',
+    diagDistance: 'Khoảng cách: {distance} m',
+    diagAccuracy: 'Độ chính xác: {accuracy} m',
+    diagRadius: 'Bán kính geofence: {radius} m',
+    diagLastVerified: 'Xác minh lần cuối: {time}',
+    diagMethodWifi: 'Wi-Fi cửa hàng',
+    diagMethodLocation: 'Vị trí',
     enableHint:
-      'Bật thông báo cửa hàng một lần trên thiết bị này khi dùng Wi-Fi cửa hàng. Các lần sau sẽ tự kích hoạt nếu quyền thông báo đã được cho phép.',
+      'Bật thông báo cửa hàng một lần trên thiết bị này khi ở cửa hàng (Wi‑Fi hoặc vị trí). Các lần sau sẽ tự kích hoạt nếu quyền thông báo đã được cho phép.',
     enable: 'Bật thông báo cửa hàng',
     enabling: 'Đang bật…',
-    active: 'Đã nhận diện Wi-Fi cửa hàng: {storeCode}. Thông báo đang bật trên thiết bị này.',
+    active: 'Đã nhận diện cửa hàng: {storeCode}. Thông báo đang bật trên thiết bị này.',
     activeUntil:
-      'Đã nhận diện Wi-Fi cửa hàng: {storeCode}. Thông báo đang bật trên thiết bị này đến {time}.',
+      'Đã nhận diện cửa hàng: {storeCode}. Thông báo đang bật trên thiết bị này đến {time}.',
     sendTest: 'Gửi thông báo thử',
     testSent:
       'Đã gửi thông báo thử. Âm thanh và rung phụ thuộc cài đặt thiết bị (Im lặng / Tập trung / Không làm phiền).',
@@ -2117,7 +2157,7 @@ export const sectionsVi = {
     iosInstallFirst:
       'Trên iPhone/iPad, hãy thêm Hey Pelo Ops vào Màn hình chính trước, rồi mở từ đó để bật thông báo cửa hàng.',
     limitation:
-      'IP công cộng được kiểm tra lại khi ứng dụng đang mở (khi tải, lấy focus, hoặc khi lên mạng). Rời Wi‑Fi cửa hàng sẽ kết thúc phiên. Ứng dụng đóng hoặc chạy nền không thể chứng minh mạng liên tục cho đến lần làm mới tiếp theo.',
+      'Hiện diện cửa hàng được kiểm tra lại khi ứng dụng đang mở (khi tải, lấy focus, hoặc khi lên mạng). Rời Wi‑Fi cửa hàng hoặc khu vực cửa hàng sẽ kết thúc phiên. Ứng dụng đóng hoặc chạy nền không thể chứng minh hiện diện liên tục cho đến lần làm mới tiếp theo.',
   },
   users: {
     title: 'Người dùng & Quyền truy cập',

@@ -44,6 +44,32 @@ describe('evaluateDeliveryGates', () => {
     expect(evaluateDeliveryGates(base)).toEqual({ allow: true, reason: null });
   });
 
+  it('allows explicit wifi_ip method with active wifiIp (N)', () => {
+    expect(
+      evaluateDeliveryGates({
+        ...base,
+        session: { ...base.session, activationMethod: 'wifi_ip', expiresAt: '' },
+      }),
+    ).toEqual({ allow: true, reason: null });
+  });
+
+  it('wifi_ip still requires active wifiIp even with empty expiresAt (N)', () => {
+    expect(
+      evaluateDeliveryGates({
+        ...base,
+        session: { ...base.session, activationMethod: 'wifi_ip', expiresAt: '' },
+        wifiIp: { id: 'w1', active: false },
+      }).reason,
+    ).toBe('wifi_ip_inactive');
+    expect(
+      evaluateDeliveryGates({
+        ...base,
+        session: { ...base.session, activationMethod: 'wifi_ip', expiresAt: '' },
+        wifiIp: null,
+      }).reason,
+    ).toBe('wifi_ip_inactive');
+  });
+
   it('suppresses without session', () => {
     expect(evaluateDeliveryGates({ ...base, session: null }).reason).toBe(
       'no_active_session',
@@ -105,5 +131,93 @@ describe('evaluateDeliveryGates', () => {
     expect(evaluateDeliveryGates({ ...base, hasStoreAccess: false }).reason).toBe(
       'store_access_denied',
     );
+  });
+
+  it('legacy session without activationMethod still requires wifiIp', () => {
+    expect(
+      evaluateDeliveryGates({
+        ...base,
+        session: { ...base.session, activationMethod: '', expiresAt: '' },
+        wifiIp: null,
+      }).reason,
+    ).toBe('wifi_ip_inactive');
+  });
+
+  it('allows geofence session with empty wifiIpId and no wifiIp row', () => {
+    expect(
+      evaluateDeliveryGates({
+        ...base,
+        session: {
+          ...base.session,
+          activationMethod: 'geofence',
+          wifiIpId: '',
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+        },
+        wifiIp: null,
+      }),
+    ).toEqual({ allow: true, reason: null });
+  });
+
+  it('suppresses expired geofence session', () => {
+    expect(
+      evaluateDeliveryGates({
+        ...base,
+        session: {
+          ...base.session,
+          activationMethod: 'geofence',
+          wifiIpId: '',
+          expiresAt: new Date(Date.now() - 1000).toISOString(),
+        },
+        wifiIp: null,
+      }).reason,
+    ).toBe('session_expired');
+  });
+
+  it('suppresses geofence session with empty expiresAt', () => {
+    expect(
+      evaluateDeliveryGates({
+        ...base,
+        session: {
+          ...base.session,
+          activationMethod: 'geofence',
+          wifiIpId: '',
+          expiresAt: '',
+        },
+        wifiIp: null,
+      }).reason,
+    ).toBe('session_expired');
+  });
+
+  it('geofence still requires store match, active store, and access', () => {
+    const geoSession = {
+      ...base.session,
+      activationMethod: 'geofence' as const,
+      wifiIpId: '',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    };
+    expect(
+      evaluateDeliveryGates({
+        ...base,
+        session: geoSession,
+        wifiIp: null,
+        notification: { ...base.notification, storeId: 'other' },
+      }).reason,
+    ).toBe('store_mismatch');
+    expect(
+      evaluateDeliveryGates({
+        ...base,
+        session: geoSession,
+        wifiIp: null,
+        store: { id: 's1', active: false },
+      }).reason,
+    ).toBe('store_inactive');
+    expect(
+      evaluateDeliveryGates({
+        ...base,
+        session: geoSession,
+        wifiIp: null,
+        hasStoreAccess: false,
+      }).reason,
+    ).toBe('store_access_denied');
   });
 });

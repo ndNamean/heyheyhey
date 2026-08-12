@@ -18,10 +18,16 @@ import {
 import { getClientPublicIp } from './_lib/wifi-notify/request-ip.js';
 import { roleCanEditMaster } from './_lib/wifi-notify/access.js';
 import {
-  recognizeStoreWifi,
+  recognizeStorePresence,
   loadActiveSessions,
   shouldDeactivateSessionForNetwork,
+  resolveNotificationActivationMethod,
 } from './_lib/wifi-notify/recognize.js';
+import {
+  geofenceExpiresAtIso,
+  isLocationSupplied,
+  parseDeviceLocation,
+} from './_lib/wifi-notify/geofence.js';
 import {
   parseSubscriptionPayload,
   upsertPushSubscription,
@@ -51,6 +57,80 @@ function userAgentFromReq(req) {
   return String(value || '').slice(0, 500);
 }
 
+/** Optional device location from status/activate body. Accepts lat/lng/accuracyM aliases. */
+function locationFromBody(body) {
+  if (!body || typeof body !== 'object') return undefined;
+  const location = {
+    latitude: body.latitude,
+    longitude: body.longitude,
+    accuracy: body.accuracy,
+    lat: body.lat,
+    lng: body.lng,
+    accuracyM: body.accuracyM,
+  };
+  return isLocationSupplied(location) ? location : undefined;
+}
+
+function stringifyMetric(value) {
+  if (value == null || value === '') return '';
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? String(n) : '';
+}
+
+function geofenceRadiusFromRecognition(recognition) {
+  const raw = recognition?.geofenceRadiusM ?? recognition?.store?.geofenceRadiusM ?? null;
+  if (raw == null || raw === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+const EMPTY_GEO_SESSION_FIELDS = {
+  verifiedLat: '',
+  verifiedLng: '',
+  locationAccuracyM: '',
+  distanceFromStoreM: '',
+  presenceVerifiedAt: '',
+};
+
+function geofenceSessionFields(recognition, location, now = new Date()) {
+  const parsed = parseDeviceLocation(location);
+  return {
+    activationMethod: 'geofence',
+    wifiIpId: '',
+    matchedPublicIp: '',
+    expiresAt: geofenceExpiresAtIso(now),
+    verifiedLat: parsed.ok ? stringifyMetric(parsed.latitude) : '',
+    verifiedLng: parsed.ok ? stringifyMetric(parsed.longitude) : '',
+    locationAccuracyM:
+      stringifyMetric(recognition?.accuracyM) ||
+      (parsed.ok ? stringifyMetric(parsed.accuracyM) : ''),
+    distanceFromStoreM: stringifyMetric(recognition?.distanceM),
+    presenceVerifiedAt: now.toISOString(),
+  };
+}
+
+function wifiIpSessionFields(recognition) {
+  return {
+    activationMethod: 'wifi_ip',
+    wifiIpId: recognition?.wifiIp?.id || '',
+    matchedPublicIp: recognition?.publicIp || '',
+    expiresAt: '',
+    ...EMPTY_GEO_SESSION_FIELDS,
+  };
+}
+
+async function refreshGeofenceSession(adminDb, session, recognition, location, now = new Date()) {
+  const patch = geofenceSessionFields(recognition, location, now);
+  await adminDb.transact(adminDb.tx.notificationActivationSessions[session.id].update(patch));
+  return { ...session, ...patch };
+}
+
+async function upgradeSessionToWifiIp(adminDb, session, recognition) {
+  const patch = wifiIpSessionFields(recognition);
+  await adminDb.transact(adminDb.tx.notificationActivationSessions[session.id].update(patch));
+  return { ...session, ...patch };
+}
+
 function resolveAction(req, body) {
   const fromQuery = req.query?.action;
   const q = Array.isArray(fromQuery) ? fromQuery[0] : fromQuery;
@@ -74,8 +154,9 @@ async function handleStatus(req, res, body) {
   const ctx = await loadProfileContext(userId);
   const adminDb = getAdminDb();
   const deviceId = String(body.deviceId || '').trim();
+  const location = locationFromBody(body);
 
-  const recognition = await recognizeStoreWifi(req, adminDb, ctx);
+  const recognition = await recognizeStorePresence(req, adminDb, ctx, location);
   const canSeeIp = roleCanEditMaster(
     ctx.role,
     ctx.roleDefinition,
@@ -99,11 +180,32 @@ async function handleStatus(req, res, body) {
       remaining[0] ||
       null;
     if (preferred) {
+      let session = preferred;
+      const sessionMethod = resolveNotificationActivationMethod(preferred);
+      const sameStore =
+        recognition.recognized &&
+        recognition.store &&
+        String(preferred.storeId || '') === String(recognition.store.id || '');
+      if (sameStore && sessionMethod === 'geofence') {
+        if (recognition.method === 'geofence') {
+          session = await refreshGeofenceSession(
+            adminDb,
+            preferred,
+            recognition,
+            location,
+          );
+        } else if (recognition.method === 'wifi_ip') {
+          // Now on store Wi‑Fi: drop geo TTL so the session does not expire in 5m.
+          session = await upgradeSessionToWifiIp(adminDb, preferred, recognition);
+        }
+      }
       activeSession = {
-        id: preferred.id,
-        storeId: preferred.storeId,
-        storeCode: preferred.storeCode || '',
-        expiresAt: preferred.expiresAt,
+        id: session.id,
+        storeId: session.storeId,
+        storeCode: session.storeCode || '',
+        expiresAt: session.expiresAt ?? '',
+        activationMethod: resolveNotificationActivationMethod(session) || null,
+        presenceVerifiedAt: session.presenceVerifiedAt || '',
       };
     }
   }
@@ -117,6 +219,11 @@ async function handleStatus(req, res, body) {
     expiresAt: activeSession?.expiresAt ?? recognition.expiresAt ?? '',
     sessionActive: Boolean(activeSession),
     activeSession,
+    method: recognition.method ?? null,
+    distanceM: recognition.distanceM ?? null,
+    accuracyM: recognition.accuracyM ?? null,
+    geofenceRadiusM: geofenceRadiusFromRecognition(recognition),
+    presenceVerifiedAt: activeSession?.presenceVerifiedAt || '',
   };
   if (canSeeIp) payload.matchedPublicIp = recognition.publicIp;
   return res.status(200).json(payload);
@@ -139,11 +246,24 @@ async function handleActivate(req, res, body) {
     });
   }
 
-  const recognition = await recognizeStoreWifi(req, adminDb, ctx);
+  const location = locationFromBody(body);
+  const recognition = await recognizeStorePresence(req, adminDb, ctx, location);
   if (!recognition.recognized) {
     return res.status(400).json({
       error: 'Cannot activate store notifications on this network',
       reason: recognition.reason || 'unrecognized',
+      method: recognition.method ?? null,
+      distanceM: recognition.distanceM ?? null,
+      accuracyM: recognition.accuracyM ?? null,
+    });
+  }
+
+  const method = recognition.method === 'geofence' ? 'geofence' : 'wifi_ip';
+  if (method === 'wifi_ip' && !recognition.wifiIp?.id) {
+    return res.status(400).json({
+      error: 'Cannot activate store notifications on this network',
+      reason: recognition.reason || 'unrecognized',
+      method: recognition.method ?? null,
     });
   }
 
@@ -162,21 +282,23 @@ async function handleActivate(req, res, body) {
   const now = new Date();
   const sessionId = id();
   const storeCode = recognition.store?.code || '';
+  const methodFields =
+    method === 'geofence'
+      ? geofenceSessionFields(recognition, location, now)
+      : wifiIpSessionFields(recognition);
+
   await adminDb.transact(
     adminDb.tx.notificationActivationSessions[sessionId].update({
       userId,
       deviceId,
       storeId: recognition.store.id,
-      wifiIpId: recognition.wifiIp.id,
       shiftId: '',
       subscriptionId,
-      matchedPublicIp: recognition.publicIp || '',
       storeCode,
       activatedAt: now.toISOString(),
-      // '' = no time expiry; ends on logout / access / IP / store / network leave / subscription.
-      expiresAt: '',
       deactivatedAt: '',
       deactivateReason: '',
+      ...methodFields,
     }),
   );
 
@@ -194,9 +316,14 @@ async function handleActivate(req, res, body) {
     sessionId,
     storeId: recognition.store.id,
     storeCode,
-    expiresAt: '',
+    expiresAt: methodFields.expiresAt ?? '',
     shiftId: '',
     subscriptionId,
+    method,
+    distanceM: recognition.distanceM ?? null,
+    accuracyM: recognition.accuracyM ?? null,
+    geofenceRadiusM: geofenceRadiusFromRecognition(recognition),
+    presenceVerifiedAt: methodFields.presenceVerifiedAt || '',
   });
 }
 
