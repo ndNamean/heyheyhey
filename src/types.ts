@@ -865,15 +865,20 @@ export type StoreChatMessageType =
   | 'text'
   | 'giphy_media'
   | 'text_giphy'
+  | 'attachment'
+  | 'text_attachment'
   | 'logbook_system'
   | 'report_system';
 export type StoreChatMessageStatus = 'active' | 'deleted';
 /** Phase 4 GIPHY kinds; '' when message has no media. */
 export type StoreChatGiphyKind = 'gif' | 'sticker' | 'meme' | 'emoji' | '';
+/** Chat attachment kinds; '' when none. */
+export type StoreChatAttachmentKind = 'image' | 'file' | '';
 
 /**
- * InstantDB storeChatMessages ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â room key is storeId.
+ * InstantDB storeChatMessages — room key is storeId.
  * Phase 4 giphy* / clientMutationId are additive (optional on read, '' on write).
+ * Attachment fields are additive (optional on read, '' on write when unused).
  * Keep in sync with Phase 3 forwarded* fields when merging.
  */
 export interface StoreChatMessage {
@@ -894,7 +899,7 @@ export interface StoreChatMessage {
   mentionedUserIdsJson?: string;
   /** True when the message @all'd everyone who can access the room. */
   mentionAll?: boolean;
-  /** Phase 4 GIPHY ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â '' when text-only. */
+  /** Phase 4 GIPHY — '' when text-only. */
   giphyId?: string;
   giphyKind?: StoreChatGiphyKind | string;
   giphyTitle?: string;
@@ -902,6 +907,17 @@ export interface StoreChatMessage {
   giphyHeight?: string;
   giphyUrl?: string;
   giphyPreviewUrl?: string;
+  /** Chat attachment — '' when unused. */
+  attachmentKind?: StoreChatAttachmentKind | string;
+  attachmentPath?: string;
+  attachmentFileId?: string;
+  attachmentUrl?: string;
+  attachmentMimeType?: string;
+  attachmentFileName?: string;
+  attachmentBytes?: string;
+  attachmentWidth?: string;
+  attachmentHeight?: string;
+  attachmentFile?: { id?: string; url?: string; path?: string };
   /** Source message id when this row is a forward; '' otherwise. */
   forwardedFromMessageId?: string;
   /** Original author userId when forwarded; '' otherwise. Forwarder is senderUserId. */
@@ -961,7 +977,13 @@ export type GroupChatInviteStatus =
   | 'declined'
   | 'expired'
   | 'cancelled';
-export type GroupChatMessageType = 'text' | 'giphy_media' | 'text_giphy' | 'system';
+export type GroupChatMessageType =
+  | 'text'
+  | 'giphy_media'
+  | 'text_giphy'
+  | 'attachment'
+  | 'text_attachment'
+  | 'system';
 
 /** InstantDB groupChatRooms — private invite-accept; room key is entity id. */
 export interface GroupChatRoom {
@@ -1045,6 +1067,17 @@ export interface GroupChatMessage {
   giphyHeight?: string;
   giphyUrl?: string;
   giphyPreviewUrl?: string;
+  /** Chat attachment — '' when unused. */
+  attachmentKind?: StoreChatAttachmentKind | string;
+  attachmentPath?: string;
+  attachmentFileId?: string;
+  attachmentUrl?: string;
+  attachmentMimeType?: string;
+  attachmentFileName?: string;
+  attachmentBytes?: string;
+  attachmentWidth?: string;
+  attachmentHeight?: string;
+  attachmentFile?: { id?: string; url?: string; path?: string };
   /** Source message id when this row is a forward; '' otherwise. */
   forwardedFromMessageId?: string;
   /** Original author userId when forwarded; '' otherwise. Forwarder is senderUserId. */

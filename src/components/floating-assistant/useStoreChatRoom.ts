@@ -29,6 +29,7 @@ export function useStoreChatRoom(
             limit: MESSAGE_LIMIT,
           },
           sender: { avatarFile: {} },
+          attachmentFile: {},
         },
         storeChatReactions: {
           $: {

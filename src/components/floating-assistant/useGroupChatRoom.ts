@@ -36,6 +36,7 @@ export function useGroupChatRoom(roomId: string | null | undefined, currentUserI
             limit: MESSAGE_LIMIT,
           },
           sender: { avatarFile: {} },
+          attachmentFile: {},
         },
         groupChatReactions: {
           $: {

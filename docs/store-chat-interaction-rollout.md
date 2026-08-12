@@ -20,11 +20,19 @@ Historical rows stay readable without backfill. Empty `replyToMessageId` / GIPHY
 | `VITE_STORE_CHAT_TRANSLATION` | Translate action stays unavailable even if a provider exists. |
 | `TRANSLATION_PROVIDER` (+ optional `TRANSLATION_API_KEY`) | `/api/translate-store-chat` reports unsupported when unset; `mymemory` works keyless. |
 | `VITE_REPORT_CHAT_NOTIFY` / `REPORT_CHAT_NOTIFY` | Report → Store Chat handoffs **default OFF** (opt-in). Unset/`0`/`false`/`off` → no `report_system` writes. Set `1`/`true`/`on` to enable. Does not change Logbook chat notify. |
+| `VITE_CHAT_ATTACHMENTS` | Chat composer attachments (photos/files) **default OFF**. Unset/`0`/`false`/`off` → no `+` attach UI and client upload wrapper refuses. Set `1`/`true`/`on` after Phase 1 schema/perms + `/api/upload-chat-attachment` are deployed. Does not change GIPHY. See [chat-attachments-rollout.md](./chat-attachments-rollout.md) for full QA matrices. |
 
-Hobby note: Vercel Hobby allows ≤12 serverless functions. Translation is its own route; `/api/media-url` was folded into `/api/image-proxy` (with a rewrite) to stay under the limit. Report chat reuses `/api/logbook-notify` (`type: deliver_report_event`) — no new function.
+Hobby note: Vercel Hobby allows ≤12 serverless functions. Translation is its own route; `/api/media-url` was folded into `/api/image-proxy` (with a rewrite) to stay under the limit. Report chat reuses `/api/logbook-notify` (`type: deliver_report_event`) — no new function. Chat attachments use `/api/upload-chat-attachment` (counts toward the Hobby cap).
 | Ambient glow | Controlled by `src/config/ambientMediaEffects.ts` (`enabled`); reduced-motion users get sustained color only. |
 
 Reply UI, Unicode reactions, copy/forward/favorite/delete do not require the GIPHY or translation flags.
+
+### Chat attachments rollout
+
+1. Deploy Instant schema (attachment string fields + optional `attachmentFile` → `$files` on `storeChatMessages` / `groupChatMessages`) and matching perms (`attachment` / `text_attachment`, `mediaCoherent` empty-attachment rules).
+2. Deploy `/api/upload-chat-attachment` + payload helpers (empty attachment defaults on all sends). Flag stays **off**.
+3. Phase 2+ UI: set `VITE_CHAT_ATTACHMENTS=1` (or `true` / `on`) and redeploy.
+4. Rollback UI: unset the flag (or set `0`/`false`/`off`) and redeploy — existing attachment messages still render once UI supports them; new uploads stop. Do not drop schema fields.
 
 ## Report → Store Chat (handoff)
 
@@ -61,6 +69,7 @@ Clean all-approved finalize never writes chat. Per-item approve stays inbox-only
 - **GIPHY:** remove or blank `VITE_GIPHY_API_KEY` (redeploy). Existing media messages still render; new picks stop.
 - **Translation:** unset `VITE_STORE_CHAT_TRANSLATION` and/or server translation envs. No schema rollback.
 - **Report chat:** unset `VITE_REPORT_CHAT_NOTIFY` / `REPORT_CHAT_NOTIFY` (redeploy). No schema rollback.
+- **Chat attachments:** unset `VITE_CHAT_ATTACHMENTS` (redeploy). Schema/perms/API can remain; composer attach UI stays off.
 - **Ambient glow:** set `ambientMediaEffects.enabled = false` (or gate behind a future env if added).
 - **Reactions / bookmarks UI:** revert UI commits; leave schema/perms in place (safe additive).
 - **Reply UI:** revert UI only; field already existed and empty string remains “no reply”.

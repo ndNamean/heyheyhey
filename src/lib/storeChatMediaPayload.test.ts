@@ -11,6 +11,7 @@ import {
   buildGroupChatMediaPayload,
   buildStoreChatMediaPayload,
   canSendStoreChatMedia,
+  emptyStoreChatAttachmentFields,
   emptyStoreChatGiphyFields,
   giphyItemToFields,
   normalizeStoreChatMessageType,
@@ -29,6 +30,18 @@ const sampleGif: GiphyMediaItem = {
   itemUrl: 'https://giphy.com/gifs/abc123',
 };
 
+const sampleAttachment = {
+  kind: 'image' as const,
+  path: 'stores/s1/chat/m1/photo.jpg',
+  fileId: 'file-1',
+  url: 'https://example.com/photo.jpg',
+  mimeType: 'image/jpeg',
+  fileName: 'photo.jpg',
+  bytes: 2048,
+  width: 800,
+  height: 600,
+};
+
 describe('storeChatMediaPayload', () => {
   it('builds text-only payload with empty giphy defaults', () => {
     const payload = buildStoreChatMediaPayload({
@@ -43,6 +56,9 @@ describe('storeChatMediaPayload', () => {
     expect(payload.mentionAll).toBe(false);
     expect(payload.giphyId).toBe('');
     expect(payload.giphyUrl).toBe('');
+    expect(payload.attachmentPath).toBe('');
+    expect(payload.attachmentKind).toBe('');
+    expect(payload.attachmentFileId).toBe('');
     expect(payload.forwardedFromMessageId).toBe('');
     expect(payload.clientMutationId).toBe('');
     expect(payload.sourceType).toBe('');
@@ -60,6 +76,7 @@ describe('storeChatMediaPayload', () => {
     expect(payload.messageType).toBe('text');
     expect(payload.forwardedFromMessageId).toBe('m1');
     expect(payload.forwardedFromUserId).toBe('u9');
+    expect(payload.attachmentPath).toBe('');
     expect('sourceType' in payload).toBe(false);
     expect('logbookEntryId' in payload).toBe(false);
   });
@@ -77,6 +94,7 @@ describe('storeChatMediaPayload', () => {
     expect(payload.giphyHeight).toBe('150');
     expect(payload.giphyUrl).toBe(sampleGif.url);
     expect(payload.giphyPreviewUrl).toBe(sampleGif.previewUrl);
+    expect(payload.attachmentPath).toBe('');
   });
 
   it('builds text_giphy for text + media', () => {
@@ -86,6 +104,7 @@ describe('storeChatMediaPayload', () => {
     });
     expect(payload.messageType).toBe('text_giphy');
     expect(payload.giphyKind).toBe('sticker');
+    expect(payload.attachmentPath).toBe('');
   });
 
   it('composes reply + mention + giphy together', () => {
@@ -107,6 +126,30 @@ describe('storeChatMediaPayload', () => {
     expect(payload.forwardedFromMessageId).toBe('fwd-msg');
     expect(payload.forwardedFromUserId).toBe('fwd-user');
     expect(payload.giphyId).toBe('abc123');
+    expect(payload.attachmentPath).toBe('');
+  });
+
+  it('builds attachment and text_attachment payloads; XOR clears giphy', () => {
+    const mediaOnly = buildStoreChatMediaPayload({
+      body: '  ',
+      attachment: sampleAttachment,
+      giphy: sampleGif,
+    });
+    expect(mediaOnly.messageType).toBe('attachment');
+    expect(mediaOnly.giphyId).toBe('');
+    expect(mediaOnly.attachmentKind).toBe('image');
+    expect(mediaOnly.attachmentPath).toBe(sampleAttachment.path);
+    expect(mediaOnly.attachmentFileId).toBe('file-1');
+    expect(mediaOnly.attachmentBytes).toBe('2048');
+    expect(mediaOnly.attachmentWidth).toBe('800');
+    expect(mediaOnly.attachmentHeight).toBe('600');
+
+    const withCaption = buildGroupChatMediaPayload({
+      body: 'caption',
+      attachment: { ...sampleAttachment, kind: 'file', mimeType: 'application/pdf' },
+    });
+    expect(withCaption.messageType).toBe('text_attachment');
+    expect(withCaption.attachmentKind).toBe('file');
   });
 
   it('normalizes message types and send gate', () => {
@@ -114,9 +157,12 @@ describe('storeChatMediaPayload', () => {
     expect(normalizeStoreChatMessageType('hi', false)).toBe('text');
     expect(normalizeStoreChatMessageType('', true)).toBe('giphy_media');
     expect(normalizeStoreChatMessageType('hi', true)).toBe('text_giphy');
+    expect(normalizeStoreChatMessageType('', false, true)).toBe('attachment');
+    expect(normalizeStoreChatMessageType('hi', false, true)).toBe('text_attachment');
     expect(canSendStoreChatMedia('', null)).toBe(false);
     expect(canSendStoreChatMedia('x', null)).toBe(true);
     expect(canSendStoreChatMedia('', sampleGif)).toBe(true);
+    expect(canSendStoreChatMedia('', null, sampleAttachment)).toBe(true);
   });
 
   it('maps giphy item fields and labels', () => {
@@ -130,9 +176,12 @@ describe('storeChatMediaPayload', () => {
       giphyPreviewUrl: sampleGif.previewUrl,
     });
     expect(emptyStoreChatGiphyFields().giphyId).toBe('');
+    expect(emptyStoreChatAttachmentFields().attachmentPath).toBe('');
     expect(storeChatMediaLabel('giphy_media', 'sticker')).toBe('Sticker');
     expect(storeChatMediaLabel('text_giphy', 'gif')).toBe('GIF + text');
     expect(storeChatMediaLabel('text')).toBe('Message');
+    expect(storeChatMediaLabel('attachment', '', 'image')).toBe('Photo');
+    expect(storeChatMediaLabel('text_attachment', '', 'file')).toBe('File');
   });
 });
 

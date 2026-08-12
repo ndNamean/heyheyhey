@@ -584,7 +584,7 @@ const _schema = i.schema({
       senderProfileId: i.string().indexed(),
       senderNameSnapshot: i.string(),
       senderRoleSnapshot: i.string(),
-      messageType: i.string(),                 // 'text' | 'giphy_media' | 'text_giphy' | 'logbook_system' | 'report_system'
+      messageType: i.string(),                 // 'text' | 'giphy_media' | 'text_giphy' | 'attachment' | 'text_attachment' | 'logbook_system' | 'report_system'
       body: i.string(),
       createdAt: i.string().indexed(),
       editedAt: i.string().clientRequired(),   // '' unused in v1
@@ -601,6 +601,16 @@ const _schema = i.schema({
       giphyHeight: i.string().clientRequired(),
       giphyUrl: i.string().clientRequired(),
       giphyPreviewUrl: i.string().clientRequired(),
+      // Chat attachments ('' when unused). Additive; mutual-exclusive with GIPHY via perms.
+      attachmentKind: i.string().clientRequired(), // '' | 'image' | 'file'
+      attachmentPath: i.string().clientRequired(),
+      attachmentFileId: i.string().clientRequired(),
+      attachmentUrl: i.string().clientRequired(),
+      attachmentMimeType: i.string().clientRequired(),
+      attachmentFileName: i.string().clientRequired(),
+      attachmentBytes: i.string().clientRequired(), // decimal string
+      attachmentWidth: i.string().clientRequired(),
+      attachmentHeight: i.string().clientRequired(),
       // Forward metadata (empty = not forwarded). Sender remains the forwarder.
       forwardedFromMessageId: i.string().clientRequired(),
       forwardedFromUserId: i.string().clientRequired(),
@@ -695,7 +705,7 @@ const _schema = i.schema({
       senderProfileId: i.string().indexed(),
       senderNameSnapshot: i.string(),
       senderRoleSnapshot: i.string(),
-      messageType: i.string(), // 'text' | 'giphy_media' | 'text_giphy' | 'system'
+      messageType: i.string(), // 'text' | 'giphy_media' | 'text_giphy' | 'attachment' | 'text_attachment' | 'system'
       body: i.string(),
       createdAt: i.string().indexed(),
       editedAt: i.string().clientRequired(),
@@ -711,6 +721,16 @@ const _schema = i.schema({
       giphyHeight: i.string().clientRequired(),
       giphyUrl: i.string().clientRequired(),
       giphyPreviewUrl: i.string().clientRequired(),
+      // Chat attachments ('' when unused). Additive; mutual-exclusive with GIPHY via perms.
+      attachmentKind: i.string().clientRequired(), // '' | 'image' | 'file'
+      attachmentPath: i.string().clientRequired(),
+      attachmentFileId: i.string().clientRequired(),
+      attachmentUrl: i.string().clientRequired(),
+      attachmentMimeType: i.string().clientRequired(),
+      attachmentFileName: i.string().clientRequired(),
+      attachmentBytes: i.string().clientRequired(),
+      attachmentWidth: i.string().clientRequired(),
+      attachmentHeight: i.string().clientRequired(),
       // Forward metadata (empty = not forwarded). Sender remains the forwarder.
       forwardedFromMessageId: i.string().clientRequired(),
       forwardedFromUserId: i.string().clientRequired(),
@@ -969,6 +989,10 @@ const _schema = i.schema({
       forward: { on: 'storeChatMessages', has: 'one', label: 'sender' },
       reverse: { on: 'profiles', has: 'many', label: 'storeChatMessages' },
     },
+    storeChatMessageAttachmentFile: {
+      forward: { on: 'storeChatMessages', has: 'one', label: 'attachmentFile' },
+      reverse: { on: '$files', has: 'many', label: 'storeChatAttachmentMessages' },
+    },
 
     // ─── Store Chat reactions -> store / message ─────────────────────────────
     storeChatReactionStore: {
@@ -1020,6 +1044,10 @@ const _schema = i.schema({
     groupChatMessageSender: {
       forward: { on: 'groupChatMessages', has: 'one', label: 'sender' },
       reverse: { on: 'profiles', has: 'many', label: 'groupChatMessages' },
+    },
+    groupChatMessageAttachmentFile: {
+      forward: { on: 'groupChatMessages', has: 'one', label: 'attachmentFile' },
+      reverse: { on: '$files', has: 'many', label: 'groupChatAttachmentMessages' },
     },
     groupChatReactionRoom: {
       forward: { on: 'groupChatReactions', has: 'one', label: 'room' },

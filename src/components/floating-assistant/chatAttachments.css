@@ -1,0 +1,358 @@
+/**
+ * Chat attachment composer styles (Phases 2–5).
+ * Additive — does not alter GIPHY button layout when flag is off.
+ */
+
+.fa-composer--with-attach {
+  grid-template-columns: auto 1fr auto auto;
+}
+
+.fa-composer-attach {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 0;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  background: var(--card-bg, transparent);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 1.25rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.fa-composer-attach:hover:not(:disabled),
+.fa-composer-attach:focus-visible {
+  border-color: rgba(253, 194, 22, 0.55);
+  background: rgba(253, 194, 22, 0.12);
+}
+
+.fa-composer-attach:focus-visible {
+  outline: 2px solid rgba(253, 194, 22, 0.7);
+  outline-offset: 2px;
+}
+
+.fa-composer-attach:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.fa-composer-attach[aria-expanded='true'] {
+  border-color: rgba(253, 194, 22, 0.7);
+  background: rgba(253, 194, 22, 0.16);
+}
+
+.chat-attachment-preview {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  margin: 0 0 6px;
+  border-radius: 12px;
+  border: 1px solid var(--card-border);
+  background: rgba(0, 0, 0, 0.06);
+  grid-column: 1 / -1;
+}
+
+.chat-attachment-preview__frame {
+  flex: 0 0 auto;
+  max-width: 140px;
+  max-height: 100px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.chat-attachment-preview__frame img {
+  display: block;
+  max-width: 140px;
+  max-height: 100px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+.chat-attachment-preview__file-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  font-size: 1.75rem;
+}
+
+.chat-attachment-preview__meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chat-attachment-preview__title {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 650;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-attachment-preview__sub,
+.chat-attachment-preview__hint {
+  margin: 0;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+.chat-attachment-preview__progress {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.chat-attachment-preview__progress > span {
+  display: block;
+  height: 100%;
+  background: rgba(253, 194, 22, 0.85);
+  border-radius: inherit;
+  transition: width 160ms ease;
+}
+
+.chat-attachment-preview__retry {
+  align-self: flex-start;
+  margin-top: 2px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.chat-attachment-preview__clear {
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.chat-attachment-preview__clear:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.composer-attach-menu {
+  --attach-z: 145;
+}
+
+.composer-attach-menu__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--attach-z);
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+
+.composer-attach-menu__panel {
+  position: fixed;
+  z-index: calc(var(--attach-z) + 1);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
+  color: var(--text-primary);
+}
+
+.composer-attach-menu__panel--sheet {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  max-height: min(70dvh, 480px);
+  overflow: auto;
+  border-radius: 16px 16px 0 0;
+}
+
+.composer-attach-menu__panel--popover {
+  border-radius: 14px;
+  max-height: min(70dvh, 420px);
+  overflow: auto;
+}
+
+.composer-attach-menu__handle {
+  width: 36px;
+  height: 4px;
+  margin: 0 auto 4px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.composer-attach-menu__title {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.composer-attach-menu__denied {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(253, 194, 22, 0.12);
+  border: 1px solid rgba(253, 194, 22, 0.35);
+}
+
+.composer-attach-menu__denied p {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.composer-attach-menu__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.composer-attach-menu__item {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.composer-attach-menu__item:hover:not(:disabled),
+.composer-attach-menu__item:focus-visible {
+  background: rgba(253, 194, 22, 0.14);
+}
+
+.composer-attach-menu__item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.composer-attach-menu__cancel {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 4px;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.chat-drop-target {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.fa-store-chat-drop,
+.fa-group-chat-drop {
+  min-height: 100%;
+}
+
+.chat-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: rgba(253, 194, 22, 0.18);
+  border: 2px dashed rgba(253, 194, 22, 0.75);
+  border-radius: 12px;
+  margin: 8px;
+}
+
+.chat-drop-overlay__label {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--card-bg, #fff);
+  border: 1px solid var(--card-border);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.fa-msg-attachment-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 240px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.fa-msg-attachment-file {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: min(280px, 100%);
+  padding: 10px 12px;
+  margin: 6px 0 4px;
+  border-radius: 10px;
+  border: 1px solid var(--card-border);
+  background: rgba(0, 0, 0, 0.04);
+  text-decoration: none;
+  color: inherit;
+}
+
+.fa-msg-attachment-file:hover,
+.fa-msg-attachment-file:focus-visible {
+  border-color: rgba(253, 194, 22, 0.55);
+  background: rgba(253, 194, 22, 0.1);
+}
+
+.fa-msg-attachment-file__name {
+  font-size: 13px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fa-msg-attachment-file__meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+}

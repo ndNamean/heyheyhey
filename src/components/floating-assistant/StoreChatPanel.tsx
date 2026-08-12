@@ -46,6 +46,15 @@ import {
   storeChatMediaLabel,
 } from '../../lib/storeChatMediaPayload';
 import { isGiphyConfigured, type GiphyMediaItem } from '../../lib/giphyClient';
+import { isChatAttachmentsEnabled } from '../../lib/chatAttachmentsFlag';
+import { uploadChatAttachment } from '../../lib/chatAttachmentUpload';
+import {
+  chatAttachmentPolicyErrorCopy,
+  formatChatAttachmentBytes,
+  messageHasChatAttachment,
+  resolveChatAttachmentUrl,
+} from '../../lib/chatAttachmentDisplay';
+import type { ChatAttachmentPayloadInput } from '../../lib/storeChatMediaPayload';
 import {
   isStoreChatTranslationEnabled,
   markTranslationRetry,
@@ -71,6 +80,14 @@ import ProfileAvatarPreview from '../profileAvatar/ProfileAvatarPreview';
 import { AmbientGlowMedia } from './AmbientGlowMedia';
 import FloatingAssistantLoader from './FloatingAssistantLoader';
 import { GiphyMediaPreview } from './GiphyMediaPreview';
+import { ChatAttachmentPreview } from './ChatAttachmentPreview';
+import { ChatDropOverlay } from './ChatDropOverlay';
+import {
+  ComposerAttachMenu,
+  buildQuickMessageLabels,
+} from './ComposerAttachMenu';
+import { useChatAttachmentStaging } from './useChatAttachmentStaging';
+import './chatAttachments.css';
 import {
   listStoreChatActions,
   resolveStoreChatActionKeyboard,
@@ -137,6 +154,13 @@ function quotePreviewText(
   }
   if (hasGiphyMedia(message)) {
     return storeChatMediaLabel(String(message.messageType || 'giphy_media'), message.giphyKind);
+  }
+  if (messageHasChatAttachment(message)) {
+    return storeChatMediaLabel(
+      String(message.messageType || 'attachment'),
+      undefined,
+      message.attachmentKind,
+    );
   }
   return copy.emptyMessage;
 }
@@ -369,6 +393,15 @@ function MessageBubble({
     String(message.messageType || 'giphy_media'),
     message.giphyKind,
   );
+  const hasAttachment = messageHasChatAttachment(message);
+  const attachmentUrl = resolveChatAttachmentUrl(message);
+  const attachmentKind = String(message.attachmentKind || '').trim();
+  const attachmentLabel = storeChatMediaLabel(
+    String(message.messageType || 'attachment'),
+    undefined,
+    attachmentKind,
+  );
+  const attachmentBytesLabel = formatChatAttachmentBytes(message.attachmentBytes);
   const bodyTrimmed = message.body.trim();
   const showingTranslated =
     translation?.status === 'success' &&
@@ -479,6 +512,40 @@ function MessageBubble({
               <span className="fa-msg-media-caption">{message.giphyTitle}</span>
             ) : null}
           </div>
+        ) : null}
+        {!isHandoffSystem && hasAttachment && attachmentKind === 'image' && attachmentUrl ? (
+          <div className="fa-msg-media" data-attachment-kind="image">
+            <AmbientGlowMedia cacheKey={attachmentUrl} breathe enabled={glowEnabled}>
+              <img
+                className="fa-msg-attachment-image"
+                src={attachmentUrl}
+                alt={message.attachmentFileName || attachmentLabel}
+                width={Number.parseInt(message.attachmentWidth || '', 10) || undefined}
+                height={Number.parseInt(message.attachmentHeight || '', 10) || undefined}
+                loading="lazy"
+                decoding="async"
+              />
+            </AmbientGlowMedia>
+            {message.attachmentFileName ? (
+              <span className="fa-msg-media-caption">{message.attachmentFileName}</span>
+            ) : null}
+          </div>
+        ) : null}
+        {!isHandoffSystem && hasAttachment && attachmentKind === 'file' ? (
+          <a
+            className="fa-msg-attachment-file"
+            href={attachmentUrl || undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+            download={message.attachmentFileName || undefined}
+          >
+            <span className="fa-msg-attachment-file__name">
+              {message.attachmentFileName || attachmentLabel}
+            </span>
+            <span className="fa-msg-attachment-file__meta">
+              {[message.attachmentMimeType, attachmentBytesLabel].filter(Boolean).join(' · ')}
+            </span>
+          </a>
         ) : null}
         {showingTranslated && !isHandoffSystem ? (
           <p className="fa-msg-body fa-msg-body--translated">{displayBody}</p>
@@ -899,6 +966,7 @@ export default function StoreChatPanel({
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaBtnRef = useRef<HTMLButtonElement>(null);
+  const attachBtnRef = useRef<HTMLButtonElement>(null);
   const prevStoreId = useRef<string | null>(storeId);
   const focusReturnRef = useRef<HTMLElement | null>(null);
 
@@ -920,6 +988,7 @@ export default function StoreChatPanel({
   const [giphyPickerMode, setGiphyPickerMode] = useState<'composer' | 'reaction'>('composer');
   const [giphyReactionTargetMessageId, setGiphyReactionTargetMessageId] = useState('');
   const [selectedGiphy, setSelectedGiphy] = useState<GiphyMediaItem | null>(null);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [actionAnnounce, setActionAnnounce] = useState('');
   const [translationCapable, setTranslationCapable] = useState(false);
   const [translationsByMessageId, setTranslationsByMessageId] = useState<
@@ -929,6 +998,10 @@ export default function StoreChatPanel({
   const bookmarkToggleLock = useRef(new Set<string>());
   const announceTimeoutRef = useRef<number | null>(null);
   const giphyConfigured = isGiphyConfigured();
+  const attachmentsEnabled = isChatAttachmentsEnabled();
+  const attachmentStaging = useChatAttachmentStaging({
+    onStageAttachment: () => setSelectedGiphy(null),
+  });
 
   const activeMention = useMemo(
     () => (mentionOpen ? getActiveMentionQuery(draft, caret) : null),
@@ -1004,10 +1077,13 @@ export default function StoreChatPanel({
     setActionSheetMessageId('');
     setForwardPickerMessageId('');
     setSelectedGiphy(null);
+    setAttachMenuOpen(false);
+    attachmentStaging.clear();
+    attachmentStaging.clearCameraDenied();
     setGiphyPickerOpen(false);
     setGiphyReactionTargetMessageId('');
     setTranslationsByMessageId({});
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to storeId
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to storeId
   }, [storeId]);
 
   useEffect(
@@ -1299,6 +1375,7 @@ export default function StoreChatPanel({
     setGiphyPickerMode('composer');
     setGiphyReactionTargetMessageId('');
     setGiphyPickerOpen(true);
+    setAttachMenuOpen(false);
     setReactionTrayMessageId('');
     setMoreMenuMessageId('');
   }
@@ -1322,6 +1399,7 @@ export default function StoreChatPanel({
       return;
     }
     setSelectedGiphy(item);
+    attachmentStaging.clear();
     setGiphyPickerOpen(false);
     textareaRef.current?.focus();
   }
@@ -1405,22 +1483,38 @@ export default function StoreChatPanel({
     }
     const body = message.body.trim().slice(0, STORE_CHAT_MAX_BODY);
     const hasMedia = hasGiphyMedia(message);
-    if (!body && !hasMedia) return;
+    const hasAttachment = messageHasChatAttachment(message);
+    if (!body && !hasMedia && !hasAttachment) return;
+    const attachment: ChatAttachmentPayloadInput | null = hasAttachment
+      ? {
+          kind: String(message.attachmentKind || '').trim() === 'file' ? 'file' : 'image',
+          path: message.attachmentPath || '',
+          fileId: message.attachmentFileId || message.attachmentFile?.id || '',
+          url: resolveChatAttachmentUrl(message),
+          mimeType: message.attachmentMimeType || '',
+          fileName: message.attachmentFileName || '',
+          bytes: Number.parseInt(message.attachmentBytes || '', 10) || 0,
+          width: Number.parseInt(message.attachmentWidth || '', 10) || null,
+          height: Number.parseInt(message.attachmentHeight || '', 10) || null,
+        }
+      : null;
     const mediaPayload = buildStoreChatMediaPayload({
       body,
-      giphy: hasMedia
-        ? {
-            id: message.giphyId || '',
-            kind: (message.giphyKind as GiphyMediaItem['kind']) || 'gif',
-            title: message.giphyTitle || '',
-            width: Number.parseInt(message.giphyWidth || '', 10) || 0,
-            height: Number.parseInt(message.giphyHeight || '', 10) || 0,
-            url: message.giphyUrl || '',
-            previewUrl: message.giphyPreviewUrl || message.giphyUrl || '',
-            username: '',
-            itemUrl: '',
-          }
-        : null,
+      giphy:
+        hasMedia && !attachment
+          ? {
+              id: message.giphyId || '',
+              kind: (message.giphyKind as GiphyMediaItem['kind']) || 'gif',
+              title: message.giphyTitle || '',
+              width: Number.parseInt(message.giphyWidth || '', 10) || 0,
+              height: Number.parseInt(message.giphyHeight || '', 10) || 0,
+              url: message.giphyUrl || '',
+              previewUrl: message.giphyPreviewUrl || message.giphyUrl || '',
+              username: '',
+              itemUrl: '',
+            }
+          : null,
+      attachment,
       clientMutationId: id(),
       forwardedFromMessageId: message.id,
       forwardedFromUserId: message.senderUserId,
@@ -1428,6 +1522,11 @@ export default function StoreChatPanel({
     const msgId = id();
     const target = authorizedStores.find((s) => s.id === targetStoreId);
     try {
+      const linkAttrs: Record<string, string> = {
+        store: targetStoreId,
+        sender: profile.id,
+      };
+      if (attachment?.fileId) linkAttrs.attachmentFile = attachment.fileId;
       await db.transact(
         db.tx.storeChatMessages[msgId]
           .update({
@@ -1442,7 +1541,7 @@ export default function StoreChatPanel({
             status: 'active',
             ...mediaPayload,
           })
-          .link({ store: targetStoreId, sender: profile.id }),
+          .link(linkAttrs),
       );
       announce(
         sc.forwardedTo.replace(
@@ -1585,9 +1684,44 @@ export default function StoreChatPanel({
   const canSubmit =
     canSend &&
     Boolean(storeId) &&
-    canSendStoreChatMedia(draft, selectedGiphy) &&
+    (canSendStoreChatMedia(draft, selectedGiphy) || attachmentStaging.hasStaged) &&
     !sending &&
     !sendingLock.current;
+
+  function policyErrorMessage(code?: string) {
+    return chatAttachmentPolicyErrorCopy(code, sc);
+  }
+
+  function stageIncomingFile(file: File) {
+    void attachmentStaging.stageFile(file).then((result) => {
+      if (!result.ok) {
+        setSendError(policyErrorMessage(result.error.code));
+        return;
+      }
+      setSendError(null);
+      setAttachMenuOpen(false);
+    });
+  }
+
+  function insertQuickMessage(text: string) {
+    const el = textareaRef.current;
+    const start = el?.selectionStart ?? draft.length;
+    const end = el?.selectionEnd ?? start;
+    const next =
+      draft.slice(0, start) +
+      (draft.slice(0, start) && !/\s$/.test(draft.slice(0, start)) ? ' ' : '') +
+      text +
+      draft.slice(end);
+    updateDraft(next.slice(0, STORE_CHAT_MAX_BODY));
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      const caret = Math.min(start + text.length + 1, ta.value.length);
+      ta.focus();
+      ta.setSelectionRange(caret, caret);
+      setCaret(caret);
+    });
+  }
 
   function syncCaretFromTextarea() {
     const el = textareaRef.current;
@@ -1638,7 +1772,7 @@ export default function StoreChatPanel({
 
   async function sendMessage() {
     if (hidden || !canSend || !storeId) return;
-    if (!canSendStoreChatMedia(draft, selectedGiphy)) return;
+    if (!canSendStoreChatMedia(draft, selectedGiphy) && !attachmentStaging.hasStaged) return;
     if (sendingLock.current) return;
 
     sendingLock.current = true;
@@ -1647,9 +1781,7 @@ export default function StoreChatPanel({
     composerVisual.setSending();
 
     const body = trimmed.slice(0, STORE_CHAT_MAX_BODY);
-    const msgId = id();
     const createdAt = nowIso();
-    const clientMutationId = id();
     const resolved = resolveMentionPayload(
       body,
       trackedMentions,
@@ -1662,14 +1794,83 @@ export default function StoreChatPanel({
       mentionCandidates,
       profile.userId,
     );
+
+    let attachmentPayload: ChatAttachmentPayloadInput | null = null;
+    const staged = attachmentStaging.staged;
+    let msgId = id();
+    let clientMutationId = id();
+    if (staged && attachmentsEnabled) {
+      const ids = attachmentStaging.ensureSendIds(() => id());
+      msgId = ids.messageId;
+      clientMutationId = ids.clientMutationId;
+      const cached = attachmentStaging.getCachedUpload();
+      if (cached) {
+        attachmentStaging.markSending();
+        attachmentPayload = attachmentStaging.toPayloadInput(cached);
+        if (!attachmentPayload) {
+          attachmentStaging.markFailed(sc.uploadFailed);
+          setSendError(sc.uploadFailed);
+          composerVisual.setFailure();
+          sendingLock.current = false;
+          setSending(false);
+          return;
+        }
+      } else {
+        let progressTimer: number | null = null;
+        try {
+          attachmentStaging.markUploading(18);
+          let fakeProgress = 18;
+          progressTimer = window.setInterval(() => {
+            fakeProgress = Math.min(88, fakeProgress + 10);
+            attachmentStaging.bumpUploadProgress(fakeProgress);
+          }, 280);
+          const uploaded = await uploadChatAttachment({
+            blob: staged.blob,
+            mimeType: staged.mimeType,
+            fileName: staged.fileName,
+            scope: 'store',
+            storeId,
+            messageId: msgId,
+            clientMutationId,
+          });
+          attachmentStaging.cacheUpload(uploaded);
+          attachmentStaging.markSending();
+          attachmentPayload = attachmentStaging.toPayloadInput(uploaded);
+          if (!attachmentPayload) {
+            throw new Error(sc.uploadFailed);
+          }
+        } catch (err) {
+          const message =
+            err instanceof Error ? err.message : sc.uploadFailed;
+          attachmentStaging.markFailed(message);
+          setSendError(message);
+          composerVisual.setFailure();
+          sendingLock.current = false;
+          setSending(false);
+          return;
+        } finally {
+          if (progressTimer !== null) window.clearInterval(progressTimer);
+        }
+      }
+    }
+
     const mediaPayload = buildStoreChatMediaPayload({
       body,
-      giphy: selectedGiphy,
+      giphy: attachmentPayload ? null : selectedGiphy,
+      attachment: attachmentPayload,
       replyToMessageId: replyTargetMessageId || '',
       mentionedUserIds: resolved.mentionedUserIds,
       mentionAll: resolved.mentionAll,
       clientMutationId,
     });
+
+    const linkAttrs: Record<string, string> = {
+      store: storeId,
+      sender: profile.id,
+    };
+    if (attachmentPayload?.fileId) {
+      linkAttrs.attachmentFile = attachmentPayload.fileId;
+    }
 
     const messageTx = db.tx.storeChatMessages[msgId]
       .update({
@@ -1684,13 +1885,19 @@ export default function StoreChatPanel({
         status: 'active',
         ...mediaPayload,
       })
-      .link({ store: storeId, sender: profile.id });
+      .link(linkAttrs);
 
     const notifBody =
       body ||
-      (selectedGiphy
-        ? storeChatMediaLabel(mediaPayload.messageType, selectedGiphy.kind)
-        : '');
+      (attachmentPayload
+        ? storeChatMediaLabel(
+            mediaPayload.messageType,
+            undefined,
+            attachmentPayload.kind,
+          )
+        : selectedGiphy
+          ? storeChatMediaLabel(mediaPayload.messageType, selectedGiphy.kind)
+          : '');
     const notifTxs =
       recipientIds.length > 0
         ? buildStoreChatMentionNotifications({
@@ -1713,12 +1920,14 @@ export default function StoreChatPanel({
       setMentionOpen(false);
       setReplyTargetMessageId('');
       setSelectedGiphy(null);
+      attachmentStaging.clear();
       setSendError(null);
       composerVisual.setSuccess();
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Could not send message. Try again.';
       setSendError(message);
+      if (attachmentPayload) attachmentStaging.markFailed(message);
       composerVisual.setFailure();
     } finally {
       sendingLock.current = false;
@@ -1877,7 +2086,21 @@ export default function StoreChatPanel({
         {actionAnnounce}
       </div>
       <div className="fa-tab-panel-body fa-store-chat-messages" ref={listRef}>
-        {bodyContent}
+        {attachmentsEnabled && canSend ? (
+          <ChatDropOverlay
+            enabled={!hidden && !sending}
+            label={sc.dropFilesHint}
+            onFiles={(files) => {
+              const file = files[0];
+              if (file) stageIncomingFile(file);
+            }}
+            className="fa-store-chat-drop"
+          >
+            {bodyContent}
+          </ChatDropOverlay>
+        ) : (
+          bodyContent
+        )}
       </div>
 
       {actionSheetMessageId && sheetMessage ? (
@@ -1963,7 +2186,7 @@ export default function StoreChatPanel({
       ) : null}
 
       <form
-        className="fa-composer fa-composer--store-chat"
+        className={`fa-composer fa-composer--store-chat${attachmentsEnabled ? ' fa-composer--with-attach' : ''}`}
         data-composer-enabled={canSend ? 'true' : 'false'}
         onSubmit={handleSubmit}
       >
@@ -2003,7 +2226,33 @@ export default function StoreChatPanel({
           </div>
         ) : null}
 
-        {selectedGiphy ? (
+        {attachmentStaging.staged ? (
+          <ChatAttachmentPreview
+            item={attachmentStaging.staged}
+            phase={attachmentStaging.phase}
+            uploadProgress={attachmentStaging.uploadProgress}
+            hint={sc.readyToSend}
+            statusLabel={
+              attachmentStaging.phase === 'preparing'
+                ? sc.preparingAttachment
+                : attachmentStaging.phase === 'uploading'
+                  ? sc.uploadingAttachment.replace(
+                      '{percent}',
+                      String(Math.round(attachmentStaging.uploadProgress)),
+                    )
+                  : attachmentStaging.phase === 'sending'
+                    ? sc.sendingAttachment
+                    : attachmentStaging.phase === 'failed'
+                      ? sc.uploadFailed
+                      : undefined
+            }
+            onClear={() => attachmentStaging.clear()}
+            onRetry={() => void sendMessage()}
+            removeLabel={sc.removeAttachment}
+            retryLabel={t.common.retry}
+            previewAriaLabel={sc.attachmentPreview}
+          />
+        ) : selectedGiphy ? (
           <GiphyMediaPreview
             item={selectedGiphy}
             onClear={() => setSelectedGiphy(null)}
@@ -2012,6 +2261,24 @@ export default function StoreChatPanel({
             removeLabel={sc.removeGif}
             previewAriaLabel={sc.gifPreview}
           />
+        ) : null}
+
+        {attachmentsEnabled && canSend ? (
+          <button
+            type="button"
+            ref={attachBtnRef}
+            className="fa-composer-attach"
+            disabled={hidden || !store || sending}
+            aria-label={sc.attach}
+            aria-haspopup="dialog"
+            aria-expanded={attachMenuOpen}
+            onClick={() => {
+              setAttachMenuOpen((v) => !v);
+              setGiphyPickerOpen(false);
+            }}
+          >
+            +
+          </button>
         ) : null}
 
         <div className="fa-composer-input-wrap">
@@ -2080,6 +2347,21 @@ export default function StoreChatPanel({
             maxLength={STORE_CHAT_MAX_BODY}
             value={draft}
             onChange={(e) => updateDraft(e.target.value)}
+            onPaste={(e) => {
+              if (!attachmentsEnabled || !canSend) return;
+              const items = e.clipboardData?.items;
+              if (!items) return;
+              for (const item of Array.from(items)) {
+                if (item.kind === 'file' && item.type.startsWith('image/')) {
+                  const file = item.getAsFile();
+                  if (file) {
+                    e.preventDefault();
+                    stageIncomingFile(file);
+                    return;
+                  }
+                }
+              }
+            }}
             onClick={() => {
               syncCaretFromTextarea();
               const el = textareaRef.current;
@@ -2123,6 +2405,36 @@ export default function StoreChatPanel({
           {t.common.send}
         </button>
       </form>
+
+      {attachmentsEnabled && canSend ? (
+        <ComposerAttachMenu
+          open={attachMenuOpen}
+          onOpenChange={setAttachMenuOpen}
+          anchorRef={attachBtnRef}
+          disabled={hidden || !store || sending}
+          cameraDenied={attachmentStaging.cameraDenied}
+          onCameraDeniedDismiss={() => attachmentStaging.clearCameraDenied()}
+          onCameraPermissionDenied={() => {
+            attachmentStaging.markCameraDenied();
+            setAttachMenuOpen(true);
+          }}
+          onFileChosen={(file) => stageIncomingFile(file)}
+          onQuickMessage={(text) => insertQuickMessage(text)}
+          labels={{
+            attach: sc.attach,
+            attachMenuTitle: sc.attachMenuTitle,
+            camera: sc.camera,
+            photos: sc.photos,
+            file: sc.file,
+            quickMessage: sc.quickMessage,
+            closeMenu: sc.closeAttachMenu,
+            cameraDenied: sc.cameraDenied,
+            chooseFromPhotos: sc.chooseFromPhotos,
+            cancel: t.common.cancel,
+            quickMessages: buildQuickMessageLabels(sc as unknown as Record<string, string>),
+          }}
+        />
+      ) : null}
 
       {giphyPickerOpen ? (
         <Suspense fallback={null}>

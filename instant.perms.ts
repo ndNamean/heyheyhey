@@ -593,10 +593,12 @@ const rules = {
       link: {
         store: 'canSendStoreChat',
         sender: 'canSendStoreChat && isOwnSenderProfile',
+        attachmentFile: 'canSendStoreChat',
       },
       unlink: {
         store: 'false',
         sender: 'false',
+        attachmentFile: 'false',
       },
     },
     bind: {
@@ -614,11 +616,11 @@ const rules = {
         "request.modifiedFields.all(f, f in ['deletedAt', 'status'])",
       softDeleteValid: "newData.status == 'deleted' && newData.deletedAt != ''",
       messageTypeValid:
-        "data.messageType == 'text' || data.messageType == 'giphy_media' || data.messageType == 'text_giphy' || data.messageType == 'logbook_system' || data.messageType == 'report_system'",
+        "data.messageType == 'text' || data.messageType == 'giphy_media' || data.messageType == 'text_giphy' || data.messageType == 'attachment' || data.messageType == 'text_attachment' || data.messageType == 'logbook_system' || data.messageType == 'report_system'",
       bodySizeValid: 'size(data.body) <= 2000',
-      // text / logbook_system / report_system / text_giphy need body; giphy_media may be body-empty; giphy types need media ids.
+      // text / system / GIPHY require empty attachmentPath; attachment types require path + empty giphy.
       mediaCoherent:
-        "((data.messageType == 'text' || data.messageType == 'logbook_system' || data.messageType == 'report_system') && size(data.body) > 0 && data.giphyId == '') || (data.messageType == 'giphy_media' && data.giphyId != '' && data.giphyUrl != '') || (data.messageType == 'text_giphy' && size(data.body) > 0 && data.giphyId != '' && data.giphyUrl != '')",
+        "((data.messageType == 'text' || data.messageType == 'logbook_system' || data.messageType == 'report_system') && size(data.body) > 0 && data.giphyId == '' && data.attachmentPath == '') || (data.messageType == 'giphy_media' && data.giphyId != '' && data.giphyUrl != '' && data.attachmentPath == '') || (data.messageType == 'text_giphy' && size(data.body) > 0 && data.giphyId != '' && data.giphyUrl != '' && data.attachmentPath == '') || (data.messageType == 'attachment' && data.attachmentPath != '' && data.attachmentMimeType != '' && data.giphyId == '') || (data.messageType == 'text_attachment' && size(data.body) > 0 && data.attachmentPath != '' && data.attachmentMimeType != '' && data.giphyId == '')",
     },
   },
 
@@ -783,10 +785,12 @@ const rules = {
       link: {
         room: 'canSendGroupMessage',
         sender: 'canSendGroupMessage && isOwnSenderProfile',
+        attachmentFile: 'canSendGroupMessage',
       },
       unlink: {
         room: 'false',
         sender: 'false',
+        attachmentFile: 'false',
       },
     },
     bind: {
@@ -805,10 +809,10 @@ const rules = {
         "request.modifiedFields.all(f, f in ['deletedAt', 'status'])",
       softDeleteValid: "newData.status == 'deleted' && newData.deletedAt != ''",
       messageTypeValid:
-        "data.messageType == 'text' || data.messageType == 'giphy_media' || data.messageType == 'text_giphy' || data.messageType == 'system'",
+        "data.messageType == 'text' || data.messageType == 'giphy_media' || data.messageType == 'text_giphy' || data.messageType == 'attachment' || data.messageType == 'text_attachment' || data.messageType == 'system'",
       bodySizeValid: 'size(data.body) <= 2000',
       mediaCoherent:
-        "((data.messageType == 'text' || data.messageType == 'system') && size(data.body) > 0 && data.giphyId == '') || (data.messageType == 'giphy_media' && data.giphyId != '' && data.giphyUrl != '') || (data.messageType == 'text_giphy' && size(data.body) > 0 && data.giphyId != '' && data.giphyUrl != '')",
+        "((data.messageType == 'text' || data.messageType == 'system') && size(data.body) > 0 && data.giphyId == '' && data.attachmentPath == '') || (data.messageType == 'giphy_media' && data.giphyId != '' && data.giphyUrl != '' && data.attachmentPath == '') || (data.messageType == 'text_giphy' && size(data.body) > 0 && data.giphyId != '' && data.giphyUrl != '' && data.attachmentPath == '') || (data.messageType == 'attachment' && data.attachmentPath != '' && data.attachmentMimeType != '' && data.giphyId == '') || (data.messageType == 'text_attachment' && size(data.body) > 0 && data.attachmentPath != '' && data.attachmentMimeType != '' && data.giphyId == '')",
     },
   },
 

@@ -24,7 +24,16 @@ import {
   canSendGroupChatMedia,
   groupChatMediaLabel,
   hasGiphyMedia,
+  type ChatAttachmentPayloadInput,
 } from '../../lib/storeChatMediaPayload';
+import { isChatAttachmentsEnabled } from '../../lib/chatAttachmentsFlag';
+import { uploadChatAttachment } from '../../lib/chatAttachmentUpload';
+import {
+  chatAttachmentPolicyErrorCopy,
+  formatChatAttachmentBytes,
+  messageHasChatAttachment,
+  resolveChatAttachmentUrl,
+} from '../../lib/chatAttachmentDisplay';
 import {
   buildGroupMentionCandidates,
   buildMentionMenuItems,
@@ -74,6 +83,14 @@ import ProfileAvatarPreview from '../profileAvatar/ProfileAvatarPreview';
 import { AmbientGlowMedia } from './AmbientGlowMedia';
 import FloatingAssistantLoader from './FloatingAssistantLoader';
 import { GiphyMediaPreview } from './GiphyMediaPreview';
+import { ChatAttachmentPreview } from './ChatAttachmentPreview';
+import { ChatDropOverlay } from './ChatDropOverlay';
+import {
+  ComposerAttachMenu,
+  buildQuickMessageLabels,
+} from './ComposerAttachMenu';
+import { useChatAttachmentStaging } from './useChatAttachmentStaging';
+import './chatAttachments.css';
 import {
   listStoreChatActions,
   resolveStoreChatActionKeyboard,
@@ -171,6 +188,13 @@ function quotePreviewText(
   }
   if (messageHasGiphy(message)) {
     return groupChatMediaLabel(String(message.messageType || 'giphy_media'), message.giphyKind);
+  }
+  if (messageHasChatAttachment(message)) {
+    return groupChatMediaLabel(
+      String(message.messageType || 'attachment'),
+      undefined,
+      message.attachmentKind,
+    );
   }
   return copy.emptyMessage;
 }
@@ -363,6 +387,15 @@ function GroupMessageRow({
   const hasReactions = hasUnicodeReactions || hasGiphyReactions;
   const messageHasMedia = messageHasGiphy(message);
   const mediaSrc = (message.giphyUrl || message.giphyPreviewUrl || '').trim();
+  const hasAttachment = messageHasChatAttachment(message);
+  const attachmentUrl = resolveChatAttachmentUrl(message);
+  const attachmentKind = String(message.attachmentKind || '').trim();
+  const attachmentLabel = groupChatMediaLabel(
+    String(message.messageType || 'attachment'),
+    undefined,
+    attachmentKind,
+  );
+  const attachmentBytesLabel = formatChatAttachmentBytes(message.attachmentBytes);
   const bodyTrimmed = message.body.trim();
   const showingTranslated =
     translation?.status === 'success' &&
@@ -458,6 +491,40 @@ function GroupMessageRow({
               <span className="fa-msg-media-caption">{message.giphyTitle}</span>
             ) : null}
           </div>
+        ) : null}
+        {!isSystem && hasAttachment && attachmentKind === 'image' && attachmentUrl ? (
+          <div className="fa-msg-media" data-attachment-kind="image">
+            <AmbientGlowMedia cacheKey={attachmentUrl} breathe enabled={glowEnabled}>
+              <img
+                className="fa-msg-attachment-image"
+                src={attachmentUrl}
+                alt={message.attachmentFileName || attachmentLabel}
+                width={Number.parseInt(message.attachmentWidth || '', 10) || undefined}
+                height={Number.parseInt(message.attachmentHeight || '', 10) || undefined}
+                loading="lazy"
+                decoding="async"
+              />
+            </AmbientGlowMedia>
+            {message.attachmentFileName ? (
+              <span className="fa-msg-media-caption">{message.attachmentFileName}</span>
+            ) : null}
+          </div>
+        ) : null}
+        {!isSystem && hasAttachment && attachmentKind === 'file' ? (
+          <a
+            className="fa-msg-attachment-file"
+            href={attachmentUrl || undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+            download={message.attachmentFileName || undefined}
+          >
+            <span className="fa-msg-attachment-file__name">
+              {message.attachmentFileName || attachmentLabel}
+            </span>
+            <span className="fa-msg-attachment-file__meta">
+              {[message.attachmentMimeType, attachmentBytesLabel].filter(Boolean).join(' · ')}
+            </span>
+          </a>
         ) : null}
         {isSystem ? (
           <p className="fa-group-msg-system fa-msg-body">{message.body}</p>
@@ -846,6 +913,7 @@ export default function GroupChatPanel({
   const [replyTargetMessageId, setReplyTargetMessageId] = useState('');
   const [highlightedMessageId, setHighlightedMessageId] = useState('');
   const [selectedGiphy, setSelectedGiphy] = useState<GiphyMediaItem | null>(null);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [giphyPickerOpen, setGiphyPickerOpen] = useState(false);
   const [giphyPickerMode, setGiphyPickerMode] = useState<'composer' | 'reaction'>('composer');
   const [giphyReactionTargetMessageId, setGiphyReactionTargetMessageId] = useState('');
@@ -863,6 +931,7 @@ export default function GroupChatPanel({
   const listRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaBtnRef = useRef<HTMLButtonElement>(null);
+  const attachBtnRef = useRef<HTMLButtonElement>(null);
   const sendingLock = useRef(false);
   const highlightTimeoutRef = useRef<number | null>(null);
   const announceTimeoutRef = useRef<number | null>(null);
@@ -872,6 +941,10 @@ export default function GroupChatPanel({
   const prevRoomId = useRef<string | null>(roomId);
 
   const giphyConfigured = isGiphyConfigured();
+  const attachmentsEnabled = isChatAttachmentsEnabled();
+  const attachmentStaging = useChatAttachmentStaging({
+    onStageAttachment: () => setSelectedGiphy(null),
+  });
   const roomRole = myMembership?.roomRole || '';
   const canManage = roomRole === 'owner' || roomRole === 'admin';
   const archived = room?.status === 'archived';
@@ -1066,9 +1139,44 @@ export default function GroupChatPanel({
   const canSubmit =
     composerEnabled &&
     Boolean(roomId) &&
-    canSendGroupChatMedia(draft, selectedGiphy) &&
+    (canSendGroupChatMedia(draft, selectedGiphy) || attachmentStaging.hasStaged) &&
     !sending &&
     !sendingLock.current;
+
+  function policyErrorMessage(code?: string) {
+    return chatAttachmentPolicyErrorCopy(code, sc);
+  }
+
+  function stageIncomingFile(file: File) {
+    void attachmentStaging.stageFile(file).then((result) => {
+      if (!result.ok) {
+        setSendError(policyErrorMessage(result.error.code));
+        return;
+      }
+      setSendError(null);
+      setAttachMenuOpen(false);
+    });
+  }
+
+  function insertQuickMessage(text: string) {
+    const el = textareaRef.current;
+    const start = el?.selectionStart ?? draft.length;
+    const end = el?.selectionEnd ?? start;
+    const next =
+      draft.slice(0, start) +
+      (draft.slice(0, start) && !/\s$/.test(draft.slice(0, start)) ? ' ' : '') +
+      text +
+      draft.slice(end);
+    updateDraft(next.slice(0, GROUP_CHAT_MAX_BODY));
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current;
+      if (!ta) return;
+      const caretPos = Math.min(start + text.length + 1, ta.value.length);
+      ta.focus();
+      ta.setSelectionRange(caretPos, caretPos);
+      setCaret(caretPos);
+    });
+  }
 
   const ownerCount = useMemo(
     () => members.filter((m) => m.roomRole === 'owner').length,
@@ -1088,6 +1196,9 @@ export default function GroupChatPanel({
       setReplyTargetMessageId('');
       setHighlightedMessageId('');
       setSelectedGiphy(null);
+      setAttachMenuOpen(false);
+      attachmentStaging.clear();
+      attachmentStaging.clearCameraDenied();
       setGiphyPickerOpen(false);
       setGiphyPickerMode('composer');
       setGiphyReactionTargetMessageId('');
@@ -1332,6 +1443,7 @@ export default function GroupChatPanel({
     setGiphyPickerMode('composer');
     setGiphyReactionTargetMessageId('');
     setGiphyPickerOpen(true);
+    setAttachMenuOpen(false);
     setReactionTrayMessageId('');
     setMoreMenuMessageId('');
   }
@@ -1355,6 +1467,7 @@ export default function GroupChatPanel({
       return;
     }
     setSelectedGiphy(item);
+    attachmentStaging.clear();
     setGiphyPickerOpen(false);
     textareaRef.current?.focus();
   }
@@ -1438,20 +1551,35 @@ export default function GroupChatPanel({
     }
     const body = message.body.trim().slice(0, GROUP_CHAT_MAX_BODY);
     const hasMedia = messageHasGiphy(message);
-    if (!body && !hasMedia) return;
-    const giphy = hasMedia
+    const hasAttachment = messageHasChatAttachment(message);
+    if (!body && !hasMedia && !hasAttachment) return;
+    const attachment: ChatAttachmentPayloadInput | null = hasAttachment
       ? {
-          id: message.giphyId || '',
-          kind: (message.giphyKind as GiphyMediaItem['kind']) || 'gif',
-          title: message.giphyTitle || '',
-          width: Number.parseInt(message.giphyWidth || '', 10) || 0,
-          height: Number.parseInt(message.giphyHeight || '', 10) || 0,
-          url: message.giphyUrl || '',
-          previewUrl: message.giphyPreviewUrl || message.giphyUrl || '',
-          username: '',
-          itemUrl: '',
+          kind: String(message.attachmentKind || '').trim() === 'file' ? 'file' : 'image',
+          path: message.attachmentPath || '',
+          fileId: message.attachmentFileId || message.attachmentFile?.id || '',
+          url: resolveChatAttachmentUrl(message),
+          mimeType: message.attachmentMimeType || '',
+          fileName: message.attachmentFileName || '',
+          bytes: Number.parseInt(message.attachmentBytes || '', 10) || 0,
+          width: Number.parseInt(message.attachmentWidth || '', 10) || null,
+          height: Number.parseInt(message.attachmentHeight || '', 10) || null,
         }
       : null;
+    const giphy =
+      hasMedia && !attachment
+        ? {
+            id: message.giphyId || '',
+            kind: (message.giphyKind as GiphyMediaItem['kind']) || 'gif',
+            title: message.giphyTitle || '',
+            width: Number.parseInt(message.giphyWidth || '', 10) || 0,
+            height: Number.parseInt(message.giphyHeight || '', 10) || 0,
+            url: message.giphyUrl || '',
+            previewUrl: message.giphyPreviewUrl || message.giphyUrl || '',
+            username: '',
+            itemUrl: '',
+          }
+        : null;
     const msgId = id();
     const createdAt = nowIso();
     try {
@@ -1459,10 +1587,16 @@ export default function GroupChatPanel({
         const mediaPayload = buildStoreChatMediaPayload({
           body,
           giphy,
+          attachment,
           clientMutationId: id(),
           forwardedFromMessageId: message.id,
           forwardedFromUserId: message.senderUserId,
         });
+        const linkAttrs: Record<string, string> = {
+          store: destination.id,
+          sender: profile.id,
+        };
+        if (attachment?.fileId) linkAttrs.attachmentFile = attachment.fileId;
         await db.transact(
           db.tx.storeChatMessages[msgId]
             .update({
@@ -1477,16 +1611,22 @@ export default function GroupChatPanel({
               status: 'active',
               ...mediaPayload,
             })
-            .link({ store: destination.id, sender: profile.id }),
+            .link(linkAttrs),
         );
       } else {
         const mediaPayload = buildGroupChatMediaPayload({
           body,
           giphy,
+          attachment,
           clientMutationId: id(),
           forwardedFromMessageId: message.id,
           forwardedFromUserId: message.senderUserId,
         });
+        const linkAttrs: Record<string, string> = {
+          room: destination.id,
+          sender: profile.id,
+        };
+        if (attachment?.fileId) linkAttrs.attachmentFile = attachment.fileId;
         await db.transact([
           db.tx.groupChatMessages[msgId]
             .update({
@@ -1501,7 +1641,7 @@ export default function GroupChatPanel({
               status: 'active',
               ...mediaPayload,
             })
-            .link({ room: destination.id, sender: profile.id }),
+            .link(linkAttrs),
           db.tx.groupChatRooms[destination.id].update({
             lastMessageAt: createdAt,
             updatedAt: createdAt,
@@ -1679,7 +1819,7 @@ export default function GroupChatPanel({
   async function sendMessage(e?: FormEvent) {
     e?.preventDefault();
     if (hidden || !composerEnabled || !roomId || !room) return;
-    if (!canSendGroupChatMedia(draft, selectedGiphy)) return;
+    if (!canSendGroupChatMedia(draft, selectedGiphy) && !attachmentStaging.hasStaged) return;
     if (sendingLock.current) return;
 
     sendingLock.current = true;
@@ -1688,9 +1828,7 @@ export default function GroupChatPanel({
     composerVisual.setSending();
 
     const body = trimmed.slice(0, GROUP_CHAT_MAX_BODY);
-    const msgId = id();
     const createdAt = nowIso();
-    const clientMutationId = id();
     const resolved = resolveMentionPayload(
       body,
       trackedMentions,
@@ -1703,9 +1841,70 @@ export default function GroupChatPanel({
       mentionCandidates,
       profile.userId,
     );
+
+    let attachmentPayload: ChatAttachmentPayloadInput | null = null;
+    const staged = attachmentStaging.staged;
+    let msgId = id();
+    let clientMutationId = id();
+    if (staged && attachmentsEnabled) {
+      const ids = attachmentStaging.ensureSendIds(() => id());
+      msgId = ids.messageId;
+      clientMutationId = ids.clientMutationId;
+      const cached = attachmentStaging.getCachedUpload();
+      if (cached) {
+        attachmentStaging.markSending();
+        attachmentPayload = attachmentStaging.toPayloadInput(cached);
+        if (!attachmentPayload) {
+          attachmentStaging.markFailed(sc.uploadFailed);
+          setSendError(sc.uploadFailed);
+          composerVisual.setFailure();
+          sendingLock.current = false;
+          setSending(false);
+          return;
+        }
+      } else {
+        let progressTimer: number | null = null;
+        try {
+          attachmentStaging.markUploading(18);
+          let fakeProgress = 18;
+          progressTimer = window.setInterval(() => {
+            fakeProgress = Math.min(88, fakeProgress + 10);
+            attachmentStaging.bumpUploadProgress(fakeProgress);
+          }, 280);
+          // Group rooms are not store-scoped — do not require authorizedStores.
+          const uploaded = await uploadChatAttachment({
+            blob: staged.blob,
+            mimeType: staged.mimeType,
+            fileName: staged.fileName,
+            scope: 'group',
+            roomId,
+            messageId: msgId,
+            clientMutationId,
+          });
+          attachmentStaging.cacheUpload(uploaded);
+          attachmentStaging.markSending();
+          attachmentPayload = attachmentStaging.toPayloadInput(uploaded);
+          if (!attachmentPayload) {
+            throw new Error(sc.uploadFailed);
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : sc.uploadFailed;
+          attachmentStaging.markFailed(message);
+          setSendError(message);
+          composerVisual.setFailure();
+          sendingLock.current = false;
+          setSending(false);
+          return;
+        } finally {
+          if (progressTimer !== null) window.clearInterval(progressTimer);
+        }
+      }
+    }
+
     const mediaPayload = buildGroupChatMediaPayload({
       body,
-      giphy: selectedGiphy,
+      giphy: attachmentPayload ? null : selectedGiphy,
+      attachment: attachmentPayload,
       replyToMessageId: replyTargetMessageId || '',
       mentionedUserIds: resolved.mentionedUserIds,
       mentionAll: resolved.mentionAll,
@@ -1716,9 +1915,15 @@ export default function GroupChatPanel({
 
     const notifBody =
       body ||
-      (selectedGiphy
-        ? groupChatMediaLabel(mediaPayload.messageType, selectedGiphy.kind)
-        : '');
+      (attachmentPayload
+        ? groupChatMediaLabel(
+            mediaPayload.messageType,
+            undefined,
+            attachmentPayload.kind,
+          )
+        : selectedGiphy
+          ? groupChatMediaLabel(mediaPayload.messageType, selectedGiphy.kind)
+          : '');
     const notifTxs =
       recipientIds.length > 0
         ? buildGroupChatMentionNotifications({
@@ -1731,6 +1936,14 @@ export default function GroupChatPanel({
             mentionAll: resolved.mentionAll,
           })
         : [];
+
+    const linkAttrs: Record<string, string> = {
+      room: roomId,
+      sender: profile.id,
+    };
+    if (attachmentPayload?.fileId) {
+      linkAttrs.attachmentFile = attachmentPayload.fileId;
+    }
 
     try {
       await db.transact([
@@ -1747,7 +1960,7 @@ export default function GroupChatPanel({
             status: 'active',
             ...mediaPayload,
           })
-          .link({ room: roomId, sender: profile.id }),
+          .link(linkAttrs),
         db.tx.groupChatRooms[roomId].update({
           lastMessageAt: createdAt,
           updatedAt: createdAt,
@@ -1760,9 +1973,12 @@ export default function GroupChatPanel({
       setMentionOpen(false);
       setReplyTargetMessageId('');
       setSelectedGiphy(null);
+      attachmentStaging.clear();
       composerVisual.setSuccess();
     } catch (err) {
-      setSendError(err instanceof Error ? err.message : 'Send failed');
+      const message = err instanceof Error ? err.message : 'Send failed';
+      setSendError(message);
+      if (attachmentPayload) attachmentStaging.markFailed(message);
       composerVisual.setFailure();
     } finally {
       sendingLock.current = false;
@@ -1985,51 +2201,61 @@ export default function GroupChatPanel({
       {isLoading && !room ? (
         <FloatingAssistantLoader label="Loading group…" />
       ) : (
-        <div className="fa-group-chat-messages fa-msg-list" ref={listRef} role="log" aria-live="polite">
-          {visibleMessages.map((m) => (
-            <GroupMessageRow
-              key={m.id}
-              message={m}
-              isOwn={m.senderUserId === profile.userId}
-              profile={profile}
-              candidates={mentionCandidates}
-              parentMessage={m.replyToMessageId ? messageById.get(m.replyToMessageId) || null : null}
-              reactionGroups={reactionGroupsByMessageId.get(m.id) ?? []}
-              giphyReactionGroups={giphyReactionGroupsByMessageId.get(m.id) ?? []}
-              canReact={canReact}
-              canSend={composerEnabled}
-              canForward={canForward}
-              giphyConfigured={giphyConfigured}
-              translationAvailable={translationAvailable}
-              isBookmarked={bookmarkByMessageId.has(m.id)}
-              trayOpen={reactionTrayMessageId === m.id}
-              whoReactedOpen={whoReactedMessageId === m.id}
-              moreOpen={moreMenuMessageId === m.id}
-              translation={translationsByMessageId[m.id] ?? null}
-              glowEnabled={!hidden}
-              onAction={handleMessageAction}
-              onJumpToParent={scrollToMessage}
-              onToggleReaction={(messageId, unicode) => {
-                setReactionTrayMessageId('');
-                void toggleUnicodeReaction(messageId, unicode);
-              }}
-              onToggleGiphyReaction={(messageId, giphyId) => {
-                void toggleGiphyReaction(messageId, giphyId);
-              }}
-              onOpenGiphyReactionPicker={openGiphyReactionPicker}
-              onToggleWhoReacted={toggleWhoReacted}
-              onToggleShowOriginal={toggleShowOriginal}
-              onRetryTranslation={(messageId) => {
-                void retryTranslation(messageId);
-              }}
-              onRequestCloseMenus={closeTransientMenus}
-              highlighted={highlightedMessageId === m.id}
-            />
-          ))}
-          {!visibleMessages.length ? (
-            <p className="fa-chats-list-empty">No messages yet. Say hello.</p>
-          ) : null}
-        </div>
+        <ChatDropOverlay
+          enabled={attachmentsEnabled && composerEnabled && !hidden && !sending}
+          label={sc.dropFilesHint}
+          onFiles={(files) => {
+            const file = files[0];
+            if (file) stageIncomingFile(file);
+          }}
+          className="fa-group-chat-drop"
+        >
+          <div className="fa-group-chat-messages fa-msg-list" ref={listRef} role="log" aria-live="polite">
+            {visibleMessages.map((m) => (
+              <GroupMessageRow
+                key={m.id}
+                message={m}
+                isOwn={m.senderUserId === profile.userId}
+                profile={profile}
+                candidates={mentionCandidates}
+                parentMessage={m.replyToMessageId ? messageById.get(m.replyToMessageId) || null : null}
+                reactionGroups={reactionGroupsByMessageId.get(m.id) ?? []}
+                giphyReactionGroups={giphyReactionGroupsByMessageId.get(m.id) ?? []}
+                canReact={canReact}
+                canSend={composerEnabled}
+                canForward={canForward}
+                giphyConfigured={giphyConfigured}
+                translationAvailable={translationAvailable}
+                isBookmarked={bookmarkByMessageId.has(m.id)}
+                trayOpen={reactionTrayMessageId === m.id}
+                whoReactedOpen={whoReactedMessageId === m.id}
+                moreOpen={moreMenuMessageId === m.id}
+                translation={translationsByMessageId[m.id] ?? null}
+                glowEnabled={!hidden}
+                onAction={handleMessageAction}
+                onJumpToParent={scrollToMessage}
+                onToggleReaction={(messageId, unicode) => {
+                  setReactionTrayMessageId('');
+                  void toggleUnicodeReaction(messageId, unicode);
+                }}
+                onToggleGiphyReaction={(messageId, giphyId) => {
+                  void toggleGiphyReaction(messageId, giphyId);
+                }}
+                onOpenGiphyReactionPicker={openGiphyReactionPicker}
+                onToggleWhoReacted={toggleWhoReacted}
+                onToggleShowOriginal={toggleShowOriginal}
+                onRetryTranslation={(messageId) => {
+                  void retryTranslation(messageId);
+                }}
+                onRequestCloseMenus={closeTransientMenus}
+                highlighted={highlightedMessageId === m.id}
+              />
+            ))}
+            {!visibleMessages.length ? (
+              <p className="fa-chats-list-empty">No messages yet. Say hello.</p>
+            ) : null}
+          </div>
+        </ChatDropOverlay>
       )}
 
       {actionSheetMessageId && sheetMessage ? (
@@ -2113,7 +2339,7 @@ export default function GroupChatPanel({
       ) : null}
 
       <form
-        className="fa-composer fa-composer--store-chat fa-store-chat-composer"
+        className={`fa-composer fa-composer--store-chat fa-store-chat-composer${attachmentsEnabled ? ' fa-composer--with-attach' : ''}`}
         data-composer-enabled={composerEnabled ? 'true' : 'false'}
         onSubmit={(e) => void sendMessage(e)}
       >
@@ -2121,13 +2347,13 @@ export default function GroupChatPanel({
           <div className="fa-composer-error" role="alert">
             <span>{sendError}</span>
             <button type="button" className="fa-composer-retry" onClick={() => void sendMessage()}>
-              Retry
+              {t.common.retry}
             </button>
           </div>
         ) : null}
         {sending ? (
           <div className="fa-composer-status" aria-live="polite">
-            <FloatingAssistantLoader label="Sending…" />
+            <FloatingAssistantLoader label={sc.sending} />
           </div>
         ) : null}
         {replyTargetMessageId ? (
@@ -2153,12 +2379,56 @@ export default function GroupChatPanel({
           </div>
         ) : null}
 
-        {selectedGiphy ? (
+        {attachmentStaging.staged ? (
+          <ChatAttachmentPreview
+            item={attachmentStaging.staged}
+            phase={attachmentStaging.phase}
+            uploadProgress={attachmentStaging.uploadProgress}
+            hint={sc.readyToSend}
+            statusLabel={
+              attachmentStaging.phase === 'preparing'
+                ? sc.preparingAttachment
+                : attachmentStaging.phase === 'uploading'
+                  ? sc.uploadingAttachment.replace(
+                      '{percent}',
+                      String(Math.round(attachmentStaging.uploadProgress)),
+                    )
+                  : attachmentStaging.phase === 'sending'
+                    ? sc.sendingAttachment
+                    : attachmentStaging.phase === 'failed'
+                      ? sc.uploadFailed
+                      : undefined
+            }
+            onClear={() => attachmentStaging.clear()}
+            onRetry={() => void sendMessage()}
+            removeLabel={sc.removeAttachment}
+            retryLabel={t.common.retry}
+            previewAriaLabel={sc.attachmentPreview}
+          />
+        ) : selectedGiphy ? (
           <GiphyMediaPreview
             item={selectedGiphy}
             onClear={() => setSelectedGiphy(null)}
             ambientGlow={!hidden}
           />
+        ) : null}
+
+        {attachmentsEnabled && composerEnabled ? (
+          <button
+            type="button"
+            ref={attachBtnRef}
+            className="fa-composer-attach"
+            disabled={sending}
+            aria-label={sc.attach}
+            aria-haspopup="dialog"
+            aria-expanded={attachMenuOpen}
+            onClick={() => {
+              setAttachMenuOpen((v) => !v);
+              setGiphyPickerOpen(false);
+            }}
+          >
+            +
+          </button>
         ) : null}
 
         <div className="fa-composer-input-wrap">
@@ -2221,6 +2491,21 @@ export default function GroupChatPanel({
             value={draft}
             disabled={!composerEnabled || sending}
             onChange={(e) => updateDraft(e.target.value)}
+            onPaste={(e) => {
+              if (!attachmentsEnabled || !composerEnabled) return;
+              const items = e.clipboardData?.items;
+              if (!items) return;
+              for (const item of Array.from(items)) {
+                if (item.kind === 'file' && item.type.startsWith('image/')) {
+                  const file = item.getAsFile();
+                  if (file) {
+                    e.preventDefault();
+                    stageIncomingFile(file);
+                    return;
+                  }
+                }
+              }
+            }}
             onClick={() => {
               syncCaretFromTextarea();
               const el = textareaRef.current;
@@ -2266,9 +2551,39 @@ export default function GroupChatPanel({
           disabled={!canSubmit}
           aria-disabled={!canSubmit}
         >
-          Send
+          {t.common.send}
         </button>
       </form>
+
+      {attachmentsEnabled && composerEnabled ? (
+        <ComposerAttachMenu
+          open={attachMenuOpen}
+          onOpenChange={setAttachMenuOpen}
+          anchorRef={attachBtnRef}
+          disabled={sending}
+          cameraDenied={attachmentStaging.cameraDenied}
+          onCameraDeniedDismiss={() => attachmentStaging.clearCameraDenied()}
+          onCameraPermissionDenied={() => {
+            attachmentStaging.markCameraDenied();
+            setAttachMenuOpen(true);
+          }}
+          onFileChosen={(file) => stageIncomingFile(file)}
+          onQuickMessage={(text) => insertQuickMessage(text)}
+          labels={{
+            attach: sc.attach,
+            attachMenuTitle: sc.attachMenuTitle,
+            camera: sc.camera,
+            photos: sc.photos,
+            file: sc.file,
+            quickMessage: sc.quickMessage,
+            closeMenu: sc.closeAttachMenu,
+            cameraDenied: sc.cameraDenied,
+            chooseFromPhotos: sc.chooseFromPhotos,
+            cancel: t.common.cancel,
+            quickMessages: buildQuickMessageLabels(sc as unknown as Record<string, string>),
+          }}
+        />
+      ) : null}
 
       {giphyPickerOpen ? (
         <Suspense fallback={null}>
