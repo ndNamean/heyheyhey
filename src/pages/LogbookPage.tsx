@@ -94,6 +94,7 @@ import {
   listLogbookAssigneeRecipientUserIds,
   overdueChatRemindState,
 } from '../lib/logbookOverdueRemind';
+import LogbookAssigneeRoster from '../components/LogbookAssigneeRoster';
 import OverdueRemindPanel from '../components/OverdueRemindPanel';
 import { resolveLogbookOpenState } from '../lib/logbookDeepLink';
 import {
@@ -287,25 +288,15 @@ export default function LogbookPage({
     return map;
   }, [allProfiles]);
 
-  function assigneeSummaryDisplay(entry: LogbookEntry) {
-    const role = entry.assigneeRole || '—';
-    const ids = parseAssigneeUserIds(entry.assigneeUserIdsJson);
-    if (ids.length === 0) return role;
-    return (
-      <>
-        {ids.map((uid, i) => {
-          const p = allProfiles.find((x) => x.userId === uid);
-          const label = p?.displayName || p?.email || profileNameById.get(uid) || uid;
-          return (
-            <span key={uid}>
-              {i > 0 ? ', ' : ''}
-              <IdentityWithAvatar profile={p}>{label}</IdentityWithAvatar>
-            </span>
-          );
-        })}
-        {` (${role})`}
-      </>
-    );
+  function assigneeRosterCopy() {
+    return {
+      assigneeNotSubmitted: t.logbook.assigneeNotSubmitted,
+      assigneeSubmitted: t.logbook.assigneeSubmitted,
+      assigneeWaitingApproval: t.logbook.assigneeWaitingApproval,
+      assigneeCorrection: t.logbook.assigneeCorrection,
+      assigneeApproved: t.logbook.assigneeApproved,
+      assigneeRosterSummary: t.logbook.assigneeRosterSummary,
+    };
   }
 
   function toggleAssigneeUserId(selected: string[], userId: string): string[] {
@@ -2126,8 +2117,17 @@ export default function LogbookPage({
               <span className="badge">{entry.shift}</span>
               {entryStore && <span className="small">{entryStore.code}</span>}
               {type === 'issue' && entry.assigneeRole && (
-                <span className="small">
-                  {t.logbook.assignedLabel}: {assigneeSummaryDisplay(entry)}
+                <span
+                  className="small"
+                  style={{ display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}
+                >
+                  {t.logbook.assignedLabel}: {entry.assigneeRole}
+                  <LogbookAssigneeRoster
+                    entry={entry}
+                    profiles={allProfiles}
+                    defs={defs}
+                    copy={assigneeRosterCopy()}
+                  />
                 </span>
               )}
               {type === 'issue' && (

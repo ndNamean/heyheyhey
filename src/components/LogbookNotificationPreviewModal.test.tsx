@@ -32,6 +32,12 @@ vi.mock('../i18n', () => ({
         previewOpenFull: 'Open full entry in Logbook',
         previewMissingEntry: 'Entry details are unavailable.',
         previewUnknownActor: 'Someone',
+        assigneeNotSubmitted: 'Not submitted',
+        assigneeSubmitted: 'Submitted',
+        assigneeWaitingApproval: 'Waiting approval',
+        assigneeCorrection: 'Correction requested',
+        assigneeApproved: 'Approved',
+        assigneeRosterSummary: 'Submitted {done}/{total}',
         statusOverdue: 'Overdue',
         overdueRemindAssignedTo: 'This logbook is assigned to {mentions}',
         overdueRemindUnassigned:
@@ -292,9 +298,42 @@ describe('LogbookNotificationPreviewModal', () => {
       'Olivia Owner',
     );
     expect(screen.getByTestId('logbook-notif-preview-assignee').textContent).toContain(
-      '@Sam Staff',
+      'Sam Staff',
+    );
+    expect(screen.getByTestId('logbook-notif-preview-assignee').textContent).toContain(
+      'Not submitted',
     );
     expect(document.querySelectorAll('.identity-with-avatar').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('shows waiting approval for submitter and not submitted for other assignees', () => {
+    const staff2 = profile({ userId: 'staff-2', role: 'staff', displayName: 'Pat Staff' });
+    render(
+      <LogbookNotificationPreviewModal
+        open
+        entry={entry({
+          authorUserId: 'owner-1',
+          assigneeRole: 'staff',
+          assigneeUserIdsJson: '["staff-1","staff-2"]',
+          status: 'waiting_approval',
+          resolutionSubmittedByUserId: 'staff-1',
+        })}
+        profile={owner}
+        profiles={[owner, staff, staff2]}
+        defs={defs}
+        onClose={vi.fn()}
+        onOpenFullEntry={vi.fn()}
+      />,
+    );
+    const assignee = screen.getByTestId('logbook-notif-preview-assignee');
+    expect(assignee.textContent).toContain('staff');
+    expect(assignee.textContent).toContain('Submitted 1/2');
+    expect(screen.getByTestId('logbook-assignee-roster-state-staff-1').textContent).toBe(
+      'Waiting approval',
+    );
+    expect(screen.getByTestId('logbook-assignee-roster-state-staff-2').textContent).toBe(
+      'Not submitted',
+    );
   });
 
   it('open full entry callback fires', () => {

@@ -4,6 +4,10 @@
  */
 
 import { canActOnAssignedIssue, isIssueOverdue } from './logbook';
+import {
+  formatLogbookAssigneeRosterNotifyLine,
+  LOGBOOK_ASSIGNEE_ROSTER_NOTIFY_EVENTS,
+} from './logbookAssigneeRoster';
 import type { LogbookEntry, Profile, RoleDefinition } from '../types';
 
 export const LOGBOOK_MENTION_CAP = 15;
@@ -92,6 +96,9 @@ export type BuildNormalizedLogbookNotificationInput = {
     requiresAck?: boolean;
     resolutionNote?: string;
     reviewNote?: string;
+    assigneeRole?: string;
+    assigneeUserIdsJson?: string;
+    resolutionSubmittedByUserId?: string;
   };
   eventType: LogbookNotifyEventType;
   eventVersion: string;
@@ -101,7 +108,14 @@ export type BuildNormalizedLogbookNotificationInput = {
   note?: string;
   reason?: string;
   nowMs?: number;
-  profiles?: Array<{ userId: string; displayName?: string; email?: string }>;
+  profiles?: Array<{
+    userId: string;
+    displayName?: string;
+    email?: string;
+    role?: string;
+    approvalStatus?: string;
+    stores?: Array<{ id?: string } | string>;
+  }>;
   chatMentionMode?: LogbookChatMentionMode;
 };
 
@@ -470,12 +484,19 @@ export function buildNormalizedLogbookNotification(
         ? mentionLabels.map((l) => `@${l}`).join(' ')
         : '';
 
+  const rosterLine =
+    (LOGBOOK_ASSIGNEE_ROSTER_NOTIFY_EVENTS as readonly string[]).includes(input.eventType)
+      ? formatLogbookAssigneeRosterNotifyLine(entry, input.profiles)
+      : '';
+  if (rosterLine) pushBodyParts.push(rosterLine);
+
   const chatLines = [
     `${meta.icon} ${meta.eventLabel} · ${displayId} · ${summary}`,
     `${storeLabel} · ${duePart} → ${meta.requiredAction}`,
   ];
   if (mentionLine) chatLines.push(mentionLine);
   if (detail) chatLines.push(detail);
+  if (rosterLine) chatLines.push(rosterLine);
 
   const inboxBody = [
     meta.eventLabel,
@@ -484,6 +505,7 @@ export function buildNormalizedLogbookNotification(
     `${responsibility} · ${duePart}`,
     `Action: ${meta.requiredAction}`,
     detail ? `Note: ${detail}` : '',
+    rosterLine,
   ]
     .filter(Boolean)
     .join('\n');

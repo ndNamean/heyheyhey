@@ -27,6 +27,7 @@ import {
 } from '../lib/logbook';
 import { badgeClass } from '../lib/utils';
 import type { LogbookEntry, Profile, RoleDefinition } from '../types';
+import LogbookAssigneeRoster from './LogbookAssigneeRoster';
 import OverdueRemindPanel from './OverdueRemindPanel';
 import IdentityWithAvatar from './profileAvatar/IdentityWithAvatar';
 
@@ -156,20 +157,10 @@ export default function LogbookNotificationPreviewModal({
     return listLogbookAssigneeMentionLabels(entryForRemind, profiles, defs);
   }, [entryForRemind, profiles, defs]);
 
-  const assigneeProfiles = useMemo(() => {
-    if (!entryForRemind) return [];
-    const ids = listLogbookAssigneeRecipientUserIds(entryForRemind, profiles, defs);
-    return ids.map((userId) => {
-      const p = profileForUserId(userId, profiles);
-      return {
-        userId,
-        profile: p,
-        label: profileMentionLabel(p || { userId }),
-      };
-    });
+  const assigneeCount = useMemo(() => {
+    if (!entryForRemind) return 0;
+    return listLogbookAssigneeRecipientUserIds(entryForRemind, profiles, defs).length;
   }, [entryForRemind, profiles, defs]);
-
-  const assigneeCount = assigneeProfiles.length;
 
   if (!open) return null;
 
@@ -311,17 +302,19 @@ export default function LogbookNotificationPreviewModal({
                     <dt style={{ display: 'inline', fontWeight: 600 }}>{t.logbook.previewAssignee}: </dt>
                     <dd style={{ display: 'inline', margin: 0 }} data-testid="logbook-notif-preview-assignee">
                       {(entry.assigneeRole || '').trim() || '—'}
-                      {assigneeProfiles.length > 0 ? (
-                        <span>
-                          {' · '}
-                          {assigneeProfiles.map((a, i) => (
-                            <span key={a.userId}>
-                              {i > 0 ? ' ' : ''}
-                              <IdentityChip profile={a.profile} label={`@${a.label}`} />
-                            </span>
-                          ))}
-                        </span>
-                      ) : null}
+                      <LogbookAssigneeRoster
+                        entry={entry}
+                        profiles={profiles}
+                        defs={defs}
+                        copy={{
+                          assigneeNotSubmitted: t.logbook.assigneeNotSubmitted,
+                          assigneeSubmitted: t.logbook.assigneeSubmitted,
+                          assigneeWaitingApproval: t.logbook.assigneeWaitingApproval,
+                          assigneeCorrection: t.logbook.assigneeCorrection,
+                          assigneeApproved: t.logbook.assigneeApproved,
+                          assigneeRosterSummary: t.logbook.assigneeRosterSummary,
+                        }}
+                      />
                     </dd>
                   </div>
                 </>

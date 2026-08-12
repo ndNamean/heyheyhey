@@ -346,4 +346,63 @@ describe('logbookNotificationContent', () => {
     expect(n.copy.inboxBody).toContain('Fixed compressor');
     expect(n.copy.chatBody).toContain('@Riv');
   });
+
+  it('appends assignee roster line for multi-assignee resolution_submitted', () => {
+    const n = buildNormalizedLogbookNotification({
+      entry: {
+        ...baseEntry,
+        status: 'waiting_approval',
+        assigneeRole: 'staff',
+        assigneeUserIdsJson: '["u1","u2","u3"]',
+        resolutionSubmittedByUserId: 'u1',
+        resolutionNote: 'Fixed compressor',
+      },
+      eventType: 'resolution_submitted',
+      eventVersion: 'attempt-1',
+      recipients: ['rev1'],
+      profiles: [
+        { userId: 'u1', displayName: 'Lê' },
+        { userId: 'u2', displayName: 'Phụng' },
+        { userId: 'u3', displayName: 'Linh' },
+        { userId: 'rev1', displayName: 'Riv' },
+      ],
+    });
+    expect(n.body).toContain('Submitted: Lê · Not submitted: Linh, Phụng');
+    expect(n.copy.inboxBody).toContain('Submitted: Lê · Not submitted: Linh, Phụng');
+    expect(n.copy.pushBody).toContain('Submitted: Lê · Not submitted: Linh, Phụng');
+    expect(n.copy.chatBody).toContain('Submitted: Lê · Not submitted: Linh, Phụng');
+  });
+
+  it('skips roster line for single-assignee noise and non-roster events', () => {
+    const overdueSingle = buildNormalizedLogbookNotification({
+      entry: {
+        ...baseEntry,
+        assigneeRole: 'staff',
+        assigneeUserIdsJson: '["u1"]',
+      },
+      eventType: 'overdue',
+      eventVersion: 'v1',
+      recipients: ['u1'],
+      profiles: [{ userId: 'u1', displayName: 'Lê' }],
+    });
+    expect(overdueSingle.body).not.toContain('Not submitted:');
+    expect(overdueSingle.body).not.toContain('Submitted:');
+
+    const assignedMulti = buildNormalizedLogbookNotification({
+      entry: {
+        ...baseEntry,
+        assigneeRole: 'staff',
+        assigneeUserIdsJson: '["u1","u2"]',
+      },
+      eventType: 'issue_assigned',
+      eventVersion: 'v1',
+      recipients: ['u1', 'u2'],
+      profiles: [
+        { userId: 'u1', displayName: 'Lê' },
+        { userId: 'u2', displayName: 'Phụng' },
+      ],
+    });
+    expect(assignedMulti.body).not.toContain('Not submitted:');
+    expect(assignedMulti.copy.chatBody).not.toContain('Not submitted:');
+  });
 });

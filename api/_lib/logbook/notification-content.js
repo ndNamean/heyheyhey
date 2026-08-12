@@ -196,6 +196,86 @@ function responsibilityLabel(reason) {
   return 'Stakeholders';
 }
 
+const ROSTER_NOTIFY_EVENTS = new Set([
+  'resolution_submitted',
+  'overdue',
+  'correction_requested',
+  'approved',
+]);
+
+function parseAssigneeUserIds(raw) {
+  if (raw == null || String(raw).trim() === '') return [];
+  try {
+    const parsed = JSON.parse(String(raw));
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((id) => typeof id === 'string' && id.trim() !== '');
+  } catch {
+    return [];
+  }
+}
+
+function rosterMentionLabel(profile) {
+  const name = profile?.displayName?.trim();
+  if (name) return name;
+  const email = profile?.email?.trim();
+  if (email) return email.split('@')[0] || 'Someone';
+  return 'Someone';
+}
+
+function listNotifyAssigneeUserIds(entry, profiles) {
+  const named = parseAssigneeUserIds(entry?.assigneeUserIdsJson);
+  if (named.length > 0) return named;
+  const role = String(entry?.assigneeRole || '').trim();
+  const storeId = String(entry?.storeId || '').trim();
+  if (!role || !storeId || !profiles?.length) return [];
+  const ids = [];
+  for (const p of profiles) {
+    if (p.approvalStatus && p.approvalStatus !== 'approved') continue;
+    if (!p.role || p.role !== role) continue;
+    const storeIds = (p.stores || [])
+      .map((s) => (typeof s === 'string' ? s : String(s?.id || '')))
+      .filter(Boolean);
+    if (storeIds.length > 0 && !storeIds.includes(storeId)) continue;
+    ids.push(p.userId);
+  }
+  return ids;
+}
+
+function resolveRosterState(userId, submitterId, status, reviewNote) {
+  const submitter = String(submitterId || '').trim();
+  if (!submitter || userId !== submitter) return 'not_submitted';
+  const st = String(status || '').trim();
+  if (st === 'waiting_approval') return 'waiting_approval';
+  if (st === 'resolved') return 'approved';
+  if (st === 'in_progress' && String(reviewNote || '').trim()) return 'correction';
+  return 'submitted';
+}
+
+/** Keep in sync with src/lib/logbookAssigneeRoster.ts notify line. */
+function formatAssigneeRosterNotifyLine(entry, profiles, eventType) {
+  if (!ROSTER_NOTIFY_EVENTS.has(eventType)) return '';
+  const ids = listNotifyAssigneeUserIds(entry, profiles);
+  const submitterId = String(entry?.resolutionSubmittedByUserId || '').trim();
+  if (ids.length === 0) return '';
+  if (ids.length === 1 && !submitterId) return '';
+  const rows = ids.map((userId) => {
+    const p = (profiles || []).find((x) => x.userId === userId);
+    return {
+      label: rosterMentionLabel(p || { userId }),
+      state: resolveRosterState(userId, submitterId, entry?.status, entry?.reviewNote),
+    };
+  });
+  rows.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
+  const submitted = rows.filter((r) => r.state !== 'not_submitted').map((r) => r.label);
+  const pending = rows.filter((r) => r.state === 'not_submitted').map((r) => r.label);
+  if (submitted.length && pending.length) {
+    return `Submitted: ${submitted.join(', ')} · Not submitted: ${pending.join(', ')}`;
+  }
+  if (submitted.length) return `Submitted: ${submitted.join(', ')}`;
+  if (pending.length) return `Not submitted: ${pending.join(', ')}`;
+  return '';
+}
+
 export function buildNormalizedLogbookNotification(input) {
   const meta = EVENT_META[input.eventType];
   if (!meta) {
@@ -265,12 +345,20 @@ export function buildNormalizedLogbookNotification(input) {
         ? mentionLabels.map((l) => `@${l}`).join(' ')
         : '';
 
+  const rosterLine = formatAssigneeRosterNotifyLine(
+    entry,
+    input.profiles,
+    input.eventType,
+  );
+  if (rosterLine) pushBodyParts.push(rosterLine);
+
   const chatLines = [
     `${meta.icon} ${meta.eventLabel} · ${displayId} · ${summary}`,
     `${storeLabel} · ${duePart} → ${meta.requiredAction}`,
   ];
   if (mentionLine) chatLines.push(mentionLine);
   if (detail) chatLines.push(detail);
+  if (rosterLine) chatLines.push(rosterLine);
 
   const inboxBody = [
     meta.eventLabel,
@@ -279,6 +367,7 @@ export function buildNormalizedLogbookNotification(input) {
     `${responsibility} · ${duePart}`,
     `Action: ${meta.requiredAction}`,
     detail ? `Note: ${detail}` : '',
+    rosterLine,
   ]
     .filter(Boolean)
     .join('\n');
