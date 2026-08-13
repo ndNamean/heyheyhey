@@ -98,6 +98,14 @@ function entry(partial: Partial<LogbookEntry>): LogbookEntry {
   };
 }
 
+function notifRecipientIds(
+  txs: Array<{ type: string; value: Record<string, unknown> }>,
+): string[] {
+  return txs
+    .filter((tx) => tx.type === 'notifUpdate')
+    .map((tx) => String(tx.value.recipientUserId ?? ''));
+}
+
 describe('maybeNotifyLogbookDueStates overdue split', () => {
   beforeEach(() => {
     transactMock.mockClear();
@@ -128,6 +136,63 @@ describe('maybeNotifyLogbookDueStates overdue split', () => {
       ),
     ).toBe(true);
     expect(schedulePushMock).toHaveBeenCalled();
+    expect(deliverLogbookEventMock).not.toHaveBeenCalled();
+  });
+
+  it('includes assigner when opener is someone else; assignees still receive; no Store Chat', async () => {
+    const now = Date.parse('2026-08-10T12:00:00.000Z');
+    const actor = profile({ userId: 'mgr', role: 'manager' });
+    const assigner = profile({ userId: 'assigner-1', role: 'area_manager' });
+    const staff = profile({ userId: 'staff1', role: 'staff' });
+    const overdue = entry({
+      id: 'overdue-assigner',
+      authorUserId: assigner.userId,
+      dueAt: '2026-08-10T10:00:00.000Z',
+      overdueNotifiedAt: '',
+      assigneeUserIdsJson: JSON.stringify([staff.userId]),
+    });
+
+    await maybeNotifyLogbookDueStates(
+      [overdue],
+      actor,
+      [actor, assigner, staff],
+      defs,
+      now,
+    );
+
+    expect(transactMock).toHaveBeenCalledTimes(1);
+    const txs = transactMock.mock.calls[0]?.[0] as Array<{
+      type: string;
+      value: Record<string, unknown>;
+    }>;
+    const recipients = notifRecipientIds(txs);
+    expect(recipients).toContain(assigner.userId);
+    expect(recipients).toContain(staff.userId);
+    expect(deliverLogbookEventMock).not.toHaveBeenCalled();
+  });
+
+  it('skips assigner as author when assigner is the opener', async () => {
+    const now = Date.parse('2026-08-10T12:00:00.000Z');
+    const assigner = profile({ userId: 'assigner-1', role: 'area_manager' });
+    const staff = profile({ userId: 'staff1', role: 'staff' });
+    const overdue = entry({
+      id: 'overdue-self',
+      authorUserId: assigner.userId,
+      dueAt: '2026-08-10T10:00:00.000Z',
+      overdueNotifiedAt: '',
+      assigneeUserIdsJson: JSON.stringify([staff.userId]),
+    });
+
+    await maybeNotifyLogbookDueStates([overdue], assigner, [assigner, staff], defs, now);
+
+    expect(transactMock).toHaveBeenCalledTimes(1);
+    const txs = transactMock.mock.calls[0]?.[0] as Array<{
+      type: string;
+      value: Record<string, unknown>;
+    }>;
+    const recipients = notifRecipientIds(txs);
+    expect(recipients).not.toContain(assigner.userId);
+    expect(recipients).toContain(staff.userId);
     expect(deliverLogbookEventMock).not.toHaveBeenCalled();
   });
 

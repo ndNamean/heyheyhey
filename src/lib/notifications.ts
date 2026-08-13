@@ -709,6 +709,9 @@ export function buildLogbookOverdueNotifications(
     ...getLogbookStoreManagerRecipients(entry.storeId, allProfiles, undefined, defs),
     ...getLogbookReviewerRecipients(entry, allProfiles, actor.userId, defs),
   ]);
+  if (entry.authorUserId && entry.authorUserId !== actor.userId) {
+    recipients.add(entry.authorUserId);
+  }
   const body = [
     'Logbook issue overdue',
     `Issue: ${issueSnippet(entry)}`,
