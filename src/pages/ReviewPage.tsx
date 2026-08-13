@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
@@ -69,6 +69,13 @@ interface PendingFeedback {
 
 type ReviewSurface = 'reports' | 'logbook';
 
+function keepReviewCardFocused(reportId: string) {
+  const card = document.querySelector(`[data-report-id="${reportId}"]`);
+  if (!(card instanceof HTMLElement)) return;
+  if (!card.hasAttribute('tabindex')) card.tabIndex = -1;
+  card.focus({ preventScroll: true });
+}
+
 export default function ReviewPage({
   profile,
   highlightReportId = null,
@@ -79,6 +86,7 @@ export default function ReviewPage({
   const { defs } = useRoleDefinitions();
   const [pendingFeedback, setPendingFeedback] = useState<PendingFeedback | null>(null);
   const [surface, setSurface] = useState<ReviewSurface>(initialSurface);
+  const lastHighlightScrollKey = useRef('');
 
   useEffect(() => {
     if (highlightReportId) {
@@ -153,16 +161,18 @@ export default function ReviewPage({
   }, [logbookData?.logbookEntries, profile, defs]);
 
   useEffect(() => {
-    if (!highlightReportId) return;
+    if (!highlightReportId || surface !== 'reports') return;
+    const key = `${highlightReportId}:${highlightOpenKey}`;
+    if (lastHighlightScrollKey.current === key) return;
     const el = document.querySelector(`[data-report-id="${highlightReportId}"]`);
-    if (el instanceof HTMLElement) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.classList.add('report-card--highlight');
-      const timer = window.setTimeout(() => {
-        el.classList.remove('report-card--highlight');
-      }, 2500);
-      return () => window.clearTimeout(timer);
-    }
+    if (!(el instanceof HTMLElement)) return;
+    lastHighlightScrollKey.current = key;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('report-card--highlight');
+    const timer = window.setTimeout(() => {
+      el.classList.remove('report-card--highlight');
+    }, 2500);
+    return () => window.clearTimeout(timer);
   }, [highlightReportId, highlightOpenKey, reports, surface]);
 
   if (!canReview(profile.role, defs)) {
@@ -274,6 +284,8 @@ export default function ReviewPage({
       ...notificationTxs,
     ]);
     schedulePushDeliveryFromTxs(notificationTxs);
+
+    keepReviewCardFocused(report.id);
 
     // First reject/correction in a waiting cycle → Store Chat handoff (server-deduped).
     if (status === 'rejected' || status === 'need_correction') {
@@ -574,6 +586,7 @@ export default function ReviewPage({
             className={`card${highlightReportId === report.id ? ' report-card--highlight' : ''}`}
             key={report.id}
             data-report-id={report.id}
+            tabIndex={-1}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{ flex: 1 }}>
@@ -672,18 +685,21 @@ export default function ReviewPage({
                     <div className="capture-actions" style={{ marginTop: 12 }}>
                       <button
                         className="success"
+                        type="button"
                         onClick={() => updateResponseStatus(report, resp, 'approved')}
                       >
                         {t.review.approveItem}
                       </button>
                       <button
                         className="danger"
+                        type="button"
                         onClick={() => openFeedbackModal(report, resp, 'rejected')}
                       >
                         {t.review.rejectItem}
                       </button>
                       <button
                         className="secondary"
+                        type="button"
                         onClick={() => openFeedbackModal(report, resp, 'need_correction')}
                       >
                         {t.review.correction}

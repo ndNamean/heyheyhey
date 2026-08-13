@@ -406,6 +406,15 @@ textarea { min-height: 88px; resize: vertical; }
   outline-offset: 2px;
 }
 
+.card[data-report-id]:focus {
+  outline: none;
+}
+
+.card[data-report-id]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .card.report-card--highlight {
     animation: report-card-highlight-pulse 1.2s ease-in-out 2;

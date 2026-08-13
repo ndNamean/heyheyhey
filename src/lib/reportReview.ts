@@ -37,13 +37,22 @@ export function isReportAwaitingReview(report: Pick<Report, 'status'>): boolean 
   return report.status === 'waiting_approval';
 }
 
+/** Newest submitted first; id tie-break so Instant live updates cannot reshuffle the list. */
+export function sortReportsAwaitingReview(reports: Report[]): Report[] {
+  return [...reports].sort((a, b) => {
+    const byTime = (b.submittedAt || '').localeCompare(a.submittedAt || '');
+    if (byTime) return byTime;
+    return a.id.localeCompare(b.id);
+  });
+}
+
 export function filterReportsAwaitingReview(
   reports: Report[],
   profile: Profile,
   defs: RoleDefinition[],
 ): Report[] {
-  return reports.filter(
-    (r) => isReportAwaitingReview(r) && canReviewReport(profile, r, defs),
+  return sortReportsAwaitingReview(
+    reports.filter((r) => isReportAwaitingReview(r) && canReviewReport(profile, r, defs)),
   );
 }
 

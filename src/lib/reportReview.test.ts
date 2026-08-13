@@ -206,6 +206,29 @@ describe('filterReportsAwaitingReview', () => {
     );
     expect(kept.map((r) => r.id)).toEqual(['wait-a']);
   });
+
+  it('sorts by submittedAt newest first so item approve cannot jump the list', () => {
+    const manager = profile({ userId: 'm1', role: 'manager', stores: [storeA] });
+    const kept = filterReportsAwaitingReview(
+      [
+        report({
+          id: 'older',
+          storeId: 'store-a',
+          status: 'waiting_approval',
+          submittedAt: '2026-08-10T08:00:00.000Z',
+        }),
+        report({
+          id: 'newer',
+          storeId: 'store-a',
+          status: 'waiting_approval',
+          submittedAt: '2026-08-12T23:10:00.000Z',
+        }),
+      ],
+      manager,
+      defs,
+    );
+    expect(kept.map((r) => r.id)).toEqual(['newer', 'older']);
+  });
 });
 
 describe('canReviewReportItem', () => {
