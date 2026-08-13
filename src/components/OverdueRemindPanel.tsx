@@ -1,5 +1,5 @@
 /**
- * Compact overdue → Store Chat remind strip for highlighted Logbook issues.
+ * Compact overdue → Store Chat remind strip for Logbook issues.
  */
 
 import {

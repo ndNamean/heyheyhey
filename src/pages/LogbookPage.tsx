@@ -2150,8 +2150,7 @@ export default function LogbookPage({
               </div>
             )}
 
-            {highlighted &&
-              overdue &&
+            {overdue &&
               !remindDismissedIds[entry.id] &&
               canRemindOverdueToStoreChat(profile, entry, defs) &&
               (() => {
