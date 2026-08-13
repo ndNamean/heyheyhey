@@ -5,6 +5,7 @@ import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import { canAccessAllStores, canReview } from '../lib/roles';
 import {
   buildReviewReportsWhere,
+  canReviewReport,
   canReviewReportItem,
   filterReportsAwaitingReview,
 } from '../lib/reportReview';
@@ -334,15 +335,20 @@ export default function ReviewPage({
       defs,
     );
 
-    await db.transact([
-      db.tx.reports[report.id].update({
-        status: newStatus,
-        compliancePercent,
-        updatedAt: nowIso(),
-      }),
-      buildReportFinalizedEvent(report, newStatus, profile, nowIso()),
-      ...notificationTxs,
-    ]);
+    try {
+      await db.transact([
+        db.tx.reports[report.id].update({
+          status: newStatus,
+          compliancePercent,
+          updatedAt: nowIso(),
+        }),
+        buildReportFinalizedEvent(report, newStatus, profile, nowIso()),
+        ...notificationTxs,
+      ]);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.review.loadError);
+      return;
+    }
     schedulePushDeliveryFromTxs(notificationTxs);
 
     // Finalize-with-issues only; server skips if action_required already delivered this cycle.
@@ -713,8 +719,9 @@ export default function ReviewPage({
             {pendingCount === 0 && responses.every((r) => ['approved', 'rejected'].includes(r.status)) && (
               <button
                 className="success"
+                type="button"
                 style={{ marginTop: 12 }}
-                onClick={() => markReportApproved(report)}
+                onClick={() => void markReportApproved(report)}
               >
                 {t.review.finaliseReport}
               </button>
