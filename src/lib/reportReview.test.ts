@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { canReviewReport, canReviewReportItem } from './reportReview';
+import {
+  buildReviewReportsWhere,
+  canReviewReport,
+  canReviewReportItem,
+  filterReportsAwaitingReview,
+} from './reportReview';
 import { getReviewNotificationRecipients } from './notifications';
 import { buildReportReviewStatusRows } from './reportReviewStatus';
 import { defaultDefinitionsAsEntities } from './roleResolver';
@@ -142,6 +147,64 @@ describe('canReviewReport', () => {
         defs,
       ),
     ).toBe(false);
+  });
+});
+
+describe('buildReviewReportsWhere', () => {
+  it('omits where for all-store roles so status is never Instant-filtered', () => {
+    expect(
+      buildReviewReportsWhere({
+        canAccessAllStores: true,
+        storeIds: ['store-a'],
+        highlightReportId: 'r1',
+      }),
+    ).toBeUndefined();
+  });
+
+  it('scopes managers to assigned stores via indexed storeId', () => {
+    expect(
+      buildReviewReportsWhere({
+        canAccessAllStores: false,
+        storeIds: ['store-a', 'store-a', ''],
+      }),
+    ).toEqual({ storeId: { $in: ['store-a'] } });
+  });
+
+  it('includes deep-link report id so Open Review still loads that card', () => {
+    expect(
+      buildReviewReportsWhere({
+        canAccessAllStores: false,
+        storeIds: ['store-a'],
+        highlightReportId: '2ac1be-full',
+      }),
+    ).toEqual({
+      or: [{ storeId: { $in: ['store-a'] } }, { id: '2ac1be-full' }],
+    });
+  });
+
+  it('skips the reports query when a store-scoped reviewer has no stores', () => {
+    expect(
+      buildReviewReportsWhere({
+        canAccessAllStores: false,
+        storeIds: [],
+      }),
+    ).toBeNull();
+  });
+});
+
+describe('filterReportsAwaitingReview', () => {
+  it('keeps waiting_approval on assigned stores and drops approved or other stores', () => {
+    const manager = profile({ userId: 'm1', role: 'manager', stores: [storeA] });
+    const kept = filterReportsAwaitingReview(
+      [
+        report({ id: 'wait-a', storeId: 'store-a', status: 'waiting_approval' }),
+        report({ id: 'done-a', storeId: 'store-a', status: 'approved' }),
+        report({ id: 'wait-b', storeId: 'store-b', status: 'waiting_approval' }),
+      ],
+      manager,
+      defs,
+    );
+    expect(kept.map((r) => r.id)).toEqual(['wait-a']);
   });
 });
 

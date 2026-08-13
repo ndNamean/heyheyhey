@@ -2,8 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
-import { canReview } from '../lib/roles';
-import { canReviewReport, canReviewReportItem } from '../lib/reportReview';
+import { canAccessAllStores, canReview } from '../lib/roles';
+import {
+  buildReviewReportsWhere,
+  canReviewReportItem,
+  filterReportsAwaitingReview,
+} from '../lib/reportReview';
 import { statusLabel } from '../lib/i18nUtils';
 import {
   buildItemReviewNotifications,
@@ -84,16 +88,69 @@ export default function ReviewPage({
     }
   }, [highlightReportId, highlightOpenKey, initialSurface]);
 
-  const { data } = db.useQuery({
-    reports: {
-      $: { where: { status: 'waiting_approval' } },
-      responses: { media: { file: {} } },
+  const storeIds = useMemo(
+    () => (profile.stores ?? []).map((s) => s.id).filter(Boolean),
+    [profile.stores],
+  );
+  const reportsWhere = useMemo(
+    () =>
+      buildReviewReportsWhere({
+        canAccessAllStores: canAccessAllStores(profile.role, defs),
+        storeIds,
+        highlightReportId,
+      }),
+    [defs, highlightReportId, profile.role, storeIds],
+  );
+
+  const reportsQuery = useMemo(
+    () =>
+      reportsWhere === null
+        ? {
+            profiles: { stores: {}, avatarFile: {} },
+            reviewEvents: {},
+          }
+        : {
+            reports: {
+              ...(reportsWhere ? { $: { where: reportsWhere } } : {}),
+              responses: { media: { file: {} } },
+              store: {},
+            },
+            profiles: { stores: {}, avatarFile: {} },
+            reviewEvents: {},
+          },
+    [reportsWhere],
+  );
+
+  const { data, isLoading: reportsLoading, error: reportsError } = db.useQuery(reportsQuery);
+  const {
+    data: logbookData,
+    isLoading: logbookLoading,
+    error: logbookError,
+  } = db.useQuery({
+    logbookEntries: {
       store: {},
+      photo: {},
+      sourceMedia: {},
+      resolutionMedia: {},
+      resolutionProofHistory: {},
     },
-    logbookEntries: { store: {}, photo: {}, sourceMedia: {}, resolutionMedia: {}, resolutionProofHistory: {} },
-    profiles: { stores: {}, avatarFile: {} },
-    reviewEvents: {},
   });
+
+  const allProfiles: Profile[] = (data?.profiles ?? []) as Profile[];
+  const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];
+  const reports = useMemo(
+    () =>
+      filterReportsAwaitingReview((data?.reports ?? []) as Report[], profile, defs),
+    [data?.reports, profile, defs],
+  );
+  const logbookIssues = useMemo(() => {
+    return ((logbookData?.logbookEntries ?? []) as LogbookEntry[]).filter(
+      (e) =>
+        isLogbookIssue(e) &&
+        resolveLogbookIssueStatus(e) === 'waiting_approval' &&
+        canReviewLogbookIssue(profile, e, defs),
+    );
+  }, [logbookData?.logbookEntries, profile, defs]);
 
   useEffect(() => {
     if (!highlightReportId) return;
@@ -106,23 +163,7 @@ export default function ReviewPage({
       }, 2500);
       return () => window.clearTimeout(timer);
     }
-  }, [highlightReportId, highlightOpenKey, data?.reports, surface]);
-
-  const allProfiles: Profile[] = (data?.profiles ?? []) as Profile[];
-  const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];
-  const reports = useMemo(() => {
-    return ((data?.reports ?? []) as Report[]).filter((r) =>
-      canReviewReport(profile, r, defs),
-    );
-  }, [data?.reports, profile, defs]);
-  const logbookIssues = useMemo(() => {
-    return ((data?.logbookEntries ?? []) as LogbookEntry[]).filter(
-      (e) =>
-        isLogbookIssue(e) &&
-        resolveLogbookIssueStatus(e) === 'waiting_approval' &&
-        canReviewLogbookIssue(profile, e, defs),
-    );
-  }, [data?.logbookEntries, profile, defs]);
+  }, [highlightReportId, highlightOpenKey, reports, surface]);
 
   if (!canReview(profile.role, defs)) {
     return <div className="card">{t.review.noPermission}</div>;
@@ -505,7 +546,13 @@ export default function ReviewPage({
 
       {surface === 'logbook' && !logbookIssues.length && (
         <div className="card">
-          <p>{t.review.noLogbookAwaiting}</p>
+          <p>
+            {logbookLoading
+              ? t.common.loading
+              : logbookError
+                ? t.review.loadError
+                : t.review.noLogbookAwaiting}
+          </p>
         </div>
       )}
 
@@ -662,7 +709,13 @@ export default function ReviewPage({
 
       {surface === 'reports' && !reports.length && (
         <div className="card">
-          <p>{t.review.noAwaitingReview}</p>
+          <p>
+            {reportsLoading
+              ? t.common.loading
+              : reportsError
+                ? t.review.loadError
+                : t.review.noAwaitingReview}
+          </p>
         </div>
       )}
     </div>

@@ -5,6 +5,48 @@ function profileStoreIds(profile: Profile): string[] {
   return (profile.stores ?? []).map((s) => s.id);
 }
 
+export type ReviewReportsWhereClause =
+  | { storeId: { $in: string[] } }
+  | { id: string }
+  | { or: Array<{ storeId: { $in: string[] } } | { id: string }> };
+
+/**
+ * Instant `where` for Review reports.
+ * `undefined` = no where (all-store roles). `null` = skip the reports query.
+ * Never filters on `reports.status` (unindexed) — that made the Review list
+ * flash from cache then empty after the server round-trip.
+ */
+export function buildReviewReportsWhere(opts: {
+  canAccessAllStores: boolean;
+  storeIds: string[];
+  highlightReportId?: string | null;
+}): ReviewReportsWhereClause | null | undefined {
+  if (opts.canAccessAllStores) return undefined;
+  const storeIds = [...new Set(opts.storeIds.filter(Boolean))];
+  const highlightId = String(opts.highlightReportId || '').trim();
+  if (storeIds.length && highlightId) {
+    return { or: [{ storeId: { $in: storeIds } }, { id: highlightId }] };
+  }
+  if (storeIds.length) return { storeId: { $in: storeIds } };
+  if (highlightId) return { id: highlightId };
+  return null;
+}
+
+/** Header still waiting — Review list filter (client-side; do not Instant-where status). */
+export function isReportAwaitingReview(report: Pick<Report, 'status'>): boolean {
+  return report.status === 'waiting_approval';
+}
+
+export function filterReportsAwaitingReview(
+  reports: Report[],
+  profile: Profile,
+  defs: RoleDefinition[],
+): Report[] {
+  return reports.filter(
+    (r) => isReportAwaitingReview(r) && canReviewReport(profile, r, defs),
+  );
+}
+
 /** Whether the profile may review / finalize this checklist report (role + store). */
 export function canReviewReport(
   profile: Profile,

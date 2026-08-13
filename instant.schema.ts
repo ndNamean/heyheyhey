@@ -115,7 +115,7 @@ const _schema = i.schema({
       submittedByUserId: i.string().indexed(),
       submittedByRole: i.string(),
       submittedAt: i.string(),
-      status: i.string(),                  // waiting_approval|approved|rejected|need_correction
+      status: i.string().indexed(),        // waiting_approval|approved|rejected|need_correction
       completionPercent: i.number(),
       compliancePercent: i.number(),
       archived: i.boolean(),
