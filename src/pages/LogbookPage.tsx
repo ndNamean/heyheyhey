@@ -29,6 +29,7 @@ import {
   canReviewLogbookIssue,
   canSubmitResolutionNow,
   canViewLogbookEntry,
+  dueAtHoursFromNow,
   eligibleAssigneeUsers,
   eligibleLogbookAssigneeRoles,
   getIssueConfigurationState,
@@ -171,6 +172,52 @@ function initLogbookFilters(
   const parsed = parseLogbookInitialFilter(raw);
   if (!parsed) return base;
   return { ...base, ...parsed };
+}
+
+type DueAtPreset = 'custom' | '12' | '24';
+
+function DueAtField({
+  dueAt,
+  onDueAtChange,
+}: {
+  dueAt: string;
+  onDueAtChange: (value: string) => void;
+}) {
+  const { t } = useLang();
+  const [preset, setPreset] = useState<DueAtPreset>('custom');
+
+  useEffect(() => {
+    if (!dueAt) setPreset('custom');
+  }, [dueAt]);
+
+  return (
+    <label>
+      {t.logbook.dueAt}
+      <span style={{ display: 'grid', gap: 6 }}>
+        <select
+          value={preset}
+          onChange={(e) => {
+            const next = e.target.value as DueAtPreset;
+            setPreset(next);
+            if (next === '12') onDueAtChange(dueAtHoursFromNow(12));
+            else if (next === '24') onDueAtChange(dueAtHoursFromNow(24));
+          }}
+        >
+          <option value="custom">{t.logbook.dueAtCustom}</option>
+          <option value="12">{t.logbook.dueIn12Hours}</option>
+          <option value="24">{t.logbook.dueIn24Hours}</option>
+        </select>
+        <input
+          type="datetime-local"
+          value={dueAt}
+          onChange={(e) => {
+            setPreset('custom');
+            onDueAtChange(e.target.value);
+          }}
+        />
+      </span>
+    </label>
+  );
 }
 
 export default function LogbookPage({
@@ -1661,14 +1708,10 @@ export default function LogbookPage({
                     ))}
                   </select>
                 </label>
-                <label>
-                  {t.logbook.dueAt}
-                  <input
-                    type="datetime-local"
-                    value={form.dueAt}
-                    onChange={(e) => setForm({ ...form, dueAt: e.target.value })}
-                  />
-                </label>
+                <DueAtField
+                  dueAt={form.dueAt}
+                  onDueAtChange={(dueAt) => setForm({ ...form, dueAt })}
+                />
                 <label>
                   {t.logbook.resolutionProofType}
                   <select
@@ -2211,14 +2254,10 @@ export default function LogbookPage({
                       ))}
                     </select>
                   </label>
-                  <label>
-                    {t.logbook.dueAt}
-                    <input
-                      type="datetime-local"
-                      value={setupForm.dueAt}
-                      onChange={(e) => setSetupForm({ ...setupForm, dueAt: e.target.value })}
-                    />
-                  </label>
+                  <DueAtField
+                    dueAt={setupForm.dueAt}
+                    onDueAtChange={(dueAt) => setSetupForm({ ...setupForm, dueAt })}
+                  />
                   <label>
                     {t.logbook.resolutionProofType}
                     <select
@@ -2560,16 +2599,12 @@ export default function LogbookPage({
                       ))}
                     </select>
                   </label>
-                  <label>
-                    {t.logbook.dueAt}
-                    <input
-                      type="datetime-local"
-                      value={changeAssignForm.dueAt}
-                      onChange={(e) =>
-                        setChangeAssignForm({ ...changeAssignForm, dueAt: e.target.value })
-                      }
-                    />
-                  </label>
+                  <DueAtField
+                    dueAt={changeAssignForm.dueAt}
+                    onDueAtChange={(dueAt) =>
+                      setChangeAssignForm({ ...changeAssignForm, dueAt })
+                    }
+                  />
                 </div>
                 {(() => {
                   const changeUsers = eligibleAssigneeUsers(

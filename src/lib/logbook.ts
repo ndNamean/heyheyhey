@@ -80,6 +80,19 @@ export const LOGBOOK_FILTER_KEY = 'logbookInitialFilter';
 
 const DUE_SOON_MS = 2 * 60 * 60 * 1000;
 
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+/** Format a Date as a `datetime-local` value (`YYYY-MM-DDTHH:mm`) in local wall clock. */
+export function toDatetimeLocalValue(date: Date): string {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+}
+
+export function dueAtHoursFromNow(hours: number, now = new Date()): string {
+  return toDatetimeLocalValue(new Date(now.getTime() + hours * 60 * 60 * 1000));
+}
+
 export function profileStoreIds(profile: Profile): string[] {
   return (profile.stores ?? []).map((s) => s.id);
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   canActOnAssignedIssue,
   canHardDeleteLogbookIssue,
@@ -7,6 +7,7 @@ import {
   canReviewLogbookIssue,
   canSubmitResolutionNow,
   canViewLogbookEntry,
+  dueAtHoursFromNow,
   eligibleAssigneeUsers,
   eligibleLogbookAssigneeRoles,
   getIssueConfigurationState,
@@ -28,6 +29,7 @@ import {
   resolveSourceMedia,
   serializeAssigneeUserIds,
   splitNotesAnnouncementsForHome,
+  toDatetimeLocalValue,
 } from './logbook';
 import {
   buildLogbookNoteAnnouncementNotifications,
@@ -131,6 +133,40 @@ describe('resolveLogbookEntryType', () => {
   it('falls back to isAnnouncement for legacy rows', () => {
     expect(resolveLogbookEntryType(entry({ isAnnouncement: true }))).toBe('announcement');
     expect(resolveLogbookEntryType(entry({ isAnnouncement: false }))).toBe('note');
+  });
+});
+
+describe('due datetime-local helpers', () => {
+  it('formats local wall clock as YYYY-MM-DDTHH:mm', () => {
+    const now = new Date(2026, 6, 21, 14, 5, 59, 999);
+    expect(toDatetimeLocalValue(now)).toBe('2026-07-21T14:05');
+  });
+
+  it('adds 12 and 24 hours from a frozen now', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 6, 21, 8, 0, 0, 0));
+    try {
+      const now = new Date();
+      expect(dueAtHoursFromNow(12, now)).toBe('2026-07-21T20:00');
+      expect(dueAtHoursFromNow(24, now)).toBe('2026-07-22T08:00');
+      expect(dueAtHoursFromNow(12)).toBe('2026-07-21T20:00');
+      expect(dueAtHoursFromNow(24)).toBe('2026-07-22T08:00');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rolls over midnight and the calendar day', () => {
+    const nearMidnight = new Date(2026, 6, 21, 20, 30, 0, 0);
+    expect(dueAtHoursFromNow(12, nearMidnight)).toBe('2026-07-22T08:30');
+    expect(dueAtHoursFromNow(24, nearMidnight)).toBe('2026-07-22T20:30');
+
+    const justBeforeMidnight = new Date(2026, 6, 21, 23, 45, 0, 0);
+    expect(dueAtHoursFromNow(12, justBeforeMidnight)).toBe('2026-07-22T11:45');
+    expect(dueAtHoursFromNow(24, justBeforeMidnight)).toBe('2026-07-22T23:45');
+
+    const monthEnd = new Date(2026, 0, 31, 20, 0, 0, 0);
+    expect(dueAtHoursFromNow(12, monthEnd)).toBe('2026-02-01T08:00');
   });
 });
 
