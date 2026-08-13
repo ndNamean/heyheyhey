@@ -312,6 +312,9 @@ const _schema = i.schema({
       overdueChatRemindedAt: i.string().clientRequired(),
       /** Admin-stamped Instant id of the overdue remind Store Chat message; '' until sent. */
       overdueChatRemindMessageId: i.string().clientRequired(),
+      /** Optional link back to the checklist report / response that spawned this issue. */
+      sourceReportId: i.string().indexed().clientRequired(),
+      sourceResponseId: i.string().indexed().clientRequired(),
     }),
 
     // ─── Review audit trail ──────────────────────────────────────────────────

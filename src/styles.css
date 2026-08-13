@@ -2349,6 +2349,55 @@ body.wizard-active .page {
   margin-top: 18px;
 }
 
+.finalise-logbook-issues-modal {
+  max-width: 520px;
+}
+
+.finalise-logbook-issues-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.finalise-logbook-issue-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-card);
+  cursor: pointer;
+}
+
+.finalise-logbook-issue-row input {
+  margin-top: 4px;
+}
+
+.finalise-logbook-issue-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.finalise-logbook-issue-title {
+  font-weight: 600;
+}
+
+.finalise-logbook-issue-note {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+}
+
+.finalise-logbook-issue-thumbs {
+  margin-top: 8px;
+}
+
+.finalise-logbook-issue-thumbs .proof-photo-card {
+  max-width: 72px;
+}
+
 /* ── Dashboard feedback frequency ─────────────────────────────────────────── */
 .feedback-freq-card {
   margin-top: 0;

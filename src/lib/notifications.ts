@@ -71,6 +71,18 @@ function actionLabel(status: string): string {
   return status;
 }
 
+/** Inbox title for report_finalized — N-item Needs correction wording when N >= 1. */
+export function reportFinalizedNotificationTitle(opts: {
+  storeCode: string;
+  reportStatus: string;
+  needCorrectionCount: number;
+}): string {
+  const n = opts.needCorrectionCount;
+  if (n === 1) return 'Report finalised — 1 item needs correction';
+  if (n > 1) return `Report finalised — ${n} items need correction`;
+  return `${opts.storeCode} — Report ${actionLabel(opts.reportStatus)}`;
+}
+
 function buildItemReviewBody(
   report: Report,
   response: ReportResponse,
@@ -165,6 +177,7 @@ export function buildReportFinalizedNotifications(
   }
 
   const rejectedItems = responses.filter((r) => r.status === 'rejected' || r.status === 'need_correction');
+  const needCorrectionCount = responses.filter((r) => r.status === 'need_correction').length;
   const feedbackSummary = rejectedItems.length
     ? rejectedItems
         .map((r) => `• ${r.title}: ${r.rejectionReason || r.status}`)
@@ -179,6 +192,12 @@ export function buildReportFinalizedNotifications(
     feedbackSummary,
   ].join('\n');
 
+  const title = reportFinalizedNotificationTitle({
+    storeCode: report.storeCode,
+    reportStatus,
+    needCorrectionCount,
+  });
+
   return [...recipients].map((recipientUserId) =>
     db.tx.notifications[id()].update({
       recipientUserId,
@@ -186,7 +205,7 @@ export function buildReportFinalizedNotifications(
       reportId: report.id,
       reportResponseId: '',
       storeId: report.storeId,
-      title: `${report.storeCode} — Report ${actionLabel(reportStatus)}`,
+      title,
       body,
       itemTitle: '',
       completionPercent: report.completionPercent ?? 0,

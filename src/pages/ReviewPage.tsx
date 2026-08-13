@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { id } from '@instantdb/react';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import { canAccessAllStores, canReview } from '../lib/roles';
 import {
   buildReviewReportsWhere,
+  canFinaliseReportResponses,
   canReviewReport,
   canReviewReportItem,
   filterReportsAwaitingReview,
+  resolveFinaliseReportStatus,
 } from '../lib/reportReview';
 import { statusLabel } from '../lib/i18nUtils';
 import {
@@ -17,6 +20,7 @@ import {
 import { schedulePushDeliveryFromTxs } from '../lib/pushDelivery';
 import {
   buildItemReviewEvent,
+  buildLogbookIssueCreatedEvents,
   buildLogbookResolutionApprovedEvent,
   buildLogbookResolutionRejectedEvent,
   buildReportFinalizedEvent,
@@ -28,8 +32,11 @@ import { badgeClass, nowIso } from '../lib/utils';
 import ProofPhoto from '../components/ProofPhoto';
 import ProofMediaDetails from '../components/ProofMediaDetails';
 import ReviewFeedbackModal, { type FeedbackResult } from '../components/ReviewFeedbackModal';
+import FinaliseLogbookIssuesModal, {
+  type FinaliseLogbookIssuesConfirm,
+} from '../components/FinaliseLogbookIssuesModal';
 import { isVideoMedia } from '../lib/mediaMime';
-import { formatMediaCaptureTime } from '../lib/proofTime';
+import { formatMediaCaptureTime, resolveCaptureTimezone, ymdInTimeZone } from '../lib/proofTime';
 import ReportTimeline, { LogbookTimeline } from '../components/ReportTimeline';
 import IdentityWithAvatar from '../components/profileAvatar/IdentityWithAvatar';
 import {
@@ -37,10 +44,17 @@ import {
   getIssueConfigurationState,
   isIssueOverdue,
   isLogbookIssue,
+  issueCreateFields,
   resolveLogbookIssueStatus,
   resolveResolutionProofs,
   resolveSourceMedia,
+  serializeAssigneeUserIds,
 } from '../lib/logbook';
+import {
+  mapNeedCorrectionItemToLogbookIssue,
+  needCorrectionItemsForLogbookIssues,
+} from '../lib/finaliseLogbookIssues';
+import { OPEN_LOGBOOK_EVENT, type LogbookDeepLink } from '../lib/logbookDeepLink';
 import {
   proofTypeLabel,
   resolveLogbookProofType,
@@ -70,6 +84,11 @@ interface PendingFeedback {
 
 type ReviewSurface = 'reports' | 'logbook';
 
+interface PendingFinaliseIssues {
+  report: Report;
+  items: ReportResponse[];
+}
+
 function keepReviewCardFocused(reportId: string) {
   const card = document.querySelector(`[data-report-id="${reportId}"]`);
   if (!(card instanceof HTMLElement)) return;
@@ -86,6 +105,8 @@ export default function ReviewPage({
   const { t } = useLang();
   const { defs } = useRoleDefinitions();
   const [pendingFeedback, setPendingFeedback] = useState<PendingFeedback | null>(null);
+  const [pendingFinaliseIssues, setPendingFinaliseIssues] =
+    useState<PendingFinaliseIssues | null>(null);
   const [surface, setSurface] = useState<ReviewSurface>(initialSurface);
   const lastHighlightScrollKey = useRef('');
 
@@ -147,19 +168,20 @@ export default function ReviewPage({
 
   const allProfiles: Profile[] = (data?.profiles ?? []) as Profile[];
   const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];
+  const allLogbookEntries = (logbookData?.logbookEntries ?? []) as LogbookEntry[];
   const reports = useMemo(
     () =>
       filterReportsAwaitingReview((data?.reports ?? []) as Report[], profile, defs),
     [data?.reports, profile, defs],
   );
   const logbookIssues = useMemo(() => {
-    return ((logbookData?.logbookEntries ?? []) as LogbookEntry[]).filter(
+    return allLogbookEntries.filter(
       (e) =>
         isLogbookIssue(e) &&
         resolveLogbookIssueStatus(e) === 'waiting_approval' &&
         canReviewLogbookIssue(profile, e, defs),
     );
-  }, [logbookData?.logbookEntries, profile, defs]);
+  }, [allLogbookEntries, profile, defs]);
 
   useEffect(() => {
     if (!highlightReportId || surface !== 'reports') return;
@@ -315,9 +337,15 @@ export default function ReviewPage({
       return;
     }
     const responses = (report.responses ?? []) as ReportResponse[];
-    const allApproved = responses.every((r) => r.status === 'approved');
-    const anyRejected = responses.some((r) => r.status === 'rejected');
-    const newStatus = allApproved ? 'approved' : anyRejected ? 'rejected' : 'waiting_approval';
+    if (!canFinaliseReportResponses(responses)) {
+      alert(t.review.noPermissionItem);
+      return;
+    }
+    const newStatus = resolveFinaliseReportStatus(responses);
+    if (newStatus === 'waiting_approval') {
+      alert(t.review.noPermissionItem);
+      return;
+    }
     const compliancePercent =
       responses.length
         ? Math.round(
@@ -361,6 +389,125 @@ export default function ReviewPage({
       eventVersion: cycleKey,
       reportStatus: newStatus,
     });
+
+    const issueCandidates = needCorrectionItemsForLogbookIssues(responses, allLogbookEntries);
+    if (issueCandidates.length > 0) {
+      setPendingFinaliseIssues({ report, items: issueCandidates });
+    }
+  }
+
+  async function createLogbookIssuesFromFinalise(result: FinaliseLogbookIssuesConfirm) {
+    const pending = pendingFinaliseIssues;
+    setPendingFinaliseIssues(null);
+    if (!pending) return;
+
+    const { report, items } = pending;
+    const selected = items.filter((item) => result.selectedResponseIds.includes(item.id));
+    if (!selected.length) return;
+
+    const dueAtIso = new Date(result.dueAtLocal).toISOString();
+    if (!Number.isFinite(Date.parse(dueAtIso))) {
+      alert(t.logbook.dueRequired);
+      return;
+    }
+
+    const store = report.store;
+    const storeCoords =
+      store && Number.isFinite(store.lat) && Number.isFinite(store.lng)
+        ? { lat: store.lat, lng: store.lng }
+        : null;
+    const createdTimezone = resolveCaptureTimezone(storeCoords);
+    const now = new Date();
+    const createdAt = now.toISOString();
+    const date = ymdInTimeZone(now, createdTimezone);
+
+    const createdEntryIds: string[] = [];
+    const txs: unknown[] = [];
+
+    for (const response of selected) {
+      if (needCorrectionItemsForLogbookIssues([response], allLogbookEntries).length === 0) {
+        continue;
+      }
+      const mapped = mapNeedCorrectionItemToLogbookIssue(report, response);
+      const entryId = id();
+      const typeFields = {
+        ...issueCreateFields(
+          mapped.assigneeRole,
+          dueAtIso,
+          mapped.resolutionProofType,
+          mapped.resolutionRequirement,
+          mapped.assigneeUserIds,
+        ),
+        sourceReportId: mapped.sourceReportId,
+        sourceResponseId: mapped.sourceResponseId,
+      };
+
+      txs.push(
+        db.tx.logbookEntries[entryId].update({
+          storeId: report.storeId,
+          authorUserId: profile.userId,
+          date,
+          shift: 'AM',
+          content: mapped.content,
+          severity: result.severity,
+          requiresAck: false,
+          ackUserIdsJson: '[]',
+          createdAt,
+          updatedAt: createdAt,
+          createdTimezone,
+          ...typeFields,
+        }),
+      );
+      if (report.storeId) {
+        txs.push(db.tx.logbookEntries[entryId].link({ store: report.storeId }));
+      }
+      for (const fileId of mapped.sourceFileIds) {
+        txs.push(db.tx.logbookEntries[entryId].link({ sourceMedia: fileId }));
+      }
+
+      const entryLike = {
+        id: entryId,
+        storeId: report.storeId,
+        content: mapped.content,
+        assigneeRole: mapped.assigneeRole,
+        assigneeUserIdsJson: serializeAssigneeUserIds(mapped.assigneeUserIds),
+        dueAt: dueAtIso,
+        severity: result.severity,
+        entryType: 'issue' as const,
+        isAnnouncement: false,
+        status: 'open' as const,
+        resolutionProofType: mapped.resolutionProofType,
+        resolutionRequirement: mapped.resolutionRequirement,
+      } as LogbookEntry;
+      txs.push(...buildLogbookIssueCreatedEvents(entryLike, profile, createdAt));
+      createdEntryIds.push(entryId);
+    }
+
+    if (!txs.length) return;
+
+    try {
+      await db.transact(txs as Parameters<typeof db.transact>[0]);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : t.review.loadError);
+      return;
+    }
+
+    for (const entryId of createdEntryIds) {
+      void deliverLogbookEvent({ entryId, eventType: 'issue_assigned', eventVersion: createdAt });
+    }
+
+    const msg = t.review.logbookIssuesCreated.replace('{n}', String(createdEntryIds.length));
+    const firstId = createdEntryIds[0];
+    if (firstId && window.confirm(`${msg}\n\n${t.review.openLogbookAfterCreate}`)) {
+      const link: LogbookDeepLink = {
+        entryId: firstId,
+        filter: 'my-assigned',
+        storeId: report.storeId || undefined,
+      };
+      window.dispatchEvent(new CustomEvent(OPEN_LOGBOOK_EVENT, { detail: link }));
+    } else {
+      alert(msg);
+    }
   }
 
   return (
@@ -371,6 +518,14 @@ export default function ReviewPage({
         itemTitle={pendingFeedback?.response.title ?? ''}
         onConfirm={handleFeedbackConfirm}
         onCancel={() => setPendingFeedback(null)}
+      />
+
+      <FinaliseLogbookIssuesModal
+        open={!!pendingFinaliseIssues}
+        report={pendingFinaliseIssues?.report ?? null}
+        items={pendingFinaliseIssues?.items ?? []}
+        onConfirm={(result) => void createLogbookIssuesFromFinalise(result)}
+        onSkip={() => setPendingFinaliseIssues(null)}
       />
 
       <div className="card">
@@ -715,7 +870,7 @@ export default function ReviewPage({
               );
             })}
 
-            {pendingCount === 0 && responses.every((r) => ['approved', 'rejected'].includes(r.status)) && (
+            {canFinaliseReportResponses(responses) && (
               <button
                 className="success"
                 type="button"

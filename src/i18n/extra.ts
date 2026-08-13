@@ -524,6 +524,13 @@ export const sectionsEn = {
     confirmReject: 'Confirm reject',
     sendCorrection: 'Send correction',
     sendFeedback: 'Send feedback',
+    createLogbookIssuesTitle: 'Create Logbook issues?',
+    createLogbookIssuesSubtitle:
+      'Optionally open Logbook follow-ups for items that need correction. Assigned to the submitter with linked proof photos.',
+    skipLogbookIssues: 'Skip',
+    confirmLogbookIssues: 'Confirm',
+    logbookIssuesCreated: 'Created {n} Logbook issue(s).',
+    openLogbookAfterCreate: 'Open Logbook?',
   },
   templates: {
     title: 'Templates',
@@ -1963,6 +1970,13 @@ export const sectionsVi = {
     confirmReject: 'Xác nhận từ chối',
     sendCorrection: 'Gửi yêu cầu chỉnh sửa',
     sendFeedback: 'Gửi phản hồi',
+    createLogbookIssuesTitle: 'Tạo vấn đề Nhật ký?',
+    createLogbookIssuesSubtitle:
+      'Tuỳ chọn mở theo dõi Nhật ký cho các mục cần chỉnh sửa. Giao cho người nộp và gắn ảnh chứng minh.',
+    skipLogbookIssues: 'Bỏ qua',
+    confirmLogbookIssues: 'Xác nhận',
+    logbookIssuesCreated: 'Đã tạo {n} vấn đề Nhật ký.',
+    openLogbookAfterCreate: 'Mở Nhật ký?',
   },
   templates: {
     title: 'Mẫu báo cáo',

@@ -756,6 +756,10 @@ export interface LogbookEntry {
   overdueChatRemindedAt?: string;
   /** Instant id of the overdue remind Store Chat message; '' until stamped. */
   overdueChatRemindMessageId?: string;
+  /** Checklist report that spawned this issue ('' when not from Finalise). */
+  sourceReportId?: string;
+  /** Checklist response that spawned this issue ('' when not from Finalise). */
+  sourceResponseId?: string;
   store?: Store;
   /** Legacy single photo link ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â interpret via resolveLogbookMedia helpers */
   photo?: LogbookFileRef;

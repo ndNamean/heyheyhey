@@ -68,6 +68,45 @@ export function canReviewReport(
   return userCanAccessStore(profile.role, profileStoreIds(profile), report.storeId, defs);
 }
 
+/** Item statuses that allow Finalise (no pending waiting_approval left). */
+export const FINALISE_READY_ITEM_STATUSES = [
+  'approved',
+  'rejected',
+  'need_correction',
+] as const;
+
+export type FinaliseReportHeaderStatus =
+  | 'approved'
+  | 'rejected'
+  | 'need_correction'
+  | 'waiting_approval';
+
+/** Show Finalise when every item is reviewed (approved | rejected | need_correction). */
+export function canFinaliseReportResponses(
+  responses: Pick<ReportResponse, 'status'>[],
+): boolean {
+  if (!responses.length) return false;
+  const pending = responses.filter((r) => r.status === 'waiting_approval').length;
+  if (pending > 0) return false;
+  return responses.every((r) =>
+    (FINALISE_READY_ITEM_STATUSES as readonly string[]).includes(r.status),
+  );
+}
+
+/**
+ * Header status after Finalise:
+ * all approved → approved; any rejected → rejected; else any need_correction → need_correction.
+ */
+export function resolveFinaliseReportStatus(
+  responses: Pick<ReportResponse, 'status'>[],
+): FinaliseReportHeaderStatus {
+  if (!canFinaliseReportResponses(responses)) return 'waiting_approval';
+  if (responses.every((r) => r.status === 'approved')) return 'approved';
+  if (responses.some((r) => r.status === 'rejected')) return 'rejected';
+  if (responses.some((r) => r.status === 'need_correction')) return 'need_correction';
+  return 'waiting_approval';
+}
+
 /** Whether the profile may approve/reject a single response item on the report. */
 export function canReviewReportItem(
   profile: Profile,

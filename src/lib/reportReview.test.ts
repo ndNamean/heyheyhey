@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildReviewReportsWhere,
+  canFinaliseReportResponses,
   canReviewReport,
   canReviewReportItem,
   filterReportsAwaitingReview,
+  resolveFinaliseReportStatus,
 } from './reportReview';
-import { getReviewNotificationRecipients } from './notifications';
+import {
+  getReviewNotificationRecipients,
+  reportFinalizedNotificationTitle,
+} from './notifications';
 import { buildReportReviewStatusRows } from './reportReviewStatus';
 import { defaultDefinitionsAsEntities } from './roleResolver';
 import type { Profile, Report, ReportResponse, RoleDefinition, Store } from '../types';
@@ -254,6 +259,74 @@ describe('canReviewReportItem', () => {
     expect(canReviewReportItem(manager, r, response({ submittedByRole: 'staff' }), defs)).toBe(
       false,
     );
+  });
+});
+
+describe('canFinaliseReportResponses + resolveFinaliseReportStatus', () => {
+  it('hides Finalise while any item is still waiting_approval', () => {
+    const responses = [
+      response({ id: 'a', status: 'approved' }),
+      response({ id: 'b', status: 'waiting_approval' }),
+    ];
+    expect(canFinaliseReportResponses(responses)).toBe(false);
+    expect(resolveFinaliseReportStatus(responses)).toBe('waiting_approval');
+  });
+
+  it('allows Finalise for mixed approved + need_correction and sets header need_correction', () => {
+    const responses = [
+      response({ id: 'a', status: 'approved' }),
+      response({ id: 'b', status: 'need_correction' }),
+    ];
+    expect(canFinaliseReportResponses(responses)).toBe(true);
+    expect(resolveFinaliseReportStatus(responses)).toBe('need_correction');
+  });
+
+  it('prefers rejected over need_correction for header status', () => {
+    const responses = [
+      response({ id: 'a', status: 'approved' }),
+      response({ id: 'b', status: 'need_correction' }),
+      response({ id: 'c', status: 'rejected' }),
+    ];
+    expect(canFinaliseReportResponses(responses)).toBe(true);
+    expect(resolveFinaliseReportStatus(responses)).toBe('rejected');
+  });
+
+  it('sets approved when every item is approved', () => {
+    const responses = [
+      response({ id: 'a', status: 'approved' }),
+      response({ id: 'b', status: 'approved' }),
+    ];
+    expect(canFinaliseReportResponses(responses)).toBe(true);
+    expect(resolveFinaliseReportStatus(responses)).toBe('approved');
+  });
+});
+
+describe('reportFinalizedNotificationTitle', () => {
+  it('uses N-item Needs correction wording when N >= 1', () => {
+    expect(
+      reportFinalizedNotificationTitle({
+        storeCode: 'TKA',
+        reportStatus: 'need_correction',
+        needCorrectionCount: 1,
+      }),
+    ).toBe('Report finalised — 1 item needs correction');
+    expect(
+      reportFinalizedNotificationTitle({
+        storeCode: 'TKA',
+        reportStatus: 'need_correction',
+        needCorrectionCount: 3,
+      }),
+    ).toBe('Report finalised — 3 items need correction');
+  });
+
+  it('keeps store + status title when no Needs correction items', () => {
+    expect(
+      reportFinalizedNotificationTitle({
+        storeCode: 'TKA',
+        reportStatus: 'approved',
+        needCorrectionCount: 0,
+      }),
+    ).toBe('TKA — Report Approved');
   });
 });
 
