@@ -10,7 +10,10 @@ import {
   type OpenStoreChatDetail,
 } from '../FeedbackInbox';
 import { OPEN_LOGBOOK_EVENT } from '../../lib/logbookDeepLink';
-import { OPEN_REVIEW_REPORT_EVENT } from '../../lib/reportDeepLink';
+import {
+  OPEN_FIX_RESUBMIT_REPORT_EVENT,
+  OPEN_REVIEW_REPORT_EVENT,
+} from '../../lib/reportDeepLink';
 import FloatingAssistantLauncher from './FloatingAssistantLauncher';
 import FloatingAssistantPanel from './FloatingAssistantPanel';
 import { type AssistantTabId } from './AssistantTabs';
@@ -196,17 +199,19 @@ export default function FloatingAssistantShell({ profile }: Props) {
     return () => window.removeEventListener(OPEN_GROUP_CHAT_EVENT, onOpenGroupChat);
   }, []);
 
-  // Handoff CTAs (Open Logbook / Open Review): dismiss the sheet on mobile so
-  // Review/Logbook fill the viewport; keep the panel open beside content on desktop.
+  // Handoff CTAs (Open Logbook / Open Review / Fix & resubmit): dismiss the sheet on mobile so
+  // the target page fills the viewport; keep the panel open beside content on desktop.
   useEffect(() => {
     function closeIfMobile() {
       if (layout.formFactor === 'mobile') close();
     }
     window.addEventListener(OPEN_LOGBOOK_EVENT, closeIfMobile);
     window.addEventListener(OPEN_REVIEW_REPORT_EVENT, closeIfMobile);
+    window.addEventListener(OPEN_FIX_RESUBMIT_REPORT_EVENT, closeIfMobile);
     return () => {
       window.removeEventListener(OPEN_LOGBOOK_EVENT, closeIfMobile);
       window.removeEventListener(OPEN_REVIEW_REPORT_EVENT, closeIfMobile);
+      window.removeEventListener(OPEN_FIX_RESUBMIT_REPORT_EVENT, closeIfMobile);
     };
   }, [close, layout.formFactor]);
 

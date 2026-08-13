@@ -1,4 +1,6 @@
 export const OPEN_REVIEW_REPORT_EVENT = 'heyPelo:openReviewReport';
+/** Submitter correction flow (Fix & resubmit) — same destination as StaffHome Fix & resubmit. */
+export const OPEN_FIX_RESUBMIT_REPORT_EVENT = 'heyPelo:openFixResubmitReport';
 
 export type ReportDeepLink = {
   page?: 'review';

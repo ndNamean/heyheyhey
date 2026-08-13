@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  OPEN_FIX_RESUBMIT_REPORT_EVENT,
   OPEN_REVIEW_REPORT_EVENT,
   buildReportDeepLinkUrl,
   ensureReportDeepLinkJson,
@@ -10,8 +11,9 @@ import {
 } from './reportDeepLink';
 
 describe('reportDeepLink', () => {
-  it('exposes open review event name', () => {
+  it('exposes open review and fix-resubmit event names', () => {
     expect(OPEN_REVIEW_REPORT_EVENT).toBe('heyPelo:openReviewReport');
+    expect(OPEN_FIX_RESUBMIT_REPORT_EVENT).toBe('heyPelo:openFixResubmitReport');
   });
 
   it('builds and parses search deep links', () => {

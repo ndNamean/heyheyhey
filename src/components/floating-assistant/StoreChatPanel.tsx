@@ -71,6 +71,7 @@ import {
   resolveStoreChatLogbookDeepLink,
 } from '../../lib/logbookDeepLink';
 import {
+  OPEN_FIX_RESUBMIT_REPORT_EVENT,
   OPEN_REVIEW_REPORT_EVENT,
   resolveStoreChatReportDeepLink,
 } from '../../lib/reportDeepLink';
@@ -241,6 +242,21 @@ function openReviewFromMessage(message: StoreChatMessage) {
   const link = resolveStoreChatReportDeepLink(message);
   if (!link) return;
   window.dispatchEvent(new CustomEvent(OPEN_REVIEW_REPORT_EVENT, { detail: link }));
+}
+
+function openFixResubmitFromMessage(message: StoreChatMessage) {
+  const link = resolveStoreChatReportDeepLink(message);
+  if (!link) return;
+  window.dispatchEvent(new CustomEvent(OPEN_FIX_RESUBMIT_REPORT_EVENT, { detail: link }));
+}
+
+/** Route report handoff CTA by actionType (fix_resubmit → submit correction; else Review). */
+function openReportFromMessage(message: StoreChatMessage) {
+  if (String(message.actionType || '').trim() === 'fix_resubmit') {
+    openFixResubmitFromMessage(message);
+    return;
+  }
+  openReviewFromMessage(message);
 }
 
 /** Prefer stored requiredAction; else map actionType (+ status for view). */
@@ -586,7 +602,7 @@ function MessageBubble({
           <button
             type="button"
             className="fa-msg-logbook-open"
-            onClick={() => openReviewFromMessage(message)}
+            onClick={() => openReportFromMessage(message)}
           >
             {reportSystemCtaLabel(message, sc.openReview || 'Open Review')}
           </button>

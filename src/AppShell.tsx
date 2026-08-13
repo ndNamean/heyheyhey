@@ -29,6 +29,7 @@ import {
   parseLogbookDeepLinkJson,
 } from './lib/logbookDeepLink';
 import {
+  OPEN_FIX_RESUBMIT_REPORT_EVENT,
   OPEN_REVIEW_REPORT_EVENT,
   parseReportDeepLinkFromSearch,
   parseReportDeepLinkJson,
@@ -145,11 +146,21 @@ export default function AppShell({ profile }: Props) {
         goReviewReport(link);
       }
     };
+    const onOpenFixResubmit = (event: Event) => {
+      const detail = (event as CustomEvent<unknown>).detail;
+      const link =
+        typeof detail === 'string' ? parseReportDeepLinkJson(detail) : (detail as ReportDeepLink);
+      if (link && typeof link === 'object' && link.reportId) {
+        startCorrection(link.reportId);
+      }
+    };
     window.addEventListener(OPEN_LOGBOOK_EVENT, onOpenLogbook);
     window.addEventListener(OPEN_REVIEW_REPORT_EVENT, onOpenReview);
+    window.addEventListener(OPEN_FIX_RESUBMIT_REPORT_EVENT, onOpenFixResubmit);
     return () => {
       window.removeEventListener(OPEN_LOGBOOK_EVENT, onOpenLogbook);
       window.removeEventListener(OPEN_REVIEW_REPORT_EVENT, onOpenReview);
+      window.removeEventListener(OPEN_FIX_RESUBMIT_REPORT_EVENT, onOpenFixResubmit);
     };
   }, []);
 

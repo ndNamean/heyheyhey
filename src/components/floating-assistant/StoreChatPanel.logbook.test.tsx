@@ -266,6 +266,47 @@ describe('StoreChatPanel report_system row', () => {
     }
   });
 
+  it('dispatches OPEN_FIX_RESUBMIT_REPORT_EVENT on Fix and resubmit', async () => {
+    const { OPEN_FIX_RESUBMIT_REPORT_EVENT, OPEN_REVIEW_REPORT_EVENT } = await import(
+      '../../lib/reportDeepLink'
+    );
+    currentMessages = [
+      {
+        ...currentMessages[0],
+        requiredAction: 'Fix and resubmit',
+        actionType: 'fix_resubmit',
+        statusSnapshot: 'need_correction',
+        logbookEventType: 'report_action_required',
+      },
+    ];
+    const fixSeen: unknown[] = [];
+    const reviewSeen: unknown[] = [];
+    const onFix = (event: Event) => {
+      fixSeen.push((event as CustomEvent).detail);
+    };
+    const onReview = (event: Event) => {
+      reviewSeen.push((event as CustomEvent).detail);
+    };
+    window.addEventListener(OPEN_FIX_RESUBMIT_REPORT_EVENT, onFix);
+    window.addEventListener(OPEN_REVIEW_REPORT_EVENT, onReview);
+    try {
+      renderPanel();
+      fireEvent.click(screen.getByRole('button', { name: /fix and resubmit/i }));
+      expect(fixSeen).toEqual([
+        {
+          page: 'review',
+          surface: 'reports',
+          reportId: 'report-99',
+          storeId: 's1',
+        },
+      ]);
+      expect(reviewSeen).toEqual([]);
+    } finally {
+      window.removeEventListener(OPEN_FIX_RESUBMIT_REPORT_EVENT, onFix);
+      window.removeEventListener(OPEN_REVIEW_REPORT_EVENT, onReview);
+    }
+  });
+
   it('uses message requiredAction for report CTA label', () => {
     currentMessages = [
       {
