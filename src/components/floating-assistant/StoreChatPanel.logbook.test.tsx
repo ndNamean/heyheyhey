@@ -199,6 +199,13 @@ describe('StoreChatPanel logbook_system row', () => {
     expect(screen.getByRole('button', { name: /react to logbook/i })).toBeTruthy();
     expect(screen.queryByRole('menuitem', { name: /delete/i })).toBeNull();
   });
+
+  it('shows posted date and time like human messages', () => {
+    const { container } = renderPanel();
+    const timeEl = container.querySelector('time.fa-msg-time');
+    expect(timeEl?.getAttribute('dateTime')).toBe('2026-08-04T00:00:00.000Z');
+    expect(timeEl?.textContent?.trim()).not.toBe('');
+  });
 });
 
 describe('StoreChatPanel report_system row', () => {
@@ -319,5 +326,12 @@ describe('StoreChatPanel report_system row', () => {
     ];
     renderPanel();
     expect(screen.getByRole('button', { name: /^view$/i })).toBeTruthy();
+  });
+
+  it('shows posted date and time like human messages', () => {
+    const { container } = renderPanel();
+    const timeEl = container.querySelector('time.fa-msg-time');
+    expect(timeEl?.getAttribute('dateTime')).toBe('2026-08-04T00:00:00.000Z');
+    expect(timeEl?.textContent?.trim()).not.toBe('');
   });
 });

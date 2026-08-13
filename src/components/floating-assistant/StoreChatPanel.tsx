@@ -483,6 +483,9 @@ function MessageBubble({
             >
               {message.statusSnapshot || 'open'}
             </span>
+            <time className="fa-msg-time" dateTime={message.createdAt}>
+              {formatMessageTime(message.createdAt)}
+            </time>
           </div>
         ) : null}
         {!isHandoffSystem && isForwarded(message) ? (
