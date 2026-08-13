@@ -351,17 +351,16 @@ export default function ReviewPage({
     }
     schedulePushDeliveryFromTxs(notificationTxs);
 
-    // Finalize-with-issues only; server skips if action_required already delivered this cycle.
-    if (newStatus === 'rejected') {
-      const cycleKey =
-        String(report.updatedAt || report.submittedAt || nowIso()).trim() || nowIso();
-      void deliverReportEvent({
-        reportId: report.id,
-        eventType: 'report_finalized',
-        eventVersion: cycleKey,
-        reportStatus: newStatus,
-      });
-    }
+    // Closing Store Chat card for approved + issues; server skips issues when
+    // action_required already delivered this cycle, and skips waiting_approval.
+    const cycleKey =
+      String(report.updatedAt || report.submittedAt || nowIso()).trim() || nowIso();
+    void deliverReportEvent({
+      reportId: report.id,
+      eventType: 'report_finalized',
+      eventVersion: cycleKey,
+      reportStatus: newStatus,
+    });
   }
 
   return (

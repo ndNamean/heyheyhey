@@ -55,6 +55,35 @@ describe('api/_lib/report/notification-content', () => {
       }),
     ).toBe(false);
   });
+
+  it('emits finalize chat for approved', () => {
+    expect(
+      shouldEmitReportFinalizedChat({
+        reportStatus: 'approved',
+        actionRequiredAlreadyDelivered: false,
+      }),
+    ).toBe(true);
+  });
+
+  it('approved finalize copy uses Report approved + View', () => {
+    const n = buildNormalizedReportNotification({
+      report: {
+        id: 'rep123',
+        storeId: 's1',
+        storeCode: 'S1',
+        templateName: 'Daily',
+        reportDate: '2026-08-10',
+        status: 'approved',
+      },
+      eventType: 'report_finalized',
+      eventVersion: 'v1',
+      recipients: ['u1'],
+      actor: { userId: 'mgr', displayName: 'Manager' },
+    });
+    expect(n.copy.eventLabel).toBe('Report approved');
+    expect(n.requiredAction).toBe('View');
+    expect(n.actionType).toBe('view');
+  });
 });
 
 describe('api/_lib/report/recipients', () => {

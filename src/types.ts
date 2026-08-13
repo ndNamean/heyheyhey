@@ -929,6 +929,8 @@ export interface StoreChatMessage {
   reportId?: string;
   logbookEventType?: string;
   actionType?: string;
+  /** Human CTA label when present on handoff rows; else derive from actionType. */
+  requiredAction?: string;
   targetUserIdsJson?: string;
   deepLinkJson?: string;
   statusSnapshot?: string;

@@ -1149,7 +1149,7 @@ async function deliverReportEvent(req, res, adminDb, actor, body) {
   }
 
   const normalized = buildNormalizedReportNotification({
-    report,
+    report: reportStatusHint ? { ...report, status: reportStatusHint } : report,
     eventType,
     eventVersion,
     recipients,

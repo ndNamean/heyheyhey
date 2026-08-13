@@ -233,6 +233,8 @@ describe('StoreChatPanel report_system row', () => {
           storeId: 's1',
         }),
         statusSnapshot: 'waiting_approval',
+        actionType: 'open_review',
+        requiredAction: 'Open Review',
       },
     ];
     Object.defineProperty(Element.prototype, 'scrollIntoView', {
@@ -262,5 +264,19 @@ describe('StoreChatPanel report_system row', () => {
     } finally {
       window.removeEventListener(OPEN_REVIEW_REPORT_EVENT, handler);
     }
+  });
+
+  it('uses message requiredAction for report CTA label', () => {
+    currentMessages = [
+      {
+        ...currentMessages[0],
+        requiredAction: 'View',
+        actionType: 'view',
+        statusSnapshot: 'approved',
+        logbookEventType: 'report_finalized',
+      },
+    ];
+    renderPanel();
+    expect(screen.getByRole('button', { name: /^view$/i })).toBeTruthy();
   });
 });

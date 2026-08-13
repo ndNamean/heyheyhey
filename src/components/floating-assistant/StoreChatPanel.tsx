@@ -243,6 +243,20 @@ function openReviewFromMessage(message: StoreChatMessage) {
   window.dispatchEvent(new CustomEvent(OPEN_REVIEW_REPORT_EVENT, { detail: link }));
 }
 
+/** Prefer stored requiredAction; else map actionType (+ status for view). */
+function reportSystemCtaLabel(message: StoreChatMessage, fallbackOpenReview: string): string {
+  const required = String(message.requiredAction || '').trim();
+  if (required) return required;
+  const action = String(message.actionType || '').trim();
+  if (action === 'fix_resubmit') return 'Fix and resubmit';
+  if (action === 'view') {
+    const status = String(message.statusSnapshot || '').trim();
+    if (status === 'rejected' || status === 'need_correction') return 'View / fix';
+    return 'View';
+  }
+  return fallbackOpenReview;
+}
+
 function isLogbookSystemMessage(message: StoreChatMessage): boolean {
   return message.messageType === 'logbook_system' || message.sourceType === 'logbook';
 }
@@ -574,7 +588,7 @@ function MessageBubble({
             className="fa-msg-logbook-open"
             onClick={() => openReviewFromMessage(message)}
           >
-            {sc.openReview || 'Open Review'}
+            {reportSystemCtaLabel(message, sc.openReview || 'Open Review')}
           </button>
         ) : null}
         {!isHandoffSystem && translation && translation.status !== 'idle' && translation.status !== 'empty' ? (

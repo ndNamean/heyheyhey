@@ -32,6 +32,23 @@ const EVENT_META = {
   },
 };
 
+/** Branch report_finalized copy by live report status (approved vs issues). */
+export function resolveReportEventMeta(eventType, reportStatus) {
+  const base = EVENT_META[eventType];
+  if (eventType !== 'report_finalized') return base;
+  const status = String(reportStatus || '').trim();
+  if (status === 'approved') {
+    return {
+      ...base,
+      eventLabel: 'Report approved',
+      actionType: 'view',
+      requiredAction: 'View',
+      defaultStatus: 'approved',
+    };
+  }
+  return base;
+}
+
 export function reportDisplayId(reportId) {
   const id = String(reportId || '').trim();
   return id ? `#${id.slice(0, 6)}` : '#------';
@@ -105,8 +122,7 @@ function trimSummary(report) {
 }
 
 export function buildNormalizedReportNotification(input) {
-  const meta = EVENT_META[input.eventType];
-  if (!meta) {
+  if (!EVENT_META[input.eventType]) {
     throw new Error(`Unsupported report notify event: ${input.eventType}`);
   }
 
@@ -121,7 +137,9 @@ export function buildNormalizedReportNotification(input) {
     String(input.storeLabel || '').trim() ||
     [report.storeCode, report.storeName].filter(Boolean).join(' — ') ||
     (storeId ? 'Unknown store' : 'Unknown store');
-  const statusSnapshot = String(report.status || '').trim() || meta.defaultStatus;
+  const statusHint = String(report.status || '').trim();
+  const meta = resolveReportEventMeta(input.eventType, statusHint);
+  const statusSnapshot = statusHint || meta.defaultStatus;
   const detail =
     String(input.note || '').trim() || String(input.itemTitle || '').trim();
 
@@ -213,7 +231,8 @@ export function shouldEmitReportChatOnItemApprove() {
 
 export function shouldEmitReportFinalizedChat(opts) {
   const status = String(opts?.reportStatus || '');
-  if (status === 'approved' || status === 'waiting_approval') return false;
+  if (status === 'waiting_approval') return false;
+  if (status === 'approved') return true;
   if (status !== 'rejected' && status !== 'need_correction') return false;
   if (opts?.actionRequiredAlreadyDelivered) return false;
   return true;

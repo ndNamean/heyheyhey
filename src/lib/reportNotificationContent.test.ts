@@ -143,10 +143,16 @@ describe('reportNotificationContent', () => {
     expect(shouldEmitReportChatOnItemApprove()).toBe(false);
   });
 
-  it('volume: finalize chat only for issues without prior action_required', () => {
+  it('volume: finalize chat for approved; issues only without prior action_required', () => {
     expect(
       shouldEmitReportFinalizedChat({
         reportStatus: 'approved',
+        actionRequiredAlreadyDelivered: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldEmitReportFinalizedChat({
+        reportStatus: 'waiting_approval',
         actionRequiredAlreadyDelivered: false,
       }),
     ).toBe(false);
@@ -162,6 +168,35 @@ describe('reportNotificationContent', () => {
         actionRequiredAlreadyDelivered: false,
       }),
     ).toBe(true);
+  });
+
+  it('approved finalize copy uses Report approved + View', () => {
+    const n = buildNormalizedReportNotification({
+      report: report({ status: 'approved' }),
+      eventType: 'report_finalized',
+      eventVersion: '2026-08-10T09:00:00.000Z',
+      recipients: ['staff1'],
+      actor: { userId: 'mgr1', displayName: 'Manager' },
+      storeLabel: 'TKA — Store A',
+    });
+    expect(n.copy.eventLabel).toBe('Report approved');
+    expect(n.actionType).toBe('view');
+    expect(n.requiredAction).toBe('View');
+    expect(n.statusSnapshot).toBe('approved');
+    expect(n.copy.chatBody).toContain('Report approved');
+  });
+
+  it('issues finalize copy keeps View / fix', () => {
+    const n = buildNormalizedReportNotification({
+      report: report({ status: 'rejected' }),
+      eventType: 'report_finalized',
+      eventVersion: '2026-08-10T09:00:00.000Z',
+      recipients: ['staff1'],
+      actor: { userId: 'mgr1', displayName: 'Manager' },
+    });
+    expect(n.copy.eventLabel).toBe('Report finalized with issues');
+    expect(n.requiredAction).toBe('View / fix');
+    expect(n.actionType).toBe('view');
   });
 
   it('selects reviewers for submitted event and excludes actor', () => {
@@ -210,7 +245,7 @@ describe('reportNotificationContent', () => {
 });
 
 describe('report chat volume guarantees', () => {
-  it('10 item approves → 0 chat; first correction → 1; resubmit → new submitted; finalize after action_required → 0', () => {
+  it('10 item approves → 0 chat; first correction → 1; resubmit → new submitted; finalize after action_required → 0; approved finalize → emit', () => {
     const chatEvents: string[] = [];
     // 10 approves — never chat
     for (let i = 0; i < 10; i++) {
@@ -240,6 +275,19 @@ describe('report chat volume guarantees', () => {
       }),
     ).toBe(false);
 
-    expect(chatEvents).toEqual(['report_action_required', 'report_submitted']);
+    // all-approved finalize → emit
+    expect(
+      shouldEmitReportFinalizedChat({
+        reportStatus: 'approved',
+        actionRequiredAlreadyDelivered: false,
+      }),
+    ).toBe(true);
+    chatEvents.push('report_finalized');
+
+    expect(chatEvents).toEqual([
+      'report_action_required',
+      'report_submitted',
+      'report_finalized',
+    ]);
   });
 });
