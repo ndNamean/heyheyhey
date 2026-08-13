@@ -7,9 +7,11 @@ import { canAccessAllStores, canReview } from '../lib/roles';
 import {
   buildReviewReportsWhere,
   canFinaliseReportResponses,
+  canRemindReportInStoreChat,
   canReviewReport,
   canReviewReportItem,
   filterReportsAwaitingReview,
+  firstActionableReportResponse,
   resolveFinaliseReportStatus,
 } from '../lib/reportReview';
 import { statusLabel } from '../lib/i18nUtils';
@@ -107,6 +109,8 @@ export default function ReviewPage({
   const [pendingFeedback, setPendingFeedback] = useState<PendingFeedback | null>(null);
   const [pendingFinaliseIssues, setPendingFinaliseIssues] =
     useState<PendingFinaliseIssues | null>(null);
+  const [remindBusyReportId, setRemindBusyReportId] = useState<string | null>(null);
+  const [remindMsgByReportId, setRemindMsgByReportId] = useState<Record<string, string>>({});
   const [surface, setSurface] = useState<ReviewSurface>(initialSurface);
   const lastHighlightScrollKey = useRef('');
 
@@ -329,6 +333,49 @@ export default function ReviewPage({
     const { report, response, status } = pendingFeedback;
     setPendingFeedback(null);
     await updateResponseStatus(report, response, status, result);
+  }
+
+  async function remindReportInStoreChat(report: Report) {
+    if (!canReviewReport(profile, report, defs)) {
+      alert(t.review.noPermissionItem);
+      return;
+    }
+    const responses = (report.responses ?? []) as ReportResponse[];
+    if (!canRemindReportInStoreChat(responses)) {
+      alert(t.review.noPermissionItem);
+      return;
+    }
+    const actionable = firstActionableReportResponse(responses);
+    setRemindBusyReportId(report.id);
+    setRemindMsgByReportId((prev) => {
+      const next = { ...prev };
+      delete next[report.id];
+      return next;
+    });
+    try {
+      const result = await deliverReportEvent({
+        reportId: report.id,
+        eventType: 'report_action_required',
+        eventVersion: `remind:${nowIso()}`,
+        note:
+          actionable?.rejectionReason?.trim() ||
+          actionable?.feedbackNote?.trim() ||
+          undefined,
+        itemTitle: actionable?.title?.trim() || undefined,
+        responseId: actionable?.id,
+      });
+      setRemindMsgByReportId((prev) => ({
+        ...prev,
+        [report.id]: result.ok ? t.review.remindSuccess : result.message || t.review.remindFailed,
+      }));
+    } catch (e) {
+      setRemindMsgByReportId((prev) => ({
+        ...prev,
+        [report.id]: e instanceof Error ? e.message : t.review.remindFailed,
+      }));
+    } finally {
+      setRemindBusyReportId(null);
+    }
   }
 
   async function markReportApproved(report: Report) {
@@ -870,7 +917,7 @@ export default function ReviewPage({
               );
             })}
 
-            {canFinaliseReportResponses(responses) && (
+            {canFinaliseReportResponses(responses) ? (
               <button
                 className="success"
                 type="button"
@@ -879,7 +926,25 @@ export default function ReviewPage({
               >
                 {t.review.finaliseReport}
               </button>
-            )}
+            ) : canRemindReportInStoreChat(responses) ? (
+              <div style={{ marginTop: 12 }}>
+                <button
+                  className="secondary"
+                  type="button"
+                  disabled={remindBusyReportId === report.id}
+                  onClick={() => void remindReportInStoreChat(report)}
+                >
+                  {remindBusyReportId === report.id
+                    ? t.review.remindSending
+                    : t.review.remindInStoreChat}
+                </button>
+                {remindMsgByReportId[report.id] ? (
+                  <p className="small" style={{ margin: '8px 0 0' }}>
+                    {remindMsgByReportId[report.id]}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         );
       })}

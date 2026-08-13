@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   buildReviewReportsWhere,
   canFinaliseReportResponses,
+  canRemindReportInStoreChat,
   canReviewReport,
   canReviewReportItem,
   filterReportsAwaitingReview,
+  firstActionableReportResponse,
   resolveFinaliseReportStatus,
 } from './reportReview';
 import {
@@ -272,23 +274,22 @@ describe('canFinaliseReportResponses + resolveFinaliseReportStatus', () => {
     expect(resolveFinaliseReportStatus(responses)).toBe('waiting_approval');
   });
 
-  it('allows Finalise for mixed approved + need_correction and sets header need_correction', () => {
+  it('hides Finalise for mixed approved + need_correction', () => {
     const responses = [
       response({ id: 'a', status: 'approved' }),
       response({ id: 'b', status: 'need_correction' }),
     ];
-    expect(canFinaliseReportResponses(responses)).toBe(true);
-    expect(resolveFinaliseReportStatus(responses)).toBe('need_correction');
+    expect(canFinaliseReportResponses(responses)).toBe(false);
+    expect(resolveFinaliseReportStatus(responses)).toBe('waiting_approval');
   });
 
-  it('prefers rejected over need_correction for header status', () => {
+  it('hides Finalise for mixed approved + rejected', () => {
     const responses = [
       response({ id: 'a', status: 'approved' }),
-      response({ id: 'b', status: 'need_correction' }),
-      response({ id: 'c', status: 'rejected' }),
+      response({ id: 'b', status: 'rejected' }),
     ];
-    expect(canFinaliseReportResponses(responses)).toBe(true);
-    expect(resolveFinaliseReportStatus(responses)).toBe('rejected');
+    expect(canFinaliseReportResponses(responses)).toBe(false);
+    expect(resolveFinaliseReportStatus(responses)).toBe('waiting_approval');
   });
 
   it('sets approved when every item is approved', () => {
@@ -298,6 +299,56 @@ describe('canFinaliseReportResponses + resolveFinaliseReportStatus', () => {
     ];
     expect(canFinaliseReportResponses(responses)).toBe(true);
     expect(resolveFinaliseReportStatus(responses)).toBe('approved');
+  });
+});
+
+describe('canRemindReportInStoreChat + firstActionableReportResponse', () => {
+  it('hides Remind while any item is still waiting_approval', () => {
+    const responses = [
+      response({ id: 'a', status: 'approved' }),
+      response({ id: 'b', status: 'waiting_approval' }),
+    ];
+    expect(canRemindReportInStoreChat(responses)).toBe(false);
+  });
+
+  it('shows Remind for approved + need_correction', () => {
+    const responses = [
+      response({ id: 'a', status: 'approved' }),
+      response({
+        id: 'b',
+        status: 'need_correction',
+        title: 'Fix fridge',
+        rejectionReason: 'Dirty',
+      }),
+    ];
+    expect(canRemindReportInStoreChat(responses)).toBe(true);
+    expect(firstActionableReportResponse(responses)?.id).toBe('b');
+  });
+
+  it('shows Remind for approved + rejected', () => {
+    const responses = [
+      response({ id: 'a', status: 'approved' }),
+      response({ id: 'b', status: 'rejected', title: 'Bad photo' }),
+    ];
+    expect(canRemindReportInStoreChat(responses)).toBe(true);
+    expect(firstActionableReportResponse(responses)?.id).toBe('b');
+  });
+
+  it('prefers need_correction over rejected for actionable item', () => {
+    const responses = [
+      response({ id: 'a', status: 'rejected', title: 'Rejected first' }),
+      response({ id: 'b', status: 'need_correction', title: 'Needs fix' }),
+    ];
+    expect(firstActionableReportResponse(responses)?.id).toBe('b');
+  });
+
+  it('hides Remind when every item is approved', () => {
+    const responses = [
+      response({ id: 'a', status: 'approved' }),
+      response({ id: 'b', status: 'approved' }),
+    ];
+    expect(canRemindReportInStoreChat(responses)).toBe(false);
+    expect(firstActionableReportResponse(responses)).toBeNull();
   });
 });
 

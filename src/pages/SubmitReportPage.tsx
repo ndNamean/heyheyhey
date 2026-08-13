@@ -82,6 +82,7 @@ export default function SubmitReportPage({
   const [correctionReady, setCorrectionReady] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [notifySoftFail, setNotifySoftFail] = useState(false);
   const [cameraReviewPending, setCameraReviewPending] = useState(false);
   const correctionInitRef = useRef(false);
   /** Item ids frozen when the wizard session starts for a template (avoids mid-flight inserts). */
@@ -604,11 +605,12 @@ export default function SubmitReportPage({
       );
 
       await db.transact([reportTx, ...responseUpdateTxs, ...mediaLinkTxs, ...reviewEventTxs]);
-      void deliverReportEvent({
+      const notify = await deliverReportEvent({
         reportId: correctionReport.id,
         eventType: 'report_submitted',
         eventVersion: now,
       });
+      setNotifySoftFail(!notify.ok);
       setSubmitted(true);
     } catch (e) {
       alert(e instanceof Error ? e.message : t.validation.resubmitFailed);
@@ -664,6 +666,11 @@ export default function SubmitReportPage({
         <p>
           {correctionMode ? t.submit.fixesInQueue : t.submit.waitingReview}
         </p>
+        {correctionMode && notifySoftFail ? (
+          <p className="small" style={{ marginTop: 8 }}>
+            {t.submit.resubmitNotifyPending}
+          </p>
+        ) : null}
         <button onClick={resetForm}>
           {correctionMode ? t.submit.backToHome : t.submit.submitAnother}
         </button>

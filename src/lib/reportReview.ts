@@ -68,7 +68,7 @@ export function canReviewReport(
   return userCanAccessStore(profile.role, profileStoreIds(profile), report.storeId, defs);
 }
 
-/** Item statuses that allow Finalise (no pending waiting_approval left). */
+/** Item statuses that count as reviewed (no pending waiting_approval left). */
 export const FINALISE_READY_ITEM_STATUSES = [
   'approved',
   'rejected',
@@ -81,21 +81,47 @@ export type FinaliseReportHeaderStatus =
   | 'need_correction'
   | 'waiting_approval';
 
-/** Show Finalise when every item is reviewed (approved | rejected | need_correction). */
-export function canFinaliseReportResponses(
+function everyResponseReviewed(
   responses: Pick<ReportResponse, 'status'>[],
 ): boolean {
   if (!responses.length) return false;
-  const pending = responses.filter((r) => r.status === 'waiting_approval').length;
-  if (pending > 0) return false;
   return responses.every((r) =>
     (FINALISE_READY_ITEM_STATUSES as readonly string[]).includes(r.status),
   );
 }
 
+/** Show Finalise only when every item is Approved. */
+export function canFinaliseReportResponses(
+  responses: Pick<ReportResponse, 'status'>[],
+): boolean {
+  if (!responses.length) return false;
+  return responses.every((r) => r.status === 'approved');
+}
+
+/**
+ * Remind in Store Chat when every item is reviewed but not all approved
+ * (mixed approved + need_correction / rejected). Hidden while any item waits.
+ */
+export function canRemindReportInStoreChat(
+  responses: Pick<ReportResponse, 'status'>[],
+): boolean {
+  if (!everyResponseReviewed(responses)) return false;
+  return !responses.every((r) => r.status === 'approved');
+}
+
+/** Prefer need_correction, else rejected — for Remind note / itemTitle. */
+export function firstActionableReportResponse<
+  T extends Pick<ReportResponse, 'status' | 'title' | 'rejectionReason' | 'feedbackNote'>,
+>(responses: T[]): T | null {
+  const needCorrection = responses.find((r) => r.status === 'need_correction');
+  if (needCorrection) return needCorrection;
+  return responses.find((r) => r.status === 'rejected') ?? null;
+}
+
 /**
  * Header status after Finalise:
  * all approved → approved; any rejected → rejected; else any need_correction → need_correction.
+ * (With all-approved Finalise gating, only `approved` is reachable from the button.)
  */
 export function resolveFinaliseReportStatus(
   responses: Pick<ReportResponse, 'status'>[],
