@@ -186,8 +186,14 @@ function DueAtField({
   const { t } = useLang();
   const [preset, setPreset] = useState<DueAtPreset>('custom');
 
+  // Custom default: when empty, seed 3 hours from now so the picker is ready to tweak.
   useEffect(() => {
-    if (!dueAt) setPreset('custom');
+    if (!dueAt) {
+      setPreset('custom');
+      onDueAtChange(dueAtHoursFromNow(3));
+    }
+    // Only react to empty dueAt; parent setters are unstable inline lambdas.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dueAt]);
 
   return (
@@ -201,6 +207,7 @@ function DueAtField({
             setPreset(next);
             if (next === '12') onDueAtChange(dueAtHoursFromNow(12));
             else if (next === '24') onDueAtChange(dueAtHoursFromNow(24));
+            else if (next === 'custom' && !dueAt) onDueAtChange(dueAtHoursFromNow(3));
           }}
         >
           <option value="custom">{t.logbook.dueAtCustom}</option>
