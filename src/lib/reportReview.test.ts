@@ -158,23 +158,25 @@ describe('canReviewReport', () => {
 });
 
 describe('buildReviewReportsWhere', () => {
-  it('omits where for all-store roles so status is never Instant-filtered', () => {
+  it('filters all-store roles to indexed waiting_approval', () => {
     expect(
       buildReviewReportsWhere({
         canAccessAllStores: true,
         storeIds: ['store-a'],
         highlightReportId: 'r1',
       }),
-    ).toBeUndefined();
+    ).toEqual({ status: 'waiting_approval' });
   });
 
-  it('scopes managers to assigned stores via indexed storeId', () => {
+  it('scopes managers to waiting_approval on assigned stores', () => {
     expect(
       buildReviewReportsWhere({
         canAccessAllStores: false,
         storeIds: ['store-a', 'store-a', ''],
       }),
-    ).toEqual({ storeId: { $in: ['store-a'] } });
+    ).toEqual({
+      and: [{ status: 'waiting_approval' }, { storeId: { $in: ['store-a'] } }],
+    });
   });
 
   it('includes deep-link report id so Open Review still loads that card', () => {
@@ -185,8 +187,21 @@ describe('buildReviewReportsWhere', () => {
         highlightReportId: '2ac1be-full',
       }),
     ).toEqual({
-      or: [{ storeId: { $in: ['store-a'] } }, { id: '2ac1be-full' }],
+      or: [
+        { and: [{ status: 'waiting_approval' }, { storeId: { $in: ['store-a'] } }] },
+        { id: '2ac1be-full' },
+      ],
     });
+  });
+
+  it('uses highlight id only when store-scoped reviewer has no stores', () => {
+    expect(
+      buildReviewReportsWhere({
+        canAccessAllStores: false,
+        storeIds: [],
+        highlightReportId: 'r-deep',
+      }),
+    ).toEqual({ id: 'r-deep' });
   });
 
   it('skips the reports query when a store-scoped reviewer has no stores', () => {

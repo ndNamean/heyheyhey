@@ -98,6 +98,33 @@ function keepReviewCardFocused(reportId: string) {
   card.focus({ preventScroll: true });
 }
 
+type InstantQueryErrorLike = {
+  message?: string;
+  hint?: unknown;
+  code?: unknown;
+  type?: unknown;
+};
+
+function instantErrorMeta(error: unknown): InstantQueryErrorLike {
+  if (!error || typeof error !== 'object') return { message: String(error ?? '') };
+  const e = error as InstantQueryErrorLike;
+  return {
+    message: typeof e.message === 'string' ? e.message : String(error),
+    hint: e.hint,
+    code: e.code ?? e.type,
+  };
+}
+
+function isConnectionLikeLoadFailure(
+  connectionStatus: string,
+  error: unknown,
+): boolean {
+  if (connectionStatus === 'closed' || connectionStatus === 'errored') return true;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+  const message = instantErrorMeta(error).message?.toLowerCase() ?? '';
+  return /offline|network|connection|failed to fetch|net::|not connected/.test(message);
+}
+
 export default function ReviewPage({
   profile,
   highlightReportId = null,
@@ -112,7 +139,23 @@ export default function ReviewPage({
   const [remindBusyReportId, setRemindBusyReportId] = useState<string | null>(null);
   const [remindMsgByReportId, setRemindMsgByReportId] = useState<Record<string, string>>({});
   const [surface, setSurface] = useState<ReviewSurface>(initialSurface);
+  const [reportsQueryPaused, setReportsQueryPaused] = useState(false);
+  const [logbookQueryPaused, setLogbookQueryPaused] = useState(false);
   const lastHighlightScrollKey = useRef('');
+  const lastLoggedReportsSig = useRef('');
+  const lastLoggedLogbookSig = useRef('');
+  const lastGoodReportsRef = useRef<{
+    reports: Report[];
+    profiles: Profile[];
+    events: ReviewEvent[];
+  } | null>(null);
+  const lastGoodLogbookRef = useRef<{
+    issues: LogbookEntry[];
+    profiles: Profile[];
+    events: ReviewEvent[];
+  } | null>(null);
+
+  const connectionStatus = db.useConnectionStatus();
 
   useEffect(() => {
     if (highlightReportId) {
@@ -121,6 +164,16 @@ export default function ReviewPage({
       setSurface(initialSurface);
     }
   }, [highlightReportId, highlightOpenKey, initialSurface]);
+
+  useEffect(() => {
+    if (!reportsQueryPaused) return;
+    setReportsQueryPaused(false);
+  }, [reportsQueryPaused]);
+
+  useEffect(() => {
+    if (!logbookQueryPaused) return;
+    setLogbookQueryPaused(false);
+  }, [logbookQueryPaused]);
 
   const storeIds = useMemo(
     () => (profile.stores ?? []).map((s) => s.id).filter(Boolean),
@@ -138,21 +191,39 @@ export default function ReviewPage({
 
   const reportsQuery = useMemo(
     () =>
-      reportsWhere === null
-        ? {
-            profiles: { stores: {}, avatarFile: {} },
-            reviewEvents: {},
-          }
-        : {
-            reports: {
-              ...(reportsWhere ? { $: { where: reportsWhere } } : {}),
-              responses: { media: { file: {} } },
-              store: {},
+      reportsQueryPaused
+        ? null
+        : reportsWhere === null
+          ? {
+              profiles: { stores: {}, avatarFile: {} },
+              reviewEvents: {},
+            }
+          : {
+              reports: {
+                ...(reportsWhere ? { $: { where: reportsWhere } } : {}),
+                responses: { media: { file: {} } },
+                store: {},
+              },
+              profiles: { stores: {}, avatarFile: {} },
+              reviewEvents: {},
             },
-            profiles: { stores: {}, avatarFile: {} },
-            reviewEvents: {},
+    [reportsQueryPaused, reportsWhere],
+  );
+
+  const logbookQuery = useMemo(
+    () =>
+      logbookQueryPaused || surface !== 'logbook'
+        ? null
+        : {
+            logbookEntries: {
+              store: {},
+              photo: {},
+              sourceMedia: {},
+              resolutionMedia: {},
+              resolutionProofHistory: {},
+            },
           },
-    [reportsWhere],
+    [logbookQueryPaused, surface],
   );
 
   const { data, isLoading: reportsLoading, error: reportsError } = db.useQuery(reportsQuery);
@@ -160,15 +231,7 @@ export default function ReviewPage({
     data: logbookData,
     isLoading: logbookLoading,
     error: logbookError,
-  } = db.useQuery({
-    logbookEntries: {
-      store: {},
-      photo: {},
-      sourceMedia: {},
-      resolutionMedia: {},
-      resolutionProofHistory: {},
-    },
-  });
+  } = db.useQuery(logbookQuery);
 
   const allProfiles: Profile[] = (data?.profiles ?? []) as Profile[];
   const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];
@@ -187,6 +250,110 @@ export default function ReviewPage({
     );
   }, [allLogbookEntries, profile, defs]);
 
+  const reportsQueryOk = data != null && !reportsError;
+  if (reportsQueryOk) {
+    lastGoodReportsRef.current = {
+      reports,
+      profiles: allProfiles,
+      events: allEvents,
+    };
+  }
+
+  const logbookQueryActive = surface === 'logbook' && !logbookQueryPaused;
+  const logbookQueryOk = logbookQueryActive && logbookData != null && !logbookError;
+  if (logbookQueryOk) {
+    lastGoodLogbookRef.current = {
+      issues: logbookIssues,
+      profiles: allProfiles,
+      events: allEvents,
+    };
+  }
+
+  const reportsHasLastGood = lastGoodReportsRef.current != null;
+  const logbookHasLastGood = lastGoodLogbookRef.current != null;
+  const reportsRefreshFailed = Boolean(reportsError) && reportsHasLastGood;
+  const logbookRefreshFailed = Boolean(logbookError) && logbookHasLastGood && surface === 'logbook';
+  const reportsInitialFailed = Boolean(reportsError) && !reportsHasLastGood;
+  const logbookInitialFailed =
+    Boolean(logbookError) && !logbookHasLastGood && surface === 'logbook';
+
+  const displayReports =
+    !reportsQueryOk && lastGoodReportsRef.current
+      ? lastGoodReportsRef.current.reports
+      : reports;
+  const displayLogbookIssues =
+    !logbookQueryOk && lastGoodLogbookRef.current
+      ? lastGoodLogbookRef.current.issues
+      : logbookIssues;
+  const displayProfiles =
+    surface === 'logbook' && !logbookQueryOk && lastGoodLogbookRef.current
+      ? lastGoodLogbookRef.current.profiles
+      : !reportsQueryOk && lastGoodReportsRef.current
+        ? lastGoodReportsRef.current.profiles
+        : allProfiles;
+  const displayEvents =
+    surface === 'logbook' && !logbookQueryOk && lastGoodLogbookRef.current
+      ? lastGoodLogbookRef.current.events
+      : !reportsQueryOk && lastGoodReportsRef.current
+        ? lastGoodReportsRef.current.events
+        : allEvents;
+
+  useEffect(() => {
+    if (!reportsError) return;
+    const meta = instantErrorMeta(reportsError);
+    const sig = `reports|${meta.message}|${String(meta.hint ?? '')}|${String(meta.code ?? '')}`;
+    if (sig === lastLoggedReportsSig.current) return;
+    lastLoggedReportsSig.current = sig;
+    console.error('[review-load]', {
+      surface,
+      queryKind: 'reports',
+      message: meta.message,
+      hint: meta.hint,
+      code: meta.code,
+      hasData: data != null,
+      filteredCount: reports.length,
+      profileRole: profile.role,
+      storeIdsLength: storeIds.length,
+      connectionStatus,
+    });
+  }, [
+    connectionStatus,
+    data,
+    profile.role,
+    reports.length,
+    reportsError,
+    storeIds.length,
+    surface,
+  ]);
+
+  useEffect(() => {
+    if (!logbookError || surface !== 'logbook') return;
+    const meta = instantErrorMeta(logbookError);
+    const sig = `logbook|${meta.message}|${String(meta.hint ?? '')}|${String(meta.code ?? '')}`;
+    if (sig === lastLoggedLogbookSig.current) return;
+    lastLoggedLogbookSig.current = sig;
+    console.error('[review-load]', {
+      surface,
+      queryKind: 'logbook',
+      message: meta.message,
+      hint: meta.hint,
+      code: meta.code,
+      hasData: logbookData != null,
+      filteredCount: logbookIssues.length,
+      profileRole: profile.role,
+      storeIdsLength: storeIds.length,
+      connectionStatus,
+    });
+  }, [
+    connectionStatus,
+    logbookData,
+    logbookError,
+    logbookIssues.length,
+    profile.role,
+    storeIds.length,
+    surface,
+  ]);
+
   useEffect(() => {
     if (!highlightReportId || surface !== 'reports') return;
     const key = `${highlightReportId}:${highlightOpenKey}`;
@@ -200,11 +367,18 @@ export default function ReviewPage({
       el.classList.remove('report-card--highlight');
     }, 2500);
     return () => window.clearTimeout(timer);
-  }, [highlightReportId, highlightOpenKey, reports, surface]);
+  }, [highlightReportId, highlightOpenKey, displayReports, surface]);
 
   if (!canReview(profile.role, defs)) {
     return <div className="card">{t.review.noPermission}</div>;
   }
+
+  const reportsBlockingMessage = isConnectionLikeLoadFailure(connectionStatus, reportsError)
+    ? t.review.loadError
+    : t.review.loadUnavailable;
+  const logbookBlockingMessage = isConnectionLikeLoadFailure(connectionStatus, logbookError)
+    ? t.review.loadError
+    : t.review.loadUnavailable;
 
   async function approveLogbookIssue(entry: LogbookEntry) {
     if (!canReviewLogbookIssue(profile, entry, defs)) return;
@@ -585,9 +759,9 @@ export default function ReviewPage({
             onClick={() => setSurface('reports')}
           >
             {t.review.tabReports}
-            {reports.length > 0 && (
+            {displayReports.length > 0 && (
               <span className="badge warn" style={{ marginLeft: 6 }}>
-                {reports.length}
+                {displayReports.length}
               </span>
             )}
           </button>
@@ -597,30 +771,34 @@ export default function ReviewPage({
             onClick={() => setSurface('logbook')}
           >
             {t.review.tabLogbook}
-            {logbookIssues.length > 0 && (
+            {displayLogbookIssues.length > 0 && (
               <span className="badge warn" style={{ marginLeft: 6 }}>
-                {logbookIssues.length}
+                {displayLogbookIssues.length}
               </span>
             )}
           </button>
         </div>
       </div>
 
+      {surface === 'logbook' && logbookRefreshFailed && (
+        <p className="small">{t.review.refreshWarning}</p>
+      )}
+
       {surface === 'logbook' &&
-        logbookIssues.map((entry) => {
+        displayLogbookIssues.map((entry) => {
           const proofType = resolveLogbookProofType(entry);
           const overdue = isIssueOverdue(entry);
           const submitter = resolveActorDisplay(
             entry.resolutionSubmittedByUserId || '',
             undefined,
-            allProfiles,
+            displayProfiles,
           );
-          const creator = resolveActorDisplay(entry.authorUserId, undefined, allProfiles);
-          const submitterProfile = allProfiles.find(
+          const creator = resolveActorDisplay(entry.authorUserId, undefined, displayProfiles);
+          const submitterProfile = displayProfiles.find(
             (p) => p.userId === (entry.resolutionSubmittedByUserId || ''),
           );
-          const creatorProfile = allProfiles.find((p) => p.userId === entry.authorUserId);
-          const entryEvents = allEvents.filter((e) => e.logbookEntryId === entry.id);
+          const creatorProfile = displayProfiles.find((p) => p.userId === entry.authorUserId);
+          const entryEvents = displayEvents.filter((e) => e.logbookEntryId === entry.id);
           const sourceMedia = resolveSourceMedia(entry);
           const resolutionProofs = resolveResolutionProofs(entry);
           const configState = getIssueConfigurationState(entry);
@@ -763,28 +941,43 @@ export default function ReviewPage({
           );
         })}
 
-      {surface === 'logbook' && !logbookIssues.length && (
+      {surface === 'logbook' && !displayLogbookIssues.length && (
         <div className="card">
-          <p>
-            {logbookLoading
-              ? t.common.loading
-              : logbookError
-                ? t.review.loadError
+          {logbookInitialFailed ? (
+            <>
+              <p>{logbookBlockingMessage}</p>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setLogbookQueryPaused(true)}
+              >
+                {t.common.retry}
+              </button>
+            </>
+          ) : (
+            <p>
+              {!logbookHasLastGood && logbookLoading
+                ? t.common.loading
                 : t.review.noLogbookAwaiting}
-          </p>
+            </p>
+          )}
         </div>
       )}
 
+      {surface === 'reports' && reportsRefreshFailed && (
+        <p className="small">{t.review.refreshWarning}</p>
+      )}
+
       {surface === 'reports' &&
-        reports.map((report) => {
+        displayReports.map((report) => {
         const responses = (report.responses ?? []) as ReportResponse[];
         const pendingCount = responses.filter((r) => r.status === 'waiting_approval').length;
         const reportSubmitterName = resolveActorDisplay(
           report.submittedByUserId,
           undefined,
-          allProfiles,
+          displayProfiles,
         );
-        const reportSubmitterProfile = allProfiles.find(
+        const reportSubmitterProfile = displayProfiles.find(
           (p) => p.userId === report.submittedByUserId,
         );
 
@@ -817,7 +1010,7 @@ export default function ReviewPage({
 
             <ReportTimeline
               report={report}
-              events={allEvents.filter((e) => e.reportId === report.id)}
+              events={displayEvents.filter((e) => e.reportId === report.id)}
               defaultExpanded
             />
 
@@ -827,9 +1020,9 @@ export default function ReviewPage({
               const itemSubmitterName = resolveActorDisplay(
                 itemSubmitterUserId,
                 undefined,
-                allProfiles,
+                displayProfiles,
               );
-              const itemSubmitterProfile = allProfiles.find(
+              const itemSubmitterProfile = displayProfiles.find(
                 (p) => p.userId === itemSubmitterUserId,
               );
               return (
@@ -949,15 +1142,26 @@ export default function ReviewPage({
         );
       })}
 
-      {surface === 'reports' && !reports.length && (
+      {surface === 'reports' && !displayReports.length && (
         <div className="card">
-          <p>
-            {reportsLoading
-              ? t.common.loading
-              : reportsError
-                ? t.review.loadError
+          {reportsInitialFailed ? (
+            <>
+              <p>{reportsBlockingMessage}</p>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setReportsQueryPaused(true)}
+              >
+                {t.common.retry}
+              </button>
+            </>
+          ) : (
+            <p>
+              {!reportsHasLastGood && reportsLoading
+                ? t.common.loading
                 : t.review.noAwaitingReview}
-          </p>
+            </p>
+          )}
         </div>
       )}
     </div>

@@ -6,33 +6,45 @@ function profileStoreIds(profile: Profile): string[] {
 }
 
 export type ReviewReportsWhereClause =
-  | { storeId: { $in: string[] } }
-  | { id: string }
-  | { or: Array<{ storeId: { $in: string[] } } | { id: string }> };
+  | { status: 'waiting_approval' }
+  | { and: [{ status: 'waiting_approval' }, { storeId: { $in: string[] } }] }
+  | {
+      or: [
+        { and: [{ status: 'waiting_approval' }, { storeId: { $in: string[] } }] },
+        { id: string },
+      ];
+    }
+  | { id: string };
 
 /**
  * Instant `where` for Review reports.
- * `undefined` = no where (all-store roles). `null` = skip the reports query.
- * Never filters on `reports.status` (unindexed) — that made the Review list
- * flash from cache then empty after the server round-trip.
+ * Filters on indexed `status: waiting_approval` for efficiency; `null` = skip
+ * the reports namespace. Client still runs `filterReportsAwaitingReview`.
  */
 export function buildReviewReportsWhere(opts: {
   canAccessAllStores: boolean;
   storeIds: string[];
   highlightReportId?: string | null;
-}): ReviewReportsWhereClause | null | undefined {
-  if (opts.canAccessAllStores) return undefined;
+}): ReviewReportsWhereClause | null {
+  if (opts.canAccessAllStores) return { status: 'waiting_approval' };
   const storeIds = [...new Set(opts.storeIds.filter(Boolean))];
   const highlightId = String(opts.highlightReportId || '').trim();
   if (storeIds.length && highlightId) {
-    return { or: [{ storeId: { $in: storeIds } }, { id: highlightId }] };
+    return {
+      or: [
+        { and: [{ status: 'waiting_approval' }, { storeId: { $in: storeIds } }] },
+        { id: highlightId },
+      ],
+    };
   }
-  if (storeIds.length) return { storeId: { $in: storeIds } };
+  if (storeIds.length) {
+    return { and: [{ status: 'waiting_approval' }, { storeId: { $in: storeIds } }] };
+  }
   if (highlightId) return { id: highlightId };
   return null;
 }
 
-/** Header still waiting — Review list filter (client-side; do not Instant-where status). */
+/** Header still waiting — Review list filter (client-side safety net). */
 export function isReportAwaitingReview(report: Pick<Report, 'status'>): boolean {
   return report.status === 'waiting_approval';
 }
