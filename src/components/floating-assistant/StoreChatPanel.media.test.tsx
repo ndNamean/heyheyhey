@@ -367,4 +367,41 @@ describe('StoreChatPanel GIPHY media + reaction wiring', () => {
 
     expect(deleteMock).toHaveBeenCalledWith('r-gif-mine');
   });
+
+  it('wraps sent still-photo attachments in zoom and leaves GIPHY untouched', () => {
+    currentMessages = [
+      ...currentMessages,
+      {
+        id: 'm-photo',
+        storeId: 's1',
+        senderUserId: 'u1',
+        senderProfileId: 'p1',
+        senderNameSnapshot: 'Alice',
+        senderRoleSnapshot: 'staff',
+        messageType: 'attachment',
+        body: '',
+        createdAt: '2026-08-04T00:02:00.000Z',
+        editedAt: '',
+        deletedAt: '',
+        status: 'active',
+        replyToMessageId: '',
+        attachmentKind: 'image',
+        attachmentUrl: 'https://cdn.example/chat.jpg',
+        attachmentFileName: 'chat.jpg',
+        attachmentPath: 'chat/chat.jpg',
+        attachmentFileId: 'file-1',
+        attachmentWidth: '200',
+        attachmentHeight: '150',
+      },
+    ];
+    renderPanel();
+    const img = document.querySelector('img.fa-msg-attachment-image') as HTMLImageElement | null;
+    expect(img?.src).toContain('chat.jpg');
+    expect(img?.closest('.media-zoom')).toBeTruthy();
+    expect(img?.closest('button.media-zoom')?.getAttribute('type')).toBe('button');
+    expect(screen.queryByRole('link', { name: /Open original/i })).toBeNull();
+
+    const giphy = document.querySelector('img.fa-msg-giphy') as HTMLImageElement | null;
+    expect(giphy?.closest('.media-zoom')).toBeNull();
+  });
 });

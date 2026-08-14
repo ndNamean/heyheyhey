@@ -8,6 +8,8 @@ import {
 } from '../lib/proofReviewOverlay';
 import { formatMediaCaptureTime } from '../lib/proofTime';
 import ProofReviewOverlay from './ProofReviewOverlay';
+import FloatableVideo from './media-interaction/FloatableVideo';
+import ZoomableImage from './media-interaction/ZoomableImage';
 import type { MediaRecord } from '../types';
 
 /** Full media record or thin $files-linked shape (e.g. logbookEntryPhoto). */
@@ -20,6 +22,8 @@ interface Props {
   media: ProofPhotoMedia;
   className?: string;
   reviewContext?: ReviewContext;
+  /** Desktop hover float for inline videos. Photo Sheet thumbs pass false. */
+  enableVideoFloat?: boolean;
 }
 
 function logVideoDebug(tag: string, payload: unknown) {
@@ -28,7 +32,12 @@ function logVideoDebug(tag: string, payload: unknown) {
   }
 }
 
-export default function ProofPhoto({ media, className = '', reviewContext }: Props) {
+export default function ProofPhoto({
+  media,
+  className = '',
+  reviewContext,
+  enableVideoFloat = true,
+}: Props) {
   const { t } = useLang();
   const directUrl = media.fileUrl || media.url || media.file?.url || '';
   const [url, setUrl] = useState(directUrl);
@@ -162,29 +171,31 @@ export default function ProofPhoto({ media, className = '', reviewContext }: Pro
   if (isVideo) {
     return (
       <div className={`proof-photo-link proof-photo-video${className ? ` ${className}` : ''}`}>
-        <div className="proof-media-frame">
-          <div className="proof-video-player">
-            {!videoError ? (
-              <video
-                ref={videoRef}
-                key={videoSrc}
-                src={videoSrc}
-                controls
-                playsInline
-                preload="metadata"
-                onLoadedMetadata={() => logVideoDebug('VIDEO_LOADED_METADATA', { src: videoSrc })}
-                onCanPlay={() => logVideoDebug('VIDEO_CAN_PLAY', { src: videoSrc })}
-                onPlay={() => logVideoDebug('VIDEO_PLAY_ATTEMPT', { src: videoSrc })}
-                onError={handleVideoError}
-              />
-            ) : (
-              <div className="proof-video-fallback">
-                <p>{t.photoSheet.videoPlaybackFailed}</p>
-              </div>
-            )}
+        <FloatableVideo enableFloat={enableVideoFloat} resetKey={`${media.id}:${videoSrc}`}>
+          <div className="proof-media-frame">
+            <div className="proof-video-player">
+              {!videoError ? (
+                <video
+                  ref={videoRef}
+                  key={videoSrc}
+                  src={videoSrc}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  onLoadedMetadata={() => logVideoDebug('VIDEO_LOADED_METADATA', { src: videoSrc })}
+                  onCanPlay={() => logVideoDebug('VIDEO_CAN_PLAY', { src: videoSrc })}
+                  onPlay={() => logVideoDebug('VIDEO_PLAY_ATTEMPT', { src: videoSrc })}
+                  onError={handleVideoError}
+                />
+              ) : (
+                <div className="proof-video-fallback">
+                  <p>{t.photoSheet.videoPlaybackFailed}</p>
+                </div>
+              )}
+            </div>
+            {renderLegacyOverlay()}
           </div>
-          {renderLegacyOverlay()}
-        </div>
+        </FloatableVideo>
         <a
           href={url}
           target="_blank"
@@ -197,17 +208,23 @@ export default function ProofPhoto({ media, className = '', reviewContext }: Pro
     );
   }
 
+  const alt = media.fileName || media.photoCode || t.photoSheet.title;
+
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noreferrer"
-      className={`proof-photo-link${className ? ` ${className}` : ''}`}
-    >
+    <div className={`proof-photo-link${className ? ` ${className}` : ''}`}>
       <div className="proof-media-frame">
-        <img src={url} alt={media.fileName || media.photoCode || t.photoSheet.title} />
-        {renderLegacyOverlay()}
+        <ZoomableImage
+          alt={alt}
+          ariaLabel={t.photoSheet.zoomImage.replace('{alt}', alt)}
+          resetKey={`${media.id}:${url}`}
+        >
+          <img src={url} alt={alt} loading="lazy" decoding="async" />
+          {renderLegacyOverlay()}
+        </ZoomableImage>
       </div>
-    </a>
+      <a href={url} target="_blank" rel="noreferrer" className="proof-photo-open-original">
+        {t.photoSheet.openOriginal}
+      </a>
+    </div>
   );
 }

@@ -50,6 +50,7 @@ export function mockUseLang(overrides?: { lang?: string; isRtl?: boolean }) {
       },
       storeChat: pack.storeChat,
       floatingAssistant: pack.floatingAssistant,
+      photoSheet: pack.photoSheet,
     },
   };
 }

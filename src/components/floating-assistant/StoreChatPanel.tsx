@@ -79,6 +79,7 @@ import type { Profile, Store, StoreChatMessage } from '../../types';
 import ProfileAvatar from '../profileAvatar/ProfileAvatar';
 import ProfileAvatarPreview from '../profileAvatar/ProfileAvatarPreview';
 import { AmbientGlowMedia } from './AmbientGlowMedia';
+import ZoomableImage from '../media-interaction/ZoomableImage';
 import FloatingAssistantLoader from './FloatingAssistantLoader';
 import { GiphyMediaPreview } from './GiphyMediaPreview';
 import { ChatAttachmentPreview } from './ChatAttachmentPreview';
@@ -549,15 +550,25 @@ function MessageBubble({
         {!isHandoffSystem && hasAttachment && attachmentKind === 'image' && attachmentUrl ? (
           <div className="fa-msg-media" data-attachment-kind="image">
             <AmbientGlowMedia cacheKey={attachmentUrl} breathe enabled={glowEnabled}>
-              <img
-                className="fa-msg-attachment-image"
-                src={attachmentUrl}
+              <ZoomableImage
                 alt={message.attachmentFileName || attachmentLabel}
-                width={Number.parseInt(message.attachmentWidth || '', 10) || undefined}
-                height={Number.parseInt(message.attachmentHeight || '', 10) || undefined}
-                loading="lazy"
-                decoding="async"
-              />
+                ariaLabel={t.photoSheet.zoomImage.replace(
+                  '{alt}',
+                  message.attachmentFileName || attachmentLabel,
+                )}
+                resetKey={attachmentUrl}
+                stopPointerDownPropagation={false}
+              >
+                <img
+                  className="fa-msg-attachment-image"
+                  src={attachmentUrl}
+                  alt={message.attachmentFileName || attachmentLabel}
+                  width={Number.parseInt(message.attachmentWidth || '', 10) || undefined}
+                  height={Number.parseInt(message.attachmentHeight || '', 10) || undefined}
+                  loading="lazy"
+                  decoding="async"
+                />
+              </ZoomableImage>
             </AmbientGlowMedia>
             {message.attachmentFileName ? (
               <span className="fa-msg-media-caption">{message.attachmentFileName}</span>

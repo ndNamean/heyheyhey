@@ -1387,6 +1387,7 @@ body.wizard-active .page {
 .proof-media-frame {
   position: relative;
   display: block;
+  overflow: hidden;
 }
 .proof-media-frame .proof-overlay-root {
   bottom: 8px;
@@ -1986,9 +1987,44 @@ body.wizard-active .page {
   border: 1px solid #2a2a2a;
 }
 
+.proof-photo-card:has(.proof-photo-video) {
+  overflow: visible;
+}
+
+.proof-photo-video {
+  overflow: visible;
+}
+
+.proof-photo-card:has(.media-float[data-float-state='base']),
+.proof-photo-card:has(.media-float[data-float-state='enhanced']) {
+  position: relative;
+  z-index: 2;
+}
+
 .proof-photo-link {
   display: block;
   background: #0a0a0a;
+}
+
+.proof-photo-open-original {
+  display: block;
+  padding: 10px 12px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  border-top: 1px solid #2a2a2a;
+  background: #151515;
+  text-decoration: none;
+}
+
+.proof-photo-open-original:hover {
+  text-decoration: underline;
+}
+
+.proof-photo-open-original:focus-visible {
+  outline: 2px solid rgba(253, 194, 22, 0.7);
+  outline-offset: -2px;
 }
 
 .proof-photo-link img {
@@ -2129,6 +2165,17 @@ body.wizard-active .page {
   height: 64px;
   object-fit: cover;
   border-radius: 8px;
+}
+
+.proof-photo-sheet-thumb.proof-photo-link .media-zoom {
+  width: 64px;
+  height: 64px;
+}
+
+.proof-photo-sheet-thumb .proof-photo-open-original,
+.proof-photo-sheet-thumb .proof-video-open-link {
+  font-size: 10px;
+  padding: 4px 6px;
 }
 
 .proof-photo-sheet-thumb.proof-photo-loading,

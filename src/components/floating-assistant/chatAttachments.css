@@ -331,6 +331,18 @@
   background: rgba(0, 0, 0, 0.06);
 }
 
+.fa-msg-media .media-zoom {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.fa-msg-media .media-zoom__content {
+  width: 100%;
+}
+
 .fa-msg-attachment-file {
   display: flex;
   flex-direction: column;

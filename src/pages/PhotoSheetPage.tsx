@@ -93,6 +93,7 @@ export default function PhotoSheetPage({ profile }: Props) {
                     <ProofPhoto
                       media={p}
                       className="proof-photo-sheet-thumb"
+                      enableVideoFloat={false}
                       reviewContext={{
                         storeCode: store?.code,
                         watermarked: p.watermarked,
