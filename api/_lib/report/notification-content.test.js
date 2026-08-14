@@ -84,6 +84,31 @@ describe('api/_lib/report/notification-content', () => {
     expect(n.requiredAction).toBe('View');
     expect(n.actionType).toBe('view');
   });
+
+  it('action_required not_started copy uses Complete this item', () => {
+    const n = buildNormalizedReportNotification({
+      report: {
+        id: 'rep123',
+        storeId: 's1',
+        storeCode: 'S1',
+        templateName: 'Daily',
+        reportDate: '2026-08-10',
+        status: 'waiting_approval',
+      },
+      eventType: 'report_action_required',
+      eventVersion: 'v1',
+      recipients: ['u1'],
+      actor: { userId: 'mgr', displayName: 'Manager' },
+      responseStatus: 'not_started',
+      itemTitle: 'VG check',
+    });
+    expect(n.eventType).toBe('report_action_required');
+    expect(n.actionType).toBe('fix_resubmit');
+    expect(n.requiredAction).toBe('Complete this item');
+    expect(n.statusSnapshot).toBe('not_started');
+    expect(n.copy.chatBody).toContain('Complete this item');
+    expect(n.copy.chatBody).not.toContain('Fix and resubmit');
+  });
 });
 
 describe('api/_lib/report/recipients', () => {

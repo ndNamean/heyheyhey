@@ -534,7 +534,7 @@ export default function ReviewPage({
         note:
           actionable?.rejectionReason?.trim() ||
           actionable?.feedbackNote?.trim() ||
-          undefined,
+          (actionable?.status === 'not_started' ? t.review.remindNotStartedNote : undefined),
         itemTitle: actionable?.title?.trim() || undefined,
         responseId: actionable?.id,
       });
@@ -1122,7 +1122,7 @@ export default function ReviewPage({
             ) : canRemindReportInStoreChat(responses) ? (
               <div style={{ marginTop: 12 }}>
                 <button
-                  className="secondary"
+                  className="secondary review-remind-chat-btn"
                   type="button"
                   disabled={remindBusyReportId === report.id}
                   onClick={() => void remindReportInStoreChat(report)}

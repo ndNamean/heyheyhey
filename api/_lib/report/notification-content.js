@@ -33,8 +33,19 @@ const EVENT_META = {
 };
 
 /** Branch report_finalized copy by live report status (approved vs issues). */
-export function resolveReportEventMeta(eventType, reportStatus) {
+export function resolveReportEventMeta(eventType, reportStatus, responseStatus) {
   const base = EVENT_META[eventType];
+  if (eventType === 'report_action_required') {
+    const itemStatus = String(responseStatus || '').trim();
+    if (itemStatus === 'not_started') {
+      return {
+        ...base,
+        requiredAction: 'Complete this item',
+        defaultStatus: 'not_started',
+      };
+    }
+    return base;
+  }
   if (eventType !== 'report_finalized') return base;
   const status = String(reportStatus || '').trim();
   if (status === 'approved') {
@@ -138,8 +149,12 @@ export function buildNormalizedReportNotification(input) {
     [report.storeCode, report.storeName].filter(Boolean).join(' — ') ||
     (storeId ? 'Unknown store' : 'Unknown store');
   const statusHint = String(report.status || '').trim();
-  const meta = resolveReportEventMeta(input.eventType, statusHint);
-  const statusSnapshot = statusHint || meta.defaultStatus;
+  const responseStatus = String(input.responseStatus || '').trim();
+  const meta = resolveReportEventMeta(input.eventType, statusHint, responseStatus);
+  const statusSnapshot =
+    (input.eventType === 'report_action_required' && responseStatus
+      ? responseStatus
+      : statusHint) || meta.defaultStatus;
   const detail =
     String(input.note || '').trim() || String(input.itemTitle || '').trim();
 

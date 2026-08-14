@@ -93,15 +93,6 @@ export type FinaliseReportHeaderStatus =
   | 'need_correction'
   | 'waiting_approval';
 
-function everyResponseReviewed(
-  responses: Pick<ReportResponse, 'status'>[],
-): boolean {
-  if (!responses.length) return false;
-  return responses.every((r) =>
-    (FINALISE_READY_ITEM_STATUSES as readonly string[]).includes(r.status),
-  );
-}
-
 /** Show Finalise only when every item is Approved. */
 export function canFinaliseReportResponses(
   responses: Pick<ReportResponse, 'status'>[],
@@ -111,23 +102,29 @@ export function canFinaliseReportResponses(
 }
 
 /**
- * Remind in Store Chat when every item is reviewed but not all approved
- * (mixed approved + need_correction / rejected). Hidden while any item waits.
+ * Remind in Store Chat when any item still needs store work
+ * (need_correction, rejected, or not_started). Waiting approval stays out.
  */
 export function canRemindReportInStoreChat(
   responses: Pick<ReportResponse, 'status'>[],
 ): boolean {
-  if (!everyResponseReviewed(responses)) return false;
-  return !responses.every((r) => r.status === 'approved');
+  return responses.some(
+    (r) =>
+      r.status === 'need_correction' ||
+      r.status === 'rejected' ||
+      r.status === 'not_started',
+  );
 }
 
-/** Prefer need_correction, else rejected — for Remind note / itemTitle. */
+/** Prefer need_correction, then rejected, then not_started — for Remind note / itemTitle. */
 export function firstActionableReportResponse<
   T extends Pick<ReportResponse, 'status' | 'title' | 'rejectionReason' | 'feedbackNote'>,
 >(responses: T[]): T | null {
   const needCorrection = responses.find((r) => r.status === 'need_correction');
   if (needCorrection) return needCorrection;
-  return responses.find((r) => r.status === 'rejected') ?? null;
+  const rejected = responses.find((r) => r.status === 'rejected');
+  if (rejected) return rejected;
+  return responses.find((r) => r.status === 'not_started') ?? null;
 }
 
 /**

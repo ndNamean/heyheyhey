@@ -81,6 +81,8 @@ export type BuildNormalizedReportNotificationInput = {
   profiles?: Array<{ userId: string; displayName?: string; email?: string }>;
   /** Item title when event is tied to a single response. */
   itemTitle?: string;
+  /** Item status when event is tied to a single response (e.g. not_started). */
+  responseStatus?: string;
 };
 
 const EVENT_META: Record<
@@ -126,8 +128,20 @@ type ReportEventMeta = (typeof EVENT_META)[ReportNotifyEventType];
 export function resolveReportEventMeta(
   eventType: ReportNotifyEventType,
   reportStatus?: string,
+  responseStatus?: string,
 ): ReportEventMeta {
   const base = EVENT_META[eventType];
+  if (eventType === 'report_action_required') {
+    const itemStatus = String(responseStatus || '').trim();
+    if (itemStatus === 'not_started') {
+      return {
+        ...base,
+        requiredAction: 'Complete this item',
+        defaultStatus: 'not_started',
+      };
+    }
+    return base;
+  }
   if (eventType !== 'report_finalized') return base;
   const status = String(reportStatus || '').trim();
   if (status === 'approved') {
@@ -333,8 +347,12 @@ export function buildNormalizedReportNotification(
     [report.storeCode, report.storeName].filter(Boolean).join(' — ') ||
     (storeId ? 'Unknown store' : 'Unknown store');
   const statusHint = String(report.status || '').trim();
-  const meta = resolveReportEventMeta(input.eventType, statusHint);
-  const statusSnapshot = statusHint || meta.defaultStatus;
+  const responseStatus = String(input.responseStatus || '').trim();
+  const meta = resolveReportEventMeta(input.eventType, statusHint, responseStatus);
+  const statusSnapshot =
+    (input.eventType === 'report_action_required' && responseStatus
+      ? responseStatus
+      : statusHint) || meta.defaultStatus;
   const detail =
     String(input.note || '').trim() ||
     String(input.itemTitle || '').trim();

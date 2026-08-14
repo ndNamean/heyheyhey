@@ -1052,9 +1052,10 @@ async function deliverReportEvent(req, res, adminDb, actor, body) {
   } else if (eventType === 'report_action_required') {
     if (!response) {
       response =
-        responses.find(
-          (r) => r.status === 'rejected' || r.status === 'need_correction',
-        ) || null;
+        responses.find((r) => r.status === 'need_correction') ||
+        responses.find((r) => r.status === 'rejected') ||
+        responses.find((r) => r.status === 'not_started') ||
+        null;
     }
     if (!response) {
       return res.status(200).json({
@@ -1155,6 +1156,7 @@ async function deliverReportEvent(req, res, adminDb, actor, body) {
     recipients,
     note: String(body.note || '').trim(),
     itemTitle,
+    responseStatus: response ? String(response.status || '').trim() : undefined,
     actor,
     profiles,
     storeLabel: storeLabelForReport(report, stores),

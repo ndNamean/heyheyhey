@@ -318,7 +318,7 @@ describe('canFinaliseReportResponses + resolveFinaliseReportStatus', () => {
 });
 
 describe('canRemindReportInStoreChat + firstActionableReportResponse', () => {
-  it('hides Remind while any item is still waiting_approval', () => {
+  it('hides Remind when leftover items are only waiting_approval', () => {
     const responses = [
       response({ id: 'a', status: 'approved' }),
       response({ id: 'b', status: 'waiting_approval' }),
@@ -349,10 +349,36 @@ describe('canRemindReportInStoreChat + firstActionableReportResponse', () => {
     expect(firstActionableReportResponse(responses)?.id).toBe('b');
   });
 
+  it('shows Remind for approved + not_started', () => {
+    const responses = [
+      response({ id: 'a', status: 'approved' }),
+      response({ id: 'b', status: 'not_started', title: 'VG check' }),
+    ];
+    expect(canRemindReportInStoreChat(responses)).toBe(true);
+    expect(firstActionableReportResponse(responses)?.id).toBe('b');
+  });
+
+  it('shows Remind for not_started even if other items are waiting_approval', () => {
+    const responses = [
+      response({ id: 'a', status: 'waiting_approval' }),
+      response({ id: 'b', status: 'not_started', title: 'VG check' }),
+    ];
+    expect(canRemindReportInStoreChat(responses)).toBe(true);
+    expect(firstActionableReportResponse(responses)?.id).toBe('b');
+  });
+
   it('prefers need_correction over rejected for actionable item', () => {
     const responses = [
       response({ id: 'a', status: 'rejected', title: 'Rejected first' }),
       response({ id: 'b', status: 'need_correction', title: 'Needs fix' }),
+    ];
+    expect(firstActionableReportResponse(responses)?.id).toBe('b');
+  });
+
+  it('prefers rejected over not_started for actionable item', () => {
+    const responses = [
+      response({ id: 'a', status: 'not_started', title: 'Not started first' }),
+      response({ id: 'b', status: 'rejected', title: 'Rejected' }),
     ];
     expect(firstActionableReportResponse(responses)?.id).toBe('b');
   });

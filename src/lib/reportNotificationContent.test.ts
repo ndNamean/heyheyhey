@@ -199,6 +199,41 @@ describe('reportNotificationContent', () => {
     expect(n.actionType).toBe('view');
   });
 
+  it('action_required not_started copy uses Complete this item', () => {
+    const n = buildNormalizedReportNotification({
+      report: report({ status: 'waiting_approval' }),
+      eventType: 'report_action_required',
+      eventVersion: '2026-08-10T09:00:00.000Z',
+      recipients: ['staff1'],
+      actor: { userId: 'mgr1', displayName: 'Manager' },
+      responseStatus: 'not_started',
+      itemTitle: 'VG check',
+      note: 'This item was not started.',
+    });
+    expect(n.eventType).toBe('report_action_required');
+    expect(n.actionType).toBe('fix_resubmit');
+    expect(n.requiredAction).toBe('Complete this item');
+    expect(n.statusSnapshot).toBe('not_started');
+    expect(n.copy.scannableLine).toContain('Complete this item');
+    expect(n.copy.chatBody).toContain('Complete this item');
+    expect(n.copy.chatBody).not.toContain('Fix and resubmit');
+  });
+
+  it('action_required need_correction keeps Fix and resubmit', () => {
+    const n = buildNormalizedReportNotification({
+      report: report({ status: 'waiting_approval' }),
+      eventType: 'report_action_required',
+      eventVersion: '2026-08-10T09:00:00.000Z',
+      recipients: ['staff1'],
+      actor: { userId: 'mgr1', displayName: 'Manager' },
+      responseStatus: 'need_correction',
+      itemTitle: 'Fridge temp',
+    });
+    expect(n.requiredAction).toBe('Fix and resubmit');
+    expect(n.actionType).toBe('fix_resubmit');
+    expect(n.statusSnapshot).toBe('need_correction');
+  });
+
   it('selects reviewers for submitted event and excludes actor', () => {
     const r = report();
     const responses = [response()];
