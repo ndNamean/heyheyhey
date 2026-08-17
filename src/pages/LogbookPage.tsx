@@ -6,6 +6,7 @@ import ProofPhoto from '../components/ProofPhoto';
 import AckDetailsDropdown from '../components/AckDetailsDropdown';
 import { LogbookTimeline } from '../components/ReportTimeline';
 import IdentityWithAvatar from '../components/profileAvatar/IdentityWithAvatar';
+import { LinkifiedText } from '../components/LinkifiedText';
 import { useLang } from '../i18n';
 import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import { canReview } from '../lib/roles';
@@ -1954,7 +1955,9 @@ export default function LogbookPage({
             <div>
               <strong>{t.logbook.activeIssueSummary}</strong>
             </div>
-            <div>{proofEntry.content}</div>
+            <div>
+              <LinkifiedText text={proofEntry.content} standalone="never" />
+            </div>
             <div>
               <strong>{t.logbook.resolutionProofType}:</strong> {proofTypeLabel(proofType)}
               {proofEntry.dueAt
@@ -1972,13 +1975,15 @@ export default function LogbookPage({
           {proofEntry.resolutionRequirement?.trim() && (
             <p className="small" style={{ marginBottom: 12 }}>
               <strong>{t.logbook.resolutionRequirement}:</strong>{' '}
-              {proofEntry.resolutionRequirement}
+              <LinkifiedText text={proofEntry.resolutionRequirement} standalone="never" />
             </p>
           )}
           {hasCorrectionFeedback(proofEntry) && (
             <div className="badge warn" style={{ display: 'block', marginBottom: 12, padding: 8 }}>
               <strong>{t.logbook.correctionRequested}</strong>
-              <div>{proofEntry.reviewNote}</div>
+              <div>
+                <LinkifiedText text={proofEntry.reviewNote || ''} standalone="never" />
+              </div>
             </div>
           )}
 
@@ -2374,10 +2379,13 @@ export default function LogbookPage({
               </div>
             )}
 
-            <p style={{ margin: '8px 0 0' }}>{entry.content}</p>
+            <p style={{ margin: '8px 0 0' }}>
+              <LinkifiedText text={entry.content} standalone="never" />
+            </p>
             {entry.resolutionRequirement?.trim() && type === 'issue' && (
               <p className="small" style={{ margin: '4px 0 0' }}>
-                <strong>{t.logbook.resolutionRequirement}:</strong> {entry.resolutionRequirement}
+                <strong>{t.logbook.resolutionRequirement}:</strong>{' '}
+                <LinkifiedText text={entry.resolutionRequirement} standalone="never" />
               </p>
             )}
             <p className="small" style={{ margin: '4px 0 0' }}>
@@ -2402,7 +2410,9 @@ export default function LogbookPage({
             {correction && (
               <div className="badge warn" style={{ display: 'block', marginTop: 8, padding: 8 }}>
                 <strong>{t.logbook.correctionRequested}</strong>
-                <div>{entry.reviewNote}</div>
+                <div>
+                  <LinkifiedText text={entry.reviewNote || ''} standalone="never" />
+                </div>
               </div>
             )}
 
@@ -2444,7 +2454,7 @@ export default function LogbookPage({
                     })()}
                     {entry.reviewNote?.trim() && (
                       <p className="small" style={{ margin: '4px 0 0' }}>
-                        {entry.reviewNote.trim()}
+                        <LinkifiedText text={entry.reviewNote.trim()} standalone="never" />
                       </p>
                     )}
                   </>
@@ -2578,7 +2588,8 @@ export default function LogbookPage({
                 )}
                 {entry.resolutionNote && (
                   <div>
-                    {t.logbook.resolutionNoteOptional}: {entry.resolutionNote}
+                    {t.logbook.resolutionNoteOptional}:{' '}
+                    <LinkifiedText text={entry.resolutionNote} standalone="never" />
                   </div>
                 )}
               </div>

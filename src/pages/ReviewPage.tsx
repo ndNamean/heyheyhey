@@ -41,6 +41,7 @@ import { isVideoMedia } from '../lib/mediaMime';
 import { formatMediaCaptureTime, resolveCaptureTimezone, ymdInTimeZone } from '../lib/proofTime';
 import ReportTimeline, { LogbookTimeline } from '../components/ReportTimeline';
 import IdentityWithAvatar from '../components/profileAvatar/IdentityWithAvatar';
+import { LinkifiedText } from '../components/LinkifiedText';
 import {
   canReviewLogbookIssue,
   getIssueConfigurationState,
@@ -812,7 +813,9 @@ export default function ReviewPage({
                 {overdue && <span className="badge bad">{t.logbook.statusOverdue}</span>}
                 <span className="badge">{proofTypeLabel(proofType)}</span>
               </div>
-              <p style={{ margin: '8px 0 0' }}>{entry.content}</p>
+              <p style={{ margin: '8px 0 0' }}>
+                <LinkifiedText text={entry.content} standalone="never" />
+              </p>
               <p className="small">
                 {entry.store?.code || entry.storeId} · {t.common.severity}: {entry.severity} ·{' '}
                 {t.logbook.assigneeRole}: {entry.assigneeRole || '—'}
@@ -835,7 +838,8 @@ export default function ReviewPage({
               )}
               {entry.resolutionRequirement?.trim() && (
                 <p className="small">
-                  <strong>{t.logbook.resolutionRequirement}:</strong> {entry.resolutionRequirement}
+                  <strong>{t.logbook.resolutionRequirement}:</strong>{' '}
+                  <LinkifiedText text={entry.resolutionRequirement} standalone="never" />
                 </p>
               )}
               <p className="small">
@@ -860,7 +864,8 @@ export default function ReviewPage({
               )}
               {entry.resolutionNote && (
                 <p>
-                  <strong>{t.common.note}:</strong> {entry.resolutionNote}
+                  <strong>{t.common.note}:</strong>{' '}
+                  <LinkifiedText text={entry.resolutionNote} standalone="never" />
                 </p>
               )}
               {sourceMedia.length > 0 && (

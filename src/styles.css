@@ -23,6 +23,8 @@
   --warn-bg: rgba(251, 191, 36, 0.15);
   --warn-border: rgba(251, 191, 36, 0.35);
   --focus-ring: 0 0 0 2px rgba(253, 194, 22, 0.55);
+  --link: var(--accent);
+  --link-hover: var(--accent-stat);
   --radius-card: 20px;
   --radius-btn: 12px;
   --glass-blur: blur(12px);

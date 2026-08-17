@@ -21,9 +21,7 @@ import {
   getActiveMentionQuery,
   insertMentionToken,
   MENTION_ALL_TOKEN,
-  parseMentionedUserIdsJson,
   resolveMentionPayload,
-  segmentMentionBody,
   type MentionCandidate,
   type MentionMenuItem,
   type SelectedMention,
@@ -89,6 +87,8 @@ import {
   buildQuickMessageLabels,
 } from './ComposerAttachMenu';
 import { useChatAttachmentStaging } from './useChatAttachmentStaging';
+import { MessageBody } from './MessageBody';
+import { LinkifiedText } from '../LinkifiedText';
 import './chatAttachments.css';
 import {
   listStoreChatActions,
@@ -179,34 +179,6 @@ function actionLabelsFromT(sc: StoreChatActionLabelCopy): StoreChatActionLabelCo
     translate: sc.translate,
     delete: sc.delete,
   };
-}
-
-function MentionBody({
-  body,
-  mentionedUserIdsJson,
-  mentionAll,
-  candidates,
-}: {
-  body: string;
-  mentionedUserIdsJson?: string;
-  mentionAll?: boolean;
-  candidates: MentionCandidate[];
-}) {
-  const mentionedIds = parseMentionedUserIdsJson(mentionedUserIdsJson);
-  const segments = segmentMentionBody(body, mentionedIds, Boolean(mentionAll), candidates);
-  return (
-    <p className="fa-msg-body">
-      {segments.map((seg, i) =>
-        seg.type === 'mention' ? (
-          <span key={`m-${i}`} className="fa-msg-mention">
-            {seg.value}
-          </span>
-        ) : (
-          <span key={`t-${i}`}>{seg.value}</span>
-        ),
-      )}
-    </p>
-  );
 }
 
 function buildActionContext(params: {
@@ -592,10 +564,14 @@ function MessageBubble({
           </a>
         ) : null}
         {showingTranslated && !isHandoffSystem ? (
-          <p className="fa-msg-body fa-msg-body--translated">{displayBody}</p>
+          <LinkifiedText
+            text={displayBody}
+            as="p"
+            className="fa-msg-body fa-msg-body--translated"
+          />
         ) : bodyTrimmed ? (
           <div className={isHandoffSystem ? 'fa-msg-logbook-body' : undefined}>
-            <MentionBody
+            <MessageBody
               body={message.body}
               mentionedUserIdsJson={message.mentionedUserIdsJson}
               mentionAll={message.mentionAll}

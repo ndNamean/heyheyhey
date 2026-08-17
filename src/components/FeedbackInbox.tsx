@@ -11,6 +11,7 @@ import {
 } from '../lib/notifications';
 import ReportTimeline from './ReportTimeline';
 import IdentityWithAvatar from './profileAvatar/IdentityWithAvatar';
+import { LinkifiedText } from './LinkifiedText';
 import type { Notification, Profile, Report, ReviewEvent } from '../types';
 import { parseLogbookDeepLinkJson } from '../lib/logbookDeepLink';
 
@@ -227,7 +228,9 @@ export default function FeedbackInbox({
                   {n.compliancePercent ?? 0}%
                 </div>
               )}
-              <div className="feedback-item-body">{n.body}</div>
+              <div className="feedback-item-body">
+                <LinkifiedText text={n.body} standalone="never" />
+              </div>
               {isLogbook && onOpenLogbookEntry && n.reportId && (
                 <div className="feedback-item-cta">
                   {t.logbook.openInLogbook}

@@ -30,6 +30,7 @@ import type { LogbookEntry, Profile, RoleDefinition } from '../types';
 import LogbookAssigneeRoster from './LogbookAssigneeRoster';
 import OverdueRemindPanel from './OverdueRemindPanel';
 import IdentityWithAvatar from './profileAvatar/IdentityWithAvatar';
+import { LinkifiedText } from './LinkifiedText';
 
 export type LogbookNotificationClickDecision = 'navigate' | 'preview';
 
@@ -244,7 +245,11 @@ export default function LogbookNotificationPreviewModal({
         ) : (
           <>
             <p style={{ margin: '0 0 8px', whiteSpace: 'pre-wrap' }} data-testid="logbook-notif-preview-content">
-              {entry.content || '—'}
+              {entry.content ? (
+                <LinkifiedText text={entry.content} standalone="never" />
+              ) : (
+                '—'
+              )}
             </p>
 
             <dl className="small" style={{ margin: 0, display: 'grid', gap: 6 }}>

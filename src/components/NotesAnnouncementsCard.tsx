@@ -11,6 +11,7 @@ import {
 } from '../lib/logbook';
 import { nowIso } from '../lib/utils';
 import type { LogbookEntry, Profile } from '../types';
+import { LinkifiedText } from './LinkifiedText';
 
 interface Props {
   profile: Profile;
@@ -110,7 +111,9 @@ export default function NotesAnnouncementsCard({
             <span className="small">{t.staffHome.notesAllStores}</span>
           )}
         </div>
-        <p style={{ margin: '8px 0 0' }}>{entry.content}</p>
+        <p style={{ margin: '8px 0 0' }}>
+          <LinkifiedText text={entry.content} standalone="never" />
+        </p>
         <div style={{ marginTop: 8 }}>
           {acked ? (
             <span className="badge good">{t.common.acknowledged}</span>

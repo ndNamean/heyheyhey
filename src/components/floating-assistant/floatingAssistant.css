@@ -899,6 +899,112 @@ body.wizard-active .floating-assistant-root {
   color: var(--text-primary);
 }
 
+.fa-msg-body .fa-link--standalone {
+  vertical-align: top;
+}
+
+.fa-link {
+  color: var(--link, var(--accent));
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.fa-link:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.fa-link--inline {
+  display: inline;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  border-radius: 2px;
+}
+
+.fa-link--inline:hover,
+.fa-link--inline:focus-visible {
+  color: var(--link-hover, var(--accent));
+  text-decoration-thickness: 2px;
+}
+
+.fa-link--inline:active {
+  opacity: 0.82;
+}
+
+.fa-link--inline .fa-link__ext {
+  display: inline;
+  margin-inline-start: 0.15em;
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.fa-link--standalone {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  max-width: min(280px, 100%);
+  min-height: 44px;
+  padding: 10px 12px;
+  margin: 6px 0 4px;
+  border-radius: 10px;
+  border: 1px solid var(--card-border);
+  background: rgba(0, 0, 0, 0.04);
+  text-decoration: none;
+  color: inherit;
+}
+
+.fa-link--standalone:hover,
+.fa-link--standalone:focus-visible {
+  border-color: rgba(253, 194, 22, 0.55);
+  background: rgba(253, 194, 22, 0.1);
+  text-decoration: none;
+}
+
+.fa-link--standalone:focus-visible {
+  border-radius: 10px;
+}
+
+.fa-link--standalone:active {
+  background: rgba(253, 194, 22, 0.16);
+}
+
+.fa-link__copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fa-link__host {
+  font-size: 13px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.fa-link__path {
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fa-link--standalone .fa-link__ext {
+  flex: 0 0 auto;
+  color: var(--link, var(--accent));
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1;
+}
+
 .fa-msg-quote {
   display: flex;
   flex-direction: column;

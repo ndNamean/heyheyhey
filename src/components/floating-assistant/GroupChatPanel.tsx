@@ -41,9 +41,7 @@ import {
   getActiveMentionQuery,
   insertMentionToken,
   MENTION_ALL_TOKEN,
-  parseMentionedUserIdsJson,
   resolveMentionPayload,
-  segmentMentionBody,
   type MentionCandidate,
   type MentionMenuItem,
   type SelectedMention,
@@ -91,6 +89,8 @@ import {
   buildQuickMessageLabels,
 } from './ComposerAttachMenu';
 import { useChatAttachmentStaging } from './useChatAttachmentStaging';
+import { MessageBody } from './MessageBody';
+import { LinkifiedText } from '../LinkifiedText';
 import './chatAttachments.css';
 import {
   listStoreChatActions,
@@ -236,34 +236,6 @@ function buildActionContext(params: {
     canForward: params.canForward,
     isSystemMessage: Boolean(params.isSystemMessage),
   };
-}
-
-function MentionBody({
-  body,
-  mentionedUserIdsJson,
-  mentionAll,
-  candidates,
-}: {
-  body: string;
-  mentionedUserIdsJson?: string;
-  mentionAll?: boolean;
-  candidates: MentionCandidate[];
-}) {
-  const mentionedIds = parseMentionedUserIdsJson(mentionedUserIdsJson);
-  const segments = segmentMentionBody(body, mentionedIds, Boolean(mentionAll), candidates);
-  return (
-    <p className="fa-msg-body">
-      {segments.map((seg, i) =>
-        seg.type === 'mention' ? (
-          <span key={`m-${i}`} className="fa-msg-mention">
-            {seg.value}
-          </span>
-        ) : (
-          <span key={`t-${i}`}>{seg.value}</span>
-        ),
-      )}
-    </p>
-  );
 }
 
 function GroupMessageRow({
@@ -538,11 +510,20 @@ function GroupMessageRow({
           </a>
         ) : null}
         {isSystem ? (
-          <p className="fa-group-msg-system fa-msg-body">{message.body}</p>
+          <LinkifiedText
+            text={message.body}
+            as="p"
+            className="fa-group-msg-system fa-msg-body"
+            standalone="never"
+          />
         ) : showingTranslated ? (
-          <p className="fa-msg-body fa-msg-body--translated">{displayBody}</p>
+          <LinkifiedText
+            text={displayBody}
+            as="p"
+            className="fa-msg-body fa-msg-body--translated"
+          />
         ) : bodyTrimmed ? (
-          <MentionBody
+          <MessageBody
             body={message.body}
             mentionedUserIdsJson={message.mentionedUserIdsJson}
             mentionAll={message.mentionAll}
