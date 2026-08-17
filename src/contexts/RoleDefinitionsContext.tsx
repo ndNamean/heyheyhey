@@ -5,6 +5,7 @@ import {
   useSeedRoleDefinitions,
   linkProfilesToRoleDefinitions,
 } from '../lib/roleResolver';
+import { canFinalApproveAccess } from '../lib/roles';
 import type { Profile, RoleDefinition } from '../types';
 
 interface RoleDefinitionsContextValue {
@@ -18,14 +19,14 @@ const RoleDefinitionsContext = createContext<RoleDefinitionsContextValue>({
 });
 
 function useLinkProfilesToDefinitions(
-  isOwner: boolean,
+  canLink: boolean,
   defs: RoleDefinition[],
   profiles: { id: string; role: string; roleDefinition?: { id: string; key?: string } | null }[] | undefined,
 ) {
   const linkedRef = useRef(false);
 
   useEffect(() => {
-    if (!isOwner || !defs.length || !profiles?.length || linkedRef.current) return;
+    if (!canLink || !defs.length || !profiles?.length || linkedRef.current) return;
     const txs = linkProfilesToRoleDefinitions(profiles, defs);
     if (!txs.length) return;
     linkedRef.current = true;
@@ -33,7 +34,7 @@ function useLinkProfilesToDefinitions(
       linkedRef.current = false;
       console.error('Failed to link profiles to role definitions:', err);
     });
-  }, [isOwner, defs, profiles]);
+  }, [canLink, defs, profiles]);
 }
 
 export function RoleDefinitionsProvider({
@@ -45,13 +46,15 @@ export function RoleDefinitionsProvider({
 }) {
   const { defs, isLoading, isEmpty } = useRoleDefinitionsQuery();
   const isOwner = profile.role === 'owner';
+  // Instant profiles.link.roleDefinition is isAdmin (owner | admin | areaManager).
+  const canLinkRoleDefinitions = canFinalApproveAccess(profile.role);
 
   useSeedRoleDefinitions(isOwner, defs, isEmpty);
 
   const { data: profileData } = db.useQuery(
-    isOwner ? { profiles: { roleDefinition: {} } } : null,
+    canLinkRoleDefinitions ? { profiles: { roleDefinition: {} } } : null,
   );
-  useLinkProfilesToDefinitions(isOwner, defs, profileData?.profiles);
+  useLinkProfilesToDefinitions(canLinkRoleDefinitions, defs, profileData?.profiles);
 
   const value = useMemo(() => ({ defs, isLoading }), [defs, isLoading]);
 

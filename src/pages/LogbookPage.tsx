@@ -721,7 +721,12 @@ export default function LogbookPage({
       setDraftCreateEntryId(id());
       setShowForm(false);
     } catch (e) {
-      alert(e instanceof Error ? e.message : t.logbook.saveFailed);
+      const raw = e instanceof Error ? e.message : String(e ?? '');
+      alert(
+        /perms-pass|Permission denied/i.test(raw)
+          ? t.logbook.noCreatePermission
+          : raw || t.logbook.saveFailed,
+      );
     } finally {
       setSaving(false);
     }

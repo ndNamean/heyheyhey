@@ -1,8 +1,9 @@
 import type { InstantRules } from '@instantdb/react';
 
 // Server-side capability checks use legacy profile.role strings so permissions
-// work before every profile has a linked roleDefinition. The app UI still reads
-// capabilities from roleDefinitions on the client.
+// work before every profile has a linked roleDefinition. Linked definitions
+// add defCanReview / defCanAccessAllStores / defCanEditMaster so custom roles
+// match the client flags. Empty auth.ref still allows the system keys below.
 // System `admin` is treated like areaManager for master-data / review / users
 // (templates, stores, report review writes, profile admin actions).
 const LEGACY_BIND = {
@@ -15,9 +16,13 @@ const LEGACY_BIND = {
   isManager: "'manager' in auth.ref('$user.profile.role')",
   isLeader: "'leader' in auth.ref('$user.profile.role') || 'subleader' in auth.ref('$user.profile.role')",
   isHybrid: "'hybrid' in auth.ref('$user.profile.role')",
-  canEditMaster: 'isOwner || isAreaManagerTier',
+  defCanReview: "true in auth.ref('$user.profile.roleDefinition.canReview')",
+  defCanAccessAllStores: "true in auth.ref('$user.profile.roleDefinition.canAccessAllStores')",
+  defCanEditMaster: "true in auth.ref('$user.profile.roleDefinition.canEditMaster')",
+  canEditMaster: 'isOwner || isAreaManagerTier || defCanEditMaster',
   canManageUsers: 'isOwner || isAreaManagerTier',
-  canReview: "isApproved && (isOwner || isAreaManagerTier || isManager || isLeader || isHybrid)",
+  canReview: "isApproved && (isOwner || isAreaManagerTier || isManager || isLeader || isHybrid || defCanReview)",
+  hasAllStoreAccess: 'isOwner || isAreaManagerTier || defCanAccessAllStores',
   canPreApproveAccess: 'isManager',
   canScheduleShifts: 'isOwner || isAreaManagerTier || isManager',
   canProposeTemplateItem: 'isApproved && (isManager || isLeader)',
@@ -203,7 +208,6 @@ const rules = {
     },
     bind: {
       ...LEGACY_BIND,
-      hasAllStoreAccess: 'isOwner || isAreaManagerTier',
       canReviewReportStore:
         "canReview && (hasAllStoreAccess || data.storeId in auth.ref('$user.profile.stores.id'))",
       isReportSubmitter: 'auth.id != null && data.submittedByUserId == auth.id',
@@ -236,7 +240,6 @@ const rules = {
     },
     bind: {
       ...LEGACY_BIND,
-      hasAllStoreAccess: 'isOwner || isAreaManagerTier',
       // Empty storeId = legacy row; client still gates by report.storeId until backfill.
       canReviewReportStore:
         "canReview && (hasAllStoreAccess || data.storeId == null || data.storeId == '' || data.storeId in auth.ref('$user.profile.stores.id'))",
@@ -420,7 +423,6 @@ const rules = {
     },
     bind: {
       ...LEGACY_BIND,
-      hasAllStoreAccess: 'isOwner || isAreaManagerTier',
       canReviewReportStore:
         "canReview && (hasAllStoreAccess || data.storeId in auth.ref('$user.profile.stores.id'))",
     },

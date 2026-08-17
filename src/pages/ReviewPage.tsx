@@ -627,6 +627,19 @@ export default function ReviewPage({
     const selected = items.filter((item) => result.selectedResponseIds.includes(item.id));
     if (!selected.length) return;
 
+    if (!canReview(profile.role, defs)) {
+      alert(t.logbook.noCreatePermission);
+      return;
+    }
+    if (
+      report.storeId &&
+      !canAccessAllStores(profile.role, defs) &&
+      !storeIds.includes(report.storeId)
+    ) {
+      alert(t.logbook.storeNotAllowed);
+      return;
+    }
+
     const dueAtIso = new Date(result.dueAtLocal).toISOString();
     if (!Number.isFinite(Date.parse(dueAtIso))) {
       alert(t.logbook.dueRequired);
@@ -710,7 +723,12 @@ export default function ReviewPage({
     try {
       await db.transact(txs as Parameters<typeof db.transact>[0]);
     } catch (e) {
-      alert(e instanceof Error ? e.message : t.review.loadError);
+      const raw = instantErrorMeta(e).message ?? '';
+      alert(
+        /perms-pass|Permission denied/i.test(raw)
+          ? t.logbook.noCreatePermission
+          : raw || t.review.loadError,
+      );
       return;
     }
 
