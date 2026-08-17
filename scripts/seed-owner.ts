@@ -67,7 +67,7 @@ async function main() {
     return;
   }
 
-  await db.transact(
+  const txs = [
     // @ts-expect-error — admin SDK tx shape is the same as client
     db.tx.profiles[profile.id].update({
       role: 'owner',
@@ -76,7 +76,12 @@ async function main() {
       approvedByEmail: 'seed-owner-script',
       updatedAt: new Date().toISOString(),
     }),
-  );
+  ];
+  if (profile.userId) {
+    // @ts-expect-error — admin SDK tx shape is the same as client
+    txs.push(db.tx.profiles[profile.id].link({ $user: profile.userId }));
+  }
+  await db.transact(txs);
 
   console.log(`Done. ${ownerEmail} is now an approved owner.`);
   console.log('Open the app and sign in to verify.');

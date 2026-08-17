@@ -222,6 +222,8 @@ export interface Profile {
   /** Linked $files row; `url` is the live signed URL from Instant queries. */
   avatarFile?: { id: string; path?: string; url?: string };
   roleDefinition?: RoleDefinition;
+  /** Linked auth user; Instant permission rules traverse via $user.profile.* */
+  $user?: { id: string };
   // Optional linked data from useQuery:
   stores?: Store[];
 }
