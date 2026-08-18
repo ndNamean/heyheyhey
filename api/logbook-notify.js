@@ -40,6 +40,11 @@ import {
   overdueRemindChatDeliveryKey,
 } from './_lib/logbook/overdue-remind.js';
 import {
+  linkedFileIds,
+  parseSubmitFileIds,
+  planResolutionMediaLinks,
+} from './_lib/logbook/submit-resolution-media.js';
+import {
   buildNormalizedReportNotification,
   isReportChatNotifyEnabled,
   reportActionRequiredChatKey,
@@ -219,7 +224,7 @@ async function handleSubmitResolution(req, res, adminDb, actor, body) {
   const note = String(body.note || '').trim();
   const resolutionNumber = String(body.resolutionNumber || '').trim();
   const resolutionChecked = Boolean(body.resolutionChecked);
-  const fileId = String(body.fileId || '').trim();
+  const fileIds = parseSubmitFileIds(body);
 
   if (!entryId || !attemptId) {
     return res.status(400).json({ error: 'Missing entryId or attemptId' });
@@ -260,13 +265,15 @@ async function handleSubmitResolution(req, res, adminDb, actor, body) {
     return res.status(200).json({ ok: true, deduped: true });
   }
 
-  const priorResolutionId = entry.resolutionMedia?.id || '';
-  const priorPhotoId = entry.photo?.id || '';
-  const historyIds = new Set(
-    (entry.resolutionProofHistory || [])
+  const priorFileIds = linkedFileIds(entry.resolutionMedia);
+  const mediaPlan = planResolutionMediaLinks({
+    priorResolutionMedia: entry.resolutionMedia,
+    priorPhotoId: entry.photo?.id || '',
+    historyIds: (entry.resolutionProofHistory || [])
       .map((f) => f?.id)
       .filter(Boolean),
-  );
+    newFileIds: fileIds,
+  });
   const prevStatus = String(entry.status || 'in_progress');
   const createdAt = nowIso();
   const displayName =
@@ -276,25 +283,20 @@ async function handleSubmitResolution(req, res, adminDb, actor, body) {
 
   const txs = [];
 
-  // Preserve prior proof in append-only history before replacing the one-slot current.
-  if (priorResolutionId && !historyIds.has(priorResolutionId)) {
+  for (const fid of mediaPlan.unlinkResolutionMediaIds) {
+    txs.push(
+      adminDb.tx.logbookEntries[entryId].unlink({ resolutionMedia: fid }),
+    );
+  }
+  for (const fid of mediaPlan.unlinkPhotoIds) {
+    txs.push(adminDb.tx.logbookEntries[entryId].unlink({ photo: fid }));
+  }
+  for (const fid of mediaPlan.historyLinkIds) {
     txs.push(
       adminDb.tx.logbookEntries[entryId].link({
-        resolutionProofHistory: priorResolutionId,
+        resolutionProofHistory: fid,
       }),
     );
-    historyIds.add(priorResolutionId);
-  }
-
-  if (priorResolutionId) {
-    txs.push(
-      adminDb.tx.logbookEntries[entryId].unlink({
-        resolutionMedia: priorResolutionId,
-      }),
-    );
-  }
-  if (priorPhotoId && priorPhotoId === priorResolutionId) {
-    txs.push(adminDb.tx.logbookEntries[entryId].unlink({ photo: priorPhotoId }));
   }
 
   txs.push(
@@ -310,23 +312,17 @@ async function handleSubmitResolution(req, res, adminDb, actor, body) {
     }),
   );
 
-  if (fileId) {
-    if (!historyIds.has(fileId)) {
-      txs.push(
-        adminDb.tx.logbookEntries[entryId].link({
-          resolutionProofHistory: fileId,
-        }),
-      );
-    }
+  for (const fid of mediaPlan.currentLinkIds) {
     txs.push(
-      adminDb.tx.logbookEntries[entryId].link({ resolutionMedia: fileId }),
+      adminDb.tx.logbookEntries[entryId].link({ resolutionMedia: fid }),
     );
   }
 
   const eventNote = [
     note,
     `attempt:${attemptId}`,
-    priorResolutionId ? `priorFileId:${priorResolutionId}` : '',
+    priorFileIds.length ? `priorFileIds:${priorFileIds.join(',')}` : '',
+    fileIds.length ? `fileIds:${fileIds.join(',')}` : '',
   ]
     .filter(Boolean)
     .join('\n');
