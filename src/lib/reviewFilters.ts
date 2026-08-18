@@ -2,8 +2,9 @@
  * Lean client-side filters for the Review inbox (date presets + store).
  */
 
+import { canAccessAllStores } from './roles';
 import { todayYmd } from './utils';
-import type { LogbookEntry, Report } from '../types';
+import type { LogbookEntry, Profile, Report, RoleDefinition, Store } from '../types';
 
 export type ReviewDatePreset = 'all' | 'today' | 'yesterday' | 'last2days' | 'last7days';
 
@@ -120,6 +121,19 @@ export function filterLogbookIssuesForReview(
 
 export function isReviewFilterActive(filters: ReviewFilterState): boolean {
   return filters.datePreset !== 'all' || (filters.storeId !== 'all' && !!filters.storeId);
+}
+
+/**
+ * Store catalog for the Review store picker — scoped users use linked profile stores
+ * so the picker stays stable when the reports query refresh fails.
+ */
+export function resolveReviewStoreCatalog(
+  profile: Profile,
+  defs: RoleDefinition[],
+  queryStores: Store[],
+): Store[] {
+  if (canAccessAllStores(profile.role, defs)) return queryStores;
+  return profile.stores ?? [];
 }
 
 export type ReviewFilterChipKind = 'date' | 'store';

@@ -39,6 +39,7 @@ import {
   filterReportsForReview,
   isReviewFilterActive,
   listReviewFilterChips,
+  resolveReviewStoreCatalog,
   REVIEW_DATE_PRESETS,
   type ReviewDatePreset,
 } from '../lib/reviewFilters';
@@ -188,6 +189,7 @@ export default function ReviewPage({
     profiles: Profile[];
     events: ReviewEvent[];
   } | null>(null);
+  const lastGoodStoresRef = useRef<Store[]>([]);
 
   const connectionStatus = db.useConnectionStatus();
 
@@ -238,12 +240,13 @@ export default function ReviewPage({
                 responses: { media: { file: {} } },
                 store: {},
               },
-              stores: {},
               profiles: { stores: {}, avatarFile: {} },
               reviewEvents: {},
             },
     [reportsQueryPaused, reportsWhere],
   );
+
+  const storesQuery = useMemo(() => ({ stores: {} }), []);
 
   const logbookQuery = useMemo(
     () =>
@@ -262,6 +265,7 @@ export default function ReviewPage({
   );
 
   const { data, isLoading: reportsLoading, error: reportsError } = db.useQuery(reportsQuery);
+  const { data: storesData } = db.useQuery(storesQuery);
   const {
     data: logbookData,
     isLoading: logbookLoading,
@@ -270,7 +274,11 @@ export default function ReviewPage({
 
   const allProfiles: Profile[] = (data?.profiles ?? []) as Profile[];
   const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];
-  const stores: Store[] = (data?.stores ?? []) as Store[];
+  const queryStores: Store[] = (storesData?.stores ?? []) as Store[];
+  if (queryStores.length) {
+    lastGoodStoresRef.current = queryStores;
+  }
+  const stableQueryStores = queryStores.length ? queryStores : lastGoodStoresRef.current;
   const allLogbookEntries = (logbookData?.logbookEntries ?? []) as LogbookEntry[];
   const reports = useMemo(
     () =>
@@ -339,10 +347,10 @@ export default function ReviewPage({
       storesSelectableBy(
         profile.role,
         profileVisibilityStoreIds(profile),
-        stores,
+        resolveReviewStoreCatalog(profile, defs, stableQueryStores),
         defs,
       ),
-    [profile, stores, defs],
+    [profile, stableQueryStores, defs],
   );
 
   useEffect(() => {

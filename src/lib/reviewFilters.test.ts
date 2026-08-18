@@ -10,10 +10,11 @@ import {
   logbookIssueMatchesReviewFilters,
   matchesReviewStore,
   reportMatchesReviewFilters,
+  resolveReviewStoreCatalog,
   resolveReviewDateRange,
   ymdInReviewRange,
 } from './reviewFilters';
-import type { LogbookEntry, Report } from '../types';
+import type { LogbookEntry, Profile, Report, Store } from '../types';
 
 const TODAY = '2026-08-18';
 
@@ -282,5 +283,32 @@ describe('clearReviewFilterChip', () => {
       datePreset: 'today',
       storeId: 'all',
     });
+  });
+});
+
+describe('resolveReviewStoreCatalog', () => {
+  const storeA = { id: 's1', code: 'A', name: 'Alpha' } as Store;
+  const storeB = { id: 's2', code: 'B', name: 'Beta' } as Store;
+  const profile = {
+    role: 'manager',
+    stores: [storeA, storeB],
+  } as Profile;
+  const ownerProfile = { role: 'owner', stores: [] } as Profile;
+  const defs = [
+    { key: 'owner', canAccessAllStores: true, active: true },
+    { key: 'manager', canAccessAllStores: false, active: true },
+  ] as import('../types').RoleDefinition[];
+
+  it('uses profile stores for scoped reviewers', () => {
+    expect(resolveReviewStoreCatalog(profile, defs, [])).toEqual([storeA, storeB]);
+  });
+
+  it('uses query stores for all-store access roles', () => {
+    const queryStores = [
+      { id: 's1', code: 'A', name: 'Alpha' },
+      { id: 's2', code: 'B', name: 'Beta' },
+      { id: 's3', code: 'C', name: 'Charlie' },
+    ] as Store[];
+    expect(resolveReviewStoreCatalog(ownerProfile, defs, queryStores)).toEqual(queryStores);
   });
 });
