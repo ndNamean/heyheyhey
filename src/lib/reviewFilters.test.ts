@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  clearReviewFilterChip,
+  countActiveReviewFilters,
   defaultReviewFilterState,
   filterLogbookIssuesForReview,
   filterReportsForReview,
   isReviewFilterActive,
+  listReviewFilterChips,
   logbookIssueMatchesReviewFilters,
   matchesReviewStore,
   reportMatchesReviewFilters,
@@ -206,5 +209,78 @@ describe('isReviewFilterActive', () => {
 
   it('is true when store is narrowed', () => {
     expect(isReviewFilterActive({ datePreset: 'all', storeId: 's1' })).toBe(true);
+  });
+});
+
+describe('countActiveReviewFilters', () => {
+  it('returns 0 for defaults', () => {
+    expect(countActiveReviewFilters(defaultReviewFilterState())).toBe(0);
+  });
+
+  it('returns 1 when only date is narrowed', () => {
+    expect(countActiveReviewFilters({ datePreset: 'today', storeId: 'all' })).toBe(1);
+  });
+
+  it('returns 1 when only store is narrowed', () => {
+    expect(countActiveReviewFilters({ datePreset: 'all', storeId: 's1' })).toBe(1);
+  });
+
+  it('returns 2 when both are narrowed', () => {
+    expect(countActiveReviewFilters({ datePreset: 'today', storeId: 's1' })).toBe(2);
+  });
+});
+
+describe('listReviewFilterChips', () => {
+  const labels = {
+    datePreset: { today: 'Today', yesterday: 'Yesterday' },
+    storeLabel: 'HP-VO — Store Name',
+  };
+
+  it('returns empty list for defaults', () => {
+    expect(listReviewFilterChips(defaultReviewFilterState(), labels)).toEqual([]);
+  });
+
+  it('includes date chip when preset is narrowed', () => {
+    expect(listReviewFilterChips({ datePreset: 'today', storeId: 'all' }, labels)).toEqual([
+      { id: 'date', kind: 'date', label: 'Today' },
+    ]);
+  });
+
+  it('includes store chip when store is narrowed', () => {
+    expect(listReviewFilterChips({ datePreset: 'all', storeId: 's1' }, labels)).toEqual([
+      { id: 'store', kind: 'store', label: 'HP-VO — Store Name' },
+    ]);
+  });
+
+  it('includes both chips when both are narrowed', () => {
+    expect(listReviewFilterChips({ datePreset: 'today', storeId: 's1' }, labels)).toEqual([
+      { id: 'date', kind: 'date', label: 'Today' },
+      { id: 'store', kind: 'store', label: 'HP-VO — Store Name' },
+    ]);
+  });
+
+  it('omits store chip when storeLabel is missing', () => {
+    expect(
+      listReviewFilterChips(
+        { datePreset: 'all', storeId: 's1' },
+        { datePreset: labels.datePreset },
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe('clearReviewFilterChip', () => {
+  it('clears date preset only', () => {
+    expect(clearReviewFilterChip({ datePreset: 'today', storeId: 's1' }, 'date')).toEqual({
+      datePreset: 'all',
+      storeId: 's1',
+    });
+  });
+
+  it('clears store only', () => {
+    expect(clearReviewFilterChip({ datePreset: 'today', storeId: 's1' }, 'store')).toEqual({
+      datePreset: 'today',
+      storeId: 'all',
+    });
   });
 });

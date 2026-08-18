@@ -121,3 +121,52 @@ export function filterLogbookIssuesForReview(
 export function isReviewFilterActive(filters: ReviewFilterState): boolean {
   return filters.datePreset !== 'all' || (filters.storeId !== 'all' && !!filters.storeId);
 }
+
+export type ReviewFilterChipKind = 'date' | 'store';
+
+export interface ReviewFilterChip {
+  id: string;
+  kind: ReviewFilterChipKind;
+  label: string;
+}
+
+export interface ReviewFilterChipLabels {
+  datePreset: Partial<Record<ReviewDatePreset, string>>;
+  storeLabel?: string;
+}
+
+/** Count active filter dimensions (0–2: date preset + store). */
+export function countActiveReviewFilters(filters: ReviewFilterState): number {
+  let count = 0;
+  if (filters.datePreset !== 'all') count++;
+  if (filters.storeId !== 'all' && !!filters.storeId) count++;
+  return count;
+}
+
+/** Build removable chip descriptors for collapsed filter UI. */
+export function listReviewFilterChips(
+  filters: ReviewFilterState,
+  labels: ReviewFilterChipLabels,
+): ReviewFilterChip[] {
+  const chips: ReviewFilterChip[] = [];
+  if (filters.datePreset !== 'all') {
+    chips.push({
+      id: 'date',
+      kind: 'date',
+      label: labels.datePreset[filters.datePreset] ?? filters.datePreset,
+    });
+  }
+  if (filters.storeId !== 'all' && !!filters.storeId && labels.storeLabel) {
+    chips.push({ id: 'store', kind: 'store', label: labels.storeLabel });
+  }
+  return chips;
+}
+
+/** Clear one filter dimension, leaving others unchanged. */
+export function clearReviewFilterChip(
+  filters: ReviewFilterState,
+  kind: ReviewFilterChipKind,
+): ReviewFilterState {
+  if (kind === 'date') return { ...filters, datePreset: 'all' };
+  return { ...filters, storeId: 'all' };
+}

@@ -32,10 +32,13 @@ import { deliverReportEvent } from '../lib/reportNotifyClient';
 import { resolveActorDisplay } from '../lib/actorDisplay';
 import { badgeClass, nowIso } from '../lib/utils';
 import {
+  clearReviewFilterChip,
+  countActiveReviewFilters,
   defaultReviewFilterState,
   filterLogbookIssuesForReview,
   filterReportsForReview,
   isReviewFilterActive,
+  listReviewFilterChips,
   REVIEW_DATE_PRESETS,
   type ReviewDatePreset,
 } from '../lib/reviewFilters';
@@ -166,6 +169,10 @@ export default function ReviewPage({
   const [remindMsgByReportId, setRemindMsgByReportId] = useState<Record<string, string>>({});
   const [surface, setSurface] = useState<ReviewSurface>(initialSurface);
   const [filters, setFilters] = useState(defaultReviewFilterState);
+  const [reviewFiltersOpen, setReviewFiltersOpen] = useState(false);
+  const [isMobileFilters, setIsMobileFilters] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 720px)').matches : false,
+  );
   const [reportsQueryPaused, setReportsQueryPaused] = useState(false);
   const [logbookQueryPaused, setLogbookQueryPaused] = useState(false);
   const lastHighlightScrollKey = useRef('');
@@ -344,6 +351,14 @@ export default function ReviewPage({
     setFilters((prev) => ({ ...prev, storeId: 'all' }));
   }, [filters.storeId, selectableStores]);
 
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 720px)');
+    const onChange = () => setIsMobileFilters(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
   const filteredReports = useMemo(
     () =>
       filterReportsForReview(displayReports, filters, {
@@ -358,8 +373,24 @@ export default function ReviewPage({
   );
 
   const filterActive = isReviewFilterActive(filters);
+  const activeFilterCount = countActiveReviewFilters(filters);
   const showStoreFilter = selectableStores.length > 1;
   const storeFilterNarrowed = filters.storeId !== 'all';
+
+  const filterChips = useMemo(() => {
+    const store = selectableStores.find((s) => s.id === filters.storeId);
+    const storeLabel =
+      showStoreFilter && storeFilterNarrowed && store
+        ? `${store.code} — ${store.name}`
+        : undefined;
+    const datePresetLabels = Object.fromEntries(
+      REVIEW_DATE_PRESETS.map((preset) => [preset, reviewDatePresetLabel(t, preset)]),
+    ) as Record<ReviewDatePreset, string>;
+    return listReviewFilterChips(filters, {
+      datePreset: datePresetLabels,
+      storeLabel,
+    });
+  }, [filters, selectableStores, showStoreFilter, storeFilterNarrowed, t]);
 
   useEffect(() => {
     if (!reportsError) return;
@@ -812,6 +843,73 @@ export default function ReviewPage({
     }
   }
 
+  function clearAllReviewFilters() {
+    setFilters(defaultReviewFilterState());
+  }
+
+  function renderReviewFiltersBody() {
+    return (
+      <>
+        <div className="review-filters-row">
+          <div className="tabs">
+            {REVIEW_DATE_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                className={filters.datePreset === preset ? 'active' : ''}
+                onClick={() => setFilters((prev) => ({ ...prev, datePreset: preset }))}
+              >
+                {reviewDatePresetLabel(t, preset)}
+              </button>
+            ))}
+          </div>
+          {showStoreFilter && (
+            <label
+              className={`review-store-filter${storeFilterNarrowed ? ' is-narrowed' : ''}`}
+            >
+              {t.common.store}
+              <select
+                value={filters.storeId}
+                onChange={(e) =>
+                  setFilters((prev) => ({ ...prev, storeId: e.target.value }))
+                }
+              >
+                <option value="all">{t.common.allStores}</option>
+                {selectableStores.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.code} — {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+        {filterActive &&
+          ((surface === 'reports' && displayReports.length > 0) ||
+            (surface === 'logbook' && displayLogbookIssues.length > 0)) && (
+            <p className="small review-filter-meta">
+              {t.review.showingCount
+                .replace('{n}', String(
+                  surface === 'reports'
+                    ? filteredReports.length
+                    : filteredLogbookIssues.length,
+                ))
+                .replace('{m}', String(
+                  surface === 'reports'
+                    ? displayReports.length
+                    : displayLogbookIssues.length,
+                ))}
+            </p>
+          )}
+      </>
+    );
+  }
+
+  const filtersToggleLabel =
+    activeFilterCount > 0
+      ? t.review.filtersCount.replace('{n}', String(activeFilterCount))
+      : t.review.filters;
+
   return (
     <div>
       <ReviewFeedbackModal
@@ -861,59 +959,93 @@ export default function ReviewPage({
         </div>
 
         <div className="review-filters">
-          <div className="review-filters-row">
-            <div className="tabs">
-              {REVIEW_DATE_PRESETS.map((preset) => (
-                <button
-                  key={preset}
-                  type="button"
-                  className={filters.datePreset === preset ? 'active' : ''}
-                  onClick={() => setFilters((prev) => ({ ...prev, datePreset: preset }))}
-                >
-                  {reviewDatePresetLabel(t, preset)}
-                </button>
-              ))}
-            </div>
-            {showStoreFilter && (
-              <label
-                className={`review-store-filter${storeFilterNarrowed ? ' is-narrowed' : ''}`}
-              >
-                {t.common.store}
-                <select
-                  value={filters.storeId}
-                  onChange={(e) =>
-                    setFilters((prev) => ({ ...prev, storeId: e.target.value }))
-                  }
-                >
-                  <option value="all">{t.common.allStores}</option>
-                  {selectableStores.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.code} — {s.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+          <div className="review-filters-trigger-row">
+            <button
+              type="button"
+              className={`secondary review-filters-toggle${filterActive ? ' is-active' : ''}`}
+              aria-expanded={reviewFiltersOpen}
+              onClick={() => setReviewFiltersOpen((open) => !open)}
+            >
+              {filtersToggleLabel} {reviewFiltersOpen ? '▴' : '▾'}
+            </button>
+            {filterActive && (
+              <button type="button" className="secondary" onClick={clearAllReviewFilters}>
+                {t.review.clearFilters}
+              </button>
             )}
           </div>
-          {filterActive &&
-            ((surface === 'reports' && displayReports.length > 0) ||
-              (surface === 'logbook' && displayLogbookIssues.length > 0)) && (
-              <p className="small review-filter-meta">
-                {t.review.showingCount
-                  .replace('{n}', String(
-                    surface === 'reports'
-                      ? filteredReports.length
-                      : filteredLogbookIssues.length,
-                  ))
-                  .replace('{m}', String(
-                    surface === 'reports'
-                      ? displayReports.length
-                      : displayLogbookIssues.length,
-                  ))}
-              </p>
-            )}
+
+          {filterActive && !reviewFiltersOpen && (
+            <div className="logbook-filter-chips">
+              {filterChips.map((chip) => (
+                <span key={chip.id} className="logbook-filter-chip">
+                  {chip.label}
+                  <button
+                    type="button"
+                    aria-label={t.review.removeFilter}
+                    onClick={() =>
+                      setFilters((prev) => clearReviewFilterChip(prev, chip.kind))
+                    }
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {reviewFiltersOpen && !isMobileFilters && (
+            <div className="review-filters-panel">{renderReviewFiltersBody()}</div>
+          )}
         </div>
       </div>
+
+      {reviewFiltersOpen && isMobileFilters && (
+        <div
+          className="logbook-more-filters-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t.review.filters}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setReviewFiltersOpen(false);
+          }}
+        >
+          <div className="logbook-more-filters-sheet">
+            <div className="logbook-more-filters-sheet-header">
+              <strong>{filtersToggleLabel}</strong>
+              {filterActive && (
+                <button type="button" className="secondary" onClick={clearAllReviewFilters}>
+                  {t.review.clearFilters}
+                </button>
+              )}
+            </div>
+            {filterActive && (
+              <div className="logbook-filter-chips" style={{ padding: '8px 16px 0' }}>
+                {filterChips.map((chip) => (
+                  <span key={chip.id} className="logbook-filter-chip">
+                    {chip.label}
+                    <button
+                      type="button"
+                      aria-label={t.review.removeFilter}
+                      onClick={() =>
+                        setFilters((prev) => clearReviewFilterChip(prev, chip.kind))
+                      }
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="logbook-more-filters-sheet-body">{renderReviewFiltersBody()}</div>
+            <div className="logbook-more-filters-sheet-footer">
+              <button type="button" onClick={() => setReviewFiltersOpen(false)}>
+                {t.common.done}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {surface === 'logbook' && logbookRefreshFailed && (
         <p className="small">{t.review.refreshWarning}</p>

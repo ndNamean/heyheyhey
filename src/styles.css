@@ -2739,8 +2739,31 @@ body.wizard-active .page {
   margin: 8px 0 0;
 }
 
+.review-filters-trigger-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.review-filters-toggle {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.review-filters-toggle.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px var(--accent-soft);
+}
+
+.review-filters-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--card-border);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .review-store-filter select {
+  .review-store-filter select,
+  .review-filters-toggle {
     transition: none;
   }
 }
