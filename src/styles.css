@@ -2700,6 +2700,51 @@ body.wizard-active .page {
   border: 1px solid var(--card-border);
 }
 
+/* ── Review inbox filters ─────────────────────────────────────────────────── */
+.review-filters {
+  margin-top: 12px;
+}
+
+.review-filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.review-filters .tabs {
+  margin-bottom: 0;
+}
+
+.review-filters .tabs button {
+  min-height: 32px;
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+.review-store-filter {
+  min-width: 160px;
+}
+
+.review-store-filter select {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.review-store-filter.is-narrowed select {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px var(--accent-soft);
+}
+
+.review-filter-meta {
+  margin: 8px 0 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .review-store-filter select {
+    transition: none;
+  }
+}
+
 /* ── Responsive ───────────────────────────────────────────────────────────── */
 @media (min-width: 801px) {
   .bottom-nav { display: none; }

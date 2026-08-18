@@ -31,6 +31,15 @@ import { deliverLogbookEvent } from '../lib/logbookNotifyClient';
 import { deliverReportEvent } from '../lib/reportNotifyClient';
 import { resolveActorDisplay } from '../lib/actorDisplay';
 import { badgeClass, nowIso } from '../lib/utils';
+import {
+  defaultReviewFilterState,
+  filterLogbookIssuesForReview,
+  filterReportsForReview,
+  isReviewFilterActive,
+  REVIEW_DATE_PRESETS,
+  type ReviewDatePreset,
+} from '../lib/reviewFilters';
+import { profileVisibilityStoreIds, storesSelectableBy } from '../lib/inviteScope';
 import ProofPhoto from '../components/ProofPhoto';
 import ProofMediaDetails from '../components/ProofMediaDetails';
 import ReviewFeedbackModal, { type FeedbackResult } from '../components/ReviewFeedbackModal';
@@ -69,6 +78,7 @@ import type {
   Report,
   ReportResponse,
   ReviewEvent,
+  Store,
 } from '../types';
 
 interface Props {
@@ -106,6 +116,21 @@ type InstantQueryErrorLike = {
   type?: unknown;
 };
 
+function reviewDatePresetLabel(t: ReturnType<typeof useLang>['t'], preset: ReviewDatePreset): string {
+  switch (preset) {
+    case 'all':
+      return t.common.all;
+    case 'today':
+      return t.review.datePresetToday;
+    case 'yesterday':
+      return t.review.datePresetYesterday;
+    case 'last2days':
+      return t.review.datePresetLast2Days;
+    case 'last7days':
+      return t.review.datePresetLast7Days;
+  }
+}
+
 function instantErrorMeta(error: unknown): InstantQueryErrorLike {
   if (!error || typeof error !== 'object') return { message: String(error ?? '') };
   const e = error as InstantQueryErrorLike;
@@ -140,6 +165,7 @@ export default function ReviewPage({
   const [remindBusyReportId, setRemindBusyReportId] = useState<string | null>(null);
   const [remindMsgByReportId, setRemindMsgByReportId] = useState<Record<string, string>>({});
   const [surface, setSurface] = useState<ReviewSurface>(initialSurface);
+  const [filters, setFilters] = useState(defaultReviewFilterState);
   const [reportsQueryPaused, setReportsQueryPaused] = useState(false);
   const [logbookQueryPaused, setLogbookQueryPaused] = useState(false);
   const lastHighlightScrollKey = useRef('');
@@ -205,6 +231,7 @@ export default function ReviewPage({
                 responses: { media: { file: {} } },
                 store: {},
               },
+              stores: {},
               profiles: { stores: {}, avatarFile: {} },
               reviewEvents: {},
             },
@@ -236,6 +263,7 @@ export default function ReviewPage({
 
   const allProfiles: Profile[] = (data?.profiles ?? []) as Profile[];
   const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];
+  const stores: Store[] = (data?.stores ?? []) as Store[];
   const allLogbookEntries = (logbookData?.logbookEntries ?? []) as LogbookEntry[];
   const reports = useMemo(
     () =>
@@ -298,6 +326,40 @@ export default function ReviewPage({
       : !reportsQueryOk && lastGoodReportsRef.current
         ? lastGoodReportsRef.current.events
         : allEvents;
+
+  const selectableStores = useMemo(
+    () =>
+      storesSelectableBy(
+        profile.role,
+        profileVisibilityStoreIds(profile),
+        stores,
+        defs,
+      ),
+    [profile, stores, defs],
+  );
+
+  useEffect(() => {
+    if (filters.storeId === 'all') return;
+    if (selectableStores.some((s) => s.id === filters.storeId)) return;
+    setFilters((prev) => ({ ...prev, storeId: 'all' }));
+  }, [filters.storeId, selectableStores]);
+
+  const filteredReports = useMemo(
+    () =>
+      filterReportsForReview(displayReports, filters, {
+        keepReportIds: highlightReportId ? [highlightReportId] : [],
+      }),
+    [displayReports, filters, highlightReportId],
+  );
+
+  const filteredLogbookIssues = useMemo(
+    () => filterLogbookIssuesForReview(displayLogbookIssues, filters),
+    [displayLogbookIssues, filters],
+  );
+
+  const filterActive = isReviewFilterActive(filters);
+  const showStoreFilter = selectableStores.length > 1;
+  const storeFilterNarrowed = filters.storeId !== 'all';
 
   useEffect(() => {
     if (!reportsError) return;
@@ -368,7 +430,7 @@ export default function ReviewPage({
       el.classList.remove('report-card--highlight');
     }, 2500);
     return () => window.clearTimeout(timer);
-  }, [highlightReportId, highlightOpenKey, displayReports, surface]);
+  }, [highlightReportId, highlightOpenKey, filteredReports, surface]);
 
   if (!canReview(profile.role, defs)) {
     return <div className="card">{t.review.noPermission}</div>;
@@ -797,6 +859,60 @@ export default function ReviewPage({
             )}
           </button>
         </div>
+
+        <div className="review-filters">
+          <div className="review-filters-row">
+            <div className="tabs">
+              {REVIEW_DATE_PRESETS.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  className={filters.datePreset === preset ? 'active' : ''}
+                  onClick={() => setFilters((prev) => ({ ...prev, datePreset: preset }))}
+                >
+                  {reviewDatePresetLabel(t, preset)}
+                </button>
+              ))}
+            </div>
+            {showStoreFilter && (
+              <label
+                className={`review-store-filter${storeFilterNarrowed ? ' is-narrowed' : ''}`}
+              >
+                {t.common.store}
+                <select
+                  value={filters.storeId}
+                  onChange={(e) =>
+                    setFilters((prev) => ({ ...prev, storeId: e.target.value }))
+                  }
+                >
+                  <option value="all">{t.common.allStores}</option>
+                  {selectableStores.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.code} — {s.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </div>
+          {filterActive &&
+            ((surface === 'reports' && displayReports.length > 0) ||
+              (surface === 'logbook' && displayLogbookIssues.length > 0)) && (
+              <p className="small review-filter-meta">
+                {t.review.showingCount
+                  .replace('{n}', String(
+                    surface === 'reports'
+                      ? filteredReports.length
+                      : filteredLogbookIssues.length,
+                  ))
+                  .replace('{m}', String(
+                    surface === 'reports'
+                      ? displayReports.length
+                      : displayLogbookIssues.length,
+                  ))}
+              </p>
+            )}
+        </div>
       </div>
 
       {surface === 'logbook' && logbookRefreshFailed && (
@@ -804,7 +920,7 @@ export default function ReviewPage({
       )}
 
       {surface === 'logbook' &&
-        displayLogbookIssues.map((entry) => {
+        filteredLogbookIssues.map((entry) => {
           const proofType = resolveLogbookProofType(entry);
           const overdue = isIssueOverdue(entry);
           const submitter = resolveActorDisplay(
@@ -964,7 +1080,7 @@ export default function ReviewPage({
           );
         })}
 
-      {surface === 'logbook' && !displayLogbookIssues.length && (
+      {surface === 'logbook' && !filteredLogbookIssues.length && (
         <div className="card">
           {logbookInitialFailed ? (
             <>
@@ -981,7 +1097,9 @@ export default function ReviewPage({
             <p>
               {!logbookHasLastGood && logbookLoading
                 ? t.common.loading
-                : t.review.noLogbookAwaiting}
+                : displayLogbookIssues.length > 0 && filterActive
+                  ? t.review.noLogbookInFilter
+                  : t.review.noLogbookAwaiting}
             </p>
           )}
         </div>
@@ -992,7 +1110,7 @@ export default function ReviewPage({
       )}
 
       {surface === 'reports' &&
-        displayReports.map((report) => {
+        filteredReports.map((report) => {
         const responses = (report.responses ?? []) as ReportResponse[];
         const pendingCount = responses.filter((r) => r.status === 'waiting_approval').length;
         const reportSubmitterName = resolveActorDisplay(
@@ -1165,7 +1283,7 @@ export default function ReviewPage({
         );
       })}
 
-      {surface === 'reports' && !displayReports.length && (
+      {surface === 'reports' && !filteredReports.length && (
         <div className="card">
           {reportsInitialFailed ? (
             <>
@@ -1182,7 +1300,9 @@ export default function ReviewPage({
             <p>
               {!reportsHasLastGood && reportsLoading
                 ? t.common.loading
-                : t.review.noAwaitingReview}
+                : displayReports.length > 0 && filterActive
+                  ? t.review.noReportsInFilter
+                  : t.review.noAwaitingReview}
             </p>
           )}
         </div>
