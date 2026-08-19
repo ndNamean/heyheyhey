@@ -2034,7 +2034,7 @@ body.wizard-active .floating-assistant-root {
   max-width: 100%;
   display: flex;
   flex-direction: column;
-  max-height: min(480px, 70dvh);
+  max-height: var(--menu-max-h, min(480px, calc(var(--fa-panel-height, 640px) - 180px)));
   overflow: hidden;
   border-radius: 10px;
   border: 1px solid var(--input-border, rgba(255, 255, 255, 0.14));

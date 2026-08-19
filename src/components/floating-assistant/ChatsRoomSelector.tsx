@@ -520,6 +520,23 @@ export default function ChatsRoomSelector({
     return filteredOptions.findIndex((o) => isSameRoom(o, opt));
   }
 
+  const [menuMaxH, setMenuMaxH] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!open || useSheet) {
+      setMenuMaxH(null);
+      return;
+    }
+    const root = rootRef.current;
+    if (!root) return;
+    const panel = root.closest('.fa-panel') as HTMLElement | null;
+    if (!panel) return;
+    const selectorBottom = root.getBoundingClientRect().bottom;
+    const panelBottom = panel.getBoundingClientRect().bottom;
+    const available = panelBottom - selectorBottom - 8;
+    if (available > 0) setMenuMaxH(available);
+  }, [open, useSheet]);
+
   const menuClass = [
     'fa-chats-room-selector-menu',
     useSheet ? 'fa-chats-room-selector-menu--sheet' : '',
@@ -596,6 +613,7 @@ export default function ChatsRoomSelector({
             id={listboxId}
             role={useSheet ? 'dialog' : undefined}
             aria-label={useSheet ? 'Select conversation' : undefined}
+            style={menuMaxH != null ? ({ '--menu-max-h': `${menuMaxH}px` } as React.CSSProperties) : undefined}
           >
             {useSheet ? (
               <div className="fa-chats-room-selector-sheet-handle" aria-hidden="true">
