@@ -293,7 +293,7 @@
 
 .fa-store-chat-drop,
 .fa-group-chat-drop {
-  min-height: 100%;
+  min-height: 0;
 }
 
 .chat-drop-overlay {
