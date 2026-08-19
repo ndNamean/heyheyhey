@@ -670,6 +670,10 @@ const _schema = i.schema({
       updatedAt: i.string(),
       lastMessageAt: i.string().indexed().clientRequired(),
       similarNameKey: i.string().indexed().clientRequired(),
+      // '' = private group (missing treated the same). 'store_ops_leadership' = system room.
+      roomKind: i.string().indexed().clientRequired(),
+      // '' for private groups; store id for operations leadership rooms.
+      storeId: i.string().indexed().clientRequired(),
     }),
 
     groupChatMembers: i.entity({
@@ -1067,6 +1071,11 @@ const _schema = i.schema({
     groupChatBookmarkMessage: {
       forward: { on: 'groupChatBookmarks', has: 'one', label: 'message' },
       reverse: { on: 'groupChatMessages', has: 'many', label: 'bookmarks' },
+    },
+    // One-to-one: authoritative uniqueness for Operations Leadership rooms.
+    groupChatRoomStore: {
+      forward: { on: 'groupChatRooms', has: 'one', label: 'store' },
+      reverse: { on: 'stores', has: 'one', label: 'opsLeadershipRoom' },
     },
   },
 });

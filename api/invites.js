@@ -2,6 +2,7 @@
  * Opaque-token invitations API + Custom Group Chat Admin actions (Hobby fold).
  * Invite actions: create | validate | accept | resend | revoke | list | remove-user
  * Group chat actions: groupChatCreate | groupChatInvite | groupChatAccept | …
+ *                     groupChatEnsureStoreOpsLeadership (gated by STORE_OPS_LEADERSHIP_CHAT)
  * (gated by VITE_GROUP_CHAT / GROUP_CHAT; default off)
  */
 

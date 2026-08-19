@@ -39,6 +39,13 @@ import {
   getAssigneeRecipientUserIds,
   overdueRemindChatDeliveryKey,
 } from './_lib/logbook/overdue-remind.js';
+import { isStoreOpsLeadershipOversightNotifyEnabled } from './_lib/group-chat/leadership-flag.js';
+import {
+  additionalLeadershipOversightRecipients,
+  buildLeadershipOversightNotification,
+  leadershipOversightDeliveryKey,
+  shouldDeliverLeadershipOversight,
+} from './_lib/logbook/leadership-oversight.js';
 import {
   linkedFileIds,
   parseSubmitFileIds,
@@ -715,6 +722,71 @@ async function deliverEvent(req, res, adminDb, actor, body) {
     }
     for (let i = 0; i < chatTxs.length; i += CHAT_TX_CHUNK) {
       await adminDb.transact(chatTxs.slice(i, i + CHAT_TX_CHUNK));
+    }
+  }
+
+  if (
+    shouldDeliverLeadershipOversight(
+      eventType,
+      entry.storeId,
+      isStoreOpsLeadershipOversightNotifyEnabled(),
+    )
+  ) {
+    const additional = additionalLeadershipOversightRecipients({
+      storeId: entry.storeId,
+      profiles,
+      defs,
+      existingRecipients: recipients,
+    });
+    const extraIds = [];
+    const extraTxs = [];
+    for (const recipientUserId of additional) {
+      const deliveryKey = leadershipOversightDeliveryKey(
+        entryId,
+        eventType,
+        eventVersion,
+        recipientUserId,
+      );
+      let exists = false;
+      try {
+        exists = Boolean(
+          (
+            await adminDb.query({
+              notifications: { $: { where: { deliveryKey } } },
+            })
+          ).notifications?.length,
+        );
+      } catch {
+        /* migration fallback */
+      }
+      if (exists) continue;
+      const notificationId = id();
+      extraIds.push(notificationId);
+      extraTxs.push(
+        adminDb.tx.notifications[notificationId].update(
+          buildLeadershipOversightNotification({
+            recipientUserId,
+            entry,
+            eventType,
+            eventVersion,
+            actor,
+            title: `Leadership oversight · ${normalized.copy.pushTitle || normalized.title}`,
+            body: normalized.copy.inboxBody || normalized.body,
+            deepLinkJson: ensureDeepLinkJson(normalized, entry, entry.storeId),
+            actionStatus: normalized.actionStatus,
+            now: nowIso(),
+          }),
+        ),
+      );
+    }
+    if (extraTxs.length) {
+      await adminDb.transact(extraTxs);
+      void deliverPushForNotificationIds(extraIds, { adminDb }).catch((err) => {
+        console.warn(
+          '[logbook-notify] leadership oversight push skipped',
+          err?.message || err,
+        );
+      });
     }
   }
 

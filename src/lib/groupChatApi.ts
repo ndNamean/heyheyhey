@@ -3,6 +3,7 @@
  */
 
 import { db } from '../db';
+import { isStoreOpsLeadershipChatEnabled } from './storeOpsLeadershipFlag';
 
 export type GroupChatApiAction =
   | 'groupChatCreate'
@@ -15,7 +16,8 @@ export type GroupChatApiAction =
   | 'groupChatRename'
   | 'groupChatRemoveMember'
   | 'groupChatLeave'
-  | 'groupChatListPending';
+  | 'groupChatListPending'
+  | 'groupChatEnsureStoreOpsLeadership';
 
 async function authHeaders() {
   const user = await db.getAuth();
@@ -53,3 +55,14 @@ export async function groupChatApi<T = Record<string, unknown>>(
   }
   return data;
 }
+
+/** Fire-and-forget ensure — never throws. No-op when the leadership chat flag is off. */
+export function scheduleStoreOpsLeadershipEnsure(
+  body: { storeId?: string; profileId?: string } = {},
+): void {
+  if (!isStoreOpsLeadershipChatEnabled()) return;
+  void groupChatApi('groupChatEnsureStoreOpsLeadership', body).catch((err) => {
+    console.warn('[group-chat] leadership ensure', err);
+  });
+}
+

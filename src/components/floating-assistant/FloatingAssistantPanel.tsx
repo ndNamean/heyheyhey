@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useLang } from '../../i18n';
-import { isGroupChatEnabled } from '../../lib/groupChatFlag';
+import { isChatsSurfaceEnabled } from '../../lib/storeOpsLeadershipFlag';
 import type { Profile, Store } from '../../types';
 import type { AssistantPanelMode, FormFactor } from './assistantPanelLayout';
 import AssistantTabs, { type AssistantTabId } from './AssistantTabs';
@@ -119,7 +119,7 @@ export default function FloatingAssistantPanel({
 }: Props) {
   const { t } = useLang();
   const fa = t.floatingAssistant;
-  const groupChatOn = isGroupChatEnabled();
+  const chatsSurfaceOn = isChatsSurfaceEnabled();
   const panelRef = useRef<HTMLDivElement>(null);
   const exitFocusRef = useRef<HTMLButtonElement>(null);
   const moreWrapRef = useRef<HTMLDivElement>(null);
@@ -278,7 +278,7 @@ export default function FloatingAssistantPanel({
         <div className="fa-panel-header-text">
           <h2 className="fa-panel-title">Assistant</h2>
           <p className="fa-panel-subtitle small">
-            {groupChatOn ? 'Knowledge & chats' : 'Knowledge & store chat'}
+            {chatsSurfaceOn ? 'Knowledge & chats' : 'Knowledge & store chat'}
           </p>
         </div>
         <div className="fa-panel-header-actions">
@@ -383,7 +383,7 @@ export default function FloatingAssistantPanel({
         </div>
       </header>
 
-      {!groupChatOn || activeTab === 'knowledge' ? (
+      {!chatsSurfaceOn || activeTab === 'knowledge' ? (
         <div className="fa-panel-store">
           {storesLoading ? (
             <FloatingAssistantLoader label="Loading stores…" />
@@ -415,7 +415,7 @@ export default function FloatingAssistantPanel({
           labelledBy="fa-tab-knowledge"
           hidden={activeTab !== 'knowledge'}
         />
-        {groupChatOn ? (
+        {chatsSurfaceOn ? (
           <ChatsTabBody
             profile={profile}
             stores={stores}

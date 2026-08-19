@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   SELECTED_CHAT_ROOM_STORAGE_KEY,
   toChatRoomKey,
   migrateSelectedChatRoomKey,
   type ChatRoomRef,
 } from '../../lib/chatRoomKeys';
-import { groupChatApi } from '../../lib/groupChatApi';
+import { groupChatApi, scheduleStoreOpsLeadershipEnsure } from '../../lib/groupChatApi';
+import { isGroupChatEnabled } from '../../lib/groupChatFlag';
+import { isStoreOpsLeadershipChatEnabled } from '../../lib/storeOpsLeadershipFlag';
+import { privateGroupRooms } from '../../lib/storeOpsLeadership';
 import { canCreateCrossStoreGroupChat, canCreateGroupChat, canSendGroupChat } from '../../lib/roles';
 import { useRoleDefinitions } from '../../contexts/RoleDefinitionsContext';
 import type { Profile, Store } from '../../types';
@@ -88,6 +91,8 @@ export default function ChatsTabBody({
   onConversationUnreadChange,
 }: Props) {
   const { defs } = useRoleDefinitions();
+  const groupChatOn = isGroupChatEnabled();
+  const leadershipChatOn = isStoreOpsLeadershipChatEnabled();
   const [selected, setSelected] = useState<ChatRoomRef | null>(() =>
     readStoredRoom(selectedStoreId),
   );
@@ -169,10 +174,17 @@ export default function ChatsTabBody({
     selectRoom({ kind: 'store', id: storeId });
   }, [initialStoreChatMessageId, selectedStoreId, selected, selectRoom]);
 
-  const canCreate = canCreateGroupChat(profile.role, defs);
+  const canCreate = groupChatOn && canCreateGroupChat(profile.role, defs);
   const canCross = canCreateCrossStoreGroupChat(profile.role, defs);
   const canSendGroup =
     canSendGroupChat(profile.role, defs) && profile.role !== 'viewer';
+
+  const ensuredRef = useRef(false);
+  useEffect(() => {
+    if (hidden || !leadershipChatOn || ensuredRef.current) return;
+    ensuredRef.current = true;
+    scheduleStoreOpsLeadershipEnsure();
+  }, [hidden, leadershipChatOn]);
 
   async function acceptInvite(inviteId: string) {
     setInviteBusyId(inviteId);
@@ -291,7 +303,7 @@ export default function ChatsTabBody({
         profile={profile}
         authorizedStores={stores}
         canCrossStore={canCross}
-        existingGroupNames={rooms.map((r) => r.name)}
+        existingGroupNames={privateGroupRooms(rooms).map((r) => r.name)}
         onCreated={(roomId) => selectRoom({ kind: 'group', id: roomId })}
       />
 

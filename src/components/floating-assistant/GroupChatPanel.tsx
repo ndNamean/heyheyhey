@@ -47,6 +47,13 @@ import {
   type SelectedMention,
 } from '../../lib/storeChatMentions';
 import { buildGroupChatMentionNotifications } from '../../lib/notifications';
+import { schedulePushDeliveryFromTxs } from '../../lib/pushDelivery';
+import {
+  STORE_OPS_LEADERSHIP_LIST_SUBTITLE,
+  isStoreOpsLeadershipRoom,
+} from '../../lib/storeOpsLeadership';
+import { getRoleDef } from '../../lib/roles';
+import { useRoleDefinitions } from '../../contexts/RoleDefinitionsContext';
 import {
   QUICK_UNICODE_REACTIONS,
   giphyReactionDisplayUrl,
@@ -871,6 +878,7 @@ export default function GroupChatPanel({
   showBack = false,
 }: Props) {
   const { lang, t } = useLang();
+  const { defs } = useRoleDefinitions();
   const sc = t.storeChat;
   const actionLabels = actionLabelsFromT(sc);
   const {
@@ -938,7 +946,8 @@ export default function GroupChatPanel({
     onStageAttachment: () => setSelectedGiphy(null),
   });
   const roomRole = myMembership?.roomRole || '';
-  const canManage = roomRole === 'owner' || roomRole === 'admin';
+  const leadershipRoom = isStoreOpsLeadershipRoom(room);
+  const canManage = !leadershipRoom && (roomRole === 'owner' || roomRole === 'admin');
   const archived = room?.status === 'archived';
   const composerEnabled = canSend && !archived;
   const canReact = Boolean(roomId && profile.userId && !archived);
@@ -1926,6 +1935,7 @@ export default function GroupChatPanel({
             actor: profile,
             recipientUserIds: recipientIds,
             mentionAll: resolved.mentionAll,
+            storeId: leadershipRoom ? String(room.storeId || '') : '',
           })
         : [];
 
@@ -1959,6 +1969,9 @@ export default function GroupChatPanel({
         }),
         ...notifTxs,
       ]);
+      if (leadershipRoom && notifTxs.length) {
+        schedulePushDeliveryFromTxs(notifTxs);
+      }
       setDraft('');
       setTrackedMentions([]);
       setMentionAllTracked(false);
@@ -2178,7 +2191,11 @@ export default function GroupChatPanel({
         ) : null}
         <div className="fa-group-chat-header-text">
           <h3 className="fa-group-chat-title">{room?.name || 'Group'}</h3>
-          <p className="small">{members.length} members · private</p>
+          <p className="small">
+            {leadershipRoom
+              ? `${STORE_OPS_LEADERSHIP_LIST_SUBTITLE} · ${members.length} members`
+              : `${members.length} members · private`}
+          </p>
         </div>
         <button
           type="button"
@@ -2666,6 +2683,10 @@ export default function GroupChatPanel({
                 {members.map((m) => {
                   const p = memberProfile(m);
                   const name = p?.displayName || p?.email || m.userId;
+                  const roleLabel = p?.role
+                    ? getRoleDef(p.role, defs)?.label || p.role
+                    : m.roomRole;
+                  const memberLine = leadershipRoom ? `${name} · ${roleLabel}` : `${name} · ${m.roomRole}`;
                   const canRemove =
                     canManage &&
                     m.userId !== profile.userId &&
@@ -2675,7 +2696,7 @@ export default function GroupChatPanel({
                     <li key={m.id} className="fa-group-member-row">
                       <span className="fa-group-member-identity">
                         <IdentityWithAvatar profile={p} size={20}>
-                          {name} · {m.roomRole}
+                          {memberLine}
                         </IdentityWithAvatar>
                       </span>
                       {canRemove ? (
@@ -2819,14 +2840,16 @@ export default function GroupChatPanel({
               ) : null}
 
               <div className="fa-modal-actions">
-                <button
-                  type="button"
-                  className="fa-btn-secondary fa-btn-compact"
-                  disabled={busy}
-                  onClick={() => void leaveOrArchive()}
-                >
-                  {myMembership?.roomRole === 'owner' ? 'Archive group' : 'Leave group'}
-                </button>
+                {leadershipRoom ? null : (
+                  <button
+                    type="button"
+                    className="fa-btn-secondary fa-btn-compact"
+                    disabled={busy}
+                    onClick={() => void leaveOrArchive()}
+                  >
+                    {myMembership?.roomRole === 'owner' ? 'Archive group' : 'Leave group'}
+                  </button>
+                )}
               </div>
               {manageError ? (
                 <p className="fa-create-group-error" role="alert">

@@ -5,6 +5,12 @@ import type { ChatRoomRef } from '../../lib/chatRoomKeys';
 import type { GroupChatInvite, GroupChatRoom, Store } from '../../types';
 import ProfileAvatarPreview from '../profileAvatar/ProfileAvatarPreview';
 import type { UnreadSenderSummary } from './useUnreadStoreChat';
+import {
+  STORE_OPS_LEADERSHIP_LIST_SUBTITLE,
+  STORE_OPS_LEADERSHIP_LIST_TITLE,
+  leadershipRoomForStore,
+  privateGroupRooms,
+} from '../../lib/storeOpsLeadership';
 
 const MAX_VISIBLE_SENDERS = 3;
 
@@ -149,6 +155,7 @@ export default function ChatsRoomSelector({
 
   const roomOptions = useMemo((): RoomOption[] => {
     const list: RoomOption[] = [];
+    const usedLeadership = new Set<string>();
     for (const s of stores) {
       list.push({
         kind: 'store',
@@ -158,8 +165,21 @@ export default function ChatsRoomSelector({
         unread: unreadByStore[s.id] || 0,
         senders: unreadSendersByStore[s.id] ?? [],
       });
+      const lead = leadershipRoomForStore(groups, s.id);
+      if (lead) {
+        usedLeadership.add(lead.id);
+        list.push({
+          kind: 'group',
+          id: lead.id,
+          title: STORE_OPS_LEADERSHIP_LIST_TITLE,
+          subtitle: STORE_OPS_LEADERSHIP_LIST_SUBTITLE,
+          unread: unreadByGroup[lead.id] || 0,
+          senders: [],
+        });
+      }
     }
-    for (const g of groups) {
+    for (const g of privateGroupRooms(groups)) {
+      if (usedLeadership.has(g.id)) continue;
       list.push({
         kind: 'group',
         id: g.id,
@@ -188,24 +208,12 @@ export default function ChatsRoomSelector({
       (o) => o.unread > 0 && !isSameRoom(o, current),
     );
     const unreadIds = new Set(unread.map((o) => `${o.kind}:${o.id}`));
-    const restStores = matchingOptions.filter(
+    const rest = matchingOptions.filter(
       (o) =>
-        o.kind === 'store' &&
         !isSameRoom(o, current) &&
         !unreadIds.has(`${o.kind}:${o.id}`),
     );
-    const restGroups = matchingOptions.filter(
-      (o) =>
-        o.kind === 'group' &&
-        !isSameRoom(o, current) &&
-        !unreadIds.has(`${o.kind}:${o.id}`),
-    );
-    return [
-      ...(current ? [current] : []),
-      ...unread,
-      ...restStores,
-      ...restGroups,
-    ];
+    return [...(current ? [current] : []), ...unread, ...rest];
   }, [matchingOptions, selected]);
 
   const filteredInvites = useMemo(() => {

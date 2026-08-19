@@ -699,6 +699,7 @@ const rules = {
       link: {
         members: 'false',
         invites: 'false',
+        store: 'false',
         // Reverse link half: Instant evaluates these in an empty bind container, so
         // named binds like isActiveMember fail with "undeclared reference". Gate
         // membership on the child entity forward links (messages/reactions/bookmarks
@@ -710,6 +711,7 @@ const rules = {
       unlink: {
         members: 'false',
         invites: 'false',
+        store: 'false',
         messages: 'false',
         reactions: 'false',
         bookmarks: 'false',

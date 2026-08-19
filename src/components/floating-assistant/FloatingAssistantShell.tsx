@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { BACK_PRIORITY, useNativeBack } from '../../lib/nativeBack';
-import { isGroupChatEnabled } from '../../lib/groupChatFlag';
+import { isChatsSurfaceEnabled } from '../../lib/storeOpsLeadershipFlag';
 import type { Profile } from '../../types';
 import {
   OPEN_GROUP_CHAT_EVENT,
@@ -62,7 +62,7 @@ export default function FloatingAssistantShell({ profile }: Props) {
   const launcherRef = useRef<HTMLButtonElement>(null);
   const wasOpenRef = useRef(false);
   const offline = useOfflineFlag();
-  const groupChatOn = isGroupChatEnabled();
+  const chatsSurfaceOn = isChatsSurfaceEnabled();
 
   const {
     authorizedStores,
@@ -186,7 +186,7 @@ export default function FloatingAssistantShell({ profile }: Props) {
 
   useEffect(() => {
     function onOpenGroupChat(event: Event) {
-      if (!isGroupChatEnabled()) return;
+      if (!isChatsSurfaceEnabled()) return;
       const detail = (event as CustomEvent<OpenGroupChatDetail>).detail;
       const roomId = detail?.roomId?.trim();
       if (!roomId) return;
@@ -215,8 +215,8 @@ export default function FloatingAssistantShell({ profile }: Props) {
     };
   }, [close, layout.formFactor]);
 
-  const launcherUnread = groupChatOn ? conversationUnread || totalUnread : totalUnread;
-  const launcherHasUnread = groupChatOn
+  const launcherUnread = chatsSurfaceOn ? conversationUnread || totalUnread : totalUnread;
+  const launcherHasUnread = chatsSurfaceOn
     ? conversationUnread > 0 || hasUnread
     : hasUnread;
 

@@ -4,13 +4,15 @@
  *
  * Actions: groupChatCreate | groupChatInvite | groupChatAccept | groupChatDecline |
  *          groupChatCancel | groupChatRemind | groupChatArchive | groupChatRename |
- *          groupChatRemoveMember | groupChatLeave | groupChatListPending
+ *          groupChatRemoveMember | groupChatLeave | groupChatListPending |
+ *          groupChatEnsureStoreOpsLeadership
  */
 
 import { id } from '@instantdb/admin';
 import { getAdminDb, parseBody } from '../export/instant-admin.js';
 import { verifyRequestUser, loadProfileContext } from '../export/auth.js';
 import { isGroupChatEnabled } from './flag.js';
+import { isStoreOpsLeadershipChatEnabled } from './leadership-flag.js';
 import {
   validateGroupChatName,
   normalizeGroupChatDescription,
@@ -28,6 +30,17 @@ import {
   inviteRemindDeliveryKey,
   nextInviteExpiresAt,
 } from './remind.js';
+import {
+  isReservedStoreOpsLeadershipSimilarNameKey,
+  leadershipLifecycleForbidden,
+} from './store-ops-leadership.js';
+import {
+  ensureLeadershipRoomForStore,
+  loadEnsureContext,
+  resolveEnsureStoreIds,
+} from './ensure-store-ops-leadership.js';
+import { roleCanManageUsers } from '../export/role-capabilities.js';
+import { roleCanEditMaster, userHasStoreAccess } from '../wifi-notify/access.js';
 
 function httpError(status, message) {
   const err = new Error(message);
@@ -42,6 +55,29 @@ async function requireApprovedUser(req) {
   const { userId, email } = await verifyRequestUser(req);
   const ctx = await loadProfileContext(userId);
   return { ...ctx, email: email || ctx.email };
+}
+
+async function requireLeadershipChatUser(req) {
+  if (!isStoreOpsLeadershipChatEnabled()) {
+    throw httpError(404, 'Operations leadership chat is disabled');
+  }
+  const { userId, email } = await verifyRequestUser(req);
+  const ctx = await loadProfileContext(userId);
+  return { ...ctx, email: email || ctx.email };
+}
+
+function assertNotLeadershipLifecycle(room) {
+  if (leadershipLifecycleForbidden(room)) {
+    throw httpError(403, 'Forbidden: operations leadership room is system-managed');
+  }
+}
+
+async function loadInviteRoom(adminDb, invite) {
+  if (!invite) return null;
+  const linked = Array.isArray(invite.room) ? invite.room[0] : invite.room;
+  if (linked) return linked;
+  if (!invite.roomId) return null;
+  return loadRoomWithMembers(adminDb, invite.roomId);
 }
 
 function emptyMessageSystemFields() {
@@ -147,6 +183,9 @@ async function createRoom(req, res) {
   if (!nameCheck.ok) {
     return res.status(400).json({ error: `Invalid name: ${nameCheck.error}` });
   }
+  if (isReservedStoreOpsLeadershipSimilarNameKey(similarNameKey(nameCheck.name))) {
+    return res.status(400).json({ error: 'Name is reserved for operations leadership rooms' });
+  }
   const description = normalizeGroupChatDescription(body.description);
   const icon = String(body.icon ?? '').trim().slice(0, 64);
   const inviteeProfileIds = Array.isArray(body.inviteeProfileIds)
@@ -191,6 +230,8 @@ async function createRoom(req, res) {
       updatedAt: now,
       lastMessageAt: now,
       similarNameKey: similarNameKey(nameCheck.name),
+      roomKind: '',
+      storeId: '',
     }),
     adminDb.tx.groupChatMembers[memberId]
       .update({
@@ -285,6 +326,7 @@ async function inviteMembers(req, res) {
   if (!room || room.status === 'archived') {
     throw httpError(404, 'Room not found or archived');
   }
+  assertNotLeadershipLifecycle(room);
   const actorMember = (room.members || []).find((m) => m.userId === ctx.userId);
   if (!memberIsRoomOwnerOrAdmin(actorMember)) {
     throw httpError(403, 'Forbidden: room owner/admin required');
@@ -391,6 +433,7 @@ async function acceptInvite(req, res) {
   if (!room || room.status === 'archived') {
     throw httpError(400, 'Room unavailable');
   }
+  assertNotLeadershipLifecycle(room);
 
   const now = new Date().toISOString();
   const memberId = id();
@@ -440,7 +483,7 @@ async function declineInvite(req, res) {
 
   const adminDb = getAdminDb();
   const result = await adminDb.query({
-    groupChatInvites: { $: { where: { id: inviteId } } },
+    groupChatInvites: { $: { where: { id: inviteId } }, room: {} },
   });
   const invite = result.groupChatInvites?.[0];
   if (!invite || invite.inviteeUserId !== ctx.userId) {
@@ -449,6 +492,8 @@ async function declineInvite(req, res) {
   if (invite.status !== 'pending') {
     throw httpError(400, `Invite is ${invite.status}`);
   }
+  const room = await loadInviteRoom(adminDb, invite);
+  assertNotLeadershipLifecycle(room);
   const now = new Date().toISOString();
   await adminDb.transact([
     adminDb.tx.groupChatInvites[inviteId].update({
@@ -467,13 +512,15 @@ async function cancelInvite(req, res) {
 
   const adminDb = getAdminDb();
   const result = await adminDb.query({
-    groupChatInvites: { $: { where: { id: inviteId } } },
+    groupChatInvites: { $: { where: { id: inviteId } }, room: {} },
   });
   const invite = result.groupChatInvites?.[0];
   if (!invite) throw httpError(404, 'Invite not found');
   if (invite.status !== 'pending') {
     throw httpError(400, `Invite is ${invite.status}`);
   }
+  const room = await loadInviteRoom(adminDb, invite);
+  assertNotLeadershipLifecycle(room);
 
   const membership = await findActorMembership(adminDb, invite.roomId, ctx.userId);
   const canCancel =
@@ -516,6 +563,7 @@ async function remindInvite(req, res) {
   if (!guard.ok) throw httpError(guard.status, guard.error);
 
   const room = Array.isArray(invite.room) ? invite.room[0] : invite.room;
+  assertNotLeadershipLifecycle(room);
   const roomName = room?.name || invite.roomNameSnapshot || 'group chat';
   const nowMs = Date.now();
   const expiresAt = nextInviteExpiresAt(nowMs);
@@ -546,6 +594,9 @@ async function archiveRoom(req, res) {
   if (!roomId) return res.status(400).json({ error: 'roomId required' });
 
   const adminDb = getAdminDb();
+  const room = await loadRoomWithMembers(adminDb, roomId);
+  if (!room) throw httpError(404, 'Room not found');
+  assertNotLeadershipLifecycle(room);
   const membership = await findActorMembership(adminDb, roomId, ctx.userId);
   if (!membership || membership.roomRole !== 'owner') {
     throw httpError(403, 'Forbidden: room owner required');
@@ -567,8 +618,14 @@ async function renameRoom(req, res) {
   const nameCheck = validateGroupChatName(body.name);
   if (!roomId) return res.status(400).json({ error: 'roomId required' });
   if (!nameCheck.ok) return res.status(400).json({ error: `Invalid name: ${nameCheck.error}` });
+  if (isReservedStoreOpsLeadershipSimilarNameKey(similarNameKey(nameCheck.name))) {
+    return res.status(400).json({ error: 'Name is reserved for operations leadership rooms' });
+  }
 
   const adminDb = getAdminDb();
+  const room = await loadRoomWithMembers(adminDb, roomId);
+  if (!room) throw httpError(404, 'Room not found');
+  assertNotLeadershipLifecycle(room);
   const membership = await findActorMembership(adminDb, roomId, ctx.userId);
   if (!memberIsRoomOwnerOrAdmin(membership)) {
     throw httpError(403, 'Forbidden: room owner/admin required');
@@ -600,6 +657,7 @@ async function removeMember(req, res) {
   const adminDb = getAdminDb();
   const room = await loadRoomWithMembers(adminDb, roomId);
   if (!room) throw httpError(404, 'Room not found');
+  assertNotLeadershipLifecycle(room);
   const actorMember = (room.members || []).find((m) => m.userId === ctx.userId);
   if (!memberIsRoomOwnerOrAdmin(actorMember)) {
     throw httpError(403, 'Forbidden');
@@ -624,6 +682,9 @@ async function leaveRoom(req, res) {
   if (!roomId) return res.status(400).json({ error: 'roomId required' });
 
   const adminDb = getAdminDb();
+  const room = await loadRoomWithMembers(adminDb, roomId);
+  if (!room) throw httpError(404, 'Room not found');
+  assertNotLeadershipLifecycle(room);
   const membership = await findActorMembership(adminDb, roomId, ctx.userId);
   if (!membership) throw httpError(404, 'Not a member');
   if (membership.roomRole === 'owner') {
@@ -668,6 +729,58 @@ async function listPending(req, res) {
   return res.status(200).json({ ok: true, invites, historyDisclosure: 'full' });
 }
 
+async function ensureStoreOpsLeadership(req, res) {
+  const ctx = await requireLeadershipChatUser(req);
+  const body = parseBody(req.body) || {};
+  // Server-derived roster only — ignore client memberIds / ranks.
+  void body.memberIds;
+  void body.ranks;
+
+  const adminDb = getAdminDb();
+  const { stores, profiles, roleDefinitions } = await loadEnsureContext(adminDb);
+  const canEditMaster = roleCanEditMaster(ctx.role, ctx.roleDefinition, ctx.roleDefinitions);
+  const canManageUsers = roleCanManageUsers(ctx.role, ctx.roleDefinition);
+  const storeIds = resolveEnsureStoreIds({
+    bodyStoreId: body.storeId,
+    bodyProfileId: body.profileId,
+    actor: ctx,
+    stores,
+    canEditMaster,
+    canManageUsers,
+    userHasStoreAccess,
+  });
+
+  const results = [];
+  for (const storeId of storeIds) {
+    const store = stores.find((s) => s.id === storeId);
+    if (!store) continue;
+    try {
+      const summary = await ensureLeadershipRoomForStore({
+        adminDb,
+        store,
+        profiles,
+        defs: roleDefinitions,
+        actor: ctx,
+      });
+      results.push(summary);
+    } catch (e) {
+      console.error('[group-chat] leadership ensure', {
+        storeId,
+        roomId: '',
+        expected: 0,
+        actual: 0,
+        added: 0,
+        removed: 0,
+        noOp: false,
+        error: e instanceof Error ? e.message : String(e),
+      });
+      throw e;
+    }
+  }
+
+  return res.status(200).json({ ok: true, results });
+}
+
 export async function handleGroupChatRequest(req, res) {
   const action = String(req.query?.action || req.body?.action || '').trim();
 
@@ -701,6 +814,9 @@ export async function handleGroupChatRequest(req, res) {
     }
     if (req.method === 'POST' && action === 'groupChatLeave') {
       return await leaveRoom(req, res);
+    }
+    if (req.method === 'POST' && action === 'groupChatEnsureStoreOpsLeadership') {
+      return await ensureStoreOpsLeadership(req, res);
     }
     if (
       (req.method === 'GET' || req.method === 'POST') &&

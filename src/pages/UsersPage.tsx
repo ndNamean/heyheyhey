@@ -24,6 +24,7 @@ import {
   buildAccessRecheckNotifications,
 } from '../lib/notifications';
 import { schedulePushDeliveryFromTxs } from '../lib/pushDelivery';
+import { scheduleStoreOpsLeadershipEnsure } from '../lib/groupChatApi';
 import {
   canAccessUsersPage,
   canFinalApproveAccess,
@@ -329,6 +330,7 @@ function StoresAssignControl({
           .map((id) => db.tx.profiles[profile.id].unlink({ stores: id })),
       ];
       if (txs.length) await db.transact(txs);
+      scheduleStoreOpsLeadershipEnsure({ profileId: profile.id });
       setOpen(false);
     } catch (e) {
       alert(e instanceof Error ? e.message : t.errors.saveFailed);
@@ -445,6 +447,7 @@ function ApproveModal({
       ];
       await db.transact(txs);
       schedulePushDeliveryFromTxs(txs);
+      scheduleStoreOpsLeadershipEnsure({ profileId: pending.id });
       onClose();
     } catch (e) {
       alert(e instanceof Error ? e.message : t.users.approveFailed);
@@ -1201,6 +1204,7 @@ export default function UsersPage({ currentProfile }: Props) {
       return;
     }
     await db.transact(profileRoleAssignTx(profile.id, role, defs, profile.roleDefinition?.id));
+    scheduleStoreOpsLeadershipEnsure({ profileId: profile.id });
   }
 
   async function confirmRoleChange() {

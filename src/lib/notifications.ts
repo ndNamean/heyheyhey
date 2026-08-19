@@ -1026,11 +1026,11 @@ export function buildStoreChatMentionNotifications(opts: {
   return txs;
 }
 
-function emptyGroupChatNotifFields(messageId: string, roomId: string) {
+function emptyGroupChatNotifFields(messageId: string, roomId: string, storeId = '') {
   return {
     reportId: messageId,
     reportResponseId: '',
-    storeId: '',
+    storeId: storeId || '',
     itemTitle: '',
     completionPercent: 0,
     compliancePercent: 0,
@@ -1043,7 +1043,8 @@ function emptyGroupChatNotifFields(messageId: string, roomId: string) {
 /**
  * In-app notifications for Group Chat @mentions / @all.
  * `reportId` stores the message id (same reuse pattern as store chat).
- * Room id lives in `deepLinkJson` (storeId stays empty).
+ * Room id lives in `deepLinkJson`. Private groups keep storeId empty;
+ * operations leadership rooms pass the room's storeId.
  */
 export function buildGroupChatMentionNotifications(opts: {
   messageId: string;
@@ -1053,6 +1054,7 @@ export function buildGroupChatMentionNotifications(opts: {
   actor: Profile;
   recipientUserIds: string[];
   mentionAll: boolean;
+  storeId?: string;
 }) {
   const { messageId, roomId, roomName, body, actor, recipientUserIds, mentionAll } = opts;
   const actorName = actor.displayName?.trim() || actor.email?.split('@')[0] || 'Someone';
@@ -1063,6 +1065,7 @@ export function buildGroupChatMentionNotifications(opts: {
     ? `${actorName} mentioned everyone in Group Chat`
     : `${actorName} mentioned you in Group Chat`;
   const notifBody = [`Group: ${roomPart}`, preview].filter(Boolean).join('\n');
+  const storeId = String(opts.storeId ?? '');
 
   const seen = new Set<string>();
   const txs = [];
@@ -1080,7 +1083,7 @@ export function buildGroupChatMentionNotifications(opts: {
         actorRole: actor.role,
         readAt: '',
         createdAt: nowIso(),
-        ...emptyGroupChatNotifFields(messageId, roomId),
+        ...emptyGroupChatNotifFields(messageId, roomId, storeId),
       }),
     );
   }

@@ -13,6 +13,7 @@ import {
   type WifiIpRowLike,
 } from '../lib/storeWifiIp';
 import { nowIso } from '../lib/utils';
+import { scheduleStoreOpsLeadershipEnsure } from '../lib/groupChatApi';
 import type { Profile, Store } from '../types';
 
 const MapPicker = lazy(() => import('../components/MapPicker'));
@@ -352,6 +353,7 @@ export default function StoresPage({ profile }: Props) {
       }
 
       await db.transact(txs);
+      scheduleStoreOpsLeadershipEnsure({ storeId });
       cancelEdit();
     } catch (e) {
       alert(e instanceof Error ? e.message : t.stores.saveFailed);
@@ -363,6 +365,7 @@ export default function StoresPage({ profile }: Props) {
   async function deactivate(store: Store) {
     if (!confirm(`Deactivate ${store.name}?`)) return;
     await db.transact(db.tx.stores[store.id].update({ active: false, updatedAt: nowIso() }));
+    scheduleStoreOpsLeadershipEnsure({ storeId: store.id });
   }
 
   const f = (k: keyof typeof form, v: string) => setForm((prev) => ({ ...prev, [k]: v }));

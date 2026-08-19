@@ -1,4 +1,4 @@
-import { isGroupChatEnabled } from '../../lib/groupChatFlag';
+import { isChatsSurfaceEnabled } from '../../lib/storeOpsLeadershipFlag';
 
 export type AssistantTabId = 'knowledge' | 'store-chat';
 
@@ -20,9 +20,9 @@ export default function AssistantTabs({
   storeChatUnread = 0,
   conversationUnread,
 }: Props) {
-  const groupChatOn = isGroupChatEnabled();
-  const chatsLabel = groupChatOn ? 'Chats' : 'Store Chat';
-  const badgeCount = groupChatOn
+  const chatsSurfaceOn = isChatsSurfaceEnabled();
+  const chatsLabel = chatsSurfaceOn ? 'Chats' : 'Store Chat';
+  const badgeCount = chatsSurfaceOn
     ? conversationUnread ?? storeChatUnread
     : storeChatUnread;
   const ids = { knowledgePanelId, storeChatPanelId };
@@ -64,7 +64,7 @@ export default function AssistantTabs({
               <span
                 className="fa-tab-badge"
                 aria-label={
-                  groupChatOn
+                  chatsSurfaceOn
                     ? `${badgeCount} unread conversations`
                     : `${badgeCount} unread store chat ${badgeCount === 1 ? 'message' : 'messages'}`
                 }

@@ -2,6 +2,12 @@ import { useMemo, useState } from 'react';
 import type { ChatRoomRef } from '../../lib/chatRoomKeys';
 import type { GroupChatInvite, GroupChatRoom, Store } from '../../types';
 import type { UnreadSenderSummary } from './useUnreadStoreChat';
+import {
+  STORE_OPS_LEADERSHIP_LIST_SUBTITLE,
+  STORE_OPS_LEADERSHIP_LIST_TITLE,
+  leadershipRoomForStore,
+  privateGroupRooms,
+} from '../../lib/storeOpsLeadership';
 
 /** Show always-visible search when room count exceeds this. */
 const SEARCH_VISIBLE_THRESHOLD = 6;
@@ -97,19 +103,41 @@ export default function ChatsRoomList({
 
     for (const s of stores) {
       const title = `${s.code} · ${s.name}`;
-      if (needle && !title.toLowerCase().includes(needle)) continue;
-      list.push({
-        kind: 'store',
-        id: s.id,
-        key: `store:${s.id}`,
-        title,
-        subtitle: 'Store chat',
-        unread: unreadByStore[s.id] || 0,
-        senders: unreadSendersByStore?.[s.id],
-      });
+      if (!needle || title.toLowerCase().includes(needle)) {
+        list.push({
+          kind: 'store',
+          id: s.id,
+          key: `store:${s.id}`,
+          title,
+          subtitle: 'Store chat',
+          unread: unreadByStore[s.id] || 0,
+          senders: unreadSendersByStore?.[s.id],
+        });
+      }
+      const lead = leadershipRoomForStore(groups, s.id);
+      if (lead) {
+        const leadTitle = STORE_OPS_LEADERSHIP_LIST_TITLE;
+        const leadSub = STORE_OPS_LEADERSHIP_LIST_SUBTITLE;
+        if (
+          !needle ||
+          leadTitle.toLowerCase().includes(needle) ||
+          leadSub.toLowerCase().includes(needle) ||
+          title.toLowerCase().includes(needle) ||
+          (lead.name || '').toLowerCase().includes(needle)
+        ) {
+          list.push({
+            kind: 'group',
+            id: lead.id,
+            key: `group:${lead.id}`,
+            title: leadTitle,
+            subtitle: leadSub,
+            unread: unreadByGroup[lead.id] || 0,
+          });
+        }
+      }
     }
 
-    for (const g of groups) {
+    for (const g of privateGroupRooms(groups)) {
       if (needle && !g.name.toLowerCase().includes(needle)) continue;
       list.push({
         kind: 'group',

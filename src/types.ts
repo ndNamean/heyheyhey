@@ -977,6 +977,7 @@ export interface StoreChatBookmark {
   createdAt: string;
 }
 
+export type GroupChatRoomKind = 'private' | 'store_ops_leadership';
 export type GroupChatRoomStatus = 'active' | 'archived';
 export type GroupChatRoomRole = 'owner' | 'admin' | 'member';
 export type GroupChatInviteStatus =
@@ -1007,6 +1008,11 @@ export interface GroupChatRoom {
   updatedAt: string;
   lastMessageAt: string;
   similarNameKey: string;
+  /** Missing or '' = private. Picker `kind` is unrelated. */
+  roomKind?: GroupChatRoomKind | string;
+  /** '' for private groups; store id for operations leadership rooms. */
+  storeId?: string;
+  store?: Store | Store[];
   members?: GroupChatMember[];
   invites?: GroupChatInvite[];
 }

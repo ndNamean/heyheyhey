@@ -12,6 +12,8 @@ import {
 } from '../lib/roleResolver';
 import { DEFAULT_ROLE_DEFINITIONS } from '../lib/defaultRoleDefinitions';
 import { nowIso } from '../lib/utils';
+import { scheduleStoreOpsLeadershipEnsure } from '../lib/groupChatApi';
+import { roleEligibilityCrossedSubleader } from '../lib/storeOpsLeadership';
 import type { Profile, RoleDefinition, RoleDefinitionSeed } from '../types';
 
 type CapabilityKey = keyof Pick<
@@ -238,6 +240,15 @@ export default function RolesPermissionsPanel({
           updatedAt: now,
         }),
       ]);
+      const afterDefs = [
+        ...sorted.map((d) =>
+          d.rank >= newRank ? { ...d, rank: d.rank + 1 } : d,
+        ),
+        { ...template, key, rank: newRank, isSystem: false, active: true } as RoleDefinition,
+      ];
+      if (roleEligibilityCrossedSubleader(sorted, afterDefs)) {
+        scheduleStoreOpsLeadershipEnsure();
+      }
       setShowAdd(false);
       setAddKey('');
       setAddLabel('');

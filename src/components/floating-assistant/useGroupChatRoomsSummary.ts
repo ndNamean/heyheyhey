@@ -1,22 +1,30 @@
 import { useMemo } from 'react';
 import { db } from '../../db';
+import { isGroupChatEnabled } from '../../lib/groupChatFlag';
+import { isChatsSurfaceEnabled, isStoreOpsLeadershipChatEnabled } from '../../lib/storeOpsLeadershipFlag';
+import { isStoreOpsLeadershipRoom } from '../../lib/storeOpsLeadership';
 import type { GroupChatInvite, GroupChatMember, GroupChatRoom } from '../../types';
 
 /**
  * Memberships + pending invites for the signed-in user (Instant client rules).
+ * Queries when private groups OR leadership rooms are enabled.
  */
 export function useGroupChatRoomsSummary(userId: string | undefined) {
-  const query = userId
-    ? {
-        groupChatMembers: {
-          $: { where: { userId } },
-          room: {},
-        },
-        groupChatInvites: {
-          $: { where: { inviteeUserId: userId, status: 'pending' } },
-        },
-      }
-    : null;
+  const enabled = isChatsSurfaceEnabled();
+  const groupChatOn = isGroupChatEnabled();
+  const leadershipOn = isStoreOpsLeadershipChatEnabled();
+  const query =
+    userId && enabled
+      ? {
+          groupChatMembers: {
+            $: { where: { userId } },
+            room: {},
+          },
+          groupChatInvites: {
+            $: { where: { inviteeUserId: userId, status: 'pending' } },
+          },
+        }
+      : null;
 
   const { data, isLoading, error } = db.useQuery(query);
 
@@ -38,8 +46,9 @@ export function useGroupChatRoomsSummary(userId: string | undefined) {
   }, [memberships]);
 
   const pendingInvites = useMemo(() => {
+    if (!groupChatOn) return [];
     return (data?.groupChatInvites ?? []) as GroupChatInvite[];
-  }, [data?.groupChatInvites]);
+  }, [data?.groupChatInvites, groupChatOn]);
 
   const membershipByRoomId = useMemo(() => {
     const map = new Map<string, GroupChatMember>();
@@ -47,8 +56,15 @@ export function useGroupChatRoomsSummary(userId: string | undefined) {
     return map;
   }, [memberships]);
 
+  const visibleRooms = useMemo(() => {
+    return rooms.filter((room) => {
+      if (isStoreOpsLeadershipRoom(room)) return leadershipOn;
+      return groupChatOn;
+    });
+  }, [rooms, leadershipOn, groupChatOn]);
+
   return {
-    rooms,
+    rooms: visibleRooms,
     memberships,
     membershipByRoomId,
     pendingInvites,
