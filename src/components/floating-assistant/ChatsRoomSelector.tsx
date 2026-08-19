@@ -26,6 +26,13 @@ function storeTitle(store: Store): string {
   return `${store.code} · ${store.name}`;
 }
 
+function leadershipTitle(store: Store): string {
+  const code = String(store.code || '').trim();
+  return code
+    ? `${STORE_OPS_LEADERSHIP_LIST_TITLE} · ${code}`
+    : STORE_OPS_LEADERSHIP_LIST_TITLE;
+}
+
 function isSameRoom(
   a: { kind: string; id: string } | null | undefined,
   b: { kind: string; id: string } | null | undefined,
@@ -171,7 +178,7 @@ export default function ChatsRoomSelector({
         list.push({
           kind: 'group',
           id: lead.id,
-          title: STORE_OPS_LEADERSHIP_LIST_TITLE,
+          title: leadershipTitle(s),
           subtitle: STORE_OPS_LEADERSHIP_LIST_SUBTITLE,
           unread: unreadByGroup[lead.id] || 0,
           senders: [],

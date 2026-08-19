@@ -12,6 +12,13 @@ import {
 /** Show always-visible search when room count exceeds this. */
 const SEARCH_VISIBLE_THRESHOLD = 6;
 
+function leadershipTitle(code: string): string {
+  const trimmed = String(code || '').trim();
+  return trimmed
+    ? `${STORE_OPS_LEADERSHIP_LIST_TITLE} · ${trimmed}`
+    : STORE_OPS_LEADERSHIP_LIST_TITLE;
+}
+
 export type ChatListItem =
   | {
       kind: 'store';
@@ -116,7 +123,7 @@ export default function ChatsRoomList({
       }
       const lead = leadershipRoomForStore(groups, s.id);
       if (lead) {
-        const leadTitle = STORE_OPS_LEADERSHIP_LIST_TITLE;
+        const leadTitle = leadershipTitle(s.code);
         const leadSub = STORE_OPS_LEADERSHIP_LIST_SUBTITLE;
         if (
           !needle ||
