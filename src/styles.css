@@ -3823,6 +3823,12 @@ body.wizard-active .page {
   height: 0;
   z-index: 4;
   overflow: visible;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.dash-sticky-thead-slot.is-pinned {
+  visibility: visible;
 }
 
 .dash-sticky-thead {

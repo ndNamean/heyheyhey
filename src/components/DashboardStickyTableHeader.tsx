@@ -7,6 +7,11 @@ interface DashboardStickyTableHeaderProps {
   topOffset?: number;
 }
 
+/**
+ * Visual sticky table-header clone for dashboard tables that must keep
+ * overflow-x on the scroller. Hidden while the real <thead> is still visible
+ * so it does not overlay the first rows at rest.
+ */
 export default function DashboardStickyTableHeader({
   labels,
   tableRef,
@@ -15,13 +20,28 @@ export default function DashboardStickyTableHeader({
 }: DashboardStickyTableHeaderProps) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [columnWidths, setColumnWidths] = useState<number[]>([]);
+  const [pinned, setPinned] = useState(false);
+  const [desktopStickyTitle, setDesktopStickyTitle] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(min-width: 801px)').matches : true,
+  );
+
+  // Desktop may stack under a sticky section title; ≤800px titles are static so pin at 0.
+  const safeTopOffset = desktopStickyTitle ? Math.max(0, Math.round(topOffset)) : 0;
+
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 801px)');
+    const onChange = () => setDesktopStickyTitle(media.matches);
+    onChange();
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
 
   const topStyle = useMemo(
     () =>
       ({
-        '--dash-sticky-top': `${Math.max(0, Math.round(topOffset))}px`,
+        '--dash-sticky-top': `${safeTopOffset}px`,
       }) as CSSProperties,
-    [topOffset],
+    [safeTopOffset],
   );
 
   useEffect(() => {
@@ -65,10 +85,34 @@ export default function DashboardStickyTableHeader({
     };
   }, [scrollerRef, tableRef]);
 
+  useEffect(() => {
+    const table = tableRef.current;
+    const thead = table?.tHead;
+    if (!thead) return;
+
+    // Shrink the observation root from the top by the sticky offset so the
+    // clone appears only after the real thead has passed the pin line.
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setPinned(!entry.isIntersecting);
+      },
+      {
+        root: null,
+        rootMargin: `-${safeTopOffset + 1}px 0px 0px 0px`,
+        threshold: 0,
+      },
+    );
+    observer.observe(thead);
+    return () => observer.disconnect();
+  }, [tableRef, safeTopOffset, labels.length]);
+
   if (!labels.length) return null;
 
   return (
-    <div className="dash-sticky-thead-slot" style={topStyle}>
+    <div
+      className={`dash-sticky-thead-slot${pinned ? ' is-pinned' : ''}`}
+      style={topStyle}
+    >
       <div className="dash-sticky-thead" aria-hidden="true">
         <div className="dash-sticky-thead-track" ref={trackRef}>
           {labels.map((label, index) => (
