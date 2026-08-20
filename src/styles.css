@@ -3776,6 +3776,100 @@ body.wizard-active .page {
   text-align: left;
 }
 
+/* ── Dashboard sticky scroll sections ────────────────────────────────────── */
+.dash-scroll-section {
+  position: relative;
+  overflow: visible;
+  --dash-sticky-top: 0px;
+}
+
+.dash-scroll-section .card {
+  position: relative;
+  overflow: visible;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.dash-scroll-section .card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--card-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.dash-scroll-section .card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.dash-sticky-heading {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--card-border);
+  padding: 10px 14px;
+  margin-bottom: 10px;
+}
+
+.dash-sticky-thead-slot {
+  position: sticky;
+  top: var(--dash-sticky-top, 0px);
+  height: 0;
+  z-index: 4;
+  overflow: visible;
+}
+
+.dash-sticky-thead {
+  background: var(--input-bg);
+  border-bottom: 1px solid var(--card-border);
+}
+
+.dash-sticky-thead-track {
+  display: inline-flex;
+  min-width: max-content;
+  will-change: transform;
+}
+
+.dash-sticky-thead-cell {
+  padding: 12px 14px;
+  border-right: 1px solid var(--card-border);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+  font-weight: 700;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.dash-sticky-thead-cell:last-child {
+  border-right: none;
+}
+
+.dash-table-x {
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x pan-y;
+}
+
+@media (max-width: 800px) {
+  .dash-sticky-heading {
+    position: static;
+  }
+
+  .dash-sticky-thead-slot {
+    top: 0;
+  }
+}
+
 @media (max-width: 640px) {
   .template-schedule-recurrence {
     flex-direction: column;

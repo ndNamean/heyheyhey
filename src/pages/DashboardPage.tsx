@@ -10,6 +10,7 @@ import {
 } from '../lib/logbookNotificationContent';
 import ExportModal from '../components/ExportModal';
 import FailureCorrectionHistory from '../components/FailureCorrectionHistory';
+import DashboardStickyTableHeader from '../components/DashboardStickyTableHeader';
 import ScheduledTaskCompletion from '../components/ScheduledTaskCompletion';
 import { ReportTimelineLeadCell } from '../components/ReportTimeline';
 import IdentityWithAvatar from '../components/profileAvatar/IdentityWithAvatar';
@@ -79,6 +80,10 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
     deepLinkFilter?: string;
   } | null>(null);
   const dueNotifyRan = useRef(false);
+  const logbookHeadingRef = useRef<HTMLDivElement | null>(null);
+  const logbookTableScrollerRef = useRef<HTMLDivElement | null>(null);
+  const logbookTableRef = useRef<HTMLTableElement | null>(null);
+  const [logbookStickyTopOffset, setLogbookStickyTopOffset] = useState(0);
 
   const { data } = db.useQuery({
     reports: {
@@ -257,6 +262,20 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
     defs,
   ]);
 
+  const logbookHeaderLabels = useMemo(
+    () => [
+      t.logbook.typeIssue,
+      t.common.store,
+      t.common.severity,
+      t.logbook.assigneeRole,
+      t.logbook.dueAt,
+      t.common.status,
+      t.logbook.overdueDuration,
+      t.common.actions,
+    ],
+    [t],
+  );
+
   useEffect(() => {
     if (dueNotifyRan.current || !allLogbookEntries.length) return;
     dueNotifyRan.current = true;
@@ -265,6 +284,18 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
       if (!ok) dueNotifyRan.current = false;
     });
   }, [allLogbookEntries, profile, profiles, defs]);
+
+  useEffect(() => {
+    const heading = logbookHeadingRef.current;
+    if (!heading) return;
+    const updateHeight = () => {
+      setLogbookStickyTopOffset(Math.round(heading.offsetHeight));
+    };
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(heading);
+    updateHeight();
+    return () => observer.disconnect();
+  }, []);
 
   const displayStores = canAccessAllStores(profile.role, defs)
     ? stores
@@ -405,133 +436,151 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
         </div>
       </div>
 
-      <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <h2 style={{ margin: 0, flex: 1 }}>{t.logbook.dashboardTitle}</h2>
-          {onOpenLogbook && (
-            <button type="button" className="secondary" onClick={() => onOpenLogbook('all')}>
-              {t.logbook.openInLogbook}
-            </button>
-          )}
+      <section className="dash-scroll-section">
+        <div className="dash-sticky-heading" ref={logbookHeadingRef}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <h2 id="logbook-issues-heading" style={{ margin: 0, flex: 1 }}>
+              {t.logbook.dashboardTitle}
+            </h2>
+            {onOpenLogbook && (
+              <button type="button" className="secondary" onClick={() => onOpenLogbook('all')}>
+                {t.logbook.openInLogbook}
+              </button>
+            )}
+          </div>
         </div>
-        <div className="grid four" style={{ marginTop: 12 }}>
-          <div>
-            <div className="small">{t.logbook.statusOpen}</div>
-            <div className="metric">{logbookMetrics.counts.open}</div>
-          </div>
-          <div>
-            <div className="small">{t.logbook.statusInProgress}</div>
-            <div className="metric">{logbookMetrics.counts.inProgress}</div>
-          </div>
-          <div>
-            <div className="small">{t.logbook.statusWaiting}</div>
-            <div className="metric">{logbookMetrics.counts.waitingApproval}</div>
-          </div>
-          <div>
-            <div className="small">{t.logbook.statusOverdue}</div>
-            <div className="metric">{logbookMetrics.counts.overdue}</div>
-          </div>
-          <div>
-            <div className="small">{t.logbook.statusResolved}</div>
-            <div className="metric">{logbookMetrics.counts.resolved}</div>
-          </div>
-          <div>
-            <div className="small">{t.logbook.resolutionRate}</div>
-            <div className="metric">
-              {logbookMetrics.resolutionRate == null ? '—' : `${logbookMetrics.resolutionRate}%`}
+        <div className="card">
+          <div className="grid four" style={{ marginTop: 12 }}>
+            <div>
+              <div className="small">{t.logbook.statusOpen}</div>
+              <div className="metric">{logbookMetrics.counts.open}</div>
+            </div>
+            <div>
+              <div className="small">{t.logbook.statusInProgress}</div>
+              <div className="metric">{logbookMetrics.counts.inProgress}</div>
+            </div>
+            <div>
+              <div className="small">{t.logbook.statusWaiting}</div>
+              <div className="metric">{logbookMetrics.counts.waitingApproval}</div>
+            </div>
+            <div>
+              <div className="small">{t.logbook.statusOverdue}</div>
+              <div className="metric">{logbookMetrics.counts.overdue}</div>
+            </div>
+            <div>
+              <div className="small">{t.logbook.statusResolved}</div>
+              <div className="metric">{logbookMetrics.counts.resolved}</div>
+            </div>
+            <div>
+              <div className="small">{t.logbook.resolutionRate}</div>
+              <div className="metric">
+                {logbookMetrics.resolutionRate == null ? '—' : `${logbookMetrics.resolutionRate}%`}
+              </div>
+            </div>
+            <div>
+              <div className="small">{t.logbook.onTimeRate}</div>
+              <div className="metric">
+                {logbookMetrics.onTimeResolutionRate == null
+                  ? '—'
+                  : `${logbookMetrics.onTimeResolutionRate}%`}
+              </div>
+            </div>
+            <div>
+              <div className="small">{t.logbook.avgResolution}</div>
+              <div className="metric">
+                {formatDurationMs(logbookMetrics.avgResolutionDurationMs)}
+              </div>
             </div>
           </div>
-          <div>
-            <div className="small">{t.logbook.onTimeRate}</div>
-            <div className="metric">
-              {logbookMetrics.onTimeResolutionRate == null
-                ? '—'
-                : `${logbookMetrics.onTimeResolutionRate}%`}
-            </div>
+          <div className="grid two" style={{ marginTop: 12 }}>
+            <label>
+              {t.common.status}
+              <select
+                value={issueStatusFilter}
+                onChange={(e) => setIssueStatusFilter(e.target.value)}
+              >
+                <option value="all">{t.common.all}</option>
+                <option value="open">{t.logbook.statusOpen}</option>
+                <option value="in_progress">{t.logbook.statusInProgress}</option>
+                <option value="waiting_approval">{t.logbook.statusWaiting}</option>
+                <option value="resolved">{t.logbook.statusResolved}</option>
+              </select>
+            </label>
+            <label>
+              {t.common.severity}
+              <select
+                value={issueSeverityFilter}
+                onChange={(e) => setIssueSeverityFilter(e.target.value)}
+              >
+                <option value="all">{t.common.all}</option>
+                {['info', 'warning', 'critical'].map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              {t.logbook.assigneeRole}
+              <select
+                value={issueAssigneeFilter}
+                onChange={(e) => setIssueAssigneeFilter(e.target.value)}
+              >
+                <option value="all">{t.common.all}</option>
+                {['staff', 'hybrid', 'subleader', 'leader', 'manager'].map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
-          <div>
-            <div className="small">{t.logbook.avgResolution}</div>
-            <div className="metric">
-              {formatDurationMs(logbookMetrics.avgResolutionDurationMs)}
-            </div>
+          <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={issueOverdueOnly}
+                onChange={(e) => setIssueOverdueOnly(e.target.checked)}
+              />
+              {t.logbook.overdueOnly}
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={issueWaitingMyReview}
+                onChange={(e) => setIssueWaitingMyReview(e.target.checked)}
+              />
+              {t.logbook.waitingMyReview}
+            </label>
           </div>
-        </div>
-        <div className="grid two" style={{ marginTop: 12 }}>
-          <label>
-            {t.common.status}
-            <select
-              value={issueStatusFilter}
-              onChange={(e) => setIssueStatusFilter(e.target.value)}
-            >
-              <option value="all">{t.common.all}</option>
-              <option value="open">{t.logbook.statusOpen}</option>
-              <option value="in_progress">{t.logbook.statusInProgress}</option>
-              <option value="waiting_approval">{t.logbook.statusWaiting}</option>
-              <option value="resolved">{t.logbook.statusResolved}</option>
-            </select>
-          </label>
-          <label>
-            {t.common.severity}
-            <select
-              value={issueSeverityFilter}
-              onChange={(e) => setIssueSeverityFilter(e.target.value)}
-            >
-              <option value="all">{t.common.all}</option>
-              {['info', 'warning', 'critical'].map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {t.logbook.assigneeRole}
-            <select
-              value={issueAssigneeFilter}
-              onChange={(e) => setIssueAssigneeFilter(e.target.value)}
-            >
-              <option value="all">{t.common.all}</option>
-              {['staff', 'hybrid', 'subleader', 'leader', 'manager'].map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div style={{ display: 'flex', gap: 12, marginTop: 8, flexWrap: 'wrap' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input
-              type="checkbox"
-              checked={issueOverdueOnly}
-              onChange={(e) => setIssueOverdueOnly(e.target.checked)}
-            />
-            {t.logbook.overdueOnly}
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input
-              type="checkbox"
-              checked={issueWaitingMyReview}
-              onChange={(e) => setIssueWaitingMyReview(e.target.checked)}
-            />
-            {t.logbook.waitingMyReview}
-          </label>
-        </div>
-        <div className="table-wrap" style={{ marginTop: 12, overflowX: 'auto' }}>
-          <table>
-            <thead>
-              <tr>
-                <th>{t.logbook.typeIssue}</th>
-                <th>{t.common.store}</th>
-                <th>{t.common.severity}</th>
-                <th>{t.logbook.assigneeRole}</th>
-                <th>{t.logbook.dueAt}</th>
-                <th>{t.common.status}</th>
-                <th>{t.logbook.overdueDuration}</th>
-                <th>{t.common.actions}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <DashboardStickyTableHeader
+            labels={logbookHeaderLabels}
+            tableRef={logbookTableRef}
+            scrollerRef={logbookTableScrollerRef}
+            topOffset={logbookStickyTopOffset}
+          />
+          <div
+            className="table-wrap dash-table-x"
+            style={{ marginTop: 12 }}
+            ref={logbookTableScrollerRef}
+            role="region"
+            aria-labelledby="logbook-issues-heading"
+            tabIndex={0}
+          >
+            <table ref={logbookTableRef}>
+              <thead>
+                <tr>
+                  <th scope="col">{t.logbook.typeIssue}</th>
+                  <th scope="col">{t.common.store}</th>
+                  <th scope="col">{t.common.severity}</th>
+                  <th scope="col">{t.logbook.assigneeRole}</th>
+                  <th scope="col">{t.logbook.dueAt}</th>
+                  <th scope="col">{t.common.status}</th>
+                  <th scope="col">{t.logbook.overdueDuration}</th>
+                  <th scope="col">{t.common.actions}</th>
+                </tr>
+              </thead>
+              <tbody>
               {logbookIssueRows.map((e) => {
                 const status = resolveLogbookIssueStatus(e);
                 const store = e.store || (stores as { id: string; code: string }[]).find((s) => s.id === e.storeId);
@@ -611,10 +660,11 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
                   </td>
                 </tr>
               )}
-            </tbody>
-          </table>
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      </section>
 
       {canAccessChecklistItemProposals(profile.role, defs) && (
         <div className="card">

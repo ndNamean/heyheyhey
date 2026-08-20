@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import DashboardStickyTableHeader from './DashboardStickyTableHeader';
 import { useLang } from '../i18n';
 import { statusLabel } from '../lib/i18nUtils';
 import {
@@ -65,6 +66,8 @@ export default function FailureCorrectionHistory({
   const [sortKey, setSortKey] = useState<SortKey>('issueCount');
   const [selectedInstance, setSelectedInstance] = useState<IssueInstance | null>(null);
   const [selectedBreakdown, setSelectedBreakdown] = useState<BreakdownRow | null>(null);
+  const breakdownScrollerRef = useRef<HTMLDivElement | null>(null);
+  const breakdownTableRef = useRef<HTMLTableElement | null>(null);
 
   const result = useMemo(
     () =>
@@ -114,9 +117,24 @@ export default function FailureCorrectionHistory({
 
   const fh = t.failureHistory;
   const { kpis } = result;
+  const breakdownLabels = useMemo(
+    () => [
+      t.dashboard.item,
+      t.common.section,
+      t.dashboard.category,
+      t.common.store,
+      fh.issues,
+      fh.issueRate,
+      fh.resubmitted,
+      fh.recoveryRate,
+      fh.repeated,
+      fh.avgCorrectionTime,
+    ],
+    [fh, t],
+  );
 
   return (
-    <div className="failure-history-section">
+    <section className="failure-history-section dash-scroll-section">
       <div className="card table-wrap failure-history-card">
         <div className="dashboard-filters-header">
           <div>
@@ -258,7 +276,9 @@ export default function FailureCorrectionHistory({
           </>
         )}
 
-        <h3 className="failure-history-subheading">{fh.breakdown}</h3>
+        <h3 className="failure-history-subheading" id="failure-breakdown-heading">
+          {fh.breakdown}
+        </h3>
         <div className="failure-history-sort">
           <label className="small">
             {fh.sortBy}
@@ -276,45 +296,60 @@ export default function FailureCorrectionHistory({
         </div>
 
         {sortedBreakdown.length > 0 ? (
-          <table className="feedback-freq-table failure-history-breakdown">
-            <thead>
-              <tr>
-                <th>{t.dashboard.item}</th>
-                <th>{t.common.section}</th>
-                <th>{t.dashboard.category}</th>
-                <th>{t.common.store}</th>
-                <th>{fh.issues}</th>
-                <th>{fh.issueRate}</th>
-                <th>{fh.resubmitted}</th>
-                <th>{fh.recoveryRate}</th>
-                <th>{fh.repeated}</th>
-                <th>{fh.avgCorrectionTime}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedBreakdown.map((row) => (
-                <tr
-                  key={row.key}
-                  className="failure-history-row-clickable"
-                  onClick={() => {
-                    setSelectedBreakdown(row);
-                    setSelectedInstance(null);
-                  }}
-                >
-                  <td>{row.itemTitle}</td>
-                  <td>{row.section}</td>
-                  <td>{row.category}</td>
-                  <td>{row.storeCode}</td>
-                  <td>{row.issueCount}</td>
-                  <td>{row.issueRate}%</td>
-                  <td>{row.resubmittedCount}</td>
-                  <td>{row.recoveryRate}%</td>
-                  <td>{row.repeatedIssueCount}</td>
-                  <td>{formatDurationMs(row.avgCorrectionTimeMs)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <>
+            <DashboardStickyTableHeader
+              labels={breakdownLabels}
+              tableRef={breakdownTableRef}
+              scrollerRef={breakdownScrollerRef}
+            />
+            <div
+              className="dash-table-x"
+              ref={breakdownScrollerRef}
+              role="region"
+              aria-labelledby="failure-breakdown-heading"
+              tabIndex={0}
+            >
+              <table className="feedback-freq-table failure-history-breakdown" ref={breakdownTableRef}>
+                <thead>
+                  <tr>
+                    <th scope="col">{t.dashboard.item}</th>
+                    <th scope="col">{t.common.section}</th>
+                    <th scope="col">{t.dashboard.category}</th>
+                    <th scope="col">{t.common.store}</th>
+                    <th scope="col">{fh.issues}</th>
+                    <th scope="col">{fh.issueRate}</th>
+                    <th scope="col">{fh.resubmitted}</th>
+                    <th scope="col">{fh.recoveryRate}</th>
+                    <th scope="col">{fh.repeated}</th>
+                    <th scope="col">{fh.avgCorrectionTime}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedBreakdown.map((row) => (
+                    <tr
+                      key={row.key}
+                      className="failure-history-row-clickable"
+                      onClick={() => {
+                        setSelectedBreakdown(row);
+                        setSelectedInstance(null);
+                      }}
+                    >
+                      <td>{row.itemTitle}</td>
+                      <td>{row.section}</td>
+                      <td>{row.category}</td>
+                      <td>{row.storeCode}</td>
+                      <td>{row.issueCount}</td>
+                      <td>{row.issueRate}%</td>
+                      <td>{row.resubmittedCount}</td>
+                      <td>{row.recoveryRate}%</td>
+                      <td>{row.repeatedIssueCount}</td>
+                      <td>{formatDurationMs(row.avgCorrectionTimeMs)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         ) : (
           <p className="small">{fh.noData}</p>
         )}
@@ -410,6 +445,6 @@ export default function FailureCorrectionHistory({
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }

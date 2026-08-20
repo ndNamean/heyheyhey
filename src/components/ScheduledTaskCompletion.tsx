@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import DashboardStickyTableHeader from './DashboardStickyTableHeader';
 import { useLang } from '../i18n';
 import {
   calculateScheduledTaskMetrics,
@@ -31,6 +32,10 @@ export default function ScheduledTaskCompletion({
   const { t } = useLang();
   const [filterTemplateId, setFilterTemplateId] = useState('all');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const headingRef = useRef<HTMLDivElement | null>(null);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const tableRef = useRef<HTMLTableElement | null>(null);
+  const [stickyTopOffset, setStickyTopOffset] = useState(0);
 
   const scheduledTemplates = useMemo(() => {
     return templates.filter((tmpl) => {
@@ -81,76 +86,128 @@ export default function ScheduledTaskCompletion({
     setCollapsed((prev) => ({ ...prev, [templateId]: !prev[templateId] }));
   }
 
+  useEffect(() => {
+    const heading = headingRef.current;
+    if (!heading) return;
+    const updateHeight = () => {
+      setStickyTopOffset(Math.round(heading.offsetHeight));
+    };
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(heading);
+    updateHeight();
+    return () => observer.disconnect();
+  }, []);
+
+  const headerLabels = useMemo(
+    () => [
+      t.common.template,
+      t.dashboard.item,
+      t.common.store,
+      t.dashboard.scheduledTasksFrequency,
+      t.dashboard.scheduledTasksDeadline,
+      t.dashboard.scheduledTasksExpected,
+      t.dashboard.scheduledTasksCompleted,
+      t.dashboard.scheduledTasksCompletionPct,
+      t.dashboard.scheduledTasksOnTime,
+      t.dashboard.scheduledTasksOnTimePct,
+      t.dashboard.scheduledTasksAvgTime,
+      t.dashboard.scheduledTasksLate,
+      t.dashboard.scheduledTasksAvgLate,
+      t.dashboard.scheduledTasksOverdue,
+    ],
+    [t],
+  );
+
   return (
-    <div className="card table-wrap scheduled-task-completion">
-      <div className="scheduled-task-completion-header">
-        <div>
-          <h2 style={{ margin: 0 }}>{t.dashboard.scheduledTasksTitle}</h2>
-          <p className="small" style={{ marginTop: 4 }}>
-            {t.dashboard.scheduledTasksSubtitle}
-          </p>
+    <section className="dash-scroll-section">
+      <div className="card table-wrap scheduled-task-completion">
+        <div className="dash-sticky-heading" ref={headingRef}>
+          <h2 id="scheduled-task-heading" style={{ margin: 0 }}>
+            {t.dashboard.scheduledTasksTitle}
+          </h2>
         </div>
-        {templateOptions.length > 0 && (
-          <label className="scheduled-task-template-filter">
-            {t.common.template}
-            <select
-              value={filterTemplateId}
-              onChange={(e) => setFilterTemplateId(e.target.value)}
+        <div className="scheduled-task-completion-header">
+          <div>
+            <p className="small" style={{ marginTop: 4 }}>
+              {t.dashboard.scheduledTasksSubtitle}
+            </p>
+          </div>
+          {templateOptions.length > 0 && (
+            <label className="scheduled-task-template-filter">
+              {t.common.template}
+              <select
+                value={filterTemplateId}
+                onChange={(e) => setFilterTemplateId(e.target.value)}
+              >
+                <option value="all">{t.dashboard.scheduledTasksAllTemplates}</option>
+                {templateOptions.map(([id, name]) => (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
+
+        {!rows.length ? (
+          <p className="small">{t.dashboard.scheduledTasksEmpty}</p>
+        ) : (
+          <>
+            <DashboardStickyTableHeader
+              labels={headerLabels}
+              tableRef={tableRef}
+              scrollerRef={scrollerRef}
+              topOffset={stickyTopOffset}
+            />
+            <div
+              ref={scrollerRef}
+              className="scheduled-task-table-scroll dash-table-x"
+              role="region"
+              aria-labelledby="scheduled-task-heading"
+              tabIndex={0}
             >
-              <option value="all">{t.dashboard.scheduledTasksAllTemplates}</option>
-              {templateOptions.map(([id, name]) => (
-                <option key={id} value={id}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
+              <table className="scheduled-task-table" ref={tableRef}>
+                <thead>
+                  <tr>
+                    <th scope="col">{t.common.template}</th>
+                    <th scope="col">{t.dashboard.item}</th>
+                    <th scope="col">{t.common.store}</th>
+                    <th scope="col">{t.dashboard.scheduledTasksFrequency}</th>
+                    <th scope="col">{t.dashboard.scheduledTasksDeadline}</th>
+                    <th scope="col">{t.dashboard.scheduledTasksExpected}</th>
+                    <th scope="col">{t.dashboard.scheduledTasksCompleted}</th>
+                    <th scope="col">{t.dashboard.scheduledTasksCompletionPct}</th>
+                    <th scope="col">{t.dashboard.scheduledTasksOnTime}</th>
+                    <th scope="col">{t.dashboard.scheduledTasksOnTimePct}</th>
+                    <th scope="col">{t.dashboard.scheduledTasksAvgTime}</th>
+                    <th scope="col">{t.dashboard.scheduledTasksLate}</th>
+                    <th scope="col">{t.dashboard.scheduledTasksAvgLate}</th>
+                    <th scope="col">{t.dashboard.scheduledTasksOverdue}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {grouped.map(([templateId, group]) => {
+                    const isCollapsed = !!collapsed[templateId];
+                    return (
+                      <TemplateGroup
+                        key={templateId}
+                        templateId={templateId}
+                        name={group.name}
+                        rows={group.rows}
+                        collapsed={isCollapsed}
+                        onToggle={() => toggleTemplate(templateId)}
+                        t={t}
+                      />
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
-
-      {!rows.length ? (
-        <p className="small">{t.dashboard.scheduledTasksEmpty}</p>
-      ) : (
-        <div className="scheduled-task-table-scroll">
-          <table className="scheduled-task-table">
-            <thead>
-              <tr>
-                <th>{t.common.template}</th>
-                <th>{t.dashboard.item}</th>
-                <th>{t.common.store}</th>
-                <th>{t.dashboard.scheduledTasksFrequency}</th>
-                <th>{t.dashboard.scheduledTasksDeadline}</th>
-                <th>{t.dashboard.scheduledTasksExpected}</th>
-                <th>{t.dashboard.scheduledTasksCompleted}</th>
-                <th>{t.dashboard.scheduledTasksCompletionPct}</th>
-                <th>{t.dashboard.scheduledTasksOnTime}</th>
-                <th>{t.dashboard.scheduledTasksOnTimePct}</th>
-                <th>{t.dashboard.scheduledTasksAvgTime}</th>
-                <th>{t.dashboard.scheduledTasksLate}</th>
-                <th>{t.dashboard.scheduledTasksAvgLate}</th>
-                <th>{t.dashboard.scheduledTasksOverdue}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {grouped.map(([templateId, group]) => {
-                const isCollapsed = !!collapsed[templateId];
-                return (
-                  <TemplateGroup
-                    key={templateId}
-                    templateId={templateId}
-                    name={group.name}
-                    rows={group.rows}
-                    collapsed={isCollapsed}
-                    onToggle={() => toggleTemplate(templateId)}
-                    t={t}
-                  />
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
+    </section>
   );
 }
 
