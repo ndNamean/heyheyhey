@@ -3817,6 +3817,21 @@ body.wizard-active .page {
   margin-bottom: 10px;
 }
 
+.dash-scroll-subsection {
+  position: relative;
+  overflow: visible;
+}
+
+.dash-sticky-heading--secondary {
+  padding: 6px 14px;
+  margin-bottom: 8px;
+}
+
+.dash-sticky-heading--secondary .failure-history-subheading {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
 .dash-sticky-thead-slot {
   position: sticky;
   top: var(--dash-sticky-top, 0px);
