@@ -2224,6 +2224,10 @@ body.wizard-active .page {
   margin-bottom: 12px;
 }
 
+.dash-sticky-heading .feedback-inbox-header {
+  margin-bottom: 0;
+}
+
 .feedback-list {
   display: flex;
   flex-direction: column;

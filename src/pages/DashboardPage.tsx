@@ -84,6 +84,10 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
   const logbookTableScrollerRef = useRef<HTMLDivElement | null>(null);
   const logbookTableRef = useRef<HTMLTableElement | null>(null);
   const [logbookStickyTopOffset, setLogbookStickyTopOffset] = useState(0);
+  const failedItemsHeadingRef = useRef<HTMLDivElement | null>(null);
+  const failedItemsTableScrollerRef = useRef<HTMLDivElement | null>(null);
+  const failedItemsTableRef = useRef<HTMLTableElement | null>(null);
+  const [failedItemsStickyTopOffset, setFailedItemsStickyTopOffset] = useState(0);
 
   const { data } = db.useQuery({
     reports: {
@@ -276,6 +280,11 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
     [t],
   );
 
+  const failedItemsHeaderLabels = useMemo(
+    () => [t.dashboard.item, t.common.section, t.dashboard.category, t.dashboard.times],
+    [t],
+  );
+
   useEffect(() => {
     if (dueNotifyRan.current || !allLogbookEntries.length) return;
     dueNotifyRan.current = true;
@@ -290,6 +299,18 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
     if (!heading) return;
     const updateHeight = () => {
       setLogbookStickyTopOffset(Math.round(heading.offsetHeight));
+    };
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(heading);
+    updateHeight();
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const heading = failedItemsHeadingRef.current;
+    if (!heading) return;
+    const updateHeight = () => {
+      setFailedItemsStickyTopOffset(Math.round(heading.offsetHeight));
     };
     const observer = new ResizeObserver(updateHeight);
     observer.observe(heading);
@@ -337,6 +358,7 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
       <FeedbackInbox
         userId={profile.userId}
         title={t.dashboard.teamFeedback}
+        stickySection
         onOpenLogbookEntry={(entryId, type, deepLinkFilter) => {
           const entry = allLogbookEntries.find((e) => e.id === entryId);
           if (decideLogbookNotificationClick(type || '', profile, entry, defs) === 'preview') {
@@ -893,34 +915,54 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
         </>
       )}
 
-      <div className="card table-wrap">
-        <h2>{t.dashboard.failedItems}</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>{t.dashboard.item}</th>
-              <th>{t.common.section}</th>
-              <th>{t.dashboard.category}</th>
-              <th>{t.dashboard.times}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {metrics.failed.map((f) => (
-              <tr key={f.title}>
-                <td>{f.title}</td>
-                <td>{f.section}</td>
-                <td>{f.failureCategory}</td>
-                <td>{f.count}</td>
-              </tr>
-            ))}
-            {!metrics.failed.length && (
-              <tr>
-                <td colSpan={4}>{t.dashboard.noFailedItems}</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <section className="dash-scroll-section">
+        <div className="dash-sticky-heading" ref={failedItemsHeadingRef}>
+          <h2 id="failed-items-heading" style={{ margin: 0 }}>
+            {t.dashboard.failedItems}
+          </h2>
+        </div>
+        <div className="card">
+          <DashboardStickyTableHeader
+            labels={failedItemsHeaderLabels}
+            tableRef={failedItemsTableRef}
+            scrollerRef={failedItemsTableScrollerRef}
+            topOffset={failedItemsStickyTopOffset}
+          />
+          <div
+            className="table-wrap dash-table-x"
+            ref={failedItemsTableScrollerRef}
+            role="region"
+            aria-labelledby="failed-items-heading"
+            tabIndex={0}
+          >
+            <table ref={failedItemsTableRef}>
+              <thead>
+                <tr>
+                  <th scope="col">{t.dashboard.item}</th>
+                  <th scope="col">{t.common.section}</th>
+                  <th scope="col">{t.dashboard.category}</th>
+                  <th scope="col">{t.dashboard.times}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {metrics.failed.map((f) => (
+                  <tr key={f.title}>
+                    <td>{f.title}</td>
+                    <td>{f.section}</td>
+                    <td>{f.failureCategory}</td>
+                    <td>{f.count}</td>
+                  </tr>
+                ))}
+                {!metrics.failed.length && (
+                  <tr>
+                    <td colSpan={4}>{t.dashboard.noFailedItems}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
 
       <ScheduledTaskCompletion
         templates={allTemplates}

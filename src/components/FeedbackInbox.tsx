@@ -49,6 +49,8 @@ interface Props {
   userId: string;
   title?: string;
   limit?: number;
+  /** When true, sticky H2 within a dash-scroll-section (Dashboard only). */
+  stickySection?: boolean;
   onOpenLogbookEntry?: (entryId: string, type?: string, deepLinkFilter?: string) => void;
 }
 
@@ -56,6 +58,7 @@ export default function FeedbackInbox({
   userId,
   title,
   limit = 15,
+  stickySection = false,
   onOpenLogbookEntry,
 }: Props) {
   const { t } = useLang();
@@ -159,113 +162,129 @@ export default function FeedbackInbox({
 
   if (!notifications.length) return null;
 
+  const header = (
+    <div className="feedback-inbox-header">
+      <h2 style={{ margin: 0 }}>{inboxTitle}</h2>
+      {unreadCount > 0 && (
+        <span className="badge warn">
+          {unreadCount} {t.common.new}
+        </span>
+      )}
+    </div>
+  );
+
+  const list = (
+    <div className="feedback-list">
+      {notifications.map((n) => {
+        const isLogbook = isLogbookNotificationType(n.type);
+        const isStoreChatMention = isStoreChatMentionNotificationType(n.type);
+        const isGroupChatMention = isGroupChatMentionNotificationType(n.type);
+        const skipReportChrome = isLogbook || isStoreChatMention || isGroupChatMention;
+        const report = !skipReportChrome && n.reportId ? reportById.get(n.reportId) : undefined;
+        const showTimeline = expandedReportId === n.reportId && report;
+        const actorProfile = n.actorUserId
+          ? profiles.find((p) => p.userId === n.actorUserId)
+          : undefined;
+        const actorName =
+          actorProfile?.displayName?.trim() ||
+          actorProfile?.email?.split('@')[0] ||
+          '';
+
+        return (
+          <button
+            key={n.id}
+            type="button"
+            className={`feedback-item${n.readAt ? '' : ' feedback-item--unread'}`}
+            onClick={() => handleClick(n)}
+          >
+            <div className="feedback-item-top">
+              <span className={badgeClass(n.actionStatus)}>{statusLabel(t, n.actionStatus)}</span>
+              <span className="feedback-item-time">{formatIsoToLocalTime(n.createdAt)}</span>
+            </div>
+            <div className="feedback-item-title">{n.title}</div>
+            {(n.actorUserId || n.actorRole) && (
+              <div className="feedback-item-identity">
+                {!isLogbook && <>{t.feedback.reviewedBy}{' '}</>}
+                {actorProfile ? (
+                  <span
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    <IdentityWithAvatar profile={actorProfile}>
+                      {actorName || null}
+                    </IdentityWithAvatar>
+                  </span>
+                ) : actorName ? (
+                  actorName
+                ) : null}
+                {n.actorRole ? (
+                  <>
+                    {actorProfile || actorName ? ' · ' : ''}
+                    {n.actorRole}
+                  </>
+                ) : null}
+                {n.type === 'report_finalized' ? ` · ${t.feedback.reportSummary}` : ''}
+              </div>
+            )}
+            {!skipReportChrome && (
+              <div className="feedback-item-stats">
+                {t.feedback.completion} {n.completionPercent ?? 0}% · {t.feedback.compliance}{' '}
+                {n.compliancePercent ?? 0}%
+              </div>
+            )}
+            <div className="feedback-item-body">
+              <LinkifiedText text={n.body} standalone="never" />
+            </div>
+            {isLogbook && onOpenLogbookEntry && n.reportId && (
+              <div className="feedback-item-cta">
+                {t.logbook.openInLogbook}
+              </div>
+            )}
+            {isStoreChatMention && n.storeId && (
+              <div className="feedback-item-cta">Open in Store Chat</div>
+            )}
+            {isGroupChatMention && (
+              <div className="feedback-item-cta">Open in Group Chat</div>
+            )}
+            {n.reportId && report && (
+              <div className="feedback-item-timeline" onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  className="report-timeline-toggle"
+                  onClick={(e) => toggleTimeline(n.reportId, e)}
+                  aria-expanded={!!showTimeline}
+                >
+                  {showTimeline ? t.timeline.collapse : t.timeline.expand}
+                </button>
+                {showTimeline && (
+                  <ReportTimeline
+                    report={report}
+                    events={eventsByReportId.get(n.reportId) ?? []}
+                    notifications={notifsByReportId.get(n.reportId) ?? []}
+                    defaultExpanded
+                  />
+                )}
+              </div>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  if (stickySection) {
+    return (
+      <section className="dash-scroll-section">
+        <div className="dash-sticky-heading">{header}</div>
+        <div className="card feedback-inbox">{list}</div>
+      </section>
+    );
+  }
+
   return (
     <div className="card feedback-inbox">
-      <div className="feedback-inbox-header">
-        <h2 style={{ margin: 0 }}>{inboxTitle}</h2>
-        {unreadCount > 0 && (
-          <span className="badge warn">
-            {unreadCount} {t.common.new}
-          </span>
-        )}
-      </div>
-
-      <div className="feedback-list">
-        {notifications.map((n) => {
-          const isLogbook = isLogbookNotificationType(n.type);
-          const isStoreChatMention = isStoreChatMentionNotificationType(n.type);
-          const isGroupChatMention = isGroupChatMentionNotificationType(n.type);
-          const skipReportChrome = isLogbook || isStoreChatMention || isGroupChatMention;
-          const report = !skipReportChrome && n.reportId ? reportById.get(n.reportId) : undefined;
-          const showTimeline = expandedReportId === n.reportId && report;
-          const actorProfile = n.actorUserId
-            ? profiles.find((p) => p.userId === n.actorUserId)
-            : undefined;
-          const actorName =
-            actorProfile?.displayName?.trim() ||
-            actorProfile?.email?.split('@')[0] ||
-            '';
-
-          return (
-            <button
-              key={n.id}
-              type="button"
-              className={`feedback-item${n.readAt ? '' : ' feedback-item--unread'}`}
-              onClick={() => handleClick(n)}
-            >
-              <div className="feedback-item-top">
-                <span className={badgeClass(n.actionStatus)}>{statusLabel(t, n.actionStatus)}</span>
-                <span className="feedback-item-time">{formatIsoToLocalTime(n.createdAt)}</span>
-              </div>
-              <div className="feedback-item-title">{n.title}</div>
-              {(n.actorUserId || n.actorRole) && (
-                <div className="feedback-item-identity">
-                  {!isLogbook && <>{t.feedback.reviewedBy}{' '}</>}
-                  {actorProfile ? (
-                    <span
-                      onClick={(e) => e.stopPropagation()}
-                      onKeyDown={(e) => e.stopPropagation()}
-                    >
-                      <IdentityWithAvatar profile={actorProfile}>
-                        {actorName || null}
-                      </IdentityWithAvatar>
-                    </span>
-                  ) : actorName ? (
-                    actorName
-                  ) : null}
-                  {n.actorRole ? (
-                    <>
-                      {actorProfile || actorName ? ' · ' : ''}
-                      {n.actorRole}
-                    </>
-                  ) : null}
-                  {n.type === 'report_finalized' ? ` · ${t.feedback.reportSummary}` : ''}
-                </div>
-              )}
-              {!skipReportChrome && (
-                <div className="feedback-item-stats">
-                  {t.feedback.completion} {n.completionPercent ?? 0}% · {t.feedback.compliance}{' '}
-                  {n.compliancePercent ?? 0}%
-                </div>
-              )}
-              <div className="feedback-item-body">
-                <LinkifiedText text={n.body} standalone="never" />
-              </div>
-              {isLogbook && onOpenLogbookEntry && n.reportId && (
-                <div className="feedback-item-cta">
-                  {t.logbook.openInLogbook}
-                </div>
-              )}
-              {isStoreChatMention && n.storeId && (
-                <div className="feedback-item-cta">Open in Store Chat</div>
-              )}
-              {isGroupChatMention && (
-                <div className="feedback-item-cta">Open in Group Chat</div>
-              )}
-              {n.reportId && report && (
-                <div className="feedback-item-timeline" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    type="button"
-                    className="report-timeline-toggle"
-                    onClick={(e) => toggleTimeline(n.reportId, e)}
-                    aria-expanded={!!showTimeline}
-                  >
-                    {showTimeline ? t.timeline.collapse : t.timeline.expand}
-                  </button>
-                  {showTimeline && (
-                    <ReportTimeline
-                      report={report}
-                      events={eventsByReportId.get(n.reportId) ?? []}
-                      notifications={notifsByReportId.get(n.reportId) ?? []}
-                      defaultExpanded
-                    />
-                  )}
-                </div>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      {header}
+      {list}
     </div>
   );
 }
