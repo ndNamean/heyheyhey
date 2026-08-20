@@ -9,6 +9,7 @@ import {
   orderedRoles,
   parseApprovesSubmitterRoles,
   resetApprovalMatrixToDefaults,
+  transactProfileRoleDefinitionLinks,
 } from '../lib/roleResolver';
 import { DEFAULT_ROLE_DEFINITIONS } from '../lib/defaultRoleDefinitions';
 import { nowIso } from '../lib/utils';
@@ -284,7 +285,7 @@ export default function RolesPermissionsPanel({
     if (!txs.length) return;
     setSaving(true);
     try {
-      await db.transact(txs);
+      await transactProfileRoleDefinitionLinks(txs);
       alert(rp.relinkDone);
     } catch (e) {
       alert(e instanceof Error ? e.message : t.errors.saveFailed);

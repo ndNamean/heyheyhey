@@ -595,10 +595,27 @@ async function deliverEvent(req, res, adminDb, actor, body) {
     await adminDb.transact(inboxTxs);
   }
 
+  if (eventType === 'overdue') {
+    try {
+      await adminDb.transact(
+        adminDb.tx.logbookEntries[entryId].update({
+          overdueNotifiedAt: eventVersion || nowIso(),
+          updatedAt: nowIso(),
+        }),
+      );
+    } catch (e) {
+      console.warn(
+        '[logbook-notify] overdueNotifiedAt stamp skipped',
+        e instanceof Error ? e.message : e,
+      );
+    }
+  }
+
   let chatCreated = 0;
   let chatDeduped = 0;
+  const inboxOnly = Boolean(body.inboxOnly);
   // Single-store: one room. All-store (storeId ''): fan out to recipient-linked rooms.
-  if (isLogbookChatNotifyEnabled()) {
+  if (isLogbookChatNotifyEnabled() && !inboxOnly) {
     const roomStoreIds = resolveAckChatStoreIds(
       entry,
       recipients,
@@ -726,6 +743,7 @@ async function deliverEvent(req, res, adminDb, actor, body) {
   }
 
   if (
+    !inboxOnly &&
     shouldDeliverLeadershipOversight(
       eventType,
       entry.storeId,

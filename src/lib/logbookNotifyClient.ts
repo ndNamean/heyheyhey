@@ -145,6 +145,8 @@ export async function deliverLogbookEvent(params: {
   eventVersion: string;
   note?: string;
   reason?: string;
+  /** Inbox/push only — skip Store Chat and leadership (opportunistic overdue stamp). */
+  inboxOnly?: boolean;
 }): Promise<LogbookNotifyResult> {
   try {
     const headers = await getAuthHeaders();

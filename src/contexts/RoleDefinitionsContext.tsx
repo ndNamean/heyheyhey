@@ -4,6 +4,7 @@ import {
   useRoleDefinitionsQuery,
   useSeedRoleDefinitions,
   linkProfilesToRoleDefinitions,
+  transactProfileRoleDefinitionLinks,
 } from '../lib/roleResolver';
 import { canFinalApproveAccess } from '../lib/roles';
 import type { Profile, RoleDefinition } from '../types';
@@ -30,7 +31,7 @@ function useLinkProfilesToDefinitions(
     const txs = linkProfilesToRoleDefinitions(profiles, defs);
     if (!txs.length) return;
     linkedRef.current = true;
-    db.transact(txs).catch((err) => {
+    void transactProfileRoleDefinitionLinks(txs).catch((err) => {
       linkedRef.current = false;
       console.error('Failed to link profiles to role definitions:', err);
     });

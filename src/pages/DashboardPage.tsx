@@ -261,7 +261,9 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
     if (dueNotifyRan.current || !allLogbookEntries.length) return;
     dueNotifyRan.current = true;
     const visible = allLogbookEntries.filter((e) => canViewLogbookEntry(profile, e, defs));
-    void maybeNotifyLogbookDueStates(visible, profile, profiles as Profile[], defs);
+    void maybeNotifyLogbookDueStates(visible, profile, profiles as Profile[], defs).then((ok) => {
+      if (!ok) dueNotifyRan.current = false;
+    });
   }, [allLogbookEntries, profile, profiles, defs]);
 
   const displayStores = canAccessAllStores(profile.role, defs)

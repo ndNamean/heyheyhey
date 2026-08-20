@@ -71,6 +71,7 @@ function profile(partial: Partial<Profile> & Pick<Profile, 'role' | 'userId'>): 
     createdAt: '',
     updatedAt: '',
     stores: partial.stores ?? [storeA],
+    $user: partial.$user ?? { id: partial.userId },
   };
 }
 
@@ -113,7 +114,7 @@ describe('maybeNotifyLogbookDueStates overdue split', () => {
     deliverLogbookEventMock.mockClear();
   });
 
-  it('stamps overdue inbox once and does not call deliverLogbookEvent', async () => {
+  it('does not client-transact overdue stamps; delivers inbox via Admin inboxOnly', async () => {
     const now = Date.parse('2026-08-10T12:00:00.000Z');
     const actor = profile({ userId: 'mgr', role: 'manager' });
     const staff = profile({ userId: 'staff1', role: 'staff' });
@@ -125,18 +126,14 @@ describe('maybeNotifyLogbookDueStates overdue split', () => {
 
     await maybeNotifyLogbookDueStates([overdue], actor, [actor, staff], defs, now);
 
-    expect(transactMock).toHaveBeenCalledTimes(1);
-    const txs = transactMock.mock.calls[0]?.[0] as Array<{ type: string; value: Record<string, unknown> }>;
-    expect(txs.some((tx) => tx.type === 'notifUpdate')).toBe(true);
-    expect(
-      txs.some(
-        (tx) =>
-          tx.type === 'entryUpdate' &&
-          tx.value.overdueNotifiedAt === '2026-08-10T12:00:00.000Z',
-      ),
-    ).toBe(true);
-    expect(schedulePushMock).toHaveBeenCalled();
-    expect(deliverLogbookEventMock).not.toHaveBeenCalled();
+    expect(transactMock).not.toHaveBeenCalled();
+    expect(schedulePushMock).not.toHaveBeenCalled();
+    expect(deliverLogbookEventMock).toHaveBeenCalledWith({
+      entryId: 'overdue-1',
+      eventType: 'overdue',
+      eventVersion: '2026-08-10T12:00:00.000Z',
+      inboxOnly: true,
+    });
   });
 
   it('includes assigner when opener is someone else; assignees still receive; no Store Chat', async () => {
@@ -160,15 +157,13 @@ describe('maybeNotifyLogbookDueStates overdue split', () => {
       now,
     );
 
-    expect(transactMock).toHaveBeenCalledTimes(1);
-    const txs = transactMock.mock.calls[0]?.[0] as Array<{
-      type: string;
-      value: Record<string, unknown>;
-    }>;
-    const recipients = notifRecipientIds(txs);
-    expect(recipients).toContain(assigner.userId);
-    expect(recipients).toContain(staff.userId);
-    expect(deliverLogbookEventMock).not.toHaveBeenCalled();
+    expect(transactMock).not.toHaveBeenCalled();
+    expect(deliverLogbookEventMock).toHaveBeenCalledWith({
+      entryId: 'overdue-assigner',
+      eventType: 'overdue',
+      eventVersion: '2026-08-10T12:00:00.000Z',
+      inboxOnly: true,
+    });
   });
 
   it('skips assigner as author when assigner is the opener', async () => {
@@ -185,15 +180,13 @@ describe('maybeNotifyLogbookDueStates overdue split', () => {
 
     await maybeNotifyLogbookDueStates([overdue], assigner, [assigner, staff], defs, now);
 
-    expect(transactMock).toHaveBeenCalledTimes(1);
-    const txs = transactMock.mock.calls[0]?.[0] as Array<{
-      type: string;
-      value: Record<string, unknown>;
-    }>;
-    const recipients = notifRecipientIds(txs);
-    expect(recipients).not.toContain(assigner.userId);
-    expect(recipients).toContain(staff.userId);
-    expect(deliverLogbookEventMock).not.toHaveBeenCalled();
+    expect(transactMock).not.toHaveBeenCalled();
+    expect(deliverLogbookEventMock).toHaveBeenCalledWith({
+      entryId: 'overdue-self',
+      eventType: 'overdue',
+      eventVersion: '2026-08-10T12:00:00.000Z',
+      inboxOnly: true,
+    });
   });
 
   it('skips overdue when already stamped', async () => {

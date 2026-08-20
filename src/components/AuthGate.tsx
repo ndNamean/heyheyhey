@@ -286,39 +286,6 @@ function NeedInvitationScreen({ email }: { email: string }) {
 
 // ─── Main gate ───────────────────────────────────────────────────────────────
 
-/** Ensure profiles ↔ $users link exists so Instant auth.ref('$user.profile.*') works. */
-function useEnsureProfileUserLink(
-  user: { id: string } | null | undefined,
-  profile: Profile | undefined,
-) {
-  const [ready, setReady] = useState(false);
-  const attemptRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!user?.id || !profile?.id || profile.userId !== user.id) {
-      setReady(false);
-      attemptRef.current = null;
-      return;
-    }
-    if (profile.$user?.id === user.id) {
-      setReady(true);
-      return;
-    }
-    if (attemptRef.current === profile.id) return;
-    attemptRef.current = profile.id;
-    setReady(false);
-    db.transact(db.tx.profiles[profile.id].link({ $user: user.id }))
-      .then(() => setReady(true))
-      .catch((err) => {
-        console.error('Failed to link profile to auth user:', err);
-        attemptRef.current = null;
-        setReady(true);
-      });
-  }, [user?.id, profile?.id, profile?.userId, profile?.$user?.id]);
-
-  return ready;
-}
-
 export default function AuthGate({ children }: Props) {
   const { t } = useLang();
   const { isLoading: authLoading, user, error: authError } = db.useAuth();
@@ -337,7 +304,6 @@ export default function AuthGate({ children }: Props) {
   );
 
   const profile = profileData?.profiles?.[0] as Profile | undefined;
-  const profileLinkReady = useEnsureProfileUserLink(user, profile);
 
   if (authLoading || (user && profileLoading)) {
     return <div className="loading-screen">{t.common.loading}</div>;
@@ -371,10 +337,6 @@ export default function AuthGate({ children }: Props) {
     return <PendingScreen email={profile.email} status={profile.approvalStatus} />;
   }
   if (profile.approvalStatus === 'rejected') return <RejectedScreen email={profile.email} />;
-
-  if (!profileLinkReady) {
-    return <div className="loading-screen">{t.common.loading}</div>;
-  }
 
   return <>{children(profile)}</>;
 }

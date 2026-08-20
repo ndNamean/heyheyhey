@@ -535,7 +535,9 @@ export default function LogbookPage({
     if (dueNotifyRan.current || !pageOpen || !allEntries.length) return;
     dueNotifyRan.current = true;
     const visible = allEntries.filter((e) => canViewLogbookEntry(profile, e, defs));
-    void maybeNotifyLogbookDueStates(visible, profile, allProfiles, defs);
+    void maybeNotifyLogbookDueStates(visible, profile, allProfiles, defs).then((ok) => {
+      if (!ok) dueNotifyRan.current = false;
+    });
   }, [pageOpen, allEntries, allProfiles, profile, defs]);
 
   useEffect(() => {

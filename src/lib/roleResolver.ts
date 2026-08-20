@@ -256,6 +256,17 @@ export function linkProfilesToRoleDefinitions(
   return txs;
 }
 
+/** Instant client transacts time out around 5s; each profile.roleDefinition link evaluates isAdmin auth.ref. */
+export const PROFILE_ROLE_DEF_LINK_BATCH_SIZE = 8;
+
+export async function transactProfileRoleDefinitionLinks(
+  txs: ReturnType<typeof linkProfilesToRoleDefinitions>,
+) {
+  for (let i = 0; i < txs.length; i += PROFILE_ROLE_DEF_LINK_BATCH_SIZE) {
+    await db.transact(txs.slice(i, i + PROFILE_ROLE_DEF_LINK_BATCH_SIZE));
+  }
+}
+
 export { getRoleLinkStatus, type RoleLinkStatus } from './roleLinkStatus';
 
 function isPersistedRoleDef(def: RoleDefinition | undefined): def is RoleDefinition {
