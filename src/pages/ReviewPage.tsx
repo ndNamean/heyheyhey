@@ -237,7 +237,7 @@ export default function ReviewPage({
           : {
               reports: {
                 ...(reportsWhere ? { $: { where: reportsWhere } } : {}),
-                responses: { media: { file: {} } },
+                responses: { media: {} },
                 store: {},
               },
               profiles: { stores: {}, avatarFile: {} },
