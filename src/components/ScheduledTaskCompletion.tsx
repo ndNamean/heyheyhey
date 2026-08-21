@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import DashboardStickyTableHeader from './DashboardStickyTableHeader';
 import { useLang } from '../i18n';
+import { shouldKeepHeaderOneRow } from '../lib/dashboardHeaderLabel';
 import {
   calculateScheduledTaskMetrics,
   formatLateDuration,
@@ -160,20 +161,15 @@ export default function ScheduledTaskCompletion({
               <table className="scheduled-task-table" ref={tableRef}>
                 <thead>
                   <tr>
-                    <th scope="col">{t.common.template}</th>
-                    <th scope="col">{t.dashboard.item}</th>
-                    <th scope="col">{t.common.store}</th>
-                    <th scope="col">{t.dashboard.scheduledTasksFrequency}</th>
-                    <th scope="col">{t.dashboard.scheduledTasksDeadline}</th>
-                    <th scope="col">{t.dashboard.scheduledTasksExpected}</th>
-                    <th scope="col">{t.dashboard.scheduledTasksCompleted}</th>
-                    <th scope="col">{t.dashboard.scheduledTasksCompletionPct}</th>
-                    <th scope="col">{t.dashboard.scheduledTasksOnTime}</th>
-                    <th scope="col">{t.dashboard.scheduledTasksOnTimePct}</th>
-                    <th scope="col">{t.dashboard.scheduledTasksAvgTime}</th>
-                    <th scope="col">{t.dashboard.scheduledTasksLate}</th>
-                    <th scope="col">{t.dashboard.scheduledTasksAvgLate}</th>
-                    <th scope="col">{t.dashboard.scheduledTasksOverdue}</th>
+                    {headerLabels.map((label, index) => (
+                      <th
+                        key={`${label}-${index}`}
+                        scope="col"
+                        className={shouldKeepHeaderOneRow(label) ? 'dash-thead-keep-row' : undefined}
+                      >
+                        {label}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>

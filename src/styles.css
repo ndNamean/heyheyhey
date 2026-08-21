@@ -3773,6 +3773,10 @@ body.wizard-active .page {
   line-height: 1.25;
 }
 
+.scheduled-task-table th.dash-thead-keep-row {
+  white-space: nowrap;
+}
+
 .scheduled-task-group-row {
   cursor: pointer;
   background: rgba(17, 22, 29, 0.55);
@@ -4066,6 +4070,10 @@ body.wizard-active .page {
   line-height: 1.25;
   min-width: 0;
   flex: 0 0 auto;
+}
+
+.dash-thead-keep-row {
+  white-space: nowrap;
 }
 
 .dash-sticky-thead-cell:last-child {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react';
+import { shouldKeepHeaderOneRow } from '../lib/dashboardHeaderLabel';
 
 interface DashboardStickyTableHeaderProps {
   labels: string[];
@@ -142,7 +143,7 @@ export default function DashboardStickyTableHeader({
           {labels.map((label, index) => (
             <div
               key={`${label}-${index}`}
-              className="dash-sticky-thead-cell"
+              className={`dash-sticky-thead-cell${shouldKeepHeaderOneRow(label) ? ' dash-thead-keep-row' : ''}`}
               style={columnWidths[index] ? { width: `${columnWidths[index]}px` } : undefined}
             >
               {label}
