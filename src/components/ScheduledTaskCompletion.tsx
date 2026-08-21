@@ -144,7 +144,7 @@ export default function ScheduledTaskCompletion({
         {!rows.length ? (
           <p className="small">{t.dashboard.scheduledTasksEmpty}</p>
         ) : (
-          <>
+          <div className="dash-scroll-subsection">
             <DashboardStickyTableHeader
               labels={headerLabels}
               tableRef={tableRef}
@@ -194,7 +194,7 @@ export default function ScheduledTaskCompletion({
                 </tbody>
               </table>
             </div>
-          </>
+          </div>
         )}
       </div>
     </section>

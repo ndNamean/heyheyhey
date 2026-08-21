@@ -263,7 +263,7 @@ export default function FailureCorrectionHistory({
         </div>
 
         {result.trendBuckets.length > 0 && (
-          <>
+          <div className="dash-scroll-subsection">
             <div className="dash-section-heading dash-section-heading--secondary">
               <h3
                 className="failure-history-subheading"
@@ -323,7 +323,7 @@ export default function FailureCorrectionHistory({
                 </tbody>
               </table>
             </div>
-          </>
+          </div>
         )}
 
         <div className="dash-scroll-subsection">

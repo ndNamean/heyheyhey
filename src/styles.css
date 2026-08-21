@@ -4020,7 +4020,18 @@ body.wizard-active .page {
 
 .dash-sticky-thead {
   background: var(--input-bg);
+  border: 1px solid transparent;
   border-bottom: 1px solid var(--card-border);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dash-sticky-thead-slot.is-pinned .dash-sticky-thead {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px var(--accent-soft);
+}
+
+.dash-sticky-thead-slot.is-pinned .dash-sticky-thead-cell {
+  color: var(--text-primary);
 }
 
 .dash-sticky-thead-track {
@@ -4051,6 +4062,12 @@ body.wizard-active .page {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
   touch-action: pan-x pan-y;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-sticky-thead {
+    transition: none;
+  }
 }
 
 @media (max-width: 800px) {

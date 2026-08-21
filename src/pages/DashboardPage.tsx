@@ -86,6 +86,12 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
   const logbookTableRef = useRef<HTMLTableElement | null>(null);
   const failedItemsTableScrollerRef = useRef<HTMLDivElement | null>(null);
   const failedItemsTableRef = useRef<HTMLTableElement | null>(null);
+  const proposalsTableScrollerRef = useRef<HTMLDivElement | null>(null);
+  const proposalsTableRef = useRef<HTMLTableElement | null>(null);
+  const feedbackTableScrollerRef = useRef<HTMLDivElement | null>(null);
+  const feedbackTableRef = useRef<HTMLTableElement | null>(null);
+  const recentReportsTableScrollerRef = useRef<HTMLDivElement | null>(null);
+  const recentReportsTableRef = useRef<HTMLTableElement | null>(null);
 
   const { data } = db.useQuery({
     reports: {
@@ -280,6 +286,40 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
 
   const failedItemsHeaderLabels = useMemo(
     () => [t.dashboard.item, t.common.section, t.dashboard.category, t.dashboard.times],
+    [t],
+  );
+
+  const proposalsHeaderLabels = useMemo(
+    () => [
+      t.checklistProposals.itemTitle,
+      t.checklistProposals.section,
+      t.checklistProposals.targetTemplate,
+      t.checklistProposals.requester,
+      t.checklistProposals.requesterRole,
+      t.common.status,
+    ],
+    [t],
+  );
+
+  const feedbackHeaderLabels = useMemo(
+    () => [
+      t.review.feedbackReason,
+      t.dashboard.count,
+      t.dashboard.share,
+      t.dashboard.feedbackFreq,
+    ],
+    [t],
+  );
+
+  const recentReportsHeaderLabels = useMemo(
+    () => [
+      t.common.store,
+      t.common.template,
+      t.common.date,
+      t.common.status,
+      t.dashboard.completion,
+      t.dashboard.leadTime,
+    ],
     [t],
   );
 
@@ -560,216 +600,236 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
               {t.logbook.waitingMyReview}
             </label>
           </div>
-          <DashboardStickyTableHeader
-            labels={logbookHeaderLabels}
-            tableRef={logbookTableRef}
-            scrollerRef={logbookTableScrollerRef}
-          />
-          <div
-            className="table-wrap dash-table-x"
-            style={{ marginTop: 12 }}
-            ref={logbookTableScrollerRef}
-            role="region"
-            aria-labelledby="logbook-issues-heading"
-            tabIndex={0}
-          >
-            <table ref={logbookTableRef}>
-              <thead>
-                <tr>
-                  <th scope="col">{t.logbook.typeIssue}</th>
-                  <th scope="col">{t.common.store}</th>
-                  <th scope="col">{t.common.severity}</th>
-                  <th scope="col">{t.logbook.assigneeRole}</th>
-                  <th scope="col">{t.logbook.dueAt}</th>
-                  <th scope="col">{t.common.status}</th>
-                  <th scope="col">{t.logbook.overdueDuration}</th>
-                  <th scope="col">{t.common.actions}</th>
-                </tr>
-              </thead>
-              <tbody>
-              {logbookIssueRows.map((e) => {
-                const status = resolveLogbookIssueStatus(e);
-                const store = e.store || (stores as { id: string; code: string }[]).find((s) => s.id === e.storeId);
-                return (
-                  <tr key={e.id}>
-                    <td>{e.content.slice(0, 60)}</td>
-                    <td>{store?.code ?? e.storeId}</td>
-                    <td>{e.severity}</td>
-                    <td>
-                      {(() => {
-                        const role = e.assigneeRole || '—';
-                        let ids: string[] = [];
-                        try {
-                          const parsed = JSON.parse(e.assigneeUserIdsJson || '[]') as unknown;
-                          if (Array.isArray(parsed)) {
-                            ids = parsed.filter((id): id is string => typeof id === 'string');
-                          }
-                        } catch {
-                          ids = [];
-                        }
-                        if (ids.length === 0) return role;
-                        return (
-                          <>
-                            {ids.map((uid, i) => {
-                              const p = (profiles as Profile[]).find((x) => x.userId === uid);
-                              const label = p?.displayName || p?.email || uid;
-                              return (
-                                <span key={uid}>
-                                  {i > 0 ? ', ' : ''}
-                                  <IdentityWithAvatar profile={p}>{label}</IdentityWithAvatar>
-                                </span>
-                              );
-                            })}
-                            {` (${role})`}
-                          </>
-                        );
-                      })()}
-                    </td>
-                    <td className="small">
-                      {e.dueAt ? new Date(e.dueAt).toLocaleString() : '—'}
-                    </td>
-                    <td>
-                      <span className={badgeClass(status)}>{statusLabel(t, status)}</span>
-                      {isIssueOverdue(e) && (
-                        <span className="badge bad" style={{ marginLeft: 4 }}>
-                          {t.logbook.statusOverdue}
-                        </span>
-                      )}
-                    </td>
-                    <td className="small">{formatDurationMs(overdueDurationMs(e))}</td>
-                    <td>
-                      {onOpenLogbook && (
-                        <button
-                          type="button"
-                          className="secondary"
-                          style={{ fontSize: 12, padding: '4px 8px', minHeight: 28 }}
-                          onClick={() => {
-                            try {
-                              sessionStorage.setItem('logbookHighlightEntryId', e.id);
-                            } catch {
-                              /* ignore */
+          <div className="dash-scroll-subsection">
+            <DashboardStickyTableHeader
+              labels={logbookHeaderLabels}
+              tableRef={logbookTableRef}
+              scrollerRef={logbookTableScrollerRef}
+            />
+            <div
+              className="dash-table-x"
+              style={{ marginTop: 12 }}
+              ref={logbookTableScrollerRef}
+              role="region"
+              aria-labelledby="logbook-issues-heading"
+              tabIndex={0}
+            >
+              <table ref={logbookTableRef}>
+                <thead>
+                  <tr>
+                    <th scope="col">{t.logbook.typeIssue}</th>
+                    <th scope="col">{t.common.store}</th>
+                    <th scope="col">{t.common.severity}</th>
+                    <th scope="col">{t.logbook.assigneeRole}</th>
+                    <th scope="col">{t.logbook.dueAt}</th>
+                    <th scope="col">{t.common.status}</th>
+                    <th scope="col">{t.logbook.overdueDuration}</th>
+                    <th scope="col">{t.common.actions}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                {logbookIssueRows.map((e) => {
+                  const status = resolveLogbookIssueStatus(e);
+                  const store = e.store || (stores as { id: string; code: string }[]).find((s) => s.id === e.storeId);
+                  return (
+                    <tr key={e.id}>
+                      <td>{e.content.slice(0, 60)}</td>
+                      <td>{store?.code ?? e.storeId}</td>
+                      <td>{e.severity}</td>
+                      <td>
+                        {(() => {
+                          const role = e.assigneeRole || '—';
+                          let ids: string[] = [];
+                          try {
+                            const parsed = JSON.parse(e.assigneeUserIdsJson || '[]') as unknown;
+                            if (Array.isArray(parsed)) {
+                              ids = parsed.filter((id): id is string => typeof id === 'string');
                             }
-                            onOpenLogbook('all');
-                          }}
-                        >
-                          {t.common.view}
-                        </button>
-                      )}
+                          } catch {
+                            ids = [];
+                          }
+                          if (ids.length === 0) return role;
+                          return (
+                            <>
+                              {ids.map((uid, i) => {
+                                const p = (profiles as Profile[]).find((x) => x.userId === uid);
+                                const label = p?.displayName || p?.email || uid;
+                                return (
+                                  <span key={uid}>
+                                    {i > 0 ? ', ' : ''}
+                                    <IdentityWithAvatar profile={p}>{label}</IdentityWithAvatar>
+                                  </span>
+                                );
+                              })}
+                              {` (${role})`}
+                            </>
+                          );
+                        })()}
+                      </td>
+                      <td className="small">
+                        {e.dueAt ? new Date(e.dueAt).toLocaleString() : '—'}
+                      </td>
+                      <td>
+                        <span className={badgeClass(status)}>{statusLabel(t, status)}</span>
+                        {isIssueOverdue(e) && (
+                          <span className="badge bad" style={{ marginLeft: 4 }}>
+                            {t.logbook.statusOverdue}
+                          </span>
+                        )}
+                      </td>
+                      <td className="small">{formatDurationMs(overdueDurationMs(e))}</td>
+                      <td>
+                        {onOpenLogbook && (
+                          <button
+                            type="button"
+                            className="secondary"
+                            style={{ fontSize: 12, padding: '4px 8px', minHeight: 28 }}
+                            onClick={() => {
+                              try {
+                                sessionStorage.setItem('logbookHighlightEntryId', e.id);
+                              } catch {
+                                /* ignore */
+                              }
+                              onOpenLogbook('all');
+                            }}
+                          >
+                            {t.common.view}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!logbookIssueRows.length && (
+                  <tr>
+                    <td colSpan={8} className="small">
+                      {t.logbook.noEntries}
                     </td>
                   </tr>
-                );
-              })}
-              {!logbookIssueRows.length && (
-                <tr>
-                  <td colSpan={8} className="small">
-                    {t.logbook.noEntries}
-                  </td>
-                </tr>
-              )}
-              </tbody>
-            </table>
+                )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </section>
 
       {canAccessChecklistItemProposals(profile.role, defs) && (
-        <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h2
-              id="checklist-proposals-heading"
-              data-dash-context=""
-              data-dash-level="h2"
-              style={{ margin: 0, flex: 1 }}
-            >
-              {t.checklistProposals.metricsTitle}
-            </h2>
-            {onOpenProposals && (
-              <button type="button" className="secondary" onClick={onOpenProposals}>
-                {t.checklistProposals.viewAll}
-              </button>
+        <section className="dash-scroll-section">
+          <div className="dash-section-heading">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <h2
+                id="checklist-proposals-heading"
+                data-dash-context=""
+                data-dash-level="h2"
+                style={{ margin: 0, flex: 1 }}
+              >
+                {t.checklistProposals.metricsTitle}
+              </h2>
+              {onOpenProposals && (
+                <button type="button" className="secondary" onClick={onOpenProposals}>
+                  {t.checklistProposals.viewAll}
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="card">
+            <div className="grid four" style={{ marginTop: 12 }}>
+              <div>
+                <div className="small">{t.checklistProposals.metricTotal}</div>
+                <div className="metric">{proposalMetrics.metrics.total}</div>
+              </div>
+              <div>
+                <div className="small">{t.checklistProposals.metricPendingFirst}</div>
+                <div className="metric">{proposalMetrics.metrics.pendingFirstApproval}</div>
+              </div>
+              <div>
+                <div className="small">{t.checklistProposals.metricPendingFinal}</div>
+                <div className="metric">{proposalMetrics.metrics.pendingFinalApproval}</div>
+              </div>
+              <div>
+                <div className="small">{t.checklistProposals.metricChanges}</div>
+                <div className="metric">{proposalMetrics.metrics.changesRequested}</div>
+              </div>
+              <div>
+                <div className="small">{t.checklistProposals.metricApproved}</div>
+                <div className="metric">{proposalMetrics.metrics.fullyApproved}</div>
+              </div>
+              <div>
+                <div className="small">{t.checklistProposals.metricPublished}</div>
+                <div className="metric">{proposalMetrics.metrics.published}</div>
+              </div>
+              <div>
+                <div className="small">{t.checklistProposals.metricRejected}</div>
+                <div className="metric">{proposalMetrics.metrics.rejected}</div>
+              </div>
+              <div>
+                <div className="small">{t.checklistProposals.metricApprovalRate}</div>
+                <div className="metric">
+                  {proposalMetrics.metrics.approvalRate == null
+                    ? '—'
+                    : `${proposalMetrics.metrics.approvalRate}%`}
+                </div>
+              </div>
+              <div>
+                <div className="small">{t.checklistProposals.metricPublicationRate}</div>
+                <div className="metric">
+                  {proposalMetrics.metrics.publicationRate == null
+                    ? '—'
+                    : `${proposalMetrics.metrics.publicationRate}%`}
+                </div>
+              </div>
+            </div>
+
+            {proposalMetrics.list.length > 0 && (
+              <div className="dash-scroll-subsection">
+                <DashboardStickyTableHeader
+                  labels={proposalsHeaderLabels}
+                  tableRef={proposalsTableRef}
+                  scrollerRef={proposalsTableScrollerRef}
+                />
+                <div
+                  className="dash-table-x"
+                  style={{ marginTop: 12 }}
+                  ref={proposalsTableScrollerRef}
+                  role="region"
+                  aria-labelledby="checklist-proposals-heading"
+                  tabIndex={0}
+                >
+                  <table ref={proposalsTableRef}>
+                    <thead>
+                      <tr>
+                        <th scope="col">{t.checklistProposals.itemTitle}</th>
+                        <th scope="col">{t.checklistProposals.section}</th>
+                        <th scope="col">{t.checklistProposals.targetTemplate}</th>
+                        <th scope="col">{t.checklistProposals.requester}</th>
+                        <th scope="col">{t.checklistProposals.requesterRole}</th>
+                        <th scope="col">{t.common.status}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {proposalMetrics.list.slice(0, 20).map((p) => (
+                        <tr key={p.id}>
+                          <td>{p.title}</td>
+                          <td>{p.section}</td>
+                          <td>{p.templateNameSnapshot}</td>
+                          <td>{p.requesterNameSnapshot}</td>
+                          <td>{p.requesterRoleSnapshot}</td>
+                          <td>
+                            <span className={badgeClass(p.status)}>
+                              {(t.checklistProposals.statuses as Record<string, string>)[p.status] ??
+                                p.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             )}
           </div>
-          <div className="grid four" style={{ marginTop: 12 }}>
-            <div>
-              <div className="small">{t.checklistProposals.metricTotal}</div>
-              <div className="metric">{proposalMetrics.metrics.total}</div>
-            </div>
-            <div>
-              <div className="small">{t.checklistProposals.metricPendingFirst}</div>
-              <div className="metric">{proposalMetrics.metrics.pendingFirstApproval}</div>
-            </div>
-            <div>
-              <div className="small">{t.checklistProposals.metricPendingFinal}</div>
-              <div className="metric">{proposalMetrics.metrics.pendingFinalApproval}</div>
-            </div>
-            <div>
-              <div className="small">{t.checklistProposals.metricChanges}</div>
-              <div className="metric">{proposalMetrics.metrics.changesRequested}</div>
-            </div>
-            <div>
-              <div className="small">{t.checklistProposals.metricApproved}</div>
-              <div className="metric">{proposalMetrics.metrics.fullyApproved}</div>
-            </div>
-            <div>
-              <div className="small">{t.checklistProposals.metricPublished}</div>
-              <div className="metric">{proposalMetrics.metrics.published}</div>
-            </div>
-            <div>
-              <div className="small">{t.checklistProposals.metricRejected}</div>
-              <div className="metric">{proposalMetrics.metrics.rejected}</div>
-            </div>
-            <div>
-              <div className="small">{t.checklistProposals.metricApprovalRate}</div>
-              <div className="metric">
-                {proposalMetrics.metrics.approvalRate == null
-                  ? '—'
-                  : `${proposalMetrics.metrics.approvalRate}%`}
-              </div>
-            </div>
-            <div>
-              <div className="small">{t.checklistProposals.metricPublicationRate}</div>
-              <div className="metric">
-                {proposalMetrics.metrics.publicationRate == null
-                  ? '—'
-                  : `${proposalMetrics.metrics.publicationRate}%`}
-              </div>
-            </div>
-          </div>
-
-          {proposalMetrics.list.length > 0 && (
-            <div className="table-wrap" style={{ marginTop: 12 }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>{t.checklistProposals.itemTitle}</th>
-                    <th>{t.checklistProposals.section}</th>
-                    <th>{t.checklistProposals.targetTemplate}</th>
-                    <th>{t.checklistProposals.requester}</th>
-                    <th>{t.checklistProposals.requesterRole}</th>
-                    <th>{t.common.status}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {proposalMetrics.list.slice(0, 20).map((p) => (
-                    <tr key={p.id}>
-                      <td>{p.title}</td>
-                      <td>{p.section}</td>
-                      <td>{p.templateNameSnapshot}</td>
-                      <td>{p.requesterNameSnapshot}</td>
-                      <td>{p.requesterRoleSnapshot}</td>
-                      <td>
-                        <span className={badgeClass(p.status)}>
-                          {(t.checklistProposals.statuses as Record<string, string>)[p.status] ??
-                            p.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        </section>
       )}
 
       {approvalShare.length > 0 && (
@@ -798,83 +858,109 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
         </div>
       )}
 
-      <div className="card table-wrap feedback-freq-card">
-        <h2 id="feedback-reasons-heading" data-dash-context="" data-dash-level="h2">
-          {t.dashboard.feedbackReasons}
-        </h2>
-        <p className="small">{t.dashboard.rejectionsPeriod}</p>
+      <section className="dash-scroll-section">
+        <div className="dash-section-heading">
+          <h2
+            id="feedback-reasons-heading"
+            data-dash-context=""
+            data-dash-level="h2"
+            style={{ margin: 0 }}
+          >
+            {t.dashboard.feedbackReasons}
+          </h2>
+        </div>
+        <div className="card feedback-freq-card">
+          <p className="small">{t.dashboard.rejectionsPeriod}</p>
 
-        {feedbackStats.rows.length > 0 ? (
-          <>
-            <table className="feedback-freq-table">
-              <thead>
-                <tr>
-                  <th>{t.review.feedbackReason}</th>
-                  <th>{t.dashboard.count}</th>
-                  <th>{t.dashboard.share}</th>
-                  <th style={{ width: '30%' }}>{t.dashboard.feedbackFreq}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {feedbackStats.rows.map((row) => (
-                  <tr key={row.code}>
-                    <td>
-                      {row.label}
-                      {row.code === 'other' && feedbackStats.otherDetails.length > 0 && (
-                        <button
-                          type="button"
-                          className="feedback-other-toggle"
-                          onClick={() => setShowOtherDetails((v) => !v)}
-                        >
-                          {showOtherDetails ? t.dashboard.hideDetails : t.dashboard.showDetails}
-                        </button>
-                      )}
-                    </td>
-                    <td>{row.count}</td>
-                    <td>{row.percent}%</td>
-                    <td>
-                      <div className="progress-bar" style={{ margin: 0 }}>
-                        <div style={{ width: `${row.percent}%` }} />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {feedbackStats.rows.length > 0 ? (
+            <>
+              <div className="dash-scroll-subsection">
+                <DashboardStickyTableHeader
+                  labels={feedbackHeaderLabels}
+                  tableRef={feedbackTableRef}
+                  scrollerRef={feedbackTableScrollerRef}
+                />
+                <div
+                  className="dash-table-x"
+                  ref={feedbackTableScrollerRef}
+                  role="region"
+                  aria-labelledby="feedback-reasons-heading"
+                  tabIndex={0}
+                >
+                  <table className="feedback-freq-table" ref={feedbackTableRef}>
+                    <thead>
+                      <tr>
+                        <th scope="col">{t.review.feedbackReason}</th>
+                        <th scope="col">{t.dashboard.count}</th>
+                        <th scope="col">{t.dashboard.share}</th>
+                        <th scope="col" style={{ width: '30%' }}>
+                          {t.dashboard.feedbackFreq}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {feedbackStats.rows.map((row) => (
+                        <tr key={row.code}>
+                          <td>
+                            {row.label}
+                            {row.code === 'other' && feedbackStats.otherDetails.length > 0 && (
+                              <button
+                                type="button"
+                                className="feedback-other-toggle"
+                                onClick={() => setShowOtherDetails((v) => !v)}
+                              >
+                                {showOtherDetails ? t.dashboard.hideDetails : t.dashboard.showDetails}
+                              </button>
+                            )}
+                          </td>
+                          <td>{row.count}</td>
+                          <td>{row.percent}%</td>
+                          <td>
+                            <div className="progress-bar" style={{ margin: 0 }}>
+                              <div style={{ width: `${row.percent}%` }} />
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
 
-            {showOtherDetails && feedbackStats.otherDetails.length > 0 && (
-              <table className="feedback-other-detail">
-                <thead>
-                  <tr>
-                    <th>{t.common.date}</th>
-                    <th>{t.common.store}</th>
-                    <th>{t.dashboard.item}</th>
-                    <th>{t.dashboard.feedback}</th>
-                    <th>{t.dashboard.reviewer}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {feedbackStats.otherDetails.map((d) => (
-                    <tr key={d.id}>
-                      <td className="small">{d.reportDate}</td>
-                      <td>{d.storeCode}</td>
-                      <td>{d.itemTitle}</td>
-                      <td className="feedback-other-text">{d.text}</td>
-                      <td className="small">
-                        {d.reviewerName}
-                        <br />
-                        <span className="badge">{d.reviewerRole}</span>
-                      </td>
+              {showOtherDetails && feedbackStats.otherDetails.length > 0 && (
+                <table className="feedback-other-detail">
+                  <thead>
+                    <tr>
+                      <th>{t.common.date}</th>
+                      <th>{t.common.store}</th>
+                      <th>{t.dashboard.item}</th>
+                      <th>{t.dashboard.feedback}</th>
+                      <th>{t.dashboard.reviewer}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </>
-        ) : (
-          <p className="small">{t.dashboard.noFeedbackPeriod}</p>
-        )}
-      </div>
+                  </thead>
+                  <tbody>
+                    {feedbackStats.otherDetails.map((d) => (
+                      <tr key={d.id}>
+                        <td className="small">{d.reportDate}</td>
+                        <td>{d.storeCode}</td>
+                        <td>{d.itemTitle}</td>
+                        <td className="feedback-other-text">{d.text}</td>
+                        <td className="small">
+                          {d.reviewerName}
+                          <br />
+                          <span className="badge">{d.reviewerRole}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </>
+          ) : (
+            <p className="small">{t.dashboard.noFeedbackPeriod}</p>
+          )}
+        </div>
+      </section>
 
       {isFailureHistoryEnabled() && (
         <>
@@ -922,43 +1008,45 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
           </h2>
         </div>
         <div className="card">
-          <DashboardStickyTableHeader
-            labels={failedItemsHeaderLabels}
-            tableRef={failedItemsTableRef}
-            scrollerRef={failedItemsTableScrollerRef}
-          />
-          <div
-            className="table-wrap dash-table-x"
-            ref={failedItemsTableScrollerRef}
-            role="region"
-            aria-labelledby="failed-items-heading"
-            tabIndex={0}
-          >
-            <table ref={failedItemsTableRef}>
-              <thead>
-                <tr>
-                  <th scope="col">{t.dashboard.item}</th>
-                  <th scope="col">{t.common.section}</th>
-                  <th scope="col">{t.dashboard.category}</th>
-                  <th scope="col">{t.dashboard.times}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {metrics.failed.map((f) => (
-                  <tr key={f.title}>
-                    <td>{f.title}</td>
-                    <td>{f.section}</td>
-                    <td>{f.failureCategory}</td>
-                    <td>{f.count}</td>
-                  </tr>
-                ))}
-                {!metrics.failed.length && (
+          <div className="dash-scroll-subsection">
+            <DashboardStickyTableHeader
+              labels={failedItemsHeaderLabels}
+              tableRef={failedItemsTableRef}
+              scrollerRef={failedItemsTableScrollerRef}
+            />
+            <div
+              className="dash-table-x"
+              ref={failedItemsTableScrollerRef}
+              role="region"
+              aria-labelledby="failed-items-heading"
+              tabIndex={0}
+            >
+              <table ref={failedItemsTableRef}>
+                <thead>
                   <tr>
-                    <td colSpan={4}>{t.dashboard.noFailedItems}</td>
+                    <th scope="col">{t.dashboard.item}</th>
+                    <th scope="col">{t.common.section}</th>
+                    <th scope="col">{t.dashboard.category}</th>
+                    <th scope="col">{t.dashboard.times}</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {metrics.failed.map((f) => (
+                    <tr key={f.title}>
+                      <td>{f.title}</td>
+                      <td>{f.section}</td>
+                      <td>{f.failureCategory}</td>
+                      <td>{f.count}</td>
+                    </tr>
+                  ))}
+                  {!metrics.failed.length && (
+                    <tr>
+                      <td colSpan={4}>{t.dashboard.noFailedItems}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </section>
@@ -972,49 +1060,73 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
         storeIds={historyStoreIds}
       />
 
-      <div className="card table-wrap">
-        <h2 id="recent-reports-heading" data-dash-context="" data-dash-level="h2">
-          {t.dashboard.recentReports}
-        </h2>
-        <table>
-          <thead>
-            <tr>
-              <th>{t.common.store}</th>
-              <th>{t.common.template}</th>
-              <th>{t.common.date}</th>
-              <th>{t.common.status}</th>
-              <th>{t.dashboard.completion}</th>
-              <th>{t.dashboard.leadTime}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {reports.slice(0, 20).map((r) => (
-              <tr key={r.id}>
-                <td>
-                  <strong>{r.storeCode}</strong>
-                </td>
-                <td>{r.templateName}</td>
-                <td>{r.reportDate}</td>
-                <td>
-                  <span className={badgeClass(r.status)}>{statusLabel(t, r.status)}</span>
-                </td>
-                <td>{r.completionPercent ?? 0}%</td>
-                <td>
-                  <ReportTimelineLeadCell
-                    report={r}
-                    events={allEvents.filter((e) => e.reportId === r.id)}
-                  />
-                </td>
-              </tr>
-            ))}
-            {!reports.length && (
-              <tr>
-                <td colSpan={6}>{t.dashboard.noReportsInRange}</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <section className="dash-scroll-section">
+        <div className="dash-section-heading">
+          <h2
+            id="recent-reports-heading"
+            data-dash-context=""
+            data-dash-level="h2"
+            style={{ margin: 0 }}
+          >
+            {t.dashboard.recentReports}
+          </h2>
+        </div>
+        <div className="card">
+          <div className="dash-scroll-subsection">
+            <DashboardStickyTableHeader
+              labels={recentReportsHeaderLabels}
+              tableRef={recentReportsTableRef}
+              scrollerRef={recentReportsTableScrollerRef}
+            />
+            <div
+              className="dash-table-x"
+              ref={recentReportsTableScrollerRef}
+              role="region"
+              aria-labelledby="recent-reports-heading"
+              tabIndex={0}
+            >
+              <table ref={recentReportsTableRef}>
+                <thead>
+                  <tr>
+                    <th scope="col">{t.common.store}</th>
+                    <th scope="col">{t.common.template}</th>
+                    <th scope="col">{t.common.date}</th>
+                    <th scope="col">{t.common.status}</th>
+                    <th scope="col">{t.dashboard.completion}</th>
+                    <th scope="col">{t.dashboard.leadTime}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reports.slice(0, 20).map((r) => (
+                    <tr key={r.id}>
+                      <td>
+                        <strong>{r.storeCode}</strong>
+                      </td>
+                      <td>{r.templateName}</td>
+                      <td>{r.reportDate}</td>
+                      <td>
+                        <span className={badgeClass(r.status)}>{statusLabel(t, r.status)}</span>
+                      </td>
+                      <td>{r.completionPercent ?? 0}%</td>
+                      <td>
+                        <ReportTimelineLeadCell
+                          report={r}
+                          events={allEvents.filter((e) => e.reportId === r.id)}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                  {!reports.length && (
+                    <tr>
+                      <td colSpan={6}>{t.dashboard.noReportsInRange}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
