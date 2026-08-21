@@ -106,17 +106,17 @@ export default function ScheduledTaskCompletion({
 
   return (
     <section className="dash-scroll-section">
-      <div className="card table-wrap scheduled-task-completion">
-        <div className="dash-section-heading">
-          <h2
-            id="scheduled-task-heading"
-            data-dash-context=""
-            data-dash-level="h2"
-            style={{ margin: 0 }}
-          >
-            {t.dashboard.scheduledTasksTitle}
-          </h2>
-        </div>
+      <div className="dash-section-heading">
+        <h2
+          id="scheduled-task-heading"
+          data-dash-context=""
+          data-dash-level="h2"
+          style={{ margin: 0 }}
+        >
+          {t.dashboard.scheduledTasksTitle}
+        </h2>
+      </div>
+      <div className="card scheduled-task-completion">
         <div className="scheduled-task-completion-header">
           <div>
             <p className="small" style={{ marginTop: 4 }}>
