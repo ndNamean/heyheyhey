@@ -4045,7 +4045,8 @@ body.wizard-active .page {
 }
 
 .dash-sticky-thead-slot.is-pinned .dash-sticky-thead-cell {
-  color: var(--text-primary);
+  color: var(--accent);
+  text-shadow: 0 0 12px var(--accent-soft);
 }
 
 .dash-sticky-thead-track {
