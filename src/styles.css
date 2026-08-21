@@ -3760,12 +3760,16 @@ body.wizard-active .page {
 }
 
 .scheduled-task-table {
-  min-width: 1100px;
+  table-layout: auto;
+  min-width: max(1100px, max-content);
 }
 
 .scheduled-task-table th {
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+  min-width: min-content;
   line-height: 1.25;
 }
 
@@ -4056,7 +4060,9 @@ body.wizard-active .page {
   color: var(--text-secondary);
   font-weight: 700;
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
   line-height: 1.25;
   min-width: 0;
   flex: 0 0 auto;
@@ -4115,7 +4121,7 @@ body.wizard-active .page {
   }
 
   .scheduled-task-table {
-    min-width: 960px;
+    min-width: max(960px, max-content);
   }
 }
 
