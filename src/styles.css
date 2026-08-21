@@ -3969,6 +3969,13 @@ body.wizard-active .page {
   z-index: 1;
 }
 
+/* Direct card children are forced relative for the glass ::before layer.
+   Sticky THEAD clones must keep position:sticky or they overlay first rows. */
+.dash-scroll-section .card > .dash-sticky-thead-slot {
+  position: sticky;
+  z-index: 4;
+}
+
 /* In-document section titles (no longer independently sticky). */
 .dash-sticky-heading,
 .dash-section-heading {
