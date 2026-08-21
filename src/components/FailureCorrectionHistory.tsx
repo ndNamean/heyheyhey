@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import DashboardStickyTableHeader from './DashboardStickyTableHeader';
 import { useLang } from '../i18n';
 import { statusLabel } from '../lib/i18nUtils';
@@ -66,10 +66,10 @@ export default function FailureCorrectionHistory({
   const [sortKey, setSortKey] = useState<SortKey>('issueCount');
   const [selectedInstance, setSelectedInstance] = useState<IssueInstance | null>(null);
   const [selectedBreakdown, setSelectedBreakdown] = useState<BreakdownRow | null>(null);
-  const breakdownHeadingRef = useRef<HTMLDivElement | null>(null);
   const breakdownScrollerRef = useRef<HTMLDivElement | null>(null);
   const breakdownTableRef = useRef<HTMLTableElement | null>(null);
-  const [stickyTopOffset, setStickyTopOffset] = useState(0);
+  const trendScrollerRef = useRef<HTMLDivElement | null>(null);
+  const trendTableRef = useRef<HTMLTableElement | null>(null);
 
   const result = useMemo(
     () =>
@@ -135,24 +135,33 @@ export default function FailureCorrectionHistory({
     [fh, t],
   );
 
-  useEffect(() => {
-    const heading = breakdownHeadingRef.current;
-    if (!heading) return;
-    const updateHeight = () => {
-      setStickyTopOffset(Math.round(heading.offsetHeight));
-    };
-    const observer = new ResizeObserver(updateHeight);
-    observer.observe(heading);
-    updateHeight();
-    return () => observer.disconnect();
-  }, []);
+  const trendLabels = useMemo(
+    () => [
+      fh.period,
+      fh.issueRate,
+      fh.strictRejectionRate,
+      fh.correctionRequestRate,
+      fh.correctionRecoveryRate,
+      fh.approvalRecoveryRate,
+      fh.avgCorrectionTime,
+      t.dashboard.count,
+    ],
+    [fh, t],
+  );
 
   return (
     <section className="failure-history-section dash-scroll-section">
       <div className="card table-wrap failure-history-card">
         <div className="dashboard-filters-header">
           <div>
-            <h2 style={{ margin: 0 }}>{fh.title}</h2>
+            <h2
+              id="failure-history-heading"
+              data-dash-context=""
+              data-dash-level="h2"
+              style={{ margin: 0 }}
+            >
+              {fh.title}
+            </h2>
             <p className="small" style={{ margin: '4px 0 0' }}>
               {fh.subtitle}
             </p>
@@ -253,49 +262,69 @@ export default function FailureCorrectionHistory({
 
         {result.trendBuckets.length > 0 && (
           <>
-            <h3 className="failure-history-subheading">{fh.trend}</h3>
-            <table className="feedback-freq-table">
-              <thead>
-                <tr>
-                  <th>{fh.period}</th>
-                  <th>{fh.issueRate}</th>
-                  <th>{fh.strictRejectionRate}</th>
-                  <th>{fh.correctionRequestRate}</th>
-                  <th>{fh.correctionRecoveryRate}</th>
-                  <th>{fh.approvalRecoveryRate}</th>
-                  <th>{fh.avgCorrectionTime}</th>
-                  <th style={{ width: '12%' }}>{t.dashboard.count}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.trendBuckets.map((b) => (
-                  <tr key={b.label}>
-                    <td>{b.label}</td>
-                    <td>
-                      {b.issueRate}%
-                      <div className="progress-bar" style={{ marginTop: 4 }}>
-                        <div style={{ width: `${b.issueRate}%` }} />
-                      </div>
-                    </td>
-                    <td>{b.strictRejectionRate}%</td>
-                    <td>{b.correctionRequestRate}%</td>
-                    <td>{b.correctionRecoveryRate}%</td>
-                    <td>{b.approvalRecoveryRate}%</td>
-                    <td>{formatDurationMs(b.avgCorrectionTimeMs)}</td>
-                    <td>{b.issueCount}</td>
+            <h3
+              className="failure-history-subheading"
+              id="failure-trend-heading"
+              data-dash-context=""
+              data-dash-level="h3"
+              data-dash-parent="failure-history-heading"
+            >
+              {fh.trend}
+            </h3>
+            <DashboardStickyTableHeader
+              labels={trendLabels}
+              tableRef={trendTableRef}
+              scrollerRef={trendScrollerRef}
+            />
+            <div className="dash-table-x" ref={trendScrollerRef}>
+              <table className="feedback-freq-table" ref={trendTableRef}>
+                <thead>
+                  <tr>
+                    <th scope="col">{fh.period}</th>
+                    <th scope="col">{fh.issueRate}</th>
+                    <th scope="col">{fh.strictRejectionRate}</th>
+                    <th scope="col">{fh.correctionRequestRate}</th>
+                    <th scope="col">{fh.correctionRecoveryRate}</th>
+                    <th scope="col">{fh.approvalRecoveryRate}</th>
+                    <th scope="col">{fh.avgCorrectionTime}</th>
+                    <th scope="col" style={{ width: '12%' }}>
+                      {t.dashboard.count}
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {result.trendBuckets.map((b) => (
+                    <tr key={b.label}>
+                      <td>{b.label}</td>
+                      <td>
+                        {b.issueRate}%
+                        <div className="progress-bar" style={{ marginTop: 4 }}>
+                          <div style={{ width: `${b.issueRate}%` }} />
+                        </div>
+                      </td>
+                      <td>{b.strictRejectionRate}%</td>
+                      <td>{b.correctionRequestRate}%</td>
+                      <td>{b.correctionRecoveryRate}%</td>
+                      <td>{b.approvalRecoveryRate}%</td>
+                      <td>{formatDurationMs(b.avgCorrectionTimeMs)}</td>
+                      <td>{b.issueCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
 
         <div className="dash-scroll-subsection">
-          <div
-            className="dash-sticky-heading dash-sticky-heading--secondary"
-            ref={breakdownHeadingRef}
-          >
-            <h3 className="failure-history-subheading" id="failure-breakdown-heading">
+          <div className="dash-section-heading dash-section-heading--secondary">
+            <h3
+              className="failure-history-subheading"
+              id="failure-breakdown-heading"
+              data-dash-context=""
+              data-dash-level="h3"
+              data-dash-parent="failure-history-heading"
+            >
               {fh.breakdown}
             </h3>
           </div>
@@ -321,7 +350,6 @@ export default function FailureCorrectionHistory({
                 labels={breakdownLabels}
                 tableRef={breakdownTableRef}
                 scrollerRef={breakdownScrollerRef}
-                topOffset={stickyTopOffset}
               />
               <div
                 className="dash-table-x"

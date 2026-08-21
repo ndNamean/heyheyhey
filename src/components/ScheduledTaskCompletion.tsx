@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import DashboardStickyTableHeader from './DashboardStickyTableHeader';
 import { useLang } from '../i18n';
 import {
@@ -32,10 +32,8 @@ export default function ScheduledTaskCompletion({
   const { t } = useLang();
   const [filterTemplateId, setFilterTemplateId] = useState('all');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const headingRef = useRef<HTMLDivElement | null>(null);
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const tableRef = useRef<HTMLTableElement | null>(null);
-  const [stickyTopOffset, setStickyTopOffset] = useState(0);
 
   const scheduledTemplates = useMemo(() => {
     return templates.filter((tmpl) => {
@@ -86,18 +84,6 @@ export default function ScheduledTaskCompletion({
     setCollapsed((prev) => ({ ...prev, [templateId]: !prev[templateId] }));
   }
 
-  useEffect(() => {
-    const heading = headingRef.current;
-    if (!heading) return;
-    const updateHeight = () => {
-      setStickyTopOffset(Math.round(heading.offsetHeight));
-    };
-    const observer = new ResizeObserver(updateHeight);
-    observer.observe(heading);
-    updateHeight();
-    return () => observer.disconnect();
-  }, []);
-
   const headerLabels = useMemo(
     () => [
       t.common.template,
@@ -121,8 +107,13 @@ export default function ScheduledTaskCompletion({
   return (
     <section className="dash-scroll-section">
       <div className="card table-wrap scheduled-task-completion">
-        <div className="dash-sticky-heading" ref={headingRef}>
-          <h2 id="scheduled-task-heading" style={{ margin: 0 }}>
+        <div className="dash-section-heading">
+          <h2
+            id="scheduled-task-heading"
+            data-dash-context=""
+            data-dash-level="h2"
+            style={{ margin: 0 }}
+          >
             {t.dashboard.scheduledTasksTitle}
           </h2>
         </div>
@@ -158,7 +149,6 @@ export default function ScheduledTaskCompletion({
               labels={headerLabels}
               tableRef={tableRef}
               scrollerRef={scrollerRef}
-              topOffset={stickyTopOffset}
             />
             <div
               ref={scrollerRef}

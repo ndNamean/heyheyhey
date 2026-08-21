@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { db } from '../db';
 import FeedbackInbox from '../components/FeedbackInbox';
 import LogbookNotificationPreviewModal, {
@@ -10,6 +10,7 @@ import {
 } from '../lib/logbookNotificationContent';
 import ExportModal from '../components/ExportModal';
 import FailureCorrectionHistory from '../components/FailureCorrectionHistory';
+import DashboardContextStack from '../components/DashboardContextStack';
 import DashboardStickyTableHeader from '../components/DashboardStickyTableHeader';
 import ScheduledTaskCompletion from '../components/ScheduledTaskCompletion';
 import { ReportTimelineLeadCell } from '../components/ReportTimeline';
@@ -80,14 +81,11 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
     deepLinkFilter?: string;
   } | null>(null);
   const dueNotifyRan = useRef(false);
-  const logbookHeadingRef = useRef<HTMLDivElement | null>(null);
+  const pageRef = useRef<HTMLDivElement | null>(null);
   const logbookTableScrollerRef = useRef<HTMLDivElement | null>(null);
   const logbookTableRef = useRef<HTMLTableElement | null>(null);
-  const [logbookStickyTopOffset, setLogbookStickyTopOffset] = useState(0);
-  const failedItemsHeadingRef = useRef<HTMLDivElement | null>(null);
   const failedItemsTableScrollerRef = useRef<HTMLDivElement | null>(null);
   const failedItemsTableRef = useRef<HTMLTableElement | null>(null);
-  const [failedItemsStickyTopOffset, setFailedItemsStickyTopOffset] = useState(0);
 
   const { data } = db.useQuery({
     reports: {
@@ -294,30 +292,6 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
     });
   }, [allLogbookEntries, profile, profiles, defs]);
 
-  useEffect(() => {
-    const heading = logbookHeadingRef.current;
-    if (!heading) return;
-    const updateHeight = () => {
-      setLogbookStickyTopOffset(Math.round(heading.offsetHeight));
-    };
-    const observer = new ResizeObserver(updateHeight);
-    observer.observe(heading);
-    updateHeight();
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const heading = failedItemsHeadingRef.current;
-    if (!heading) return;
-    const updateHeight = () => {
-      setFailedItemsStickyTopOffset(Math.round(heading.offsetHeight));
-    };
-    const observer = new ResizeObserver(updateHeight);
-    observer.observe(heading);
-    updateHeight();
-    return () => observer.disconnect();
-  }, []);
-
   const displayStores = canAccessAllStores(profile.role, defs)
     ? stores
     : (profile.stores ?? []);
@@ -354,7 +328,9 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
   }
 
   return (
-    <div>
+    <div className="dashboard-page" ref={pageRef} style={{ '--dash-context-height': '0px' } as CSSProperties}>
+      <DashboardContextStack pageRef={pageRef} />
+
       <FeedbackInbox
         userId={profile.userId}
         title={t.dashboard.teamFeedback}
@@ -384,7 +360,9 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
       />
 
       <div className="card">
-        <h1>{t.dashboard.title}</h1>
+        <h1 id="operation-dashboard-heading" data-dash-context="" data-dash-level="h1">
+          {t.dashboard.title}
+        </h1>
         <p className="small">
           {profile.displayName} — {profile.role}
         </p>
@@ -392,7 +370,9 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
 
       <div className="card">
         <div className="dashboard-filters-header">
-          <h2 style={{ margin: 0 }}>{t.dashboard.filters}</h2>
+          <h2 id="dashboard-filters-heading" data-dash-context="" data-dash-level="h2" style={{ margin: 0 }}>
+            {t.dashboard.filters}
+          </h2>
           <button type="button" className="export-trigger-btn" onClick={() => setExportOpen(true)}>
             {t.export.export}
           </button>
@@ -459,9 +439,14 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
       </div>
 
       <section className="dash-scroll-section">
-        <div className="dash-sticky-heading" ref={logbookHeadingRef}>
+        <div className="dash-section-heading">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <h2 id="logbook-issues-heading" style={{ margin: 0, flex: 1 }}>
+            <h2
+              id="logbook-issues-heading"
+              data-dash-context=""
+              data-dash-level="h2"
+              style={{ margin: 0, flex: 1 }}
+            >
               {t.logbook.dashboardTitle}
             </h2>
             {onOpenLogbook && (
@@ -579,7 +564,6 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
             labels={logbookHeaderLabels}
             tableRef={logbookTableRef}
             scrollerRef={logbookTableScrollerRef}
-            topOffset={logbookStickyTopOffset}
           />
           <div
             className="table-wrap dash-table-x"
@@ -691,7 +675,14 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
       {canAccessChecklistItemProposals(profile.role, defs) && (
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <h2 style={{ margin: 0, flex: 1 }}>{t.checklistProposals.metricsTitle}</h2>
+            <h2
+              id="checklist-proposals-heading"
+              data-dash-context=""
+              data-dash-level="h2"
+              style={{ margin: 0, flex: 1 }}
+            >
+              {t.checklistProposals.metricsTitle}
+            </h2>
             {onOpenProposals && (
               <button type="button" className="secondary" onClick={onOpenProposals}>
                 {t.checklistProposals.viewAll}
@@ -783,7 +774,9 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
 
       {approvalShare.length > 0 && (
         <div className="card table-wrap">
-          <h2>{t.dashboard.approvalsByRole}</h2>
+          <h2 id="approvals-by-role-heading" data-dash-context="" data-dash-level="h2">
+            {t.dashboard.approvalsByRole}
+          </h2>
           <table>
             <thead>
               <tr>
@@ -806,7 +799,9 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
       )}
 
       <div className="card table-wrap feedback-freq-card">
-        <h2>{t.dashboard.feedbackReasons}</h2>
+        <h2 id="feedback-reasons-heading" data-dash-context="" data-dash-level="h2">
+          {t.dashboard.feedbackReasons}
+        </h2>
         <p className="small">{t.dashboard.rejectionsPeriod}</p>
 
         {feedbackStats.rows.length > 0 ? (
@@ -916,8 +911,13 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
       )}
 
       <section className="dash-scroll-section">
-        <div className="dash-sticky-heading" ref={failedItemsHeadingRef}>
-          <h2 id="failed-items-heading" style={{ margin: 0 }}>
+        <div className="dash-section-heading">
+          <h2
+            id="failed-items-heading"
+            data-dash-context=""
+            data-dash-level="h2"
+            style={{ margin: 0 }}
+          >
             {t.dashboard.failedItems}
           </h2>
         </div>
@@ -926,7 +926,6 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
             labels={failedItemsHeaderLabels}
             tableRef={failedItemsTableRef}
             scrollerRef={failedItemsTableScrollerRef}
-            topOffset={failedItemsStickyTopOffset}
           />
           <div
             className="table-wrap dash-table-x"
@@ -974,7 +973,9 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
       />
 
       <div className="card table-wrap">
-        <h2>{t.dashboard.recentReports}</h2>
+        <h2 id="recent-reports-heading" data-dash-context="" data-dash-level="h2">
+          {t.dashboard.recentReports}
+        </h2>
         <table>
           <thead>
             <tr>

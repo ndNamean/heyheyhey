@@ -4,37 +4,61 @@ interface DashboardStickyTableHeaderProps {
   labels: string[];
   tableRef: RefObject<HTMLTableElement | null>;
   scrollerRef: RefObject<HTMLElement | null>;
+  /** @deprecated Prefer --dash-context-height from the dashboard context stack. */
   topOffset?: number;
+}
+
+function readContextHeight(): number {
+  if (typeof document === 'undefined') return 0;
+  const page = document.querySelector('.dashboard-page') as HTMLElement | null;
+  if (!page) return 0;
+  const raw = getComputedStyle(page).getPropertyValue('--dash-context-height').trim();
+  const px = parseFloat(raw);
+  return Number.isFinite(px) ? Math.max(0, Math.round(px)) : 0;
 }
 
 /**
  * Visual sticky table-header clone for dashboard tables that must keep
  * overflow-x on the scroller. Hidden while the real <thead> is still visible
  * so it does not overlay the first rows at rest.
+ *
+ * Pin line tracks the progressive context stack via --dash-context-height.
  */
 export default function DashboardStickyTableHeader({
   labels,
   tableRef,
   scrollerRef,
-  topOffset = 0,
+  topOffset,
 }: DashboardStickyTableHeaderProps) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [columnWidths, setColumnWidths] = useState<number[]>([]);
   const [pinned, setPinned] = useState(false);
-  const [desktopStickyTitle, setDesktopStickyTitle] = useState(() =>
-    typeof window !== 'undefined' ? window.matchMedia('(min-width: 801px)').matches : true,
+  const [contextHeight, setContextHeight] = useState(() =>
+    typeof topOffset === 'number' ? Math.max(0, Math.round(topOffset)) : readContextHeight(),
   );
 
-  // Desktop may stack under a sticky section title; ≤800px titles are static so pin at 0.
-  const safeTopOffset = desktopStickyTitle ? Math.max(0, Math.round(topOffset)) : 0;
-
   useEffect(() => {
-    const media = window.matchMedia('(min-width: 801px)');
-    const onChange = () => setDesktopStickyTitle(media.matches);
-    onChange();
-    media.addEventListener('change', onChange);
-    return () => media.removeEventListener('change', onChange);
+    const page = document.querySelector('.dashboard-page');
+    const stack = document.querySelector('.dashboard-context-stack');
+    const update = () => setContextHeight(readContextHeight());
+    update();
+
+    const ro = new ResizeObserver(update);
+    if (page) ro.observe(page);
+    if (stack) ro.observe(stack);
+
+    const mo = new MutationObserver(update);
+    if (page) {
+      mo.observe(page, { attributes: true, attributeFilter: ['style'] });
+    }
+
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+    };
   }, []);
+
+  const safeTopOffset = contextHeight;
 
   const topStyle = useMemo(
     () =>

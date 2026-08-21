@@ -49,7 +49,7 @@ interface Props {
   userId: string;
   title?: string;
   limit?: number;
-  /** When true, sticky H2 within a dash-scroll-section (Dashboard only). */
+  /** When true, wrap in dash-scroll-section (Dashboard only; heading stickiness is owned by the context stack). */
   stickySection?: boolean;
   onOpenLogbookEntry?: (entryId: string, type?: string, deepLinkFilter?: string) => void;
 }
@@ -164,7 +164,14 @@ export default function FeedbackInbox({
 
   const header = (
     <div className="feedback-inbox-header">
-      <h2 style={{ margin: 0 }}>{inboxTitle}</h2>
+      <h2
+        id="team-feedback-heading"
+        data-dash-context=""
+        data-dash-level="h2"
+        style={{ margin: 0 }}
+      >
+        {inboxTitle}
+      </h2>
       {unreadCount > 0 && (
         <span className="badge warn">
           {unreadCount} {t.common.new}
@@ -275,7 +282,7 @@ export default function FeedbackInbox({
   if (stickySection) {
     return (
       <section className="dash-scroll-section">
-        <div className="dash-sticky-heading">{header}</div>
+        <div className="dash-section-heading">{header}</div>
         <div className="card feedback-inbox">{list}</div>
       </section>
     );
