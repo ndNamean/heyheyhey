@@ -151,17 +151,19 @@ export default function FailureCorrectionHistory({
 
   return (
     <section className="failure-history-section dash-scroll-section">
-      <div className="card table-wrap failure-history-card">
+      <div className="dash-section-heading">
+        <h2
+          id="failure-history-heading"
+          data-dash-context=""
+          data-dash-level="h2"
+          style={{ margin: 0 }}
+        >
+          {fh.title}
+        </h2>
+      </div>
+      <div className="card failure-history-card">
         <div className="dashboard-filters-header">
           <div>
-            <h2
-              id="failure-history-heading"
-              data-dash-context=""
-              data-dash-level="h2"
-              style={{ margin: 0 }}
-            >
-              {fh.title}
-            </h2>
             <p className="small" style={{ margin: '4px 0 0' }}>
               {fh.subtitle}
             </p>
@@ -262,21 +264,29 @@ export default function FailureCorrectionHistory({
 
         {result.trendBuckets.length > 0 && (
           <>
-            <h3
-              className="failure-history-subheading"
-              id="failure-trend-heading"
-              data-dash-context=""
-              data-dash-level="h3"
-              data-dash-parent="failure-history-heading"
-            >
-              {fh.trend}
-            </h3>
+            <div className="dash-section-heading dash-section-heading--secondary">
+              <h3
+                className="failure-history-subheading"
+                id="failure-trend-heading"
+                data-dash-context=""
+                data-dash-level="h3"
+                data-dash-parent="failure-history-heading"
+              >
+                {fh.trend}
+              </h3>
+            </div>
             <DashboardStickyTableHeader
               labels={trendLabels}
               tableRef={trendTableRef}
               scrollerRef={trendScrollerRef}
             />
-            <div className="dash-table-x" ref={trendScrollerRef}>
+            <div
+              className="dash-table-x"
+              ref={trendScrollerRef}
+              role="region"
+              aria-labelledby="failure-trend-heading"
+              tabIndex={0}
+            >
               <table className="feedback-freq-table" ref={trendTableRef}>
                 <thead>
                   <tr>
