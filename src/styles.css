@@ -3927,6 +3927,18 @@ body.wizard-active .page {
   box-shadow: 0 0 12px var(--accent-soft);
 }
 
+.dashboard-context-item.is-active .dashboard-context-item-label {
+  display: inline-block;
+  max-width: 100%;
+  transform: translateX(calc(var(--dock-progress, 0) * var(--dock-max-shift, 0px)));
+  text-shadow: 0 0 calc(var(--dock-progress, 0) * 12px) var(--accent-soft);
+  will-change: transform, text-shadow;
+}
+
+.dashboard-context-item.is-active.is-dock-lit .dashboard-context-item-label {
+  color: var(--accent);
+}
+
 .dashboard-context-item.is-active.is-h1 {
   font-size: 17px;
 }
@@ -3945,11 +3957,26 @@ body.wizard-active .page {
   font-weight: 600;
 }
 
+.dashboard-context-menu .dashboard-context-item.is-active .dashboard-context-item-label {
+  transform: none;
+  text-shadow: none;
+  will-change: auto;
+  color: inherit;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dashboard-context-item,
   .dashboard-context-collapse-trigger,
   .dashboard-context-sections-trigger {
     transition: none;
+  }
+
+  .dashboard-context-item.is-active {
+    --dock-progress: 1;
+  }
+
+  .dashboard-context-item.is-active .dashboard-context-item-label {
+    will-change: auto;
   }
 }
 

@@ -18,6 +18,8 @@ interface Props {
 
 const DESKTOP_VISIBLE_PREVIOUS = 2;
 const MOBILE_MQ = '(max-width: 800px)';
+const DOCK_SCROLL_DISTANCE = 180;
+const DOCK_LIT_THRESHOLD = 0.2;
 
 function prefersReducedMotion(): boolean {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
@@ -37,10 +39,12 @@ function SectionButton({
   section,
   kind,
   onNavigate,
+  itemRef,
 }: {
   section: DashContextSection;
   kind: 'active' | 'previous' | 'menu';
   onNavigate: (id: string) => void;
+  itemRef?: RefObject<HTMLButtonElement | null>;
 }) {
   const levelClass =
     section.level === 'h3'
@@ -52,6 +56,7 @@ function SectionButton({
 
   return (
     <button
+      ref={itemRef}
       type="button"
       className={`dashboard-context-item${kindClass}${levelClass}`}
       aria-current={kind === 'active' ? 'location' : undefined}
@@ -64,6 +69,7 @@ function SectionButton({
 
 export default function DashboardContextStack({ pageRef }: Props) {
   const stackRef = useRef<HTMLElement | null>(null);
+  const activeItemRef = useRef<HTMLButtonElement | null>(null);
   const [stackHeight, setStackHeight] = useState(0);
   const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.matchMedia(MOBILE_MQ).matches : false,
@@ -165,6 +171,74 @@ export default function DashboardContextStack({ pageRef }: Props) {
     };
   }, [collapsedOpen, sectionsOpen]);
 
+  useEffect(() => {
+    const item = activeItemRef.current;
+    if (!activeId || !item) return;
+
+    let rafId = 0;
+    const reducedMq = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+    const clearDock = (el: HTMLButtonElement) => {
+      el.style.removeProperty('--dock-progress');
+      el.style.removeProperty('--dock-max-shift');
+      el.classList.remove('is-dock-lit');
+    };
+
+    const writeDockVars = () => {
+      const el = activeItemRef.current;
+      if (!el) return;
+
+      const label = el.querySelector<HTMLElement>('.dashboard-context-item-label');
+      const styles = getComputedStyle(el);
+      const padL = parseFloat(styles.paddingLeft) || 0;
+      const padR = parseFloat(styles.paddingRight) || 0;
+      const available = Math.max(0, el.clientWidth - padL - padR);
+      const labelWidth = label?.getBoundingClientRect().width ?? 0;
+      const maxShift = Math.max(0, (available - labelWidth) / 2);
+      el.style.setProperty('--dock-max-shift', `${maxShift}px`);
+
+      if (reducedMq.matches) {
+        el.style.setProperty('--dock-progress', '1');
+        el.classList.add('is-dock-lit');
+        return;
+      }
+
+      const heading = document.getElementById(activeId);
+      if (!heading) {
+        el.style.setProperty('--dock-progress', '0');
+        el.classList.remove('is-dock-lit');
+        return;
+      }
+
+      const stuckLine = Math.max(0, Math.round(stackHeight));
+      const raw = stuckLine - heading.getBoundingClientRect().top;
+      const progress = Math.min(1, Math.max(0, raw / DOCK_SCROLL_DISTANCE));
+      el.style.setProperty('--dock-progress', String(progress));
+      el.classList.toggle('is-dock-lit', progress >= DOCK_LIT_THRESHOLD);
+    };
+
+    const schedule = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        writeDockVars();
+      });
+    };
+
+    writeDockVars();
+    window.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule, { passive: true });
+    reducedMq.addEventListener('change', schedule);
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      window.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      reducedMq.removeEventListener('change', schedule);
+      if (activeItemRef.current) clearDock(activeItemRef.current);
+    };
+  }, [activeId, stackHeight]);
+
   if (!sections.length) return null;
 
   return (
@@ -199,7 +273,12 @@ export default function DashboardContextStack({ pageRef }: Props) {
             )}
           </div>
           {activeSection && (
-            <SectionButton section={activeSection} kind="active" onNavigate={navigate} />
+            <SectionButton
+              section={activeSection}
+              kind="active"
+              onNavigate={navigate}
+              itemRef={activeItemRef}
+            />
           )}
         </div>
       ) : (
@@ -239,7 +318,12 @@ export default function DashboardContextStack({ pageRef }: Props) {
             />
           ))}
           {activeSection && (
-            <SectionButton section={activeSection} kind="active" onNavigate={navigate} />
+            <SectionButton
+              section={activeSection}
+              kind="active"
+              onNavigate={navigate}
+              itemRef={activeItemRef}
+            />
           )}
         </div>
       )}
