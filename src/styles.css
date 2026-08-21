@@ -3763,6 +3763,12 @@ body.wizard-active .page {
   min-width: 1100px;
 }
 
+.scheduled-task-table th {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
+
 .scheduled-task-group-row {
   cursor: pointer;
   background: rgba(17, 22, 29, 0.55);
@@ -4041,6 +4047,7 @@ body.wizard-active .page {
 }
 
 .dash-sticky-thead-cell {
+  box-sizing: border-box;
   padding: 12px 14px;
   border-right: 1px solid var(--card-border);
   font-size: 12px;
@@ -4048,7 +4055,10 @@ body.wizard-active .page {
   letter-spacing: 0.03em;
   color: var(--text-secondary);
   font-weight: 700;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+  min-width: 0;
   flex: 0 0 auto;
 }
 
