@@ -145,7 +145,7 @@ function instantErrorMeta(error: unknown): InstantQueryErrorLike {
   };
 }
 
-function countReviewQueryPayload(data: unknown): {
+function countReviewQueryPayload(data: unknown, extraMedia = 0): {
   reports: number;
   responses: number;
   media: number;
@@ -156,25 +156,36 @@ function countReviewQueryPayload(data: unknown): {
     reports?: Array<{ responses?: Array<{ media?: unknown[] }> }>;
     profiles?: unknown[];
     reviewEvents?: unknown[];
+    mediaRecords?: unknown[];
   } | null;
   if (!d) {
-    return { reports: 0, responses: 0, media: 0, profiles: 0, events: 0 };
+    return { reports: 0, responses: 0, media: extraMedia, profiles: 0, events: 0 };
   }
   let responses = 0;
-  let media = 0;
+  let nestedMedia = 0;
   for (const report of d.reports ?? []) {
     for (const response of report.responses ?? []) {
       responses += 1;
-      media += response.media?.length ?? 0;
+      nestedMedia += response.media?.length ?? 0;
     }
   }
   return {
     reports: d.reports?.length ?? 0,
     responses,
-    media,
+    media: extraMedia || nestedMedia || (d.mediaRecords?.length ?? 0),
     profiles: d.profiles?.length ?? 0,
     events: d.reviewEvents?.length ?? 0,
   };
+}
+
+function mergeReportMedia(slim: Report[], rich: Report[]): Report[] {
+  if (!slim.length) return slim;
+  if (!rich.length) return slim;
+  const byId = new Map(rich.map((report) => [report.id, report]));
+  return slim.map((report) => {
+    const full = byId.get(report.id);
+    return full ? { ...report, responses: full.responses ?? report.responses } : report;
+  });
 }
 
 function isConnectionLikeLoadFailure(
@@ -222,6 +233,7 @@ export default function ReviewPage({
     events: ReviewEvent[];
   } | null>(null);
   const lastGoodStoresRef = useRef<Store[]>([]);
+  const lastGoodRichReportsRef = useRef<Report[]>([]);
 
   const connectionStatus = db.useConnectionStatus();
 
@@ -259,23 +271,19 @@ export default function ReviewPage({
 
   const reportsQuery = useMemo(
     () =>
-      reportsQueryPaused
+      reportsQueryPaused || reportsWhere === null
         ? null
-        : reportsWhere === null
-          ? {
-              profiles: { stores: {} },
-            }
-          : {
-              reports: {
-                ...(reportsWhere ? { $: { where: reportsWhere } } : {}),
-                responses: { media: {} },
-                store: {},
-              },
-              profiles: { stores: {} },
+        : {
+            reports: {
+              ...(reportsWhere ? { $: { where: reportsWhere } } : {}),
+              responses: {},
+              store: {},
             },
+          },
     [reportsQueryPaused, reportsWhere],
   );
 
+  const profilesQuery = useMemo(() => ({ profiles: { stores: {} } }), []);
   const storesQuery = useMemo(() => ({ stores: {} }), []);
 
   const logbookQuery = useMemo(
@@ -295,6 +303,7 @@ export default function ReviewPage({
   );
 
   const { data, isLoading: reportsLoading, error: reportsError } = db.useQuery(reportsQuery);
+  const { data: profilesData } = db.useQuery(profilesQuery);
   const { data: storesData } = db.useQuery(storesQuery);
   const {
     data: logbookData,
@@ -325,7 +334,25 @@ export default function ReviewPage({
 
   const { data: eventsData } = db.useQuery(eventsQuery);
 
-  const allProfiles: Profile[] = (data?.profiles ?? []) as Profile[];
+  const reportsMediaQuery = useMemo(() => {
+    const ids = ((data?.reports ?? []) as Report[]).map((r) => r.id).filter(Boolean);
+    if (!ids.length) return null;
+    return {
+      reports: {
+        $: { where: { id: { $in: ids } } },
+        responses: { media: {} },
+      },
+    };
+  }, [data?.reports]);
+
+  const { data: reportsMediaData, error: reportsMediaError } = db.useQuery(reportsMediaQuery);
+  const richReports = (reportsMediaData?.reports ?? []) as Report[];
+  if (richReports.length && !reportsMediaError) {
+    lastGoodRichReportsRef.current = richReports;
+  }
+  const stableRichReports = richReports.length ? richReports : lastGoodRichReportsRef.current;
+
+  const allProfiles: Profile[] = (profilesData?.profiles ?? []) as Profile[];
   const allEvents = (eventsData?.reviewEvents ?? []) as ReviewEvent[];
   const queryStores: Store[] = (storesData?.stores ?? []) as Store[];
   if (queryStores.length) {
@@ -335,8 +362,12 @@ export default function ReviewPage({
   const allLogbookEntries = (logbookData?.logbookEntries ?? []) as LogbookEntry[];
   const reports = useMemo(
     () =>
-      filterReportsAwaitingReview((data?.reports ?? []) as Report[], profile, defs),
-    [data?.reports, profile, defs],
+      filterReportsAwaitingReview(
+        mergeReportMedia((data?.reports ?? []) as Report[], stableRichReports),
+        profile,
+        defs,
+      ),
+    [data?.reports, defs, profile, stableRichReports],
   );
   const logbookIssues = useMemo(() => {
     return allLogbookEntries.filter(
@@ -459,7 +490,7 @@ export default function ReviewPage({
     const sig = `reports|${meta.message}|${String(meta.hint ?? '')}|${String(meta.code ?? '')}`;
     if (sig === lastLoggedReportsSig.current) return;
     lastLoggedReportsSig.current = sig;
-    const payload = countReviewQueryPayload(data);
+    const payload = countReviewQueryPayload(data, countReviewQueryPayload(reportsMediaData).media);
     console.error('[review-load]', {
       surface,
       queryKind: 'reports',
@@ -473,6 +504,7 @@ export default function ReviewPage({
       connectionStatus,
       ...payload,
       nestsAvatarFile: false,
+      nestsMedia: false,
       eventsSeparate: true,
     });
   }, [
@@ -481,6 +513,7 @@ export default function ReviewPage({
     profile.role,
     reports.length,
     reportsError,
+    reportsMediaData,
     storeIds.length,
     surface,
   ]);

@@ -59,6 +59,29 @@ function isExpiredInstantFileUrl(url: string): boolean {
   return exp <= Date.now() / 1000 + 30;
 }
 
+const PROXY_MAX = 4;
+let proxyInflight = 0;
+const proxyWaiters: Array<() => void> = [];
+
+function acquireProxySlot(): Promise<void> {
+  if (proxyInflight < PROXY_MAX) {
+    proxyInflight += 1;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    proxyWaiters.push(() => {
+      proxyInflight += 1;
+      resolve();
+    });
+  });
+}
+
+function releaseProxySlot() {
+  proxyInflight = Math.max(0, proxyInflight - 1);
+  const next = proxyWaiters.shift();
+  if (next) next();
+}
+
 export default function ProofPhoto({
   media,
   className = '',
@@ -74,6 +97,11 @@ export default function ProofPhoto({
   );
   const [videoError, setVideoError] = useState(false);
   const [useProxyFallback, setUseProxyFallback] = useState(false);
+  const needsProxy = !directUrl || useProxyFallback;
+  const [allowProxy, setAllowProxy] = useState(
+    () => !needsProxy || typeof IntersectionObserver === 'undefined',
+  );
+  const hostRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const isVideo = isVideoMedia(media.mimeType, media.fileName);
 
@@ -95,7 +123,29 @@ export default function ProofPhoto({
   useEffect(() => {
     setVideoError(false);
     setUseProxyFallback(false);
-  }, [media.id, directUrl]);
+    setAllowProxy(!!directUrl || typeof IntersectionObserver === 'undefined');
+  }, [directUrl, media.id]);
+
+  useEffect(() => {
+    if (useProxyFallback) setAllowProxy(true);
+  }, [useProxyFallback]);
+
+  useEffect(() => {
+    if (!needsProxy || allowProxy) return;
+    const el = hostRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setAllowProxy(true);
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) setAllowProxy(true);
+      },
+      { rootMargin: '240px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [allowProxy, media.id, needsProxy]);
 
   useEffect(() => {
     if (media.storageDeleted) {
@@ -109,11 +159,20 @@ export default function ProofPhoto({
       return;
     }
 
+    if (!allowProxy) {
+      setStatus('idle');
+      return;
+    }
+
     let cancelled = false;
+    let acquired = false;
     setStatus('loading');
 
     (async () => {
       try {
+        await acquireProxySlot();
+        acquired = true;
+        if (cancelled) return;
         const res = await fetch(`/api/image-proxy?mediaId=${encodeURIComponent(media.id)}`);
         const data = (await res.json()) as { url?: string; error?: string };
         if (cancelled) return;
@@ -126,13 +185,15 @@ export default function ProofPhoto({
         }
       } catch {
         if (!cancelled) setStatus('error');
+      } finally {
+        if (acquired) releaseProxySlot();
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [media.id, media.storageDeleted, directUrl, rawDirectUrl, useProxyFallback]);
+  }, [allowProxy, media.id, media.storageDeleted, directUrl, rawDirectUrl, useProxyFallback]);
 
   const videoSrc = useMemo(() => {
     if (!isVideo || !url) return '';
@@ -181,7 +242,10 @@ export default function ProofPhoto({
 
   if (status === 'loading' || status === 'idle') {
     return (
-      <div className={`proof-photo-loading${className ? ` ${className}` : ''}`}>
+      <div
+        ref={hostRef}
+        className={`proof-photo-loading${className ? ` ${className}` : ''}`}
+      >
         {t.photoSheet.loading}
       </div>
     );
