@@ -32,6 +32,33 @@ function logVideoDebug(tag: string, payload: unknown) {
   }
 }
 
+/** Instant $files CDN URLs carry a CloudFront Policy; stale ones 403 in Console. */
+function instantSignedUrlExpirySec(url: string): number | null {
+  try {
+    const parsed = new URL(url);
+    if (!/(^|\.)instantdb\.(com|io)$/i.test(parsed.hostname)) return null;
+    const raw = parsed.searchParams.get('Policy');
+    if (!raw) return null;
+    let b64 = raw.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    const policy = JSON.parse(atob(b64)) as {
+      Statement?: Array<{
+        Condition?: { DateLessThan?: { 'AWS:EpochTime'?: number } };
+      }>;
+    };
+    const exp = policy.Statement?.[0]?.Condition?.DateLessThan?.['AWS:EpochTime'];
+    return typeof exp === 'number' && Number.isFinite(exp) ? exp : null;
+  } catch {
+    return null;
+  }
+}
+
+function isExpiredInstantFileUrl(url: string): boolean {
+  const exp = instantSignedUrlExpirySec(url);
+  if (exp == null) return false;
+  return exp <= Date.now() / 1000 + 30;
+}
+
 export default function ProofPhoto({
   media,
   className = '',
@@ -39,7 +66,8 @@ export default function ProofPhoto({
   enableVideoFloat = true,
 }: Props) {
   const { t } = useLang();
-  const directUrl = media.fileUrl || media.url || media.file?.url || '';
+  const rawDirectUrl = media.fileUrl || media.url || media.file?.url || '';
+  const directUrl = rawDirectUrl && !isExpiredInstantFileUrl(rawDirectUrl) ? rawDirectUrl : '';
   const [url, setUrl] = useState(directUrl);
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>(
     directUrl ? 'ready' : 'idle',
@@ -75,7 +103,7 @@ export default function ProofPhoto({
       return;
     }
 
-    if (directUrl) {
+    if (directUrl && !useProxyFallback) {
       setUrl(directUrl);
       setStatus('ready');
       return;
@@ -104,7 +132,7 @@ export default function ProofPhoto({
     return () => {
       cancelled = true;
     };
-  }, [media.id, media.storageDeleted, directUrl]);
+  }, [media.id, media.storageDeleted, directUrl, rawDirectUrl, useProxyFallback]);
 
   const videoSrc = useMemo(() => {
     if (!isVideo || !url) return '';
@@ -218,7 +246,16 @@ export default function ProofPhoto({
           ariaLabel={t.photoSheet.zoomImage.replace('{alt}', alt)}
           resetKey={`${media.id}:${url}`}
         >
-          <img src={url} alt={alt} loading="lazy" decoding="async" />
+          <img
+            src={url}
+            alt={alt}
+            loading="lazy"
+            decoding="async"
+            onError={() => {
+              if (!useProxyFallback) setUseProxyFallback(true);
+              else setStatus('error');
+            }}
+          />
           {renderLegacyOverlay()}
         </ZoomableImage>
       </div>
