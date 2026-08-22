@@ -218,6 +218,7 @@ export default function ReviewPage({
     typeof window !== 'undefined' ? window.matchMedia('(max-width: 720px)').matches : false,
   );
   const [reportsQueryPaused, setReportsQueryPaused] = useState(false);
+  const [holdReportsLive, setHoldReportsLive] = useState(false);
   const [logbookQueryPaused, setLogbookQueryPaused] = useState(false);
   const lastHighlightScrollKey = useRef('');
   const lastLoggedReportsSig = useRef('');
@@ -271,7 +272,7 @@ export default function ReviewPage({
 
   const reportsQuery = useMemo(
     () =>
-      reportsQueryPaused || reportsWhere === null
+      reportsQueryPaused || holdReportsLive || reportsWhere === null
         ? null
         : {
             reports: {
@@ -280,7 +281,7 @@ export default function ReviewPage({
               store: {},
             },
           },
-    [reportsQueryPaused, reportsWhere],
+    [holdReportsLive, reportsQueryPaused, reportsWhere],
   );
 
   const profilesQuery = useMemo(() => ({ profiles: { stores: {} } }), []);
@@ -303,6 +304,9 @@ export default function ReviewPage({
   );
 
   const { data, isLoading: reportsLoading, error: reportsError } = db.useQuery(reportsQuery);
+  useEffect(() => {
+    if (data && !reportsError) setHoldReportsLive(true);
+  }, [data, reportsError]);
   const { data: profilesData } = db.useQuery(profilesQuery);
   const { data: storesData } = db.useQuery(storesQuery);
   const {
@@ -310,6 +314,12 @@ export default function ReviewPage({
     isLoading: logbookLoading,
     error: logbookError,
   } = db.useQuery(logbookQuery);
+
+  const followupReportIds = useMemo(() => {
+    const live = ((data?.reports ?? []) as Report[]).map((r) => r.id).filter(Boolean);
+    if (live.length) return live;
+    return (lastGoodReportsRef.current?.reports ?? []).map((r) => r.id).filter(Boolean);
+  }, [data?.reports, holdReportsLive]);
 
   const eventsQuery = useMemo(() => {
     if (surface === 'logbook') {
@@ -323,19 +333,21 @@ export default function ReviewPage({
         },
       };
     }
-    const ids = ((data?.reports ?? []) as Report[]).map((r) => r.id).filter(Boolean);
+    if (!holdReportsLive) return null;
+    const ids = followupReportIds;
     if (!ids.length) return null;
     return {
       reviewEvents: {
         $: { where: { reportId: { $in: ids } } },
       },
     };
-  }, [data?.reports, logbookData?.logbookEntries, surface]);
+  }, [followupReportIds, holdReportsLive, logbookData?.logbookEntries, surface]);
 
   const { data: eventsData } = db.useQuery(eventsQuery);
 
   const reportsMediaQuery = useMemo(() => {
-    const ids = ((data?.reports ?? []) as Report[]).map((r) => r.id).filter(Boolean);
+    if (!holdReportsLive) return null;
+    const ids = followupReportIds;
     if (!ids.length) return null;
     return {
       reports: {
@@ -343,7 +355,7 @@ export default function ReviewPage({
         responses: { media: {} },
       },
     };
-  }, [data?.reports]);
+  }, [followupReportIds, holdReportsLive]);
 
   const { data: reportsMediaData, error: reportsMediaError } = db.useQuery(reportsMediaQuery);
   const richReports = (reportsMediaData?.reports ?? []) as Report[];
@@ -405,10 +417,12 @@ export default function ReviewPage({
   const logbookInitialFailed =
     Boolean(logbookError) && !logbookHasLastGood && surface === 'logbook';
 
-  const displayReports =
+  const displayReports = mergeReportMedia(
     !reportsQueryOk && lastGoodReportsRef.current
       ? lastGoodReportsRef.current.reports
-      : reports;
+      : reports,
+    stableRichReports,
+  );
   const displayLogbookIssues =
     !logbookQueryOk && lastGoodLogbookRef.current
       ? lastGoodLogbookRef.current.issues
@@ -420,11 +434,11 @@ export default function ReviewPage({
         ? lastGoodReportsRef.current.profiles
         : allProfiles;
   const displayEvents =
-    surface === 'logbook' && !logbookQueryOk && lastGoodLogbookRef.current
-      ? lastGoodLogbookRef.current.events
-      : !reportsQueryOk && lastGoodReportsRef.current
-        ? lastGoodReportsRef.current.events
-        : allEvents;
+    allEvents.length
+      ? allEvents
+      : surface === 'logbook' && !logbookQueryOk && lastGoodLogbookRef.current
+        ? lastGoodLogbookRef.current.events
+        : lastGoodReportsRef.current?.events ?? [];
 
   const selectableStores = useMemo(
     () =>
@@ -1521,7 +1535,11 @@ export default function ReviewPage({
               <button
                 type="button"
                 className="secondary"
-                onClick={() => setReportsQueryPaused(true)}
+                onClick={() => {
+                  setHoldReportsLive(false);
+                  lastGoodRichReportsRef.current = [];
+                  setReportsQueryPaused(true);
+                }}
               >
                 {t.common.retry}
               </button>
