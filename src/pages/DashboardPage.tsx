@@ -47,6 +47,7 @@ import type {
   Report,
   ReportResponse,
   ReviewEvent,
+  Store,
   Template,
 } from '../types';
 
@@ -92,27 +93,89 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
   const feedbackTableRef = useRef<HTMLTableElement | null>(null);
   const recentReportsTableScrollerRef = useRef<HTMLDivElement | null>(null);
   const recentReportsTableRef = useRef<HTMLTableElement | null>(null);
+  const [holdDashLive, setHoldDashLive] = useState(false);
+  const lastGoodDashRef = useRef<{ reports: Report[]; stores: Store[] } | null>(null);
+  const lastGoodProfilesRef = useRef<Profile[]>([]);
+  const lastGoodEventsRef = useRef<ReviewEvent[]>([]);
+  const lastGoodTemplatesRef = useRef<Template[]>([]);
+  const lastGoodProposalsRef = useRef<ChecklistItemProposal[]>([]);
+  const lastGoodLogbookRef = useRef<LogbookEntry[]>([]);
 
-  const { data } = db.useQuery({
-    reports: {
-      responses: {},
-      store: {},
-    },
-    stores: {},
-    profiles: { stores: {}, avatarFile: {} },
-    reviewEvents: {},
-    templates: { items: {}, stores: {}, scheduleVersions: {} },
-    checklistItemProposals: {},
-    logbookEntries: { store: {} },
-  });
+  const reportsQuery = useMemo(
+    () =>
+      holdDashLive
+        ? null
+        : {
+            reports: {
+              responses: {},
+              store: {},
+            },
+            stores: {},
+          },
+    [holdDashLive],
+  );
+  const profilesQuery = useMemo(() => ({ profiles: { stores: {} } }), []);
+  const eventsQuery = useMemo(
+    () => (holdDashLive ? { reviewEvents: {} } : null),
+    [holdDashLive],
+  );
+  const templatesQuery = useMemo(
+    () =>
+      holdDashLive
+        ? { templates: { items: {}, stores: {}, scheduleVersions: {} } }
+        : null,
+    [holdDashLive],
+  );
+  const proposalsQuery = useMemo(
+    () => (holdDashLive ? { checklistItemProposals: {} } : null),
+    [holdDashLive],
+  );
+  const logbookQuery = useMemo(
+    () => (holdDashLive ? { logbookEntries: { store: {} } } : null),
+    [holdDashLive],
+  );
 
-  const allReports: Report[] = (data?.reports ?? []) as Report[];
-  const stores = data?.stores ?? [];
-  const profiles = data?.profiles ?? [];
-  const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];
-  const allTemplates: Template[] = (data?.templates ?? []) as Template[];
-  const allProposals = (data?.checklistItemProposals ?? []) as ChecklistItemProposal[];
-  const allLogbookEntries = (data?.logbookEntries ?? []) as LogbookEntry[];
+  const {
+    data: reportsData,
+    isLoading: reportsLoading,
+    error: reportsError,
+  } = db.useQuery(reportsQuery);
+  useEffect(() => {
+    if (reportsData && !reportsError) setHoldDashLive(true);
+  }, [reportsData, reportsError]);
+  const { data: profilesData } = db.useQuery(profilesQuery);
+  const { data: eventsData } = db.useQuery(eventsQuery);
+  const { data: templatesData } = db.useQuery(templatesQuery);
+  const { data: proposalsData } = db.useQuery(proposalsQuery);
+  const { data: logbookData } = db.useQuery(logbookQuery);
+
+  const queryReports = (reportsData?.reports ?? []) as Report[];
+  const queryStores = (reportsData?.stores ?? []) as Store[];
+  if ((queryReports.length || queryStores.length) && !reportsError) {
+    lastGoodDashRef.current = { reports: queryReports, stores: queryStores };
+  }
+  const queryProfiles = (profilesData?.profiles ?? []) as Profile[];
+  if (queryProfiles.length) lastGoodProfilesRef.current = queryProfiles;
+  const queryEvents = (eventsData?.reviewEvents ?? []) as ReviewEvent[];
+  if (queryEvents.length) lastGoodEventsRef.current = queryEvents;
+  const queryTemplates = (templatesData?.templates ?? []) as Template[];
+  if (queryTemplates.length) lastGoodTemplatesRef.current = queryTemplates;
+  const queryProposals = (proposalsData?.checklistItemProposals ?? []) as ChecklistItemProposal[];
+  if (queryProposals.length) lastGoodProposalsRef.current = queryProposals;
+  const queryLogbook = (logbookData?.logbookEntries ?? []) as LogbookEntry[];
+  if (queryLogbook.length) lastGoodLogbookRef.current = queryLogbook;
+
+  const allReports: Report[] = queryReports.length
+    ? queryReports
+    : (lastGoodDashRef.current?.reports ?? []);
+  const stores = queryStores.length ? queryStores : (lastGoodDashRef.current?.stores ?? []);
+  const profiles = queryProfiles.length ? queryProfiles : lastGoodProfilesRef.current;
+  const allEvents = queryEvents.length ? queryEvents : lastGoodEventsRef.current;
+  const allTemplates: Template[] = queryTemplates.length
+    ? queryTemplates
+    : lastGoodTemplatesRef.current;
+  const allProposals = queryProposals.length ? queryProposals : lastGoodProposalsRef.current;
+  const allLogbookEntries = queryLogbook.length ? queryLogbook : lastGoodLogbookRef.current;
 
   const reports = useMemo(() => {
     let filtered = allReports.filter((r) => r.reportDate >= from && r.reportDate <= to);
@@ -1118,7 +1181,11 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
                   ))}
                   {!reports.length && (
                     <tr>
-                      <td colSpan={6}>{t.dashboard.noReportsInRange}</td>
+                      <td colSpan={6}>
+                        {reportsLoading && !lastGoodDashRef.current
+                          ? t.common.loading
+                          : t.dashboard.noReportsInRange}
+                      </td>
                     </tr>
                   )}
                 </tbody>
