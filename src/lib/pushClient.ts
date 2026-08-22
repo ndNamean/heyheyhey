@@ -148,6 +148,12 @@ export function isPushServiceUnavailableError(err: unknown): boolean {
   return /push service not available/i.test(msg);
 }
 
+/** Cursor/VS Code/Electron expose PushManager but have no FCM/push service. */
+export function lacksBrowserPushService(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /Electron\/|Cursor\//i.test(navigator.userAgent);
+}
+
 function rememberPushServiceUnavailable() {
   try {
     sessionStorage.setItem(PUSH_SERVICE_UNAVAILABLE_KEY, '1');
@@ -157,6 +163,7 @@ function rememberPushServiceUnavailable() {
 }
 
 export function isPushSupported(): boolean {
+  if (lacksBrowserPushService()) return false;
   try {
     if (sessionStorage.getItem(PUSH_SERVICE_UNAVAILABLE_KEY) === '1') return false;
   } catch {
