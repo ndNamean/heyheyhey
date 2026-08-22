@@ -25,6 +25,7 @@ import {
   activateWifiNotify,
   fetchWifiNotifyStatus,
   getPushPermissionState,
+  isPushSupported,
   sendTestPush,
   type WifiNotifyLocationPayload,
   type WifiNotifyStatusResponse,
@@ -312,6 +313,11 @@ export default function WifiNotifyStatus({ profile }: Props) {
   const [checkingLocation, setCheckingLocation] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isPushSupported()) {
+      setActionMessage(t.wifiNotify.unsupported);
+    }
+  }, [t.wifiNotify.unsupported]);
   const [showInstallGate, setShowInstallGate] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [localActive, setLocalActive] = useState<LocalActive | null>(null);
@@ -483,7 +489,7 @@ export default function WifiNotifyStatus({ profile }: Props) {
   const iosInstallRequired =
     install.isIos && !install.standalone && !install.installed;
   const permissionGranted = getPushPermissionState() === 'granted';
-  const canAutoActivate = permissionGranted && !iosInstallRequired;
+  const canAutoActivate = permissionGranted && !iosInstallRequired && isPushSupported();
 
   const displayReason = clientLocationReason || status?.reason || null;
   const distanceM =
@@ -503,7 +509,7 @@ export default function WifiNotifyStatus({ profile }: Props) {
         setShowInstallGate(true);
         return;
       }
-      if (getPushPermissionState() === 'unsupported') {
+      if (!isPushSupported() || getPushPermissionState() === 'unsupported') {
         setActionMessage(t.wifiNotify.unsupported);
         return;
       }
@@ -544,7 +550,11 @@ export default function WifiNotifyStatus({ profile }: Props) {
         status?.method === 'geofence' || !status?.recognized ? location : null,
       );
       if (!result.ok) {
-        setActionMessage(result.error || result.reason || t.wifiNotify.activateFailed);
+        setActionMessage(
+          result.reason === 'unsupported'
+            ? t.wifiNotify.unsupported
+            : result.error || result.reason || t.wifiNotify.activateFailed,
+        );
         await refreshStatus({
           withLocation: Boolean(location),
           silentLocation: true,
@@ -567,7 +577,13 @@ export default function WifiNotifyStatus({ profile }: Props) {
         silentLocation: true,
       });
     } catch (e) {
-      setActionMessage(e instanceof Error ? e.message : t.wifiNotify.activateFailed);
+      setActionMessage(
+        !isPushSupported()
+          ? t.wifiNotify.unsupported
+          : e instanceof Error
+            ? e.message
+            : t.wifiNotify.activateFailed,
+      );
     } finally {
       setBusy(false);
       setCheckingLocation(false);

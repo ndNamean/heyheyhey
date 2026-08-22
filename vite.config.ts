@@ -5,6 +5,13 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    proxy: {
+      '/api': {
+        target: 'https://restaurant-ops-instant.vercel.app',
+        changeOrigin: true,
+        secure: true,
+      },
+    },
   },
   optimizeDeps: {
     include: [

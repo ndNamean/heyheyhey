@@ -141,7 +141,27 @@ export function getPushPermission(): PushPermissionState {
   return getPushPermissionState();
 }
 
+const PUSH_SERVICE_UNAVAILABLE_KEY = 'heyhey-push-service-unavailable';
+
+export function isPushServiceUnavailableError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /push service not available/i.test(msg);
+}
+
+function rememberPushServiceUnavailable() {
+  try {
+    sessionStorage.setItem(PUSH_SERVICE_UNAVAILABLE_KEY, '1');
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
 export function isPushSupported(): boolean {
+  try {
+    if (sessionStorage.getItem(PUSH_SERVICE_UNAVAILABLE_KEY) === '1') return false;
+  } catch {
+    /* ignore */
+  }
   return (
     typeof window !== 'undefined' &&
     'serviceWorker' in navigator &&
@@ -307,13 +327,24 @@ export async function activateWifiNotify(
     }
 
     const publicKey = await getVapidPublicKey();
+    if (!publicKey) {
+      return { ok: false, error: 'Missing VAPID public key', reason: 'unsupported' };
+    }
     const registration = await navigator.serviceWorker.ready;
     let subscription = await registration.pushManager.getSubscription();
     if (!subscription) {
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
-      });
+      try {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
+        });
+      } catch (subErr) {
+        if (isPushServiceUnavailableError(subErr)) {
+          rememberPushServiceUnavailable();
+          return { ok: false, error: 'Web Push is not supported in this browser', reason: 'unsupported' };
+        }
+        throw subErr;
+      }
     }
 
     const headers = await authHeaders();
@@ -356,6 +387,10 @@ export async function activateWifiNotify(
       method: parseActivationMethod(data.method) ?? undefined,
     };
   } catch (e) {
+    if (isPushServiceUnavailableError(e)) {
+      rememberPushServiceUnavailable();
+      return { ok: false, error: 'Web Push is not supported in this browser', reason: 'unsupported' };
+    }
     return {
       ok: false,
       error: e instanceof Error ? e.message : 'Activation failed',
