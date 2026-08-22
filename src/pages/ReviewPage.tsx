@@ -145,6 +145,38 @@ function instantErrorMeta(error: unknown): InstantQueryErrorLike {
   };
 }
 
+function countReviewQueryPayload(data: unknown): {
+  reports: number;
+  responses: number;
+  media: number;
+  profiles: number;
+  events: number;
+} {
+  const d = data as {
+    reports?: Array<{ responses?: Array<{ media?: unknown[] }> }>;
+    profiles?: unknown[];
+    reviewEvents?: unknown[];
+  } | null;
+  if (!d) {
+    return { reports: 0, responses: 0, media: 0, profiles: 0, events: 0 };
+  }
+  let responses = 0;
+  let media = 0;
+  for (const report of d.reports ?? []) {
+    for (const response of report.responses ?? []) {
+      responses += 1;
+      media += response.media?.length ?? 0;
+    }
+  }
+  return {
+    reports: d.reports?.length ?? 0,
+    responses,
+    media,
+    profiles: d.profiles?.length ?? 0,
+    events: d.reviewEvents?.length ?? 0,
+  };
+}
+
 function isConnectionLikeLoadFailure(
   connectionStatus: string,
   error: unknown,
@@ -231,8 +263,7 @@ export default function ReviewPage({
         ? null
         : reportsWhere === null
           ? {
-              profiles: { stores: {}, avatarFile: {} },
-              reviewEvents: {},
+              profiles: { stores: {} },
             }
           : {
               reports: {
@@ -240,8 +271,7 @@ export default function ReviewPage({
                 responses: { media: {} },
                 store: {},
               },
-              profiles: { stores: {}, avatarFile: {} },
-              reviewEvents: {},
+              profiles: { stores: {} },
             },
     [reportsQueryPaused, reportsWhere],
   );
@@ -272,8 +302,31 @@ export default function ReviewPage({
     error: logbookError,
   } = db.useQuery(logbookQuery);
 
+  const eventsQuery = useMemo(() => {
+    if (surface === 'logbook') {
+      const ids = ((logbookData?.logbookEntries ?? []) as LogbookEntry[])
+        .map((e) => e.id)
+        .filter(Boolean);
+      if (!ids.length) return null;
+      return {
+        reviewEvents: {
+          $: { where: { logbookEntryId: { $in: ids } } },
+        },
+      };
+    }
+    const ids = ((data?.reports ?? []) as Report[]).map((r) => r.id).filter(Boolean);
+    if (!ids.length) return null;
+    return {
+      reviewEvents: {
+        $: { where: { reportId: { $in: ids } } },
+      },
+    };
+  }, [data?.reports, logbookData?.logbookEntries, surface]);
+
+  const { data: eventsData } = db.useQuery(eventsQuery);
+
   const allProfiles: Profile[] = (data?.profiles ?? []) as Profile[];
-  const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];
+  const allEvents = (eventsData?.reviewEvents ?? []) as ReviewEvent[];
   const queryStores: Store[] = (storesData?.stores ?? []) as Store[];
   if (queryStores.length) {
     lastGoodStoresRef.current = queryStores;
@@ -406,6 +459,7 @@ export default function ReviewPage({
     const sig = `reports|${meta.message}|${String(meta.hint ?? '')}|${String(meta.code ?? '')}`;
     if (sig === lastLoggedReportsSig.current) return;
     lastLoggedReportsSig.current = sig;
+    const payload = countReviewQueryPayload(data);
     console.error('[review-load]', {
       surface,
       queryKind: 'reports',
@@ -417,6 +471,9 @@ export default function ReviewPage({
       profileRole: profile.role,
       storeIdsLength: storeIds.length,
       connectionStatus,
+      ...payload,
+      nestsAvatarFile: false,
+      eventsSeparate: true,
     });
   }, [
     connectionStatus,
