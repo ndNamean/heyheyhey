@@ -151,44 +151,64 @@ describe('IdentityWithAvatar', () => {
     expect(screen.queryByRole('button', { name: /u-missing/ })).toBeNull();
   });
 
-  it('smoke: FeedbackInbox actor avatar tap does not fire parent item click', () => {
+  it('smoke: FeedbackInbox checkbox and avatar do not fire open click', () => {
     setMatchMedia(false);
-    const onItemClick = vi.fn();
+    const onOpenClick = vi.fn();
+    const onToggle = vi.fn();
 
-    // Mirrors FeedbackInbox: identity row under title with stopPropagation around
-    // IdentityWithAvatar; CTA is a separate line (div avoids nested <button> in jsdom).
+    // Mirrors FeedbackInbox split markup: wrapper row + checkbox + open button.
     render(
-      <div
-        role="button"
-        tabIndex={0}
-        className="feedback-item"
-        onClick={onItemClick}
-        onKeyDown={() => undefined}
-      >
-        <div className="feedback-item-title">Assigned a logbook entry</div>
-        <div className="feedback-item-identity">
-          <span
+      <div className="feedback-item">
+        <div className="feedback-item-row">
+          <label
+            className="ui-checkbox-label feedback-item-checkbox"
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
-            <IdentityWithAvatar profile={alice}>{alice.displayName}</IdentityWithAvatar>
-          </span>
-          {' · '}
-          manager
+            <input
+              type="checkbox"
+              className="ui-checkbox"
+              aria-label="Assigned a logbook entry"
+              onChange={onToggle}
+            />
+          </label>
+          <div
+            role="button"
+            tabIndex={0}
+            className="feedback-item-main"
+            onClick={onOpenClick}
+            onKeyDown={() => undefined}
+          >
+            <div className="feedback-item-title">Assigned a logbook entry</div>
+            <div className="feedback-item-identity">
+              <span
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.stopPropagation()}
+              >
+                <IdentityWithAvatar profile={alice}>{alice.displayName}</IdentityWithAvatar>
+              </span>
+              {' · '}
+              manager
+            </div>
+            <div className="feedback-item-body">Open item</div>
+            <div className="feedback-item-cta">Open in Logbook</div>
+          </div>
         </div>
-        <div className="feedback-item-body">Open item</div>
-        <div className="feedback-item-cta">Open in Logbook</div>
       </div>,
     );
 
+    fireEvent.click(screen.getByLabelText('Assigned a logbook entry'));
+    expect(onToggle).toHaveBeenCalledTimes(1);
+    expect(onOpenClick).not.toHaveBeenCalled();
+
     fireEvent.click(getTrigger('Alice Chen'));
-    expect(onItemClick).not.toHaveBeenCalled();
+    expect(onOpenClick).not.toHaveBeenCalled();
     expect(screen.getByRole('dialog', { name: 'Profile photo of Alice Chen' })).toBeTruthy();
 
     fireEvent.click(screen.getByText('Open item'));
-    expect(onItemClick).toHaveBeenCalledTimes(1);
+    expect(onOpenClick).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByText('Open in Logbook'));
-    expect(onItemClick).toHaveBeenCalledTimes(2);
+    expect(onOpenClick).toHaveBeenCalledTimes(2);
   });
 });

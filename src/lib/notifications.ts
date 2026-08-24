@@ -225,6 +225,40 @@ export function unreadNotifications(notifications: Notification[]): Notification
   return notifications.filter((n) => !n.readAt);
 }
 
+type MarkNotificationReadTxFactory = (notificationId: string, readAt: string) => unknown;
+type MarkNotificationReadTransact = (txs: unknown[]) => Promise<unknown>;
+
+const DEFAULT_MARK_READ_BATCH_SIZE = 50;
+
+export async function markNotificationsReadBatched(
+  notifications: Notification[],
+  opts?: {
+    batchSize?: number;
+    readAt?: string;
+    buildTx?: MarkNotificationReadTxFactory;
+    transact?: MarkNotificationReadTransact;
+  },
+): Promise<number> {
+  const unread = unreadNotifications(notifications);
+  if (!unread.length) return 0;
+
+  const batchSize = Math.max(1, Math.floor(opts?.batchSize ?? DEFAULT_MARK_READ_BATCH_SIZE));
+  const readAt = opts?.readAt ?? nowIso();
+  const buildTx: MarkNotificationReadTxFactory =
+    opts?.buildTx ?? ((notificationId, at) => db.tx.notifications[notificationId].update({ readAt: at }));
+  const transact: MarkNotificationReadTransact =
+    opts?.transact ?? (async (txs) => db.transact(txs as Parameters<typeof db.transact>[0]));
+
+  let processed = 0;
+  for (let i = 0; i < unread.length; i += batchSize) {
+    const txs = unread.slice(i, i + batchSize).map((n) => buildTx(n.id, readAt));
+    if (!txs.length) continue;
+    await transact(txs);
+    processed += txs.length;
+  }
+  return processed;
+}
+
 type AccessNotifType =
   | 'access_manager_requested'
   | 'access_pre_approved'

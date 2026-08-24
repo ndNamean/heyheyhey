@@ -225,6 +225,11 @@ export const sectionsEn = {
     compliance: 'Compliance',
     reviewedBy: 'Reviewed by',
     reportSummary: 'report summary',
+    markSelectedRead: 'Mark selected read',
+    markAllRead: 'Mark all read',
+    confirmMarkAllRead: 'Mark all {count} unread notifications as read?',
+    loadMore: 'Load more',
+    showingOf: 'Showing {shown} of {total}',
   },
   timeline: {
     submitted: 'Submitted',
@@ -1695,6 +1700,11 @@ export const sectionsVi = {
     compliance: 'Tuân thủ',
     reviewedBy: 'Xem xét bởi',
     reportSummary: 'tóm tắt báo cáo',
+    markSelectedRead: 'Đánh dấu mục chọn đã đọc',
+    markAllRead: 'Đánh dấu tất cả đã đọc',
+    confirmMarkAllRead: 'Đánh dấu tất cả {count} thông báo chưa đọc là đã đọc?',
+    loadMore: 'Tải thêm',
+    showingOf: 'Hiển thị {shown} trên {total}',
   },
   timeline: {
     submitted: 'Đã nộp',

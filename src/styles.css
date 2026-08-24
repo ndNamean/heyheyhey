@@ -2218,10 +2218,11 @@ body.wizard-active .page {
 /* ── Feedback inbox ───────────────────────────────────────────────────────── */
 .feedback-inbox-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .dash-sticky-heading .feedback-inbox-header,
@@ -2229,24 +2230,82 @@ body.wizard-active .page {
   margin-bottom: 0;
 }
 
+.feedback-inbox-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 220px;
+}
+
+.feedback-inbox-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 8px;
+}
+
+.feedback-inbox-action {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--accent-stat);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.feedback-inbox-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
 .feedback-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  max-height: min(48vh, 420px);
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.feedback-list-status {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .feedback-item {
-  width: 100%;
-  text-align: left;
   background: var(--input-bg);
   border: 1px solid var(--card-border);
   border-radius: 14px;
-  padding: 14px 16px;
+  padding: 12px 14px;
+}
+
+.feedback-item-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.feedback-item-checkbox {
+  margin: 2px 0 0;
+  flex: 0 0 auto;
+}
+
+.feedback-item-main {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
   color: var(--text-primary);
   min-height: auto;
   font-weight: 400;
   touch-action: manipulation;
   box-shadow: none;
+  padding: 0;
 }
 
 .feedback-item--unread {
@@ -2301,6 +2360,15 @@ body.wizard-active .page {
   line-height: 1.55;
   white-space: pre-wrap;
   color: var(--text-primary);
+}
+
+.feedback-load-more {
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  color: var(--text-primary);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 12px;
 }
 
 .feedback-item-actor,
