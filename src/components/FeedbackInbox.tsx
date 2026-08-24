@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import { statusLabel } from '../lib/i18nUtils';
@@ -93,7 +93,7 @@ export default function FeedbackInbox({
     [useParentData, userId],
   );
 
-  const { data, error: inboxError } = db.useQuery(inboxQuery);
+  const { data } = db.useQuery(inboxQuery);
 
   const all = ((data?.notifications ?? []) as Notification[]).sort((a, b) =>
     (b.createdAt ?? '').localeCompare(a.createdAt ?? ''),
@@ -104,30 +104,6 @@ export default function FeedbackInbox({
   const allEvents = (useParentData ? parentEvents : (data?.reviewEvents ?? [])) as ReviewEvent[];
   const allReports = (useParentData ? parentReports : (data?.reports ?? [])) as Report[];
   const profiles = (useParentData ? parentProfiles : (data?.profiles ?? [])) as Profile[];
-
-  // #region agent log
-  useEffect(() => {
-    const err =
-      inboxError && typeof inboxError === 'object' && 'message' in inboxError
-        ? String((inboxError as { message?: string }).message ?? inboxError).slice(0, 160)
-        : inboxError
-          ? String(inboxError).slice(0, 160)
-          : null;
-    fetch('http://127.0.0.1:7684/ingest/abe69921-6d9b-4724-b65e-e6a4be198993', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0f3690' },
-      body: JSON.stringify({
-        sessionId: '0f3690',
-        hypothesisId: 'A',
-        runId: 'post-fix',
-        location: 'FeedbackInbox.tsx:query',
-        message: 'inbox-instant',
-        data: { slim: useParentData, notifN: all.length, err },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  }, [all.length, inboxError, useParentData]);
-  // #endregion
 
   const reportById = useMemo(() => {
     const map = new Map<string, Report>();
