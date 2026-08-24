@@ -144,10 +144,10 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
     if (reportsData && !reportsError) setHoldDashLive(true);
   }, [reportsData, reportsError]);
   const { data: profilesData } = db.useQuery(profilesQuery);
-  const { data: eventsData } = db.useQuery(eventsQuery);
-  const { data: templatesData } = db.useQuery(templatesQuery);
-  const { data: proposalsData } = db.useQuery(proposalsQuery);
-  const { data: logbookData } = db.useQuery(logbookQuery);
+  const { data: eventsData, error: eventsError } = db.useQuery(eventsQuery);
+  const { data: templatesData, error: templatesError } = db.useQuery(templatesQuery);
+  const { data: proposalsData, error: proposalsError } = db.useQuery(proposalsQuery);
+  const { data: logbookData, error: logbookError } = db.useQuery(logbookQuery);
 
   const queryReports = (reportsData?.reports ?? []) as Report[];
   const queryStores = (reportsData?.stores ?? []) as Store[];
@@ -176,6 +176,57 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
     : lastGoodTemplatesRef.current;
   const allProposals = queryProposals.length ? queryProposals : lastGoodProposalsRef.current;
   const allLogbookEntries = queryLogbook.length ? queryLogbook : lastGoodLogbookRef.current;
+
+  // #region agent log
+  useEffect(() => {
+    const msg = (e: unknown) => {
+      if (!e) return null;
+      if (typeof e === 'object' && e && 'message' in e) {
+        return String((e as { message?: string }).message ?? e).slice(0, 160);
+      }
+      return String(e).slice(0, 160);
+    };
+    fetch('http://127.0.0.1:7684/ingest/abe69921-6d9b-4724-b65e-e6a4be198993', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0f3690' },
+      body: JSON.stringify({
+        sessionId: '0f3690',
+        hypothesisId: 'B',
+        runId: 'post-fix',
+        location: 'DashboardPage.tsx:queries',
+        message: 'dash-instant',
+        data: {
+          holdDashLive,
+          reportsN: queryReports.length,
+          eventsN: queryEvents.length,
+          templatesN: queryTemplates.length,
+          proposalsN: queryProposals.length,
+          logbookN: queryLogbook.length,
+          profilesN: queryProfiles.length,
+          reportsErr: msg(reportsError),
+          eventsErr: msg(eventsError),
+          templatesErr: msg(templatesError),
+          proposalsErr: msg(proposalsError),
+          logbookErr: msg(logbookError),
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+  }, [
+    eventsError,
+    holdDashLive,
+    logbookError,
+    proposalsError,
+    queryEvents.length,
+    queryLogbook.length,
+    queryProfiles.length,
+    queryProposals.length,
+    queryReports.length,
+    queryTemplates.length,
+    reportsError,
+    templatesError,
+  ]);
+  // #endregion
 
   const reports = useMemo(() => {
     let filtered = allReports.filter((r) => r.reportDate >= from && r.reportDate <= to);
@@ -438,6 +489,9 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
         userId={profile.userId}
         title={t.dashboard.teamFeedback}
         stickySection
+        reports={allReports}
+        events={allEvents}
+        profileRecords={profiles as Profile[]}
         onOpenLogbookEntry={(entryId, type, deepLinkFilter) => {
           const entry = allLogbookEntries.find((e) => e.id === entryId);
           if (decideLogbookNotificationClick(type || '', profile, entry, defs) === 'preview') {

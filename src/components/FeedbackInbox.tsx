@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import { statusLabel } from '../lib/i18nUtils';
@@ -52,6 +52,10 @@ interface Props {
   /** When true, wrap in dash-scroll-section (Dashboard only; heading stickiness is owned by the context stack). */
   stickySection?: boolean;
   onOpenLogbookEntry?: (entryId: string, type?: string, deepLinkFilter?: string) => void;
+  /** When the parent already loaded these, skip a second Instant reports/events/avatar receive. */
+  reports?: Report[];
+  events?: ReviewEvent[];
+  profileRecords?: Profile[];
 }
 
 export default function FeedbackInbox({
@@ -60,19 +64,36 @@ export default function FeedbackInbox({
   limit = 15,
   stickySection = false,
   onOpenLogbookEntry,
+  reports: parentReports,
+  events: parentEvents,
+  profileRecords: parentProfiles,
 }: Props) {
   const { t } = useLang();
   const inboxTitle = title ?? t.staffHome.feedback;
   const [expandedReportId, setExpandedReportId] = useState<string | null>(null);
+  const useParentData =
+    parentReports != null && parentEvents != null && parentProfiles != null;
 
-  const { data } = db.useQuery({
-    notifications: {
-      $: { where: { recipientUserId: userId } },
-    },
-    reviewEvents: {},
-    reports: { responses: {} },
-    profiles: { avatarFile: {} },
-  });
+  const inboxQuery = useMemo(
+    () =>
+      useParentData
+        ? {
+            notifications: {
+              $: { where: { recipientUserId: userId } },
+            },
+          }
+        : {
+            notifications: {
+              $: { where: { recipientUserId: userId } },
+            },
+            reviewEvents: {},
+            reports: { responses: {} },
+            profiles: { avatarFile: {} },
+          },
+    [useParentData, userId],
+  );
+
+  const { data, error: inboxError } = db.useQuery(inboxQuery);
 
   const all = ((data?.notifications ?? []) as Notification[]).sort((a, b) =>
     (b.createdAt ?? '').localeCompare(a.createdAt ?? ''),
@@ -80,9 +101,33 @@ export default function FeedbackInbox({
   const notifications = all.slice(0, limit);
   const unreadCount = all.filter((n) => !n.readAt).length;
 
-  const allEvents = (data?.reviewEvents ?? []) as ReviewEvent[];
-  const allReports = (data?.reports ?? []) as Report[];
-  const profiles = (data?.profiles ?? []) as Profile[];
+  const allEvents = (useParentData ? parentEvents : (data?.reviewEvents ?? [])) as ReviewEvent[];
+  const allReports = (useParentData ? parentReports : (data?.reports ?? [])) as Report[];
+  const profiles = (useParentData ? parentProfiles : (data?.profiles ?? [])) as Profile[];
+
+  // #region agent log
+  useEffect(() => {
+    const err =
+      inboxError && typeof inboxError === 'object' && 'message' in inboxError
+        ? String((inboxError as { message?: string }).message ?? inboxError).slice(0, 160)
+        : inboxError
+          ? String(inboxError).slice(0, 160)
+          : null;
+    fetch('http://127.0.0.1:7684/ingest/abe69921-6d9b-4724-b65e-e6a4be198993', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '0f3690' },
+      body: JSON.stringify({
+        sessionId: '0f3690',
+        hypothesisId: 'A',
+        runId: 'post-fix',
+        location: 'FeedbackInbox.tsx:query',
+        message: 'inbox-instant',
+        data: { slim: useParentData, notifN: all.length, err },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+  }, [all.length, inboxError, useParentData]);
+  // #endregion
 
   const reportById = useMemo(() => {
     const map = new Map<string, Report>();
