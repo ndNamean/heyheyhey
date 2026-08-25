@@ -475,13 +475,24 @@ export default function FeedbackInbox({
         )}
       </div>
       <div className="feedback-inbox-actions">
-        <button
-          type="button"
-          className="feedback-inbox-action"
-          onClick={() => setMode((m) => (m === 'unread' ? 'all' : 'unread'))}
-        >
-          {mode === 'unread' ? t.feedback.showAll : t.feedback.unreadOnly}
-        </button>
+        <span className="feedback-inbox-mode" role="group" aria-label={t.feedback.modeLabel}>
+          <button
+            type="button"
+            className={`feedback-inbox-action${mode === 'unread' ? ' is-active' : ''}`}
+            aria-pressed={mode === 'unread'}
+            onClick={() => setMode('unread')}
+          >
+            {t.feedback.unreadOnly}
+          </button>
+          <button
+            type="button"
+            className={`feedback-inbox-action${mode === 'all' ? ' is-active' : ''}`}
+            aria-pressed={mode === 'all'}
+            onClick={() => setMode('all')}
+          >
+            {t.feedback.showAll}
+          </button>
+        </span>
         <button
           type="button"
           className="feedback-inbox-action"

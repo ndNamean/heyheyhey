@@ -106,6 +106,7 @@ vi.mock('../i18n', () => ({
         showingOf: 'Showing {shown}',
         showAll: 'Show all',
         unreadOnly: 'Unread only',
+        modeLabel: 'Inbox mode',
         loading: 'Loading…',
         emptyUnread: "You're all caught up",
         emptyAll: 'No notifications yet',
@@ -173,7 +174,7 @@ describe('FeedbackInbox infinite modes', () => {
     cleanup();
   });
 
-  it('defaults to unread list and toggles to Show all', () => {
+  it('defaults to Unread only mode and can switch to Show all', () => {
     render(
       <FeedbackInbox
         userId="u1"
@@ -183,8 +184,13 @@ describe('FeedbackInbox infinite modes', () => {
       />,
     );
     expect(screen.getByText('Unread one')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Show all' }));
-    expect(screen.getByRole('button', { name: 'Unread only' })).toBeTruthy();
+    const unreadOnly = screen.getByRole('button', { name: 'Unread only' });
+    const showAll = screen.getByRole('button', { name: 'Show all' });
+    expect(unreadOnly.getAttribute('aria-pressed')).toBe('true');
+    expect(showAll.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(showAll);
+    expect(showAll.getAttribute('aria-pressed')).toBe('true');
+    expect(unreadOnly.getAttribute('aria-pressed')).toBe('false');
   });
 
   it('shows Load more when canLoadNextPage and calls loadNextPage', async () => {
