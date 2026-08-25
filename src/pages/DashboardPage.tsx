@@ -114,7 +114,7 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
           },
     [holdDashLive],
   );
-  const profilesQuery = useMemo(() => ({ profiles: { stores: {} } }), []);
+  const profilesQuery = useMemo(() => ({ profiles: { stores: {}, avatarFile: {} } }), []);
   const eventsQuery = useMemo(
     () => (holdDashLive ? { reviewEvents: {} } : null),
     [holdDashLive],

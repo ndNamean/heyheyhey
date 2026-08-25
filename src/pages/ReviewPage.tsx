@@ -289,7 +289,7 @@ export default function ReviewPage({
     [holdReportsLive, reportsQueryPaused, reportsWhere],
   );
 
-  const profilesQuery = useMemo(() => ({ profiles: { stores: {} } }), []);
+  const profilesQuery = useMemo(() => ({ profiles: { stores: {}, avatarFile: {} } }), []);
   const storesQuery = useMemo(() => ({ stores: {} }), []);
 
   const logbookQuery = useMemo(
