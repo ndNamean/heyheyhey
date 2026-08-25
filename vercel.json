@@ -49,9 +49,10 @@
   "rewrites": [
     { "source": "/api/upload-chat-attachment", "destination": "/api/upload-photo?action=chat_attachment" },
     { "source": "/api/media-url", "destination": "/api/image-proxy" },
-    { "source": "/api/notifications/mark-all-read", "destination": "/api/notifications?action=mark-all-read" },
-    { "source": "/api/notifications/reconcile-unread-count", "destination": "/api/notifications?action=reconcile-unread-count" },
-    { "source": "/api/notifications/bump-unread", "destination": "/api/notifications?action=bump-unread" },
+    { "source": "/api/notifications/mark-all-read", "destination": "/api/logbook-notify?action=mark-all-read" },
+    { "source": "/api/notifications/reconcile-unread-count", "destination": "/api/logbook-notify?action=reconcile-unread-count" },
+    { "source": "/api/notifications/bump-unread", "destination": "/api/logbook-notify?action=bump-unread" },
+    { "source": "/api/notifications", "destination": "/api/logbook-notify" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

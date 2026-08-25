@@ -5,8 +5,10 @@
  * - type deliver_event: Logbook inbox + Store Chat
  * - type remind_overdue_chat: once-only overdue Store Chat remind (explicit)
  * - type deliver_report_event: Report Store Chat handoffs (+ mention inbox)
+ * - action/type mark-all-read | reconcile-unread-count | bump-unread: Team Feedback counter
  *
  * Kept as one function so Hobby stays under the serverless function limit.
+ * Inbox counter routes are rewritten from /api/notifications* (no extra Lambda).
  */
 
 import { id } from '@instantdb/admin';
@@ -19,7 +21,12 @@ import {
   verifyRequestUser,
 } from './_lib/export/auth.js';
 import { deliverPushForNotificationIds } from './_lib/push/deliver-notifications.js';
-import { appendUnreadCountIncrementTxs } from './_lib/notifications/unread-count.js';
+import {
+  appendUnreadCountIncrementTxs,
+  applyUnreadCountDeltas,
+  markAllUnreadRead,
+  reconcileUnreadCount,
+} from './_lib/notifications/unread-count.js';
 import {
   buildNormalizedLogbookNotification,
   chatDeliveryKey,
@@ -1367,7 +1374,32 @@ async function deliverReportEvent(req, res, adminDb, actor, body) {
   });
 }
 
+function inboxCounterAction(req, body) {
+  const q = req.query?.action;
+  if (typeof q === 'string' && q.trim()) return q.trim();
+  if (Array.isArray(q) && q[0]) return String(q[0]).trim();
+  if (body && typeof body.action === 'string' && body.action.trim()) {
+    return body.action.trim();
+  }
+  const type = String(body?.type || '').trim();
+  if (
+    type === 'mark-all-read' ||
+    type === 'reconcile-unread-count' ||
+    type === 'bump-unread'
+  ) {
+    return type;
+  }
+  const url = String(req.url || '');
+  if (url.includes('mark-all-read')) return 'mark-all-read';
+  if (url.includes('reconcile-unread-count')) return 'reconcile-unread-count';
+  if (url.includes('bump-unread')) return 'bump-unread';
+  return '';
+}
+
 export default async function handler(req, res) {
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -1391,8 +1423,62 @@ export default async function handler(req, res) {
   }
 
   const body = parseBody(req.body) || {};
-  const type = String(body.type || '').trim();
   const adminDb = getAdminDb();
+  const counterAction = inboxCounterAction(req, body);
+
+  if (counterAction === 'mark-all-read') {
+    try {
+      const result = await markAllUnreadRead(adminDb, actor.userId);
+      return res.status(200).json({ ok: true, marked: result.marked });
+    } catch (e) {
+      return res.status(e?.status || 500).json({
+        error: e instanceof Error ? e.message : 'Mark all failed',
+      });
+    }
+  }
+
+  if (counterAction === 'reconcile-unread-count') {
+    try {
+      const result = await reconcileUnreadCount(adminDb, actor.userId);
+      return res.status(200).json({ ok: true, unreadCount: result.unreadCount });
+    } catch (e) {
+      return res.status(e?.status || 500).json({
+        error: e instanceof Error ? e.message : 'Reconcile failed',
+      });
+    }
+  }
+
+  if (counterAction === 'bump-unread') {
+    try {
+      const deltas = body.deltas && typeof body.deltas === 'object' ? body.deltas : null;
+      const recipientUserIds = Array.isArray(body.recipientUserIds)
+        ? body.recipientUserIds
+        : null;
+      if (!deltas && !recipientUserIds) {
+        return res.status(400).json({ error: 'deltas or recipientUserIds required' });
+      }
+      const result = deltas
+        ? await applyUnreadCountDeltas(adminDb, deltas)
+        : await applyUnreadCountDeltas(
+            adminDb,
+            Object.fromEntries(
+              [...recipientUserIds].reduce((m, uid) => {
+                const k = String(uid ?? '').trim();
+                if (!k) return m;
+                m.set(k, (m.get(k) ?? 0) + 1);
+                return m;
+              }, new Map()),
+            ),
+          );
+      return res.status(200).json({ ok: true, bumped: result.bumped });
+    } catch (e) {
+      return res.status(e?.status || 500).json({
+        error: e instanceof Error ? e.message : 'Bump unread failed',
+      });
+    }
+  }
+
+  const type = String(body.type || '').trim();
 
   if (type === 'submit_resolution') {
     return handleSubmitResolution(req, res, adminDb, actor, body);
