@@ -30,6 +30,11 @@ import {
 import { deliverLogbookEvent } from '../lib/logbookNotifyClient';
 import { deliverReportEvent } from '../lib/reportNotifyClient';
 import { resolveActorDisplay } from '../lib/actorDisplay';
+import {
+  buildSubmitterNeedsActionEdgeTxs,
+  computeSubmitterNeedsAction,
+  readSubmitterNeedsAction,
+} from '../lib/reportNeedsAction';
 import { badgeClass, nowIso } from '../lib/utils';
 import {
   clearReviewFilterChip,
@@ -661,6 +666,19 @@ export default function ReviewPage({
 
     const now = nowIso();
     const responses = (report.responses ?? []) as ReportResponse[];
+    const patchedResponses = responses.map((r) =>
+      r.id === response.id
+        ? {
+            ...r,
+            status,
+            rejectionReason: reason,
+            feedbackCode: feedback?.feedbackCode ?? '',
+            feedbackNote: feedback?.feedbackNote ?? '',
+          }
+        : r,
+    );
+    const prevNeedsAction = readSubmitterNeedsAction(report);
+    const nextNeedsAction = computeSubmitterNeedsAction(report.status, patchedResponses);
     const notificationTxs = buildItemReviewNotifications(
       report,
       response,
@@ -670,6 +688,13 @@ export default function ReviewPage({
       allProfiles,
       responses,
       defs,
+    );
+    const needsActionEdgeTxs = await buildSubmitterNeedsActionEdgeTxs(
+      report.submittedByUserId,
+      prevNeedsAction,
+      nextNeedsAction,
+      null,
+      { now },
     );
 
     await db.transact([
@@ -684,12 +709,16 @@ export default function ReviewPage({
         // Lazy backfill storeId on legacy responses so Instant store-scoped rules apply.
         ...(!response.storeId && report.storeId ? { storeId: report.storeId } : {}),
       }),
+      db.tx.reports[report.id].update({
+        submitterNeedsAction: nextNeedsAction,
+      }),
       buildItemReviewEvent(report, response, status, reason, profile, now, {
         feedbackCode: feedback?.feedbackCode,
         feedbackNote: feedback?.feedbackNote,
       }),
       ...notificationTxs,
-    ]);
+      ...needsActionEdgeTxs,
+    ] as Parameters<typeof db.transact>[0]);
     schedulePushDeliveryFromTxs(notificationTxs);
 
     keepReviewCardFocused(report.id);
@@ -789,17 +818,29 @@ export default function ReviewPage({
       responses,
       defs,
     );
+    const now = nowIso();
+    const nextNeedsAction = newStatus === 'rejected' || newStatus === 'need_correction';
+    const prevNeedsAction = readSubmitterNeedsAction(report);
+    const needsActionEdgeTxs = await buildSubmitterNeedsActionEdgeTxs(
+      report.submittedByUserId,
+      prevNeedsAction,
+      nextNeedsAction,
+      null,
+      { now },
+    );
 
     try {
       await db.transact([
         db.tx.reports[report.id].update({
           status: newStatus,
           compliancePercent,
-          updatedAt: nowIso(),
+          submitterNeedsAction: nextNeedsAction,
+          updatedAt: now,
         }),
-        buildReportFinalizedEvent(report, newStatus, profile, nowIso()),
+        buildReportFinalizedEvent(report, newStatus, profile, now),
         ...notificationTxs,
-      ]);
+        ...needsActionEdgeTxs,
+      ] as Parameters<typeof db.transact>[0]);
     } catch (e) {
       alert(e instanceof Error ? e.message : t.review.loadError);
       return;
@@ -809,7 +850,7 @@ export default function ReviewPage({
     // Closing Store Chat card for approved + issues; server skips issues when
     // action_required already delivered this cycle, and skips waiting_approval.
     const cycleKey =
-      String(report.updatedAt || report.submittedAt || nowIso()).trim() || nowIso();
+      String(report.updatedAt || report.submittedAt || now).trim() || now;
     void deliverReportEvent({
       reportId: report.id,
       eventType: 'report_finalized',

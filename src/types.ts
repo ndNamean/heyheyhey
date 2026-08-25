@@ -558,6 +558,8 @@ export interface Report {
   submittedByRole: string;
   submittedAt: string;
   status: ReportStatus;
+  /** Denormalized My Reports Needs action (report status OR any flagged response). */
+  submitterNeedsAction?: boolean;
   completionPercent: number;
   compliancePercent: number;
   archived: boolean;
@@ -872,6 +874,14 @@ export interface NotificationUnreadCount {
   id: string;
   userId: string;
   unreadCount: number;
+  updatedAt: string;
+}
+
+/** Per-user My Reports Needs action badge counter (reportNeedsActionCounts entity). */
+export interface ReportNeedsActionCount {
+  id: string;
+  userId: string;
+  needsActionCount: number;
   updatedAt: string;
 }
 

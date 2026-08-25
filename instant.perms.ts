@@ -214,9 +214,9 @@ const rules = {
       reportOpenForCorrection:
         "data.status == 'waiting_approval' || data.status == 'need_correction' || data.status == 'rejected'",
       onlyReportResubmitFields:
-        "request.modifiedFields.all(f, f in ['status', 'completionPercent', 'updatedAt'])",
+        "request.modifiedFields.all(f, f in ['status', 'completionPercent', 'updatedAt', 'submitterNeedsAction'])",
       onlyReportSubmitFields:
-        "request.modifiedFields.all(f, f in ['storeId', 'storeCode', 'storeName', 'templateId', 'templateName', 'reportType', 'reportDate', 'submittedByUserId', 'submittedByRole', 'submittedAt', 'status', 'completionPercent', 'compliancePercent', 'archived', 'archiveMonth', 'createdAt', 'updatedAt'])",
+        "request.modifiedFields.all(f, f in ['storeId', 'storeCode', 'storeName', 'templateId', 'templateName', 'reportType', 'reportDate', 'submittedByUserId', 'submittedByRole', 'submittedAt', 'status', 'submitterNeedsAction', 'completionPercent', 'compliancePercent', 'archived', 'archiveMonth', 'createdAt', 'updatedAt'])",
       canSubmitterUpdateReport:
         'isReportSubmitter && reportOpenForCorrection && onlyReportResubmitFields',
       canSubmitterSubmitReport: 'isApproved && onlyReportSubmitFields',
@@ -481,6 +481,23 @@ const rules = {
       ...LEGACY_BIND,
       onlyCountFields:
         "request.modifiedFields.all(f, f in ['unreadCount', 'updatedAt'])",
+    },
+  },
+
+  // ── Per-user My Reports Needs Action counters (badge) ─────────────────────
+  // View own row. Owner (resubmit) or reviewers (item/Finalise edge) may upsert
+  // needsActionCount in the same Instant tx as reports.submitterNeedsAction.
+  reportNeedsActionCounts: {
+    allow: {
+      view: 'isApproved && data.userId == auth.id',
+      create: 'isApproved && (data.userId == auth.id || canReview)',
+      update: 'isApproved && onlyCountFields && (data.userId == auth.id || canReview)',
+      delete: 'false',
+    },
+    bind: {
+      ...LEGACY_BIND,
+      onlyCountFields:
+        "request.modifiedFields.all(f, f in ['needsActionCount', 'updatedAt'])",
     },
   },
 

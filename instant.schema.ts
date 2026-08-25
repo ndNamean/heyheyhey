@@ -114,8 +114,11 @@ const _schema = i.schema({
       reportDate: i.string().indexed(),
       submittedByUserId: i.string().indexed(),
       submittedByRole: i.string(),
-      submittedAt: i.string(),
+      submittedAt: i.string().indexed(),
       status: i.string().indexed(),        // waiting_approval|approved|rejected|need_correction
+      // Denormalized My Reports "Needs action" (report status OR any flagged response).
+      // Required: item reject/correction does not update report.status until Finalise.
+      submitterNeedsAction: i.boolean().indexed().clientRequired(),
       completionPercent: i.number(),
       compliancePercent: i.number(),
       archived: i.boolean(),
@@ -404,6 +407,13 @@ const _schema = i.schema({
     notificationUnreadCounts: i.entity({
       userId: i.string().unique().indexed(),
       unreadCount: i.number(),
+      updatedAt: i.string(),
+    }),
+
+    // Per-user My Reports "Needs action" badge counter (no Instant native count aggregate).
+    reportNeedsActionCounts: i.entity({
+      userId: i.string().unique().indexed(),
+      needsActionCount: i.number(),
       updatedAt: i.string(),
     }),
 

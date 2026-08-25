@@ -6,6 +6,7 @@
  * - type remind_overdue_chat: once-only overdue Store Chat remind (explicit)
  * - type deliver_report_event: Report Store Chat handoffs (+ mention inbox)
  * - action/type mark-all-read | reconcile-unread-count | bump-unread: Team Feedback counter
+ * - action/type reconcile-report-needs-action: My Reports Needs action flag + counter
  *
  * Kept as one function so Hobby stays under the serverless function limit.
  * Inbox counter routes are rewritten from /api/notifications* (no extra Lambda).
@@ -27,6 +28,7 @@ import {
   markAllUnreadRead,
   reconcileUnreadCount,
 } from './_lib/notifications/unread-count.js';
+import { reconcileReportNeedsActionCount } from './_lib/reports/needs-action-count.js';
 import {
   buildNormalizedLogbookNotification,
   chatDeliveryKey,
@@ -1385,7 +1387,8 @@ function inboxCounterAction(req, body) {
   if (
     type === 'mark-all-read' ||
     type === 'reconcile-unread-count' ||
-    type === 'bump-unread'
+    type === 'bump-unread' ||
+    type === 'reconcile-report-needs-action'
   ) {
     return type;
   }
@@ -1393,6 +1396,7 @@ function inboxCounterAction(req, body) {
   if (url.includes('mark-all-read')) return 'mark-all-read';
   if (url.includes('reconcile-unread-count')) return 'reconcile-unread-count';
   if (url.includes('bump-unread')) return 'bump-unread';
+  if (url.includes('reconcile-report-needs-action')) return 'reconcile-report-needs-action';
   return '';
 }
 
@@ -1474,6 +1478,21 @@ export default async function handler(req, res) {
     } catch (e) {
       return res.status(e?.status || 500).json({
         error: e instanceof Error ? e.message : 'Bump unread failed',
+      });
+    }
+  }
+
+  if (counterAction === 'reconcile-report-needs-action') {
+    try {
+      const result = await reconcileReportNeedsActionCount(adminDb, actor.userId);
+      return res.status(200).json({
+        ok: true,
+        needsActionCount: result.needsActionCount,
+        reportsUpdated: result.reportsUpdated,
+      });
+    } catch (e) {
+      return res.status(e?.status || 500).json({
+        error: e instanceof Error ? e.message : 'Reconcile report needs action failed',
       });
     }
   }

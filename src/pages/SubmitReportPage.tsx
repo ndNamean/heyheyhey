@@ -18,6 +18,10 @@ import {
 } from '../lib/reviewEvents';
 import { deliverReportEvent } from '../lib/reportNotifyClient';
 import {
+  buildSubmitterNeedsActionEdgeTxs,
+  readSubmitterNeedsAction,
+} from '../lib/reportNeedsAction';
+import {
   buildScheduleCaptureForItem,
   findDuplicateOccurrenceKeys,
   parseTemplateSchedule,
@@ -451,6 +455,7 @@ export default function SubmitReportPage({
           submittedByRole: profile.role,
           submittedAt: now,
           status: 'waiting_approval',
+          submitterNeedsAction: false,
           completionPercent,
           compliancePercent: 0,
           archived: false,
@@ -578,8 +583,10 @@ export default function SubmitReportPage({
         mergedResponses.map((r) => ({ ticked: r.ticked, required: r.required })),
       );
 
+      const prevNeedsAction = readSubmitterNeedsAction(correctionReport);
       const reportTx = db.tx.reports[correctionReport.id].update({
         status: 'waiting_approval',
+        submitterNeedsAction: false,
         completionPercent,
         updatedAt: now,
       });
@@ -603,8 +610,21 @@ export default function SubmitReportPage({
         resubmittedItems,
         now,
       );
+      const needsActionEdgeTxs = await buildSubmitterNeedsActionEdgeTxs(
+        profile.userId,
+        prevNeedsAction,
+        false,
+        null,
+        { now },
+      );
 
-      await db.transact([reportTx, ...responseUpdateTxs, ...mediaLinkTxs, ...reviewEventTxs]);
+      await db.transact([
+        reportTx,
+        ...responseUpdateTxs,
+        ...mediaLinkTxs,
+        ...reviewEventTxs,
+        ...needsActionEdgeTxs,
+      ] as Parameters<typeof db.transact>[0]);
       const notify = await deliverReportEvent({
         reportId: correctionReport.id,
         eventType: 'report_submitted',
