@@ -19,6 +19,7 @@ import {
   verifyRequestUser,
 } from './_lib/export/auth.js';
 import { deliverPushForNotificationIds } from './_lib/push/deliver-notifications.js';
+import { appendUnreadCountIncrementTxs } from './_lib/notifications/unread-count.js';
 import {
   buildNormalizedLogbookNotification,
   chatDeliveryKey,
@@ -98,6 +99,13 @@ function schedulePushAfterNotify(txs) {
   void deliverPushForNotificationIds(ids).catch((err) => {
     console.warn('[logbook-notify] push deliver skipped', err?.message || err);
   });
+}
+
+/** Inbox create + per-recipient unread counter bump in one Admin transact. */
+async function transactInboxWithUnreadBump(adminDb, inboxTxs) {
+  if (!inboxTxs?.length) return;
+  const bumps = await appendUnreadCountIncrementTxs(adminDb, inboxTxs);
+  await adminDb.transact([...inboxTxs, ...bumps]);
 }
 
 function emptyLogbookNotifFields(storeId, entryId, actionStatus) {
@@ -592,7 +600,7 @@ async function deliverEvent(req, res, adminDb, actor, body) {
   }
 
   if (inboxTxs.length) {
-    await adminDb.transact(inboxTxs);
+    await transactInboxWithUnreadBump(adminDb, inboxTxs);
   }
 
   if (eventType === 'overdue') {
@@ -798,7 +806,7 @@ async function deliverEvent(req, res, adminDb, actor, body) {
       );
     }
     if (extraTxs.length) {
-      await adminDb.transact(extraTxs);
+      await transactInboxWithUnreadBump(adminDb, extraTxs);
       void deliverPushForNotificationIds(extraIds, { adminDb }).catch((err) => {
         console.warn(
           '[logbook-notify] leadership oversight push skipped',
@@ -1339,7 +1347,7 @@ async function deliverReportEvent(req, res, adminDb, actor, body) {
     );
   }
   if (mentionTxs.length) {
-    await adminDb.transact(mentionTxs);
+    await transactInboxWithUnreadBump(adminDb, mentionTxs);
     void deliverPushForNotificationIds(notificationIds, { adminDb }).catch(
       (err) => {
         console.warn(
@@ -1510,7 +1518,7 @@ export default async function handler(req, res) {
     );
 
     if (txs.length) {
-      await adminDb.transact(txs);
+      await transactInboxWithUnreadBump(adminDb, txs);
       schedulePushAfterNotify(txs);
     }
     return res.status(200).json({ ok: true, created: txs.length });
@@ -1544,7 +1552,7 @@ export default async function handler(req, res) {
       }),
     );
     if (txs.length) {
-      await adminDb.transact(txs);
+      await transactInboxWithUnreadBump(adminDb, txs);
       schedulePushAfterNotify(txs);
     }
     return res.status(200).json({ ok: true, created: txs.length });
@@ -1580,7 +1588,7 @@ export default async function handler(req, res) {
       }),
     );
     if (txs.length) {
-      await adminDb.transact(txs);
+      await transactInboxWithUnreadBump(adminDb, txs);
       schedulePushAfterNotify(txs);
     }
     return res.status(200).json({ ok: true, created: txs.length });

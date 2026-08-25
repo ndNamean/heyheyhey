@@ -867,6 +867,14 @@ export interface Notification {
   deepLinkJson?: string;
 }
 
+/** Per-user unread badge counter (notificationUnreadCounts entity). */
+export interface NotificationUnreadCount {
+  id: string;
+  userId: string;
+  unreadCount: number;
+  updatedAt: string;
+}
+
 export type StoreChatMessageType =
   | 'text'
   | 'giphy_media'

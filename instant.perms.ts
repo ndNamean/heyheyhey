@@ -467,6 +467,23 @@ const rules = {
     },
   },
 
+  // ── Per-user unread notification counters (badge) ─────────────────────────
+  // View own row; owner may update unreadCount/updatedAt for mark-read decrements.
+  // Create-path bumps and mark-all zeroing also use Admin SDK.
+  notificationUnreadCounts: {
+    allow: {
+      view: 'isApproved && data.userId == auth.id',
+      create: 'isApproved && data.userId == auth.id',
+      update: 'isApproved && data.userId == auth.id && onlyCountFields',
+      delete: 'false',
+    },
+    bind: {
+      ...LEGACY_BIND,
+      onlyCountFields:
+        "request.modifiedFields.all(f, f in ['unreadCount', 'updatedAt'])",
+    },
+  },
+
   // ── Checklist item proposals ──────────────────────────────────────────────
   checklistItemProposals: {
     allow: {

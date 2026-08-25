@@ -30,6 +30,7 @@ import {
   inviteRemindDeliveryKey,
   nextInviteExpiresAt,
 } from './remind.js';
+import { appendUnreadCountIncrementTxs } from '../notifications/unread-count.js';
 import {
   isReservedStoreOpsLeadershipSimilarNameKey,
   leadershipLifecycleForbidden,
@@ -46,6 +47,12 @@ function httpError(status, message) {
   const err = new Error(message);
   err.status = status;
   return err;
+}
+
+async function transactWithUnreadBump(adminDb, txs) {
+  if (!txs?.length) return;
+  const bumps = await appendUnreadCountIncrementTxs(adminDb, txs);
+  await adminDb.transact([...txs, ...bumps]);
 }
 
 async function requireApprovedUser(req) {
@@ -301,7 +308,7 @@ async function createRoom(req, res) {
     );
   }
 
-  await adminDb.transact(txs);
+  await transactWithUnreadBump(adminDb, txs);
   return res.status(200).json({
     ok: true,
     roomId,
@@ -395,7 +402,7 @@ async function inviteMembers(req, res) {
     );
   }
 
-  if (txs.length) await adminDb.transact(txs);
+  if (txs.length) await transactWithUnreadBump(adminDb, txs);
   return res.status(200).json({ ok: true, invites: invitesOut, historyDisclosure: 'full' });
 }
 
@@ -568,7 +575,7 @@ async function remindInvite(req, res) {
   const nowMs = Date.now();
   const expiresAt = nextInviteExpiresAt(nowMs);
 
-  await adminDb.transact([
+  await transactWithUnreadBump(adminDb, [
     adminDb.tx.groupChatInvites[inviteId].update({ expiresAt }),
     adminDb.tx.notifications[id()].update(
       buildInviteNotification({

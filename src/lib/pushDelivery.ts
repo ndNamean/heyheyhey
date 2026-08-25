@@ -30,8 +30,15 @@ export function extractNotificationIdsFromTxs(txs: unknown[]): string[] {
 /** After successful db.transact of notification txs — never throws to caller. */
 export function schedulePushDeliveryFromTxs(txs: unknown[]): void {
   const ids = extractNotificationIdsFromTxs(txs);
-  if (!ids.length) return;
-  void requestPushDelivery(ids);
+  if (ids.length) void requestPushDelivery(ids);
+  // Lazy import avoids pulling Instant client into node unit tests.
+  void import('./notificationUnreadCount')
+    .then(({ scheduleUnreadCountBumpFromTxs }) => {
+      scheduleUnreadCountBumpFromTxs(txs);
+    })
+    .catch(() => {
+      /* badge drift fixed by reconcile */
+    });
 }
 
 export function schedulePushDelivery(notificationIds: string[]): void {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import { statusLabel } from '../lib/i18nUtils';
@@ -10,6 +10,14 @@ import {
   markNotificationsReadBatched,
   isStoreChatMentionNotificationType,
 } from '../lib/notifications';
+import {
+  NOTIFICATION_PAGE_SIZE,
+  buildOwnUnreadDecrementTxs,
+  markAllNotificationsReadViaApi,
+  reconcileOwnUnreadCount,
+  type UnreadCountRow,
+} from '../lib/notificationUnreadCount';
+import { useNotificationUnreadCount } from '../hooks/useNotificationUnreadCount';
 import ReportTimeline from './ReportTimeline';
 import IdentityWithAvatar from './profileAvatar/IdentityWithAvatar';
 import { LinkifiedText } from './LinkifiedText';
@@ -46,9 +54,12 @@ function parseGroupChatDeepLink(deepLinkJson: string | undefined): OpenGroupChat
   }
 }
 
+type InboxMode = 'unread' | 'all';
+
 interface Props {
   userId: string;
   title?: string;
+  /** @deprecated Page size is fixed at 15 via Instant infinite query. */
   limit?: number;
   /** When true, wrap in dash-scroll-section (Dashboard only; heading stickiness is owned by the context stack). */
   stickySection?: boolean;
@@ -59,13 +70,20 @@ interface Props {
   profileRecords?: Profile[];
 }
 
-const WINDOW_SIZE = 30;
-const LOAD_MORE_THRESHOLD_PX = 80;
+function dedupeById<T extends { id: string }>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const row of rows) {
+    if (!row?.id || seen.has(row.id)) continue;
+    seen.add(row.id);
+    out.push(row);
+  }
+  return out;
+}
 
 export default function FeedbackInbox({
   userId,
   title,
-  limit = 15,
   stickySection = false,
   onOpenLogbookEntry,
   reports: parentReports,
@@ -74,55 +92,132 @@ export default function FeedbackInbox({
 }: Props) {
   const { t } = useLang();
   const inboxTitle = title ?? t.staffHome.feedback;
-  const initialVisibleCount = Math.max(WINDOW_SIZE, limit);
+  const [mode, setMode] = useState<InboxMode>('unread');
   const [expandedReportId, setExpandedReportId] = useState<string | null>(null);
-  const [visibleCount, setVisibleCount] = useState(initialVisibleCount);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isMarkingSelected, setIsMarkingSelected] = useState(false);
   const [isMarkingAll, setIsMarkingAll] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState(false);
+  const [optimisticReadAt, setOptimisticReadAt] = useState<Record<string, string>>({});
+  const [hiddenUnreadIds, setHiddenUnreadIds] = useState<Set<string>>(new Set());
+  const reconciledRef = useRef(false);
+
   const useParentData =
     parentReports != null && parentEvents != null && parentProfiles != null;
 
-  const inboxQuery = useMemo(
-    () =>
-      useParentData
-        ? {
-            notifications: {
-              $: { where: { recipientUserId: userId } },
-            },
-          }
-        : {
-            notifications: {
-              $: { where: { recipientUserId: userId } },
-            },
-            reviewEvents: {},
-            reports: { responses: {} },
-            profiles: { avatarFile: {} },
-          },
-    [useParentData, userId],
+  const { unreadCount, row: unreadRow } = useNotificationUnreadCount(userId);
+
+  const infiniteQuery = useMemo(
+    () => ({
+      notifications: {
+        $: {
+          where:
+            mode === 'unread'
+              ? { recipientUserId: userId, readAt: '' }
+              : { recipientUserId: userId },
+          order: { createdAt: 'desc' as const },
+          limit: NOTIFICATION_PAGE_SIZE,
+        },
+      },
+    }),
+    [mode, userId],
   );
 
-  const { data } = db.useQuery(inboxQuery);
+  const {
+    data: pageData,
+    isLoading: listLoading,
+    canLoadNextPage,
+    loadNextPage,
+    error: listError,
+  } = db.useInfiniteQuery(infiniteQuery);
 
-  const all = ((data?.notifications ?? []) as Notification[]).sort((a, b) =>
-    (b.createdAt ?? '').localeCompare(a.createdAt ?? ''),
+  const serverNotifications = useMemo(
+    () => dedupeById((pageData?.notifications ?? []) as Notification[]),
+    [pageData?.notifications],
   );
-  const notifications = all.slice(0, visibleCount);
-  const unreadCount = all.filter((n) => !n.readAt).length;
-  const loadedUnreadIds = useMemo(
-    () => notifications.filter((n) => !n.readAt).map((n) => n.id),
-    [notifications],
-  );
-  const loadedUnreadSet = useMemo(() => new Set(loadedUnreadIds), [loadedUnreadIds]);
-  const selectedLoadedUnreadIds = useMemo(
-    () => loadedUnreadIds.filter((id) => selectedIds.has(id)),
-    [loadedUnreadIds, selectedIds],
-  );
-  const hasMore = visibleCount < all.length;
 
-  const allEvents = (useParentData ? parentEvents : (data?.reviewEvents ?? [])) as ReviewEvent[];
-  const allReports = (useParentData ? parentReports : (data?.reports ?? [])) as Report[];
-  const profiles = (useParentData ? parentProfiles : (data?.profiles ?? [])) as Profile[];
+  const notifications = useMemo(() => {
+    const patched = serverNotifications.map((n) => {
+      const opt = optimisticReadAt[n.id];
+      if (!opt) return n;
+      return { ...n, readAt: n.readAt || opt };
+    });
+    if (mode === 'unread') {
+      return patched.filter((n) => !hiddenUnreadIds.has(n.id) && !n.readAt);
+    }
+    return patched;
+  }, [serverNotifications, optimisticReadAt, hiddenUnreadIds, mode]);
+
+  const reportIdsForSupport = useMemo(() => {
+    const ids = new Set<string>();
+    for (const n of notifications) {
+      if (!n.reportId) continue;
+      if (isLogbookNotificationType(n.type)) continue;
+      if (isStoreChatMentionNotificationType(n.type)) continue;
+      if (isGroupChatMentionNotificationType(n.type)) continue;
+      ids.add(n.reportId);
+    }
+    return [...ids];
+  }, [notifications]);
+
+  const actorUserIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const n of notifications) {
+      if (n.actorUserId) ids.add(n.actorUserId);
+    }
+    return [...ids];
+  }, [notifications]);
+
+  const supportQuery = useMemo(() => {
+    if (useParentData) return null;
+    const q: {
+      reports?: {
+        $: { where: { id: { $in: string[] } } };
+        responses: Record<string, never>;
+      };
+      reviewEvents?: {
+        $: { where: { reportId: { $in: string[] } } };
+      };
+      profiles?: {
+        $: { where: { userId: { $in: string[] } } };
+        avatarFile: Record<string, never>;
+      };
+    } = {};
+    if (reportIdsForSupport.length) {
+      q.reports = {
+        $: { where: { id: { $in: reportIdsForSupport } } },
+        responses: {},
+      };
+      q.reviewEvents = {
+        $: { where: { reportId: { $in: reportIdsForSupport } } },
+      };
+    }
+    if (actorUserIds.length) {
+      q.profiles = {
+        $: { where: { userId: { $in: actorUserIds } } },
+        avatarFile: {},
+      };
+    }
+    return Object.keys(q).length ? q : null;
+  }, [useParentData, reportIdsForSupport, actorUserIds]);
+
+  // Instant query typing is strict; cast for dynamic $in support queries.
+  const { data: supportData } = db.useQuery(
+    supportQuery as Parameters<typeof db.useQuery>[0],
+  );
+
+  const support = supportData as
+    | {
+        reviewEvents?: ReviewEvent[];
+        reports?: Report[];
+        profiles?: Profile[];
+      }
+    | undefined;
+
+  const allEvents = (useParentData ? parentEvents : (support?.reviewEvents ?? [])) as ReviewEvent[];
+  const allReports = (useParentData ? parentReports : (support?.reports ?? [])) as Report[];
+  const profiles = (useParentData ? parentProfiles : (support?.profiles ?? [])) as Profile[];
 
   const reportById = useMemo(() => {
     const map = new Map<string, Report>();
@@ -143,7 +238,7 @@ export default function FeedbackInbox({
 
   const notifsByReportId = useMemo(() => {
     const map = new Map<string, Notification[]>();
-    for (const n of all) {
+    for (const n of notifications) {
       if (!n.reportId || isLogbookNotificationType(n.type)) continue;
       if (isStoreChatMentionNotificationType(n.type)) continue;
       if (isGroupChatMentionNotificationType(n.type)) continue;
@@ -152,21 +247,25 @@ export default function FeedbackInbox({
       map.set(n.reportId, list);
     }
     return map;
-  }, [all]);
+  }, [notifications]);
 
-  async function markRead(n: Notification) {
-    if (n.readAt) return;
-    await db.transact(db.tx.notifications[n.id].update({ readAt: nowIso() }));
-  }
+  const loadedUnreadIds = useMemo(
+    () => notifications.filter((n) => !n.readAt).map((n) => n.id),
+    [notifications],
+  );
+  const loadedUnreadSet = useMemo(() => new Set(loadedUnreadIds), [loadedUnreadIds]);
+  const selectedLoadedUnreadIds = useMemo(
+    () => loadedUnreadIds.filter((id) => selectedIds.has(id)),
+    [loadedUnreadIds, selectedIds],
+  );
 
   useEffect(() => {
-    setVisibleCount(initialVisibleCount);
     setSelectedIds(new Set());
-  }, [userId, initialVisibleCount]);
-
-  useEffect(() => {
-    setVisibleCount((prev) => Math.min(Math.max(prev, initialVisibleCount), all.length || initialVisibleCount));
-  }, [all.length, initialVisibleCount]);
+    setOptimisticReadAt({});
+    setHiddenUnreadIds(new Set());
+    setLoadMoreError(false);
+    setExpandedReportId(null);
+  }, [userId, mode]);
 
   useEffect(() => {
     setSelectedIds((prev) => {
@@ -178,6 +277,83 @@ export default function FeedbackInbox({
       return next.size === prev.size ? prev : next;
     });
   }, [loadedUnreadSet]);
+
+  useEffect(() => {
+    if (!userId || reconciledRef.current) return;
+    if (unreadRow) {
+      reconciledRef.current = true;
+      return;
+    }
+    reconciledRef.current = true;
+    void reconcileOwnUnreadCount();
+  }, [userId, unreadRow]);
+
+  async function applyMarkRead(targets: Notification[]) {
+    const unread = targets.filter((n) => !n.readAt);
+    if (!unread.length) return;
+    const readAt = nowIso();
+    const ids = unread.map((n) => n.id);
+
+    setOptimisticReadAt((prev) => {
+      const next = { ...prev };
+      for (const id of ids) next[id] = readAt;
+      return next;
+    });
+    if (mode === 'unread') {
+      setHiddenUnreadIds((prev) => {
+        const next = new Set(prev);
+        for (const id of ids) next.add(id);
+        return next;
+      });
+    }
+
+    try {
+      const decrementTxs = await buildOwnUnreadDecrementTxs(
+        userId,
+        unread.length,
+        unreadRow as UnreadCountRow | null,
+      );
+      await markNotificationsReadBatched(unread, {
+        readAt,
+        transact: async (txs) => {
+          const chunks = [
+            ...(Array.isArray(txs) ? txs : [txs]),
+            ...decrementTxs,
+          ] as Parameters<typeof db.transact>[0];
+          await db.transact(chunks);
+        },
+      });
+      setSelectedIds((prev) => {
+        if (!prev.size) return prev;
+        const next = new Set(prev);
+        for (const id of ids) next.delete(id);
+        return next;
+      });
+    } catch {
+      setOptimisticReadAt((prev) => {
+        const next = { ...prev };
+        for (const id of ids) delete next[id];
+        return next;
+      });
+      if (mode === 'unread') {
+        setHiddenUnreadIds((prev) => {
+          const next = new Set(prev);
+          for (const id of ids) next.delete(id);
+          return next;
+        });
+      }
+      throw new Error('mark-read-failed');
+    }
+  }
+
+  async function markRead(n: Notification) {
+    if (n.readAt) return;
+    try {
+      await applyMarkRead([n]);
+    } catch {
+      /* optimistic rolled back */
+    }
+  }
 
   function toggleTimeline(reportId: string, e: React.MouseEvent) {
     e.stopPropagation();
@@ -237,17 +413,28 @@ export default function FeedbackInbox({
     setSelectedIds(new Set());
   }
 
-  function showMore() {
-    setVisibleCount((prev) => Math.min(prev + WINDOW_SIZE, all.length));
+  async function handleLoadMore() {
+    if (!canLoadNextPage || isLoadingMore || typeof loadNextPage !== 'function') return;
+    setIsLoadingMore(true);
+    setLoadMoreError(false);
+    try {
+      await Promise.resolve(loadNextPage());
+    } catch {
+      setLoadMoreError(true);
+    } finally {
+      setIsLoadingMore(false);
+    }
   }
 
   async function handleMarkSelectedRead() {
     if (!selectedLoadedUnreadIds.length || isMarkingSelected || isMarkingAll) return;
     setIsMarkingSelected(true);
     try {
-      const target = all.filter((n) => selectedIds.has(n.id) && !n.readAt);
-      await markNotificationsReadBatched(target);
+      const target = notifications.filter((n) => selectedIds.has(n.id) && !n.readAt);
+      await applyMarkRead(target);
       clearSelected();
+    } catch {
+      /* rolled back */
     } finally {
       setIsMarkingSelected(false);
     }
@@ -261,21 +448,14 @@ export default function FeedbackInbox({
     if (!confirmed) return;
     setIsMarkingAll(true);
     try {
-      await markNotificationsReadBatched(all);
+      await markAllNotificationsReadViaApi();
       clearSelected();
+      setHiddenUnreadIds(new Set(notifications.map((n) => n.id)));
+      setOptimisticReadAt({});
     } finally {
       setIsMarkingAll(false);
     }
   }
-
-  function handleListScroll(e: React.UIEvent<HTMLDivElement>) {
-    if (!hasMore) return;
-    const node = e.currentTarget;
-    const remaining = node.scrollHeight - node.scrollTop - node.clientHeight;
-    if (remaining <= LOAD_MORE_THRESHOLD_PX) showMore();
-  }
-
-  if (!notifications.length) return null;
 
   const header = (
     <div className="feedback-inbox-header">
@@ -295,6 +475,13 @@ export default function FeedbackInbox({
         )}
       </div>
       <div className="feedback-inbox-actions">
+        <button
+          type="button"
+          className="feedback-inbox-action"
+          onClick={() => setMode((m) => (m === 'unread' ? 'all' : 'unread'))}
+        >
+          {mode === 'unread' ? t.feedback.showAll : t.feedback.unreadOnly}
+        </button>
         <button
           type="button"
           className="feedback-inbox-action"
@@ -333,138 +520,187 @@ export default function FeedbackInbox({
     </div>
   );
 
-  const list = (
-    <div className="feedback-list" onScroll={handleListScroll}>
-      <div className="feedback-list-status">
-        {t.feedback.showingOf
-          .replace('{shown}', String(notifications.length))
-          .replace('{total}', String(all.length))}
-        {selectedLoadedUnreadIds.length > 0
-          ? ` · ${t.common.selectedCount.replace('{count}', String(selectedLoadedUnreadIds.length))}`
-          : ''}
-      </div>
-      {notifications.map((n) => {
-        const isLogbook = isLogbookNotificationType(n.type);
-        const isStoreChatMention = isStoreChatMentionNotificationType(n.type);
-        const isGroupChatMention = isGroupChatMentionNotificationType(n.type);
-        const skipReportChrome = isLogbook || isStoreChatMention || isGroupChatMention;
-        const report = !skipReportChrome && n.reportId ? reportById.get(n.reportId) : undefined;
-        const showTimeline = expandedReportId === n.reportId && report;
-        const actorProfile = n.actorUserId
-          ? profiles.find((p) => p.userId === n.actorUserId)
-          : undefined;
-        const actorName =
-          actorProfile?.displayName?.trim() ||
-          actorProfile?.email?.split('@')[0] ||
-          '';
-
-        return (
-          <div
-            key={n.id}
-            className={`feedback-item${n.readAt ? '' : ' feedback-item--unread'}`}
-          >
-            <div className="feedback-item-row">
-              {!n.readAt && (
-                <label
-                  className="ui-checkbox-label feedback-item-checkbox"
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => e.stopPropagation()}
-                >
-                  <input
-                    type="checkbox"
-                    className="ui-checkbox"
-                    checked={selectedIds.has(n.id)}
-                    onChange={() => toggleSelected(n.id)}
-                    aria-label={n.title}
-                  />
-                </label>
-              )}
+  const listBody = (() => {
+    if (listLoading && !notifications.length) {
+      return <div className="feedback-list-status">{t.feedback.loading}</div>;
+    }
+    if (listError && !notifications.length) {
+      return (
+        <div className="feedback-list-status">
+          {t.feedback.loadMoreError}{' '}
+          <button type="button" className="feedback-inbox-action" onClick={() => window.location.reload()}>
+            {t.feedback.retry}
+          </button>
+        </div>
+      );
+    }
+    if (!notifications.length) {
+      return (
+        <div className="feedback-list-status">
+          {mode === 'unread' ? t.feedback.emptyUnread : t.feedback.emptyAll}
+          {mode === 'unread' && (
+            <>
+              {' · '}
               <button
                 type="button"
-                className="feedback-item-main"
-                onClick={() => handleClick(n)}
+                className="feedback-inbox-action"
+                onClick={() => setMode('all')}
               >
-                <div className="feedback-item-top">
-                  <span className={badgeClass(n.actionStatus)}>{statusLabel(t, n.actionStatus)}</span>
-                  <span className="feedback-item-time">{formatIsoToLocalTime(n.createdAt)}</span>
-                </div>
-                <div className="feedback-item-title">{n.title}</div>
-                {(n.actorUserId || n.actorRole) && (
-                  <div className="feedback-item-identity">
-                    {!isLogbook && <>{t.feedback.reviewedBy}{' '}</>}
-                    {actorProfile ? (
-                      <span
-                        onClick={(e) => e.stopPropagation()}
-                        onKeyDown={(e) => e.stopPropagation()}
-                      >
-                        <IdentityWithAvatar profile={actorProfile}>
-                          {actorName || null}
-                        </IdentityWithAvatar>
-                      </span>
-                    ) : actorName ? (
-                      actorName
-                    ) : null}
-                    {n.actorRole ? (
-                      <>
-                        {actorProfile || actorName ? ' · ' : ''}
-                        {n.actorRole}
-                      </>
-                    ) : null}
-                    {n.type === 'report_finalized' ? ` · ${t.feedback.reportSummary}` : ''}
-                  </div>
-                )}
-                {!skipReportChrome && (
-                  <div className="feedback-item-stats">
-                    {t.feedback.completion} {n.completionPercent ?? 0}% · {t.feedback.compliance}{' '}
-                    {n.compliancePercent ?? 0}%
-                  </div>
-                )}
-                <div className="feedback-item-body">
-                  <LinkifiedText text={n.body} standalone="never" />
-                </div>
-                {isLogbook && onOpenLogbookEntry && n.reportId && (
-                  <div className="feedback-item-cta">
-                    {t.logbook.openInLogbook}
-                  </div>
-                )}
-                {isStoreChatMention && n.storeId && (
-                  <div className="feedback-item-cta">Open in Store Chat</div>
-                )}
-                {isGroupChatMention && (
-                  <div className="feedback-item-cta">Open in Group Chat</div>
-                )}
+                {t.feedback.showAll}
               </button>
-            </div>
-            {n.reportId && report && (
-              <div className="feedback-item-timeline">
+            </>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <>
+        <div className="feedback-list-status">
+          {t.feedback.showingOf.replace('{shown}', String(notifications.length))}
+          {selectedLoadedUnreadIds.length > 0
+            ? ` · ${t.common.selectedCount.replace('{count}', String(selectedLoadedUnreadIds.length))}`
+            : ''}
+        </div>
+        {notifications.map((n) => {
+          const isLogbook = isLogbookNotificationType(n.type);
+          const isStoreChatMention = isStoreChatMentionNotificationType(n.type);
+          const isGroupChatMention = isGroupChatMentionNotificationType(n.type);
+          const skipReportChrome = isLogbook || isStoreChatMention || isGroupChatMention;
+          const report = !skipReportChrome && n.reportId ? reportById.get(n.reportId) : undefined;
+          const showTimeline = expandedReportId === n.reportId && report;
+          const actorProfile = n.actorUserId
+            ? profiles.find((p) => p.userId === n.actorUserId)
+            : undefined;
+          const actorName =
+            actorProfile?.displayName?.trim() ||
+            actorProfile?.email?.split('@')[0] ||
+            '';
+
+          return (
+            <div
+              key={n.id}
+              className={`feedback-item${n.readAt ? '' : ' feedback-item--unread'}`}
+            >
+              <div className="feedback-item-row">
+                {!n.readAt && (
+                  <label
+                    className="ui-checkbox-label feedback-item-checkbox"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      className="ui-checkbox"
+                      checked={selectedIds.has(n.id)}
+                      onChange={() => toggleSelected(n.id)}
+                      aria-label={n.title}
+                    />
+                  </label>
+                )}
                 <button
                   type="button"
-                  className="report-timeline-toggle"
-                  onClick={(e) => toggleTimeline(n.reportId, e)}
-                  aria-expanded={!!showTimeline}
+                  className="feedback-item-main"
+                  onClick={() => handleClick(n)}
                 >
-                  {showTimeline ? t.timeline.collapse : t.timeline.expand}
+                  <div className="feedback-item-top">
+                    <span className={badgeClass(n.actionStatus)}>{statusLabel(t, n.actionStatus)}</span>
+                    <span className="feedback-item-time">{formatIsoToLocalTime(n.createdAt)}</span>
+                  </div>
+                  <div className="feedback-item-title">{n.title}</div>
+                  {(n.actorUserId || n.actorRole) && (
+                    <div className="feedback-item-identity">
+                      {!isLogbook && <>{t.feedback.reviewedBy}{' '}</>}
+                      {actorProfile ? (
+                        <span
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => e.stopPropagation()}
+                        >
+                          <IdentityWithAvatar profile={actorProfile}>
+                            {actorName || null}
+                          </IdentityWithAvatar>
+                        </span>
+                      ) : actorName ? (
+                        actorName
+                      ) : null}
+                      {n.actorRole ? (
+                        <>
+                          {actorProfile || actorName ? ' · ' : ''}
+                          {n.actorRole}
+                        </>
+                      ) : null}
+                      {n.type === 'report_finalized' ? ` · ${t.feedback.reportSummary}` : ''}
+                    </div>
+                  )}
+                  {!skipReportChrome && (
+                    <div className="feedback-item-stats">
+                      {t.feedback.completion} {n.completionPercent ?? 0}% · {t.feedback.compliance}{' '}
+                      {n.compliancePercent ?? 0}%
+                    </div>
+                  )}
+                  <div className="feedback-item-body">
+                    <LinkifiedText text={n.body} standalone="never" />
+                  </div>
+                  {isLogbook && onOpenLogbookEntry && n.reportId && (
+                    <div className="feedback-item-cta">
+                      {t.logbook.openInLogbook}
+                    </div>
+                  )}
+                  {isStoreChatMention && n.storeId && (
+                    <div className="feedback-item-cta">Open in Store Chat</div>
+                  )}
+                  {isGroupChatMention && (
+                    <div className="feedback-item-cta">Open in Group Chat</div>
+                  )}
                 </button>
-                {showTimeline && (
-                  <ReportTimeline
-                    report={report}
-                    events={eventsByReportId.get(n.reportId) ?? []}
-                    notifications={notifsByReportId.get(n.reportId) ?? []}
-                    defaultExpanded
-                  />
-                )}
               </div>
+              {n.reportId && report && (
+                <div className="feedback-item-timeline">
+                  <button
+                    type="button"
+                    className="report-timeline-toggle"
+                    onClick={(e) => toggleTimeline(n.reportId, e)}
+                    aria-expanded={!!showTimeline}
+                  >
+                    {showTimeline ? t.timeline.collapse : t.timeline.expand}
+                  </button>
+                  {showTimeline && (
+                    <ReportTimeline
+                      report={report}
+                      events={eventsByReportId.get(n.reportId) ?? []}
+                      notifications={notifsByReportId.get(n.reportId) ?? []}
+                      defaultExpanded
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {(canLoadNextPage || loadMoreError) && (
+          <div className="feedback-load-more-wrap">
+            {loadMoreError && (
+              <div className="feedback-list-status">{t.feedback.loadMoreError}</div>
             )}
+            <button
+              type="button"
+              className="feedback-load-more"
+              onClick={() => void handleLoadMore()}
+              disabled={isLoadingMore}
+            >
+              {isLoadingMore
+                ? `${t.feedback.loadMore}...`
+                : loadMoreError
+                  ? t.feedback.retry
+                  : t.feedback.loadMore}
+            </button>
           </div>
-        );
-      })}
-      {hasMore && (
-        <button type="button" className="feedback-load-more" onClick={showMore}>
-          {t.feedback.loadMore}
-        </button>
-      )}
-    </div>
-  );
+        )}
+      </>
+    );
+  })();
+
+  const list = <div className="feedback-list">{listBody}</div>;
 
   if (stickySection) {
     return (
@@ -483,11 +719,4 @@ export default function FeedbackInbox({
   );
 }
 
-export function useUnreadNotificationCount(userId: string): number {
-  const { data } = db.useQuery({
-    notifications: {
-      $: { where: { recipientUserId: userId } },
-    },
-  });
-  return ((data?.notifications ?? []) as Notification[]).filter((n) => !n.readAt).length;
-}
+export { useUnreadNotificationCount } from '../hooks/useNotificationUnreadCount';

@@ -392,12 +392,19 @@ const _schema = i.schema({
       actionStatus: i.string(),
       actorUserId: i.string(),
       actorRole: i.string(),
-      readAt: i.string(),                   // '' = unread
-      createdAt: i.string(),
+      readAt: i.string().indexed(),         // '' = unread
+      createdAt: i.string().indexed(),
       // Optional: legacy inbox rows have null; new Admin delivers set a key.
       deliveryKey: i.string().indexed().optional(),
       // clientRequired for new client writes ('' ok); legacy rows may be null.
       deepLinkJson: i.string().optional().clientRequired(),
+    }),
+
+    // Per-user unread badge counter (no Instant native count aggregate).
+    notificationUnreadCounts: i.entity({
+      userId: i.string().unique().indexed(),
+      unreadCount: i.number(),
+      updatedAt: i.string(),
     }),
 
     // ─── Checklist item proposals (new-item requests; not templateItems) ─────

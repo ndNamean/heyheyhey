@@ -17,7 +17,7 @@ import { useRoleDefinitions } from '../contexts/RoleDefinitionsContext';
 import LanguageSelector from './LanguageSelector';
 import ProfileAvatar from './profileAvatar/ProfileAvatar';
 import ProfileAvatarPreview from './profileAvatar/ProfileAvatarPreview';
-import { useUnreadNotificationCount } from './FeedbackInbox';
+import { useUnreadNotificationCount } from '../hooks/useNotificationUnreadCount';
 import type { LogbookEntry, Profile } from '../types';
 
 export type Page =

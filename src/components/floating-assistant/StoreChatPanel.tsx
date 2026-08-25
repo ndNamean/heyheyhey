@@ -1933,6 +1933,10 @@ export default function StoreChatPanel({
 
     try {
       await db.transact([messageTx, ...notifTxs]);
+      if (notifTxs.length) {
+        const { schedulePushDeliveryFromTxs } = await import('../../lib/pushDelivery');
+        schedulePushDeliveryFromTxs(notifTxs);
+      }
       setDraft('');
       if (storeId) draftsRef.current[storeId] = '';
       setTrackedMentions([]);
