@@ -180,18 +180,6 @@ export default function MyReportsPanel({ profile, onFixReport }: Props) {
           {mode === 'needs_action'
             ? t.staffHome.myReportsEmptyNeedsAction
             : t.staffHome.myReportsEmptyAll}
-          {mode === 'needs_action' && (
-            <>
-              {' · '}
-              <button
-                type="button"
-                className="feedback-inbox-action"
-                onClick={() => setMode('all')}
-              >
-                {t.staffHome.showAll}
-              </button>
-            </>
-          )}
         </div>
       );
     }

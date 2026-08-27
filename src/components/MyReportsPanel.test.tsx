@@ -166,11 +166,11 @@ describe('MyReportsPanel infinite modes', () => {
     await waitFor(() => expect(loadNextPage).toHaveBeenCalled());
   });
 
-  it('shows caught-up empty state with Show all in needs_action mode', () => {
+  it('shows caught-up empty state with a single header Show all', () => {
     infiniteState.data = { reports: [] };
     render(<MyReportsPanel profile={profile} />);
     expect(screen.getByText(/You're all caught up/)).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: 'Show all' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: 'Show all' }).length).toBe(1);
   });
 
   it('preserves Fix & resubmit for flagged responses', () => {

@@ -553,18 +553,6 @@ export default function FeedbackInbox({
       return (
         <div className="feedback-list-status">
           {mode === 'unread' ? t.feedback.emptyUnread : t.feedback.emptyAll}
-          {mode === 'unread' && (
-            <>
-              {' · '}
-              <button
-                type="button"
-                className="feedback-inbox-action"
-                onClick={() => setMode('all')}
-              >
-                {t.feedback.showAll}
-              </button>
-            </>
-          )}
         </div>
       );
     }

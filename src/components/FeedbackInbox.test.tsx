@@ -252,7 +252,7 @@ describe('FeedbackInbox infinite modes', () => {
       />,
     );
     expect(screen.getByRole('button', { name: 'Unread only' })).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: 'Show all' }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByRole('button', { name: 'Show all' }).length).toBe(1);
     expect(screen.queryByRole('button', { name: 'Select all' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Mark selected' })).toBeNull();
