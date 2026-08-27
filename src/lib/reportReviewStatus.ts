@@ -30,6 +30,57 @@ export interface BuildReportReviewStatusOptions {
   defs?: RoleDefinition[];
   daysBack?: number;
   limit?: number;
+  now?: Date;
+}
+
+export const REVIEW_STATUS_DAYS_BACK = 30;
+export const REVIEW_STATUS_DISPLAY_LIMIT = 20;
+export const REVIEW_STATUS_QUERY_LIMIT = 200;
+
+export type ReportReviewStatusWhereClause =
+  | {
+      storeId: { $in: string[] };
+      reportDate: { $gte: string; $lte: string };
+    }
+  | {
+      reportDate: { $gte: string; $lte: string };
+    };
+
+export interface BuildReportReviewStatusWhereOptions {
+  canAccessAllStores: boolean;
+  storeIds: string[];
+  daysBack?: number;
+  now?: Date;
+}
+
+/** Inclusive YYYY-MM-DD window used by Instant `where` and the client safety filter. */
+export function reviewStatusDateWindow(
+  daysBack: number = REVIEW_STATUS_DAYS_BACK,
+  now: Date = new Date(),
+): { start: string; end: string } {
+  const end = new Date(now.getTime());
+  const start = new Date(now.getTime());
+  start.setDate(start.getDate() - daysBack);
+  return {
+    start: start.toISOString().slice(0, 10),
+    end: end.toISOString().slice(0, 10),
+  };
+}
+
+/**
+ * Instant `where` for the manager-home review-status table.
+ * Store-scoped reviewers with no stores skip the reports query (`null`).
+ */
+export function buildReportReviewStatusWhere(
+  opts: BuildReportReviewStatusWhereOptions,
+): ReportReviewStatusWhereClause | null {
+  const daysBack = opts.daysBack ?? REVIEW_STATUS_DAYS_BACK;
+  const { start, end } = reviewStatusDateWindow(daysBack, opts.now);
+  const reportDate = { $gte: start, $lte: end };
+  if (opts.canAccessAllStores) return { reportDate };
+  const storeIds = [...new Set(opts.storeIds.filter(Boolean))];
+  if (!storeIds.length) return null;
+  return { storeId: { $in: storeIds }, reportDate };
 }
 
 const STATUS_ORDER: Record<string, number> = {
@@ -128,14 +179,10 @@ export function computeCorrectionDurationMs(events: ReviewEvent[], reportId: str
   return maxGap;
 }
 
-function isWithinDateWindow(reportDate: string, daysBack: number): boolean {
+function isWithinDateWindow(reportDate: string, daysBack: number, now?: Date): boolean {
   if (!reportDate?.trim()) return false;
-  const end = new Date();
-  const start = new Date();
-  start.setDate(start.getDate() - daysBack);
-  const startStr = start.toISOString().slice(0, 10);
-  const endStr = end.toISOString().slice(0, 10);
-  return reportDate >= startStr && reportDate <= endStr;
+  const { start, end } = reviewStatusDateWindow(daysBack, now);
+  return reportDate >= start && reportDate <= end;
 }
 
 function sortReports(a: Report, b: Report): number {
@@ -169,12 +216,18 @@ export function buildReportReviewStatusRows(
   events: ReviewEvent[],
   options: BuildReportReviewStatusOptions,
 ): ReportReviewStatusRow[] {
-  const { profile, defs, daysBack = 30, limit = 20 } = options;
+  const {
+    profile,
+    defs,
+    daysBack = REVIEW_STATUS_DAYS_BACK,
+    limit = REVIEW_STATUS_DISPLAY_LIMIT,
+    now,
+  } = options;
   const storeIds = (profile.stores ?? []).map((s) => s.id);
 
   const filtered = reports
     .filter((r) => userCanAccessStore(profile.role as Role, storeIds, r.storeId, defs))
-    .filter((r) => isWithinDateWindow(r.reportDate, daysBack))
+    .filter((r) => isWithinDateWindow(r.reportDate, daysBack, now))
     .sort(sortReports)
     .slice(0, limit);
 
