@@ -493,40 +493,44 @@ export default function FeedbackInbox({
             {t.feedback.showAll}
           </button>
         </span>
-        <button
-          type="button"
-          className="feedback-inbox-action"
-          onClick={selectAllLoadedUnread}
-          disabled={!loadedUnreadIds.length || isMarkingSelected || isMarkingAll}
-        >
-          {t.common.selectAll}
-        </button>
-        <button
-          type="button"
-          className="feedback-inbox-action"
-          onClick={clearSelected}
-          disabled={!selectedIds.size || isMarkingSelected || isMarkingAll}
-        >
-          {t.common.clearAll}
-        </button>
-        <button
-          type="button"
-          className="feedback-inbox-action"
-          onClick={() => void handleMarkSelectedRead()}
-          disabled={!selectedLoadedUnreadIds.length || isMarkingSelected || isMarkingAll}
-        >
-          {isMarkingSelected
-            ? `${t.feedback.markSelectedRead}...`
-            : t.feedback.markSelectedRead}
-        </button>
-        <button
-          type="button"
-          className="feedback-inbox-action"
-          onClick={() => void handleMarkAllRead()}
-          disabled={!unreadCount || isMarkingSelected || isMarkingAll}
-        >
-          {isMarkingAll ? `${t.feedback.markAllRead}...` : t.feedback.markAllRead}
-        </button>
+        {unreadCount > 0 && (
+          <>
+            <button
+              type="button"
+              className="feedback-inbox-action"
+              onClick={selectAllLoadedUnread}
+              disabled={!loadedUnreadIds.length || isMarkingSelected || isMarkingAll}
+            >
+              {t.common.selectAll}
+            </button>
+            <button
+              type="button"
+              className="feedback-inbox-action"
+              onClick={clearSelected}
+              disabled={!selectedIds.size || isMarkingSelected || isMarkingAll}
+            >
+              {t.common.clearAll}
+            </button>
+            <button
+              type="button"
+              className="feedback-inbox-action"
+              onClick={() => void handleMarkSelectedRead()}
+              disabled={!selectedLoadedUnreadIds.length || isMarkingSelected || isMarkingAll}
+            >
+              {isMarkingSelected
+                ? `${t.feedback.markSelectedRead}...`
+                : t.feedback.markSelectedRead}
+            </button>
+            <button
+              type="button"
+              className="feedback-inbox-action"
+              onClick={() => void handleMarkAllRead()}
+              disabled={isMarkingSelected || isMarkingAll}
+            >
+              {isMarkingAll ? `${t.feedback.markAllRead}...` : t.feedback.markAllRead}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

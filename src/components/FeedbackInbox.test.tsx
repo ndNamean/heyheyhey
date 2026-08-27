@@ -11,6 +11,7 @@ const {
   markAllApi,
   reconcileApi,
   infiniteState,
+  unreadState,
 } = vi.hoisted(() => {
   const infiniteState = {
     data: { notifications: [] as Array<Record<string, unknown>> },
@@ -18,12 +19,14 @@ const {
     canLoadNextPage: false,
     error: null as Error | null,
   };
+  const unreadState = { unreadCount: 2 };
   return {
     loadNextPage: vi.fn(),
     transact: vi.fn(async () => undefined),
     markAllApi: vi.fn(async () => 2),
     reconcileApi: vi.fn(async () => 0),
     infiniteState,
+    unreadState,
   };
 });
 
@@ -71,11 +74,14 @@ vi.mock('../db', () => ({
 
 vi.mock('../hooks/useNotificationUnreadCount', () => ({
   useNotificationUnreadCount: () => ({
-    unreadCount: 2,
-    row: { id: 'c1', userId: 'u1', unreadCount: 2, updatedAt: '' },
+    unreadCount: unreadState.unreadCount,
+    row:
+      unreadState.unreadCount > 0
+        ? { id: 'c1', userId: 'u1', unreadCount: unreadState.unreadCount, updatedAt: '' }
+        : null,
     isLoading: false,
   }),
-  useUnreadNotificationCount: () => 2,
+  useUnreadNotificationCount: () => unreadState.unreadCount,
 }));
 
 vi.mock('../lib/notificationUnreadCount', async () => {
@@ -164,6 +170,7 @@ describe('FeedbackInbox infinite modes', () => {
     infiniteState.isLoading = false;
     infiniteState.canLoadNextPage = false;
     infiniteState.error = null;
+    unreadState.unreadCount = 2;
     infiniteState.data = {
       notifications: [notif({ id: 'n1', title: 'Unread one' })],
     };
@@ -231,5 +238,24 @@ describe('FeedbackInbox infinite modes', () => {
       />,
     );
     expect(screen.getByText(/all caught up/i)).toBeTruthy();
+  });
+
+  it('hides bulk mark-read actions when there is nothing unread', () => {
+    unreadState.unreadCount = 0;
+    infiniteState.data = { notifications: [] };
+    render(
+      <FeedbackInbox
+        userId="u1"
+        reports={[]}
+        events={[]}
+        profileRecords={[]}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Unread only' })).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Show all' }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByRole('button', { name: 'Select all' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Mark selected' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Mark all' })).toBeNull();
   });
 });
