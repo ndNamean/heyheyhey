@@ -69,6 +69,29 @@ export function profileVisibilityStoreIds(profile: Profile): string[] {
 }
 
 /**
+ * Actor store ids that survive brief Instant cache empties of `profile.stores`.
+ * Remembers the last non-empty list for this mount (`remembered.current`).
+ */
+export function stableActorStoreIds(
+  profile: Profile,
+  allProfiles: Profile[] | undefined,
+  remembered: { current: string[] },
+): string[] {
+  const fromProfile = profileVisibilityStoreIds(profile);
+  const actorRow = allProfiles?.find(
+    (p) => p.id === profile.id || (profile.userId && p.userId === profile.userId),
+  );
+  const fromActorRow =
+    actorRow && actorRow !== profile ? profileVisibilityStoreIds(actorRow) : [];
+  const live = fromProfile.length ? fromProfile : fromActorRow;
+  if (live.length) {
+    remembered.current = live;
+    return live;
+  }
+  return remembered.current;
+}
+
+/**
  * Whether actor may see target on Users / access queues.
  * - Owner is never visible to non-owners.
  * - Non-owners only see strictly subordinate roles.

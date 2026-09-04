@@ -68,7 +68,7 @@ import {
   type LogbookLifecycleFilter,
   type LogbookQuickView,
 } from '../lib/logbookFilters';
-import { profileVisibilityStoreIds, storesSelectableBy } from '../lib/inviteScope';
+import { stableActorStoreIds, storesSelectableBy } from '../lib/inviteScope';
 import {
   PROOF_TYPES,
   canSubmitResolutionDraft,
@@ -303,24 +303,45 @@ export default function LogbookPage({
   const [remindDismissedIds, setRemindDismissedIds] = useState<Record<string, boolean>>({});
   const [remindBusyId, setRemindBusyId] = useState<string | null>(null);
   const dueNotifyRan = useRef(false);
+  const lastGoodStoresRef = useRef<Store[]>([]);
+  const lastGoodActorStoreIdsRef = useRef<string[]>([]);
 
-  const { data } = db.useQuery({
-    logbookEntries: {
-      store: {},
-      photo: {},
-      sourceMedia: {},
-      resolutionMedia: {},
-      resolutionProofHistory: {},
-    },
-    stores: {},
-    profiles: { stores: {}, avatarFile: {} },
-    reviewEvents: {},
-  });
+  const logbookQuery = useMemo(
+    () => ({
+      logbookEntries: {
+        store: {},
+        photo: {},
+        sourceMedia: {},
+        resolutionMedia: {},
+        resolutionProofHistory: {},
+      },
+      profiles: { stores: {}, avatarFile: {} },
+    }),
+    [],
+  );
+  const storesQuery = useMemo(() => ({ stores: {} }), []);
+
+  const { data } = db.useQuery(logbookQuery);
+  const { data: storesData, isLoading: storesLoading } = db.useQuery(storesQuery);
 
   const allEntries: LogbookEntry[] = (data?.logbookEntries ?? []) as LogbookEntry[];
-  const stores: Store[] = (data?.stores ?? []) as Store[];
+  const queryStores: Store[] = (storesData?.stores ?? []) as Store[];
+  if (queryStores.length) lastGoodStoresRef.current = queryStores;
+  const stores: Store[] = queryStores.length ? queryStores : lastGoodStoresRef.current;
   const allProfiles: Profile[] = (data?.profiles ?? []) as Profile[];
-  const allEvents: ReviewEvent[] = (data?.reviewEvents ?? []) as ReviewEvent[];
+
+  const logbookEntryIdsKey = allEntries.map((e) => e.id).filter(Boolean).join(',');
+  const eventsQuery = useMemo(() => {
+    const ids = logbookEntryIdsKey ? logbookEntryIdsKey.split(',') : [];
+    if (!ids.length) return null;
+    return {
+      reviewEvents: {
+        $: { where: { logbookEntryId: { $in: ids } } },
+      },
+    };
+  }, [logbookEntryIdsKey]);
+  const { data: eventsData } = db.useQuery(eventsQuery);
+  const allEvents: ReviewEvent[] = (eventsData?.reviewEvents ?? []) as ReviewEvent[];
 
   const assignedIssueExists = useMemo(
     () => allEntries.some((e) => isAssignedUnresolvedIssue(profile, e, defs)),
@@ -378,16 +399,14 @@ export default function LogbookPage({
     () => eligibleLogbookAssigneeRoles(profile.role, defs),
     [profile.role, defs],
   );
-  const selectableStores = useMemo(
-    () =>
-      storesSelectableBy(
-        profile.role,
-        profileVisibilityStoreIds(profile),
-        stores,
-        defs,
-      ),
-    [profile, stores, defs],
-  );
+  const { selectableStores, hasActorStoreAssignment } = useMemo(() => {
+    const actorStoreIds = stableActorStoreIds(profile, allProfiles, lastGoodActorStoreIdsRef);
+    return {
+      selectableStores: storesSelectableBy(profile.role, actorStoreIds, stores, defs),
+      hasActorStoreAssignment: actorStoreIds.length > 0,
+    };
+  }, [profile, allProfiles, stores, defs]);
+  const storesCatalogReady = stores.length > 0 || storesLoading === false;
 
   useEffect(() => {
     if (form.entryType !== 'issue') return;
@@ -435,6 +454,7 @@ export default function LogbookPage({
     }
     if (!form.storeId) return;
     if (selectableStores.some((s) => s.id === form.storeId)) return;
+    if (selectableStores.length === 0) return;
     setForm((prev) => ({
       ...prev,
       storeId: selectableStores[0]?.id || '',
@@ -451,6 +471,7 @@ export default function LogbookPage({
   useEffect(() => {
     if (filters.storeId === 'all') return;
     if (selectableStores.some((s) => s.id === filters.storeId)) return;
+    if (selectableStores.length === 0) return;
     setFilters((prev) => ({ ...prev, storeId: 'all' }));
   }, [filters.storeId, selectableStores]);
 
@@ -1667,7 +1688,11 @@ export default function LogbookPage({
                   <option value="">{t.common.allStores}</option>
                 )}
                 {form.entryType === 'issue' && selectableStores.length === 0 && (
-                  <option value="">{t.logbook.noAssignableStores}</option>
+                  <option value="">
+                    {storesCatalogReady && !hasActorStoreAssignment
+                      ? t.logbook.noAssignableStores
+                      : t.common.loading}
+                  </option>
                 )}
                 {selectableStores.map((s) => (
                   <option key={s.id} value={s.id}>

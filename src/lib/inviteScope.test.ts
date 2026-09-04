@@ -5,6 +5,7 @@ import {
   storesSelectableBy,
   assertStoreIdsAllowed,
   canViewManagedProfile,
+  stableActorStoreIds,
 } from './inviteScope';
 import { defaultDefinitionsAsEntities } from './roleResolver';
 import { canApproveItem, canReview } from './roles';
@@ -34,6 +35,20 @@ const stores: Store[] = [
     updatedAt: '',
   } as Store,
 ];
+
+function profileWithStores(role: string, storeIds: string[]): Profile {
+  return {
+    id: 'p1',
+    userId: 'u1',
+    email: 'a@b.c',
+    displayName: 'A',
+    role,
+    approvalStatus: 'approved',
+    stores: storeIds.map((id) => ({ id })),
+    createdAt: '',
+    updatedAt: '',
+  } as Profile;
+}
 
 describe('canAssignRole / rolesAssignableBy', () => {
   it('lets owner assign any role including elevated', () => {
@@ -124,6 +139,51 @@ describe('storesSelectableBy', () => {
     expect(assertStoreIdsAllowed('manager', ['s1'], ['s1'], defs)).toBeNull();
     expect(assertStoreIdsAllowed('manager', ['s1'], ['s2'], defs)).toMatch(/Forbidden/);
     expect(assertStoreIdsAllowed('owner', [], ['s2'], defs)).toBeNull();
+  });
+});
+
+describe('stableActorStoreIds + storesSelectableBy', () => {
+  it('keeps manager selection after live store links briefly go empty', () => {
+    const remembered = { current: [] as string[] };
+    const linked = profileWithStores('manager', ['s1', 's2']);
+    expect(stableActorStoreIds(linked, undefined, remembered)).toEqual(['s1', 's2']);
+
+    const emptied = profileWithStores('manager', []);
+    const sticky = stableActorStoreIds(emptied, undefined, remembered);
+    expect(sticky).toEqual(['s1', 's2']);
+    expect(storesSelectableBy('manager', sticky, stores, defs).map((s) => s.id)).toEqual([
+      's1',
+      's2',
+    ]);
+  });
+
+  it('selects none for a manager who never had store links', () => {
+    const remembered = { current: [] as string[] };
+    const neverLinked = profileWithStores('manager', []);
+    const ids = stableActorStoreIds(neverLinked, undefined, remembered);
+    expect(ids).toEqual([]);
+    expect(storesSelectableBy('manager', ids, stores, defs)).toHaveLength(0);
+  });
+
+  it('lets owner / areaManager use the full catalog regardless of linked stores', () => {
+    const remembered = { current: [] as string[] };
+    const ownerIds = stableActorStoreIds(profileWithStores('owner', ['s1']), undefined, remembered);
+    expect(storesSelectableBy('owner', ownerIds, stores, defs)).toHaveLength(2);
+
+    const areaRemembered = { current: [] as string[] };
+    const areaIds = stableActorStoreIds(
+      profileWithStores('areaManager', []),
+      undefined,
+      areaRemembered,
+    );
+    expect(storesSelectableBy('areaManager', areaIds, stores, defs)).toHaveLength(2);
+  });
+
+  it('falls back to actor row in allProfiles when profile.stores is empty', () => {
+    const remembered = { current: [] as string[] };
+    const emptyAuthProfile = profileWithStores('manager', []);
+    const rowInQuery = profileWithStores('manager', ['s2']);
+    expect(stableActorStoreIds(emptyAuthProfile, [rowInQuery], remembered)).toEqual(['s2']);
   });
 });
 
