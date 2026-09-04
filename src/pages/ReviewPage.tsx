@@ -12,6 +12,7 @@ import {
   canReviewReportItem,
   filterReportsAwaitingReview,
   firstActionableReportResponse,
+  listOptionalNotStartedToApprove,
   resolveFinaliseReportStatus,
 } from '../lib/reportReview';
 import { statusLabel } from '../lib/i18nUtils';
@@ -802,12 +803,34 @@ export default function ReviewPage({
       alert(t.review.noPermissionItem);
       return;
     }
+    const now = nowIso();
+    const optionalToApprove = listOptionalNotStartedToApprove(responses);
+    const postApproveResponses = responses.map((r) =>
+      optionalToApprove.some((o) => o.id === r.id) ? { ...r, status: 'approved' as const } : r,
+    );
     const compliancePercent =
-      responses.length
+      postApproveResponses.length
         ? Math.round(
-            (responses.filter((r) => r.status === 'approved').length / responses.length) * 100,
+            (postApproveResponses.filter((r) => r.status === 'approved').length /
+              postApproveResponses.length) *
+              100,
           )
         : 0;
+
+    const autoApproveTxs = optionalToApprove.flatMap((response) => [
+      db.tx.reportResponses[response.id].update({
+        status: 'approved',
+        rejectionReason: '',
+        feedbackCode: '',
+        feedbackNote: '',
+        approvedByUserId: profile.userId,
+        approvedAt: now,
+        updatedAt: now,
+        ticked: true,
+        ...(!response.storeId && report.storeId ? { storeId: report.storeId } : {}),
+      }),
+      buildItemReviewEvent(report, response, 'approved', '', profile, now),
+    ]);
 
     const notificationTxs = buildReportFinalizedNotifications(
       report,
@@ -815,10 +838,9 @@ export default function ReviewPage({
       compliancePercent,
       profile,
       allProfiles,
-      responses,
+      postApproveResponses,
       defs,
     );
-    const now = nowIso();
     const nextNeedsAction = newStatus === 'rejected' || newStatus === 'need_correction';
     const prevNeedsAction = readSubmitterNeedsAction(report);
     const needsActionEdgeTxs = await buildSubmitterNeedsActionEdgeTxs(
@@ -831,6 +853,7 @@ export default function ReviewPage({
 
     try {
       await db.transact([
+        ...autoApproveTxs,
         db.tx.reports[report.id].update({
           status: newStatus,
           compliancePercent,
@@ -858,7 +881,10 @@ export default function ReviewPage({
       reportStatus: newStatus,
     });
 
-    const issueCandidates = needCorrectionItemsForLogbookIssues(responses, allLogbookEntries);
+    const issueCandidates = needCorrectionItemsForLogbookIssues(
+      postApproveResponses,
+      allLogbookEntries,
+    );
     if (issueCandidates.length > 0) {
       setPendingFinaliseIssues({ report, items: issueCandidates });
     }
@@ -1536,34 +1562,47 @@ export default function ReviewPage({
               );
             })}
 
-            {canFinaliseReportResponses(responses) ? (
-              <button
-                className="success"
-                type="button"
-                style={{ marginTop: 12 }}
-                onClick={() => void markReportApproved(report)}
+            {(canFinaliseReportResponses(responses) ||
+              canRemindReportInStoreChat(responses)) && (
+              <div
+                style={{
+                  marginTop: 12,
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                  alignItems: 'center',
+                }}
               >
-                {t.review.finaliseReport}
-              </button>
-            ) : canRemindReportInStoreChat(responses) ? (
-              <div style={{ marginTop: 12 }}>
-                <button
-                  className="secondary review-remind-chat-btn"
-                  type="button"
-                  disabled={remindBusyReportId === report.id}
-                  onClick={() => void remindReportInStoreChat(report)}
-                >
-                  {remindBusyReportId === report.id
-                    ? t.review.remindSending
-                    : t.review.remindInStoreChat}
-                </button>
-                {remindMsgByReportId[report.id] ? (
-                  <p className="small" style={{ margin: '8px 0 0' }}>
-                    {remindMsgByReportId[report.id]}
-                  </p>
+                {canFinaliseReportResponses(responses) ? (
+                  <button
+                    className="success"
+                    type="button"
+                    onClick={() => void markReportApproved(report)}
+                  >
+                    {t.review.finaliseReport}
+                  </button>
+                ) : null}
+                {canRemindReportInStoreChat(responses) ? (
+                  <div>
+                    <button
+                      className="secondary review-remind-chat-btn"
+                      type="button"
+                      disabled={remindBusyReportId === report.id}
+                      onClick={() => void remindReportInStoreChat(report)}
+                    >
+                      {remindBusyReportId === report.id
+                        ? t.review.remindSending
+                        : t.review.remindInStoreChat}
+                    </button>
+                    {remindMsgByReportId[report.id] ? (
+                      <p className="small" style={{ margin: '8px 0 0' }}>
+                        {remindMsgByReportId[report.id]}
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
-            ) : null}
+            )}
           </div>
         );
       })}

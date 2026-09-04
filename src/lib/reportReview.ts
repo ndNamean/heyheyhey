@@ -93,18 +93,37 @@ export type FinaliseReportHeaderStatus =
   | 'need_correction'
   | 'waiting_approval';
 
-/** Show Finalise only when every item is Approved. */
+/**
+ * Show Finalise when every item is approved, or optional not_started (will be
+ * auto-approved on Finalise). Block waiting_approval, need_correction, rejected,
+ * and required not_started.
+ */
 export function canFinaliseReportResponses(
-  responses: Pick<ReportResponse, 'status'>[],
+  responses: Array<Pick<ReportResponse, 'status'> & { required?: boolean | null }>,
 ): boolean {
   if (!responses.length) return false;
-  return responses.every((r) => r.status === 'approved');
+  return responses.every(
+    (r) =>
+      r.status === 'approved' ||
+      (r.status === 'not_started' && r.required === false),
+  );
+}
+
+/**
+ * Optional not_started rows Finalise will auto-approve in the same transaction.
+ */
+export function listOptionalNotStartedToApprove<
+  T extends Pick<ReportResponse, 'status'> & { required?: boolean | null },
+>(responses: T[]): T[] {
+  return responses.filter(
+    (r) => r.status === 'not_started' && r.required === false,
+  );
 }
 
 /**
  * Remind in Store Chat when any item still needs store work
- * (need_correction, rejected, or required not_started). Waiting approval stays out.
- * Aligns with isStoreWorkResponse so Remind cannot target optional not_started skips.
+ * (need_correction, rejected, or any not_started). Waiting approval stays out.
+ * Optional not_started is reviewer-nudge only (needs-action badge stays unchanged).
  */
 export function canRemindReportInStoreChat(
   responses: Array<Pick<ReportResponse, 'status'> & { required?: boolean | null }>,
@@ -113,11 +132,14 @@ export function canRemindReportInStoreChat(
     (r) =>
       r.status === 'need_correction' ||
       r.status === 'rejected' ||
-      (r.status === 'not_started' && r.required !== false),
+      r.status === 'not_started',
   );
 }
 
-/** Prefer need_correction, then rejected, then required not_started — for Remind note / itemTitle. */
+/**
+ * Prefer need_correction, then rejected, then required not_started, then optional
+ * not_started — for Remind note / itemTitle.
+ */
 export function firstActionableReportResponse<
   T extends Pick<ReportResponse, 'status' | 'title' | 'rejectionReason' | 'feedbackNote'> & {
     required?: boolean | null;
@@ -127,24 +149,22 @@ export function firstActionableReportResponse<
   if (needCorrection) return needCorrection;
   const rejected = responses.find((r) => r.status === 'rejected');
   if (rejected) return rejected;
-  return (
-    responses.find((r) => r.status === 'not_started' && r.required !== false) ?? null
+  const requiredNotStarted = responses.find(
+    (r) => r.status === 'not_started' && r.required !== false,
   );
+  if (requiredNotStarted) return requiredNotStarted;
+  return responses.find((r) => r.status === 'not_started') ?? null;
 }
 
 /**
- * Header status after Finalise:
- * all approved → approved; any rejected → rejected; else any need_correction → need_correction.
- * (With all-approved Finalise gating, only `approved` is reachable from the button.)
+ * Header status after Finalise: when Finalise is allowed, always `approved`
+ * (optional not_started leftovers are auto-approved in the same tx).
  */
 export function resolveFinaliseReportStatus(
-  responses: Pick<ReportResponse, 'status'>[],
+  responses: Array<Pick<ReportResponse, 'status'> & { required?: boolean | null }>,
 ): FinaliseReportHeaderStatus {
   if (!canFinaliseReportResponses(responses)) return 'waiting_approval';
-  if (responses.every((r) => r.status === 'approved')) return 'approved';
-  if (responses.some((r) => r.status === 'rejected')) return 'rejected';
-  if (responses.some((r) => r.status === 'need_correction')) return 'need_correction';
-  return 'waiting_approval';
+  return 'approved';
 }
 
 /** Whether the profile may approve/reject a single response item on the report. */

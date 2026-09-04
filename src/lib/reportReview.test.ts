@@ -7,6 +7,7 @@ import {
   canReviewReportItem,
   filterReportsAwaitingReview,
   firstActionableReportResponse,
+  listOptionalNotStartedToApprove,
   resolveFinaliseReportStatus,
 } from './reportReview';
 import {
@@ -307,6 +308,16 @@ describe('canFinaliseReportResponses + resolveFinaliseReportStatus', () => {
     expect(resolveFinaliseReportStatus(responses)).toBe('waiting_approval');
   });
 
+  it('hides Finalise for required not_started leftovers', () => {
+    const responses = [
+      response({ id: 'a', status: 'approved' }),
+      response({ id: 'b', status: 'not_started', required: true }),
+    ];
+    expect(canFinaliseReportResponses(responses)).toBe(false);
+    expect(resolveFinaliseReportStatus(responses)).toBe('waiting_approval');
+    expect(listOptionalNotStartedToApprove(responses)).toEqual([]);
+  });
+
   it('sets approved when every item is approved', () => {
     const responses = [
       response({ id: 'a', status: 'approved' }),
@@ -314,6 +325,22 @@ describe('canFinaliseReportResponses + resolveFinaliseReportStatus', () => {
     ];
     expect(canFinaliseReportResponses(responses)).toBe(true);
     expect(resolveFinaliseReportStatus(responses)).toBe('approved');
+    expect(listOptionalNotStartedToApprove(responses)).toEqual([]);
+  });
+
+  it('allows Finalise for approved + optional not_started and lists them to auto-approve', () => {
+    const optional = response({
+      id: 'b',
+      status: 'not_started',
+      title: 'Optional skip',
+      required: false,
+    });
+    const responses = [response({ id: 'a', status: 'approved' }), optional];
+    expect(canFinaliseReportResponses(responses)).toBe(true);
+    expect(resolveFinaliseReportStatus(responses)).toBe('approved');
+    expect(listOptionalNotStartedToApprove(responses).map((r) => r.id)).toEqual(['b']);
+    // Both buttons: Finalise + Remind when only optional leftovers remain
+    expect(canRemindReportInStoreChat(responses)).toBe(true);
   });
 });
 
@@ -349,22 +376,32 @@ describe('canRemindReportInStoreChat + firstActionableReportResponse', () => {
     expect(firstActionableReportResponse(responses)?.id).toBe('b');
   });
 
-  it('shows Remind for approved + not_started', () => {
+  it('shows Remind for approved + required not_started', () => {
     const responses = [
       response({ id: 'a', status: 'approved' }),
       response({ id: 'b', status: 'not_started', title: 'VG check' }),
     ];
     expect(canRemindReportInStoreChat(responses)).toBe(true);
     expect(firstActionableReportResponse(responses)?.id).toBe('b');
+    expect(canFinaliseReportResponses(responses)).toBe(false);
   });
 
-  it('hides Remind for optional not_started only', () => {
+  it('shows Remind for optional not_started only', () => {
     const responses = [
       response({ id: 'a', status: 'approved' }),
       response({ id: 'b', status: 'not_started', title: 'Optional skip', required: false }),
     ];
-    expect(canRemindReportInStoreChat(responses)).toBe(false);
-    expect(firstActionableReportResponse(responses)).toBeNull();
+    expect(canRemindReportInStoreChat(responses)).toBe(true);
+    expect(firstActionableReportResponse(responses)?.id).toBe('b');
+  });
+
+  it('prefers required not_started over optional when picking actionable', () => {
+    const responses = [
+      response({ id: 'opt', status: 'not_started', title: 'Optional', required: false }),
+      response({ id: 'req', status: 'not_started', title: 'Required', required: true }),
+    ];
+    expect(canRemindReportInStoreChat(responses)).toBe(true);
+    expect(firstActionableReportResponse(responses)?.id).toBe('req');
   });
 
   it('shows Remind for not_started even if other items are waiting_approval', () => {
