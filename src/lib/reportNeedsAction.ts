@@ -1,11 +1,12 @@
 /**
  * My Reports "Needs action" flag + per-user counter helpers.
- * Flag semantics match the historical MyReportsPanel client rule:
- * report status is need_correction/rejected OR any response is rejected/need_correction.
+ * Flag: report status is need_correction/rejected OR any store-work response
+ * (rejected / need_correction / required not_started).
  */
 
 import { id } from '@instantdb/react';
 import { db } from '../db';
+import { hasStoreWorkResponses, type StoreWorkResponseLike } from './reportStoreWork';
 import { nowIso } from './utils';
 import type { ReportNeedsActionCount, ReportStatus, ResponseStatus } from '../types';
 
@@ -15,14 +16,13 @@ export type ReportNeedsActionCountRow = ReportNeedsActionCount;
 
 export function computeSubmitterNeedsAction(
   reportStatus: ReportStatus | string | undefined | null,
-  responses: Array<{ status?: ResponseStatus | string | null }>,
+  responses: Array<
+    { status?: ResponseStatus | string | null; required?: boolean | null } | StoreWorkResponseLike
+  >,
 ): boolean {
   const status = String(reportStatus ?? '');
   if (status === 'need_correction' || status === 'rejected') return true;
-  return (responses ?? []).some((resp) => {
-    const s = String(resp?.status ?? '');
-    return s === 'rejected' || s === 'need_correction';
-  });
+  return hasStoreWorkResponses(responses);
 }
 
 /** Prefer denormalized flag; fall back to compute for legacy rows missing the field. */

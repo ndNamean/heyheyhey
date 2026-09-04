@@ -1,18 +1,25 @@
 /**
  * Admin helpers for reportNeedsActionCounts + reports.submitterNeedsAction reconcile.
+ * Keep computeSubmitterNeedsAction / isStoreWorkResponse in sync with
+ * src/lib/reportNeedsAction.ts + src/lib/reportStoreWork.ts.
  */
 
 import { id } from '@instantdb/admin';
 
 const PAGE = 100;
 
+/** Twin of src/lib/reportStoreWork.ts isStoreWorkResponse. */
+export function isStoreWorkResponse(resp) {
+  const s = String(resp?.status ?? '');
+  if (s === 'rejected' || s === 'need_correction') return true;
+  if (s === 'not_started') return resp?.required !== false;
+  return false;
+}
+
 export function computeSubmitterNeedsAction(reportStatus, responses) {
   const status = String(reportStatus ?? '');
   if (status === 'need_correction' || status === 'rejected') return true;
-  return (responses || []).some((resp) => {
-    const s = String(resp?.status ?? '');
-    return s === 'rejected' || s === 'need_correction';
-  });
+  return (responses || []).some(isStoreWorkResponse);
 }
 
 export function nextNeedsActionCount(current, delta) {

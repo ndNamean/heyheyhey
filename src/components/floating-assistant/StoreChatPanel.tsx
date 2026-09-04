@@ -223,23 +223,34 @@ function openFixResubmitFromMessage(message: StoreChatMessage) {
   window.dispatchEvent(new CustomEvent(OPEN_FIX_RESUBMIT_REPORT_EVENT, { detail: link }));
 }
 
-/** Route report handoff CTA by actionType (fix_resubmit → submit correction; else Review). */
+/** Route report handoff CTA by actionType (complete_item / legacy fix_resubmit+not_started → continue; fix_resubmit → submit correction; else Review). */
 function openReportFromMessage(message: StoreChatMessage) {
-  if (String(message.actionType || '').trim() === 'fix_resubmit') {
+  const action = String(message.actionType || '').trim();
+  const status = String(message.statusSnapshot || '').trim();
+  if (
+    action === 'complete_item' ||
+    (action === 'fix_resubmit' && status === 'not_started')
+  ) {
+    openFixResubmitFromMessage(message);
+    return;
+  }
+  if (action === 'fix_resubmit') {
     openFixResubmitFromMessage(message);
     return;
   }
   openReviewFromMessage(message);
 }
 
-/** Prefer stored requiredAction; else map actionType (+ status for view). */
+/** Prefer stored requiredAction except legacy fix_resubmit+not_started; else map actionType (+ status for view). */
 function reportSystemCtaLabel(message: StoreChatMessage, fallbackOpenReview: string): string {
+  const status = String(message.statusSnapshot || '').trim();
+  if (status === 'not_started') return 'Complete this item';
   const required = String(message.requiredAction || '').trim();
   if (required) return required;
   const action = String(message.actionType || '').trim();
+  if (action === 'complete_item') return 'Complete this item';
   if (action === 'fix_resubmit') return 'Fix and resubmit';
   if (action === 'view') {
-    const status = String(message.statusSnapshot || '').trim();
     if (status === 'rejected' || status === 'need_correction') return 'View / fix';
     return 'View';
   }

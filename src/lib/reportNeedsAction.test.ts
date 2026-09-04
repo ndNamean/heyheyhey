@@ -34,6 +34,24 @@ describe('computeSubmitterNeedsAction', () => {
     ).toBe(false);
     expect(computeSubmitterNeedsAction('approved', [{ status: 'approved' }])).toBe(false);
   });
+
+  it('is true for required not_started and false for optional not_started', () => {
+    expect(
+      computeSubmitterNeedsAction('waiting_approval', [
+        { status: 'not_started', required: true },
+      ]),
+    ).toBe(true);
+    expect(
+      computeSubmitterNeedsAction('waiting_approval', [
+        { status: 'not_started' },
+      ]),
+    ).toBe(true);
+    expect(
+      computeSubmitterNeedsAction('waiting_approval', [
+        { status: 'not_started', required: false },
+      ]),
+    ).toBe(false);
+  });
 });
 
 describe('readSubmitterNeedsAction', () => {

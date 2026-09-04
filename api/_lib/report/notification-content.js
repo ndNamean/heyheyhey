@@ -40,6 +40,7 @@ export function resolveReportEventMeta(eventType, reportStatus, responseStatus) 
     if (itemStatus === 'not_started') {
       return {
         ...base,
+        actionType: 'complete_item',
         requiredAction: 'Complete this item',
         defaultStatus: 'not_started',
       };

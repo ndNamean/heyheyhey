@@ -68,6 +68,8 @@ vi.mock('../i18n', () => ({
         myReportsRetry: 'Retry',
         myReportsShowing: 'Showing {shown}',
         fixResubmit: 'Fix & resubmit',
+        completeRemaining: 'Complete remaining',
+        completeAndFix: 'Complete & fix',
         item: 'item',
         items: 'items',
       },
@@ -178,5 +180,28 @@ describe('MyReportsPanel infinite modes', () => {
     render(<MyReportsPanel profile={profile} onFixReport={onFixReport} />);
     fireEvent.click(screen.getByRole('button', { name: /Fix & resubmit/ }));
     expect(onFixReport).toHaveBeenCalledWith('r1');
+  });
+
+  it('shows Complete remaining for not_started-only store work', () => {
+    infiniteState.data = {
+      reports: [
+        report({
+          id: 'r2',
+          responses: [
+            {
+              id: 'resp2',
+              status: 'not_started',
+              title: 'VG check',
+              required: true,
+              rejectionReason: '',
+            },
+          ],
+        }),
+      ],
+    };
+    const onFixReport = vi.fn();
+    render(<MyReportsPanel profile={profile} onFixReport={onFixReport} />);
+    fireEvent.click(screen.getByRole('button', { name: /Complete remaining/ }));
+    expect(onFixReport).toHaveBeenCalledWith('r2');
   });
 });

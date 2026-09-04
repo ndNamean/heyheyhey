@@ -211,7 +211,7 @@ describe('reportNotificationContent', () => {
       note: 'This item was not started.',
     });
     expect(n.eventType).toBe('report_action_required');
-    expect(n.actionType).toBe('fix_resubmit');
+    expect(n.actionType).toBe('complete_item');
     expect(n.requiredAction).toBe('Complete this item');
     expect(n.statusSnapshot).toBe('not_started');
     expect(n.copy.scannableLine).toContain('Complete this item');

@@ -283,7 +283,7 @@ describe('Phase 5 — permissions contracts', () => {
     expect(perms).toContain('onlyResubmitFields:');
     const resubmitBlock = perms.slice(
       perms.indexOf('onlyResubmitFields:'),
-      perms.indexOf('onlyResponseSubmitFields:'),
+      perms.indexOf('onlyCompleteFields:'),
     );
     expect(resubmitBlock).not.toContain('firstCompletedAt');
     expect(resubmitBlock).not.toContain('scheduleOccurrenceKey');
@@ -300,6 +300,25 @@ describe('Phase 5 — permissions contracts', () => {
     expect(submitBlock).toContain('scheduleOccurrenceKey');
     expect(submitBlock).toContain('scheduledDueAt');
     expect(submitBlock).toContain('scheduleVersionId');
+  });
+
+  it('allows schedule capture on canCompleteNotStarted without unlocking correction resubmit', () => {
+    expect(perms).toContain('canCompleteNotStarted:');
+    expect(perms).toContain('onlyCompleteFields:');
+    const completeBlock = perms.slice(
+      perms.indexOf('onlyCompleteFields:'),
+      perms.indexOf('onlyResponseSubmitFields:'),
+    );
+    expect(completeBlock).toContain('firstCompletedAt');
+    expect(completeBlock).toContain('scheduleOccurrenceKey');
+    expect(completeBlock).toContain('scheduledDueAt');
+    expect(completeBlock).toContain('scheduleVersionId');
+    const resubmitBlock = perms.slice(
+      perms.indexOf('onlyResubmitFields:'),
+      perms.indexOf('onlyCompleteFields:'),
+    );
+    expect(resubmitBlock).not.toContain('firstCompletedAt');
+    expect(resubmitBlock).not.toContain('scheduleOccurrenceKey');
   });
 
   it('restricts templateScheduleVersions mutations to canEditMaster', () => {

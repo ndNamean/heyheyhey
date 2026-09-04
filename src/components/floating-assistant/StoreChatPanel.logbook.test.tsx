@@ -314,6 +314,72 @@ describe('StoreChatPanel report_system row', () => {
     }
   });
 
+  it('labels legacy fix_resubmit+not_started as Complete this item and opens continue path', async () => {
+    const { OPEN_FIX_RESUBMIT_REPORT_EVENT, OPEN_REVIEW_REPORT_EVENT } = await import(
+      '../../lib/reportDeepLink'
+    );
+    currentMessages = [
+      {
+        ...currentMessages[0],
+        requiredAction: 'Fix and resubmit',
+        actionType: 'fix_resubmit',
+        statusSnapshot: 'not_started',
+        logbookEventType: 'report_action_required',
+      },
+    ];
+    const fixSeen: unknown[] = [];
+    const reviewSeen: unknown[] = [];
+    const onFix = (event: Event) => {
+      fixSeen.push((event as CustomEvent).detail);
+    };
+    const onReview = (event: Event) => {
+      reviewSeen.push((event as CustomEvent).detail);
+    };
+    window.addEventListener(OPEN_FIX_RESUBMIT_REPORT_EVENT, onFix);
+    window.addEventListener(OPEN_REVIEW_REPORT_EVENT, onReview);
+    try {
+      renderPanel();
+      fireEvent.click(screen.getByRole('button', { name: /complete this item/i }));
+      expect(fixSeen).toHaveLength(1);
+      expect(reviewSeen).toEqual([]);
+    } finally {
+      window.removeEventListener(OPEN_FIX_RESUBMIT_REPORT_EVENT, onFix);
+      window.removeEventListener(OPEN_REVIEW_REPORT_EVENT, onReview);
+    }
+  });
+
+  it('routes complete_item actionType to the same continue-report event', async () => {
+    const { OPEN_FIX_RESUBMIT_REPORT_EVENT } = await import('../../lib/reportDeepLink');
+    currentMessages = [
+      {
+        ...currentMessages[0],
+        requiredAction: 'Complete this item',
+        actionType: 'complete_item',
+        statusSnapshot: 'not_started',
+        logbookEventType: 'report_action_required',
+      },
+    ];
+    const fixSeen: unknown[] = [];
+    const onFix = (event: Event) => {
+      fixSeen.push((event as CustomEvent).detail);
+    };
+    window.addEventListener(OPEN_FIX_RESUBMIT_REPORT_EVENT, onFix);
+    try {
+      renderPanel();
+      fireEvent.click(screen.getByRole('button', { name: /complete this item/i }));
+      expect(fixSeen).toEqual([
+        {
+          page: 'review',
+          surface: 'reports',
+          reportId: 'report-99',
+          storeId: 's1',
+        },
+      ]);
+    } finally {
+      window.removeEventListener(OPEN_FIX_RESUBMIT_REPORT_EVENT, onFix);
+    }
+  });
+
   it('uses message requiredAction for report CTA label', () => {
     currentMessages = [
       {

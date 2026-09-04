@@ -7,6 +7,10 @@ import {
   MY_REPORTS_PAGE_SIZE,
   reconcileOwnReportNeedsActionCount,
 } from '../lib/reportNeedsAction';
+import {
+  classifyStoreWorkResponses,
+  filterStoreWorkResponses,
+} from '../lib/reportStoreWork';
 import { useReportNeedsActionCount } from '../hooks/useReportNeedsActionCount';
 import ReportTimeline from './ReportTimeline';
 import type { Profile, Report, ReportResponse, ReviewEvent } from '../types';
@@ -191,9 +195,14 @@ export default function MyReportsPanel({ profile, onFixReport }: Props) {
         </div>
         {reports.map((report) => {
           const responses = (report.responses ?? []) as ReportResponse[];
-          const flagged = responses.filter((r) =>
-            ['rejected', 'need_correction'].includes(r.status),
-          );
+          const storeWork = filterStoreWorkResponses(responses);
+          const workClass = classifyStoreWorkResponses(storeWork);
+          const ctaLabel =
+            workClass.completeCount > 0 && workClass.fixCount > 0
+              ? t.staffHome.completeAndFix
+              : workClass.completeCount > 0
+                ? t.staffHome.completeRemaining
+                : t.staffHome.fixResubmit;
 
           return (
             <div className="item-card" key={report.id} style={{ marginTop: 10 }}>
@@ -208,7 +217,7 @@ export default function MyReportsPanel({ profile, onFixReport }: Props) {
                 {t.feedback.compliance} {report.compliancePercent ?? 0}%
               </p>
 
-              {flagged.map((resp) => (
+              {storeWork.map((resp) => (
                 <div className="feedback-report-item" key={resp.id}>
                   <strong>{resp.title}</strong>
                   <span className={badgeClass(resp.status)}>{statusLabel(t, resp.status)}</span>
@@ -218,14 +227,14 @@ export default function MyReportsPanel({ profile, onFixReport }: Props) {
                 </div>
               ))}
 
-              {flagged.length > 0 && onFixReport && (
+              {storeWork.length > 0 && onFixReport && (
                 <button
                   className="fix-resubmit-btn"
                   style={{ marginTop: 10 }}
                   onClick={() => onFixReport(report.id)}
                 >
-                  {t.staffHome.fixResubmit} ({flagged.length}{' '}
-                  {flagged.length > 1 ? t.staffHome.items : t.staffHome.item})
+                  {ctaLabel} ({storeWork.length}{' '}
+                  {storeWork.length > 1 ? t.staffHome.items : t.staffHome.item})
                 </button>
               )}
 

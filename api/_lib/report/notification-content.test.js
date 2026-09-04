@@ -103,7 +103,7 @@ describe('api/_lib/report/notification-content', () => {
       itemTitle: 'VG check',
     });
     expect(n.eventType).toBe('report_action_required');
-    expect(n.actionType).toBe('fix_resubmit');
+    expect(n.actionType).toBe('complete_item');
     expect(n.requiredAction).toBe('Complete this item');
     expect(n.statusSnapshot).toBe('not_started');
     expect(n.copy.chatBody).toContain('Complete this item');

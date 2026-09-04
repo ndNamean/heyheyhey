@@ -103,28 +103,33 @@ export function canFinaliseReportResponses(
 
 /**
  * Remind in Store Chat when any item still needs store work
- * (need_correction, rejected, or not_started). Waiting approval stays out.
+ * (need_correction, rejected, or required not_started). Waiting approval stays out.
+ * Aligns with isStoreWorkResponse so Remind cannot target optional not_started skips.
  */
 export function canRemindReportInStoreChat(
-  responses: Pick<ReportResponse, 'status'>[],
+  responses: Array<Pick<ReportResponse, 'status'> & { required?: boolean | null }>,
 ): boolean {
   return responses.some(
     (r) =>
       r.status === 'need_correction' ||
       r.status === 'rejected' ||
-      r.status === 'not_started',
+      (r.status === 'not_started' && r.required !== false),
   );
 }
 
-/** Prefer need_correction, then rejected, then not_started — for Remind note / itemTitle. */
+/** Prefer need_correction, then rejected, then required not_started — for Remind note / itemTitle. */
 export function firstActionableReportResponse<
-  T extends Pick<ReportResponse, 'status' | 'title' | 'rejectionReason' | 'feedbackNote'>,
+  T extends Pick<ReportResponse, 'status' | 'title' | 'rejectionReason' | 'feedbackNote'> & {
+    required?: boolean | null;
+  },
 >(responses: T[]): T | null {
   const needCorrection = responses.find((r) => r.status === 'need_correction');
   if (needCorrection) return needCorrection;
   const rejected = responses.find((r) => r.status === 'rejected');
   if (rejected) return rejected;
-  return responses.find((r) => r.status === 'not_started') ?? null;
+  return (
+    responses.find((r) => r.status === 'not_started' && r.required !== false) ?? null
+  );
 }
 
 /**

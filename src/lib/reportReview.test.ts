@@ -358,6 +358,15 @@ describe('canRemindReportInStoreChat + firstActionableReportResponse', () => {
     expect(firstActionableReportResponse(responses)?.id).toBe('b');
   });
 
+  it('hides Remind for optional not_started only', () => {
+    const responses = [
+      response({ id: 'a', status: 'approved' }),
+      response({ id: 'b', status: 'not_started', title: 'Optional skip', required: false }),
+    ];
+    expect(canRemindReportInStoreChat(responses)).toBe(false);
+    expect(firstActionableReportResponse(responses)).toBeNull();
+  });
+
   it('shows Remind for not_started even if other items are waiting_approval', () => {
     const responses = [
       response({ id: 'a', status: 'waiting_approval' }),

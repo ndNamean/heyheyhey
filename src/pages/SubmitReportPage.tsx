@@ -19,8 +19,13 @@ import {
 import { deliverReportEvent } from '../lib/reportNotifyClient';
 import {
   buildSubmitterNeedsActionEdgeTxs,
+  computeSubmitterNeedsAction,
   readSubmitterNeedsAction,
 } from '../lib/reportNeedsAction';
+import {
+  classifyStoreWorkResponses,
+  filterStoreWorkResponses,
+} from '../lib/reportStoreWork';
 import {
   buildScheduleCaptureForItem,
   findDuplicateOccurrenceKeys,
@@ -131,12 +136,23 @@ export default function SubmitReportPage({
   );
   const selectedTemplate = availableTemplates.find((t) => t.id === templateId);
 
-  const flaggedResponses = useMemo(() => {
+  const storeWorkResponses = useMemo(() => {
     if (!correctionReport) return [] as ReportResponse[];
-    return ((correctionReport.responses ?? []) as ReportResponse[]).filter((r) =>
-      ['rejected', 'need_correction'].includes(r.status),
+    return filterStoreWorkResponses(
+      (correctionReport.responses ?? []) as ReportResponse[],
     );
   }, [correctionReport]);
+
+  const storeWorkClass = useMemo(
+    () => classifyStoreWorkResponses(storeWorkResponses),
+    [storeWorkResponses],
+  );
+
+  const storeWorkByItemId = useMemo(() => {
+    const map = new Map<string, ReportResponse>();
+    for (const resp of storeWorkResponses) map.set(resp.templateItemId, resp);
+    return map;
+  }, [storeWorkResponses]);
 
   const visibleItems: TemplateItem[] = useMemo(() => {
     if (!selectedTemplate?.items) return [];
@@ -144,8 +160,8 @@ export default function SubmitReportPage({
     const sorted = [...items].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 
     if (correctionMode) {
-      const flaggedItemIds = new Set(flaggedResponses.map((r) => r.templateItemId));
-      return sorted.filter((i) => flaggedItemIds.has(i.id));
+      const workItemIds = new Set(storeWorkResponses.map((r) => r.templateItemId));
+      return sorted.filter((i) => workItemIds.has(i.id));
     }
 
     const roleFiltered = seesAllTemplateItems(profile.role, defs)
@@ -155,7 +171,7 @@ export default function SubmitReportPage({
     if (!pinnedItemIds) return roleFiltered;
     const pinned = new Set(pinnedItemIds);
     return roleFiltered.filter((i) => pinned.has(i.id));
-  }, [selectedTemplate, profile.role, correctionMode, flaggedResponses, defs, pinnedItemIds]);
+  }, [selectedTemplate, profile.role, correctionMode, storeWorkResponses, defs, pinnedItemIds]);
 
   useEffect(() => {
     if (correctionMode) {
@@ -185,8 +201,8 @@ export default function SubmitReportPage({
 
     correctionInitRef.current = true;
 
-    const flagged = ((correctionReport.responses ?? []) as ReportResponse[]).filter((r) =>
-      ['rejected', 'need_correction'].includes(r.status),
+    const work = filterStoreWorkResponses(
+      (correctionReport.responses ?? []) as ReportResponse[],
     );
 
     const initialResponses: Record<string, LocalResponse> = {};
@@ -194,7 +210,7 @@ export default function SubmitReportPage({
     const notes: Record<string, string> = {};
     const mediaIds = new Set<string>();
 
-    for (const resp of flagged) {
+    for (const resp of work) {
       idMap[resp.templateItemId] = resp.id;
       notes[resp.templateItemId] = resp.rejectionReason ?? '';
       const media = (resp.media ?? []) as MediaRecord[];
@@ -314,13 +330,24 @@ export default function SubmitReportPage({
         alert(`${t.submit.markItemDoneNamed} ${item.title}`);
         return false;
       }
-      if (correctionMode && needsMedia(item.proofType)) {
+      const origStatus = storeWorkByItemId.get(item.id)?.status;
+      const completingNotStarted = correctionMode && origStatus === 'not_started';
+      const fixingFlagged =
+        correctionMode &&
+        (origStatus === 'rejected' || origStatus === 'need_correction');
+
+      if (fixingFlagged && needsMedia(item.proofType)) {
         const hasNewPhoto = r.mediaItems.some((m) => !existingMediaIds.has(m.mediaRecordId));
         if (!hasNewPhoto) {
           alert(`${t.submit.newPhotoRequired} ${item.title}`);
           return false;
         }
-      } else if (item.required && needsMedia(item.proofType) && !r.mediaItems.length) {
+      } else if (
+        (completingNotStarted || !correctionMode) &&
+        item.required &&
+        needsMedia(item.proofType) &&
+        !r.mediaItems.length
+      ) {
         alert(`${t.validation.missingPhoto} ${item.title}`);
         return false;
       }
@@ -442,6 +469,11 @@ export default function SubmitReportPage({
         responseItems.map((r) => ({ ticked: r.ticked, required: r.required })),
       );
 
+      const nextNeedsAction = computeSubmitterNeedsAction(
+        'waiting_approval',
+        responseItems.map((r) => ({ status: r.status, required: r.required })),
+      );
+
       const reportTx = db.tx.reports[activeReportId]
         .update({
           storeId: selectedStore.id,
@@ -455,7 +487,7 @@ export default function SubmitReportPage({
           submittedByRole: profile.role,
           submittedAt: now,
           status: 'waiting_approval',
-          submitterNeedsAction: false,
+          submitterNeedsAction: nextNeedsAction,
           completionPercent,
           compliancePercent: 0,
           archived: false,
@@ -522,7 +554,21 @@ export default function SubmitReportPage({
         now,
       );
 
-      await db.transact([reportTx, ...responseTxs, ...mediaLinkTxs, ...reviewEventTxs]);
+      const needsActionEdgeTxs = await buildSubmitterNeedsActionEdgeTxs(
+        profile.userId,
+        false,
+        nextNeedsAction,
+        null,
+        { now },
+      );
+
+      await db.transact([
+        reportTx,
+        ...responseTxs,
+        ...mediaLinkTxs,
+        ...reviewEventTxs,
+        ...needsActionEdgeTxs,
+      ] as Parameters<typeof db.transact>[0]);
       void deliverReportEvent({
         reportId: activeReportId,
         eventType: 'report_submitted',
@@ -537,7 +583,7 @@ export default function SubmitReportPage({
   }
 
   async function resubmitCorrections() {
-    if (!correctionReport || !selectedStore) return;
+    if (!correctionReport || !selectedStore || !selectedTemplate) return;
     if (!validateItems(visibleItems)) return;
 
     setSubmitting(true);
@@ -545,10 +591,103 @@ export default function SubmitReportPage({
       const now = nowIso();
       const allResponses = (correctionReport.responses ?? []) as ReportResponse[];
 
+      const versions = (selectedTemplate.scheduleVersions ?? []) as TemplateScheduleVersion[];
+      const versionResolved = resolveActiveScheduleVersion(
+        versions.map((v) => ({
+          id: v.id,
+          scheduleJson: v.scheduleJson,
+          effectiveFrom: v.effectiveFrom,
+          effectiveTo: v.effectiveTo,
+        })),
+        reportDate,
+      );
+      const fallbackSchedule = parseTemplateSchedule(selectedTemplate.scheduleJson);
+      const activeSchedule =
+        versionResolved?.schedule ??
+        (fallbackSchedule.enabled &&
+        (!fallbackSchedule.effectiveFrom ||
+          reportDate >= fallbackSchedule.effectiveFrom.slice(0, 10))
+          ? fallbackSchedule
+          : null);
+      const scheduleVersionId = versionResolved?.id ?? '';
+
+      const completingItems = visibleItems.filter((item) => {
+        const orig = storeWorkByItemId.get(item.id);
+        const r = responses[item.id] ?? EMPTY_RESPONSE;
+        return orig?.status === 'not_started' && r.ticked;
+      });
+
+      const existingOccurrenceKeys = new Set<string>();
+      if (completingItems.length && activeSchedule) {
+        for (const resp of allResponses) {
+          if (resp.scheduleOccurrenceKey?.trim()) {
+            existingOccurrenceKeys.add(resp.scheduleOccurrenceKey.trim());
+          }
+        }
+        try {
+          const { data: siblingData } = await db.queryOnce({
+            reports: {
+              $: {
+                where: {
+                  storeId: selectedStore.id,
+                  templateId: selectedTemplate.id,
+                },
+              },
+              responses: {},
+            },
+          });
+          for (const report of (siblingData?.reports ?? []) as Report[]) {
+            for (const resp of (report.responses ?? []) as ReportResponse[]) {
+              if (resp.scheduleOccurrenceKey?.trim()) {
+                existingOccurrenceKeys.add(resp.scheduleOccurrenceKey.trim());
+              }
+            }
+          }
+        } catch {
+          // Best-effort; duplicate guard still checks keys collected from this report.
+        }
+      }
+
+      const candidateKeys: string[] = [];
+      const scheduleByItemId = new Map<
+        string,
+        {
+          scheduleOccurrenceKey: string;
+          scheduledDueAt: string;
+          firstCompletedAt: string;
+          scheduleVersionId: string;
+        }
+      >();
+
+      for (const item of completingItems) {
+        if (!activeSchedule) break;
+        const capture = buildScheduleCaptureForItem({
+          templateId: selectedTemplate.id,
+          itemId: item.id,
+          storeId: selectedStore.id,
+          reportDateYmd: reportDate,
+          completedAtIso: now,
+          schedule: activeSchedule,
+          scheduleVersionId,
+        });
+        if (!capture) continue;
+        scheduleByItemId.set(item.id, capture);
+        if (capture.scheduleOccurrenceKey) candidateKeys.push(capture.scheduleOccurrenceKey);
+      }
+
+      if (candidateKeys.length) {
+        const duplicates = findDuplicateOccurrenceKeys(existingOccurrenceKeys, candidateKeys);
+        if (duplicates.length) {
+          alert(t.submit.duplicateScheduleOccurrence);
+          return;
+        }
+      }
+
       const responseUpdateTxs = visibleItems.map((item) => {
         const respId = responseIdByItem[item.id];
         const r = responses[item.id] ?? EMPTY_RESPONSE;
-        return db.tx.reportResponses[respId].update({
+        const orig = storeWorkByItemId.get(item.id);
+        const patch: Record<string, unknown> = {
           ticked: r.ticked,
           numberValue: r.numberValue,
           note: r.note,
@@ -561,7 +700,18 @@ export default function SubmitReportPage({
           approvedByUserId: '',
           approvedAt: '',
           storeId: selectedStore.id,
-        });
+        };
+        // Schedule capture only when first-completing not_started — never on correction resubmit.
+        if (orig?.status === 'not_started') {
+          const capture = scheduleByItemId.get(item.id);
+          if (capture) {
+            patch.scheduleOccurrenceKey = capture.scheduleOccurrenceKey;
+            patch.scheduledDueAt = capture.scheduledDueAt;
+            patch.firstCompletedAt = capture.firstCompletedAt;
+            patch.scheduleVersionId = capture.scheduleVersionId;
+          }
+        }
+        return db.tx.reportResponses[respId].update(patch);
       });
 
       const mediaLinkTxs = visibleItems.flatMap((item) => {
@@ -576,7 +726,12 @@ export default function SubmitReportPage({
         const item = visibleItems.find((i) => responseIdByItem[i.id] === resp.id);
         if (!item) return resp;
         const r = responses[item.id] ?? EMPTY_RESPONSE;
-        return { ...resp, ticked: r.ticked, status: 'waiting_approval' as const };
+        return {
+          ...resp,
+          ticked: r.ticked,
+          status: 'waiting_approval' as const,
+          required: resp.required,
+        };
       });
 
       const completionPercent = calcCompletion(
@@ -584,9 +739,13 @@ export default function SubmitReportPage({
       );
 
       const prevNeedsAction = readSubmitterNeedsAction(correctionReport);
+      const nextNeedsAction = computeSubmitterNeedsAction(
+        'waiting_approval',
+        mergedResponses,
+      );
       const reportTx = db.tx.reports[correctionReport.id].update({
         status: 'waiting_approval',
-        submitterNeedsAction: false,
+        submitterNeedsAction: nextNeedsAction,
         completionPercent,
         updatedAt: now,
       });
@@ -613,7 +772,7 @@ export default function SubmitReportPage({
       const needsActionEdgeTxs = await buildSubmitterNeedsActionEdgeTxs(
         profile.userId,
         prevNeedsAction,
-        false,
+        nextNeedsAction,
         null,
         { now },
       );
@@ -659,7 +818,7 @@ export default function SubmitReportPage({
     );
   }
 
-  if (correctionMode && correctionReport && !flaggedResponses.length) {
+  if (correctionMode && correctionReport && !storeWorkResponses.length) {
     return (
       <div className="card">
         <h2>{t.submit.noCorrections}</h2>
@@ -679,13 +838,51 @@ export default function SubmitReportPage({
     );
   }
 
+  const continueBannerTitle =
+    storeWorkClass.completeCount > 0 && storeWorkClass.fixCount > 0
+      ? t.submit.completeAndFix
+      : storeWorkClass.completeCount > 0
+        ? t.submit.completeRemaining
+        : t.submit.fixCorrections;
+
+  const continueSuccessTitle =
+    storeWorkClass.completeCount > 0 && storeWorkClass.fixCount > 0
+      ? t.submit.continueSubmitted
+      : storeWorkClass.completeCount > 0
+        ? t.submit.itemsCompletedTitle
+        : t.submit.correctionsResubmitted;
+
+  const continueSuccessBody =
+    storeWorkClass.completeCount > 0 && storeWorkClass.fixCount === 0
+      ? t.submit.itemsCompletedBody
+      : t.submit.fixesInQueue;
+
+  const continueReadyTitle =
+    storeWorkClass.completeCount > 0 && storeWorkClass.fixCount > 0
+      ? t.submit.readyToContinue
+      : storeWorkClass.completeCount > 0
+        ? t.submit.readyToComplete
+        : t.submit.readyToResubmit;
+
+  const continueTag =
+    storeWorkClass.completeCount > 0 && storeWorkClass.fixCount > 0
+      ? t.submit.continueTag
+      : storeWorkClass.completeCount > 0
+        ? t.submit.completeTag
+        : t.submit.correctionTag;
+
+  const continueNextLabel =
+    storeWorkClass.completeCount > 0 && storeWorkClass.fixCount > 0
+      ? t.submit.submitContinueCheck
+      : storeWorkClass.completeCount > 0
+        ? t.submit.completeItemsCheck
+        : t.submit.resubmitCorrectionsCheck;
+
   if (submitted) {
     return (
       <div className="card">
-        <h2>{correctionMode ? t.submit.correctionsResubmitted : t.submit.reportSubmitted}</h2>
-        <p>
-          {correctionMode ? t.submit.fixesInQueue : t.submit.waitingReview}
-        </p>
+        <h2>{correctionMode ? continueSuccessTitle : t.submit.reportSubmitted}</h2>
+        <p>{correctionMode ? continueSuccessBody : t.submit.waitingReview}</p>
         {correctionMode && notifySoftFail ? (
           <p className="small" style={{ marginTop: 8 }}>
             {t.submit.resubmitNotifyPending}
@@ -773,7 +970,7 @@ export default function SubmitReportPage({
     return (
       <div className="submit-wizard">
         <div className="card">
-          <h2>{correctionMode ? t.submit.readyToResubmit : t.submit.readyToSubmit}</h2>
+          <h2>{correctionMode ? continueReadyTitle : t.submit.readyToSubmit}</h2>
           <p>
             {correctionMode
               ? `${visibleItems.length} ${
@@ -792,7 +989,7 @@ export default function SubmitReportPage({
             submitting
               ? t.submit.submitting
               : correctionMode
-                ? t.submit.resubmitCorrectionsCheck
+                ? continueNextLabel
                 : t.submit.submitReportCheck
           }
           onBack={() => {
@@ -813,7 +1010,7 @@ export default function SubmitReportPage({
     <div className="submit-wizard">
       {correctionMode && (
         <div className="card correction-mode-banner">
-          <h2 style={{ margin: 0 }}>{t.submit.fixCorrections}</h2>
+          <h2 style={{ margin: 0 }}>{continueBannerTitle}</h2>
           <p className="small" style={{ margin: '6px 0 0' }}>
             {selectedStore?.code} — {correctionReport?.templateName} · {correctionReport?.reportDate}
           </p>
@@ -831,7 +1028,7 @@ export default function SubmitReportPage({
       <div className="card">
         <p className="small">
           {t.submit.itemNOf} {step + 1} {t.common.of} {visibleItems.length}
-          {correctionMode ? ` · ${t.submit.correctionTag}` : ''}
+          {correctionMode ? ` · ${continueTag}` : ''}
         </p>
         <div className="progress-bar">
           <div style={{ width: progress + '%' }} />

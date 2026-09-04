@@ -20,7 +20,7 @@ export type ReportNotifyEventType =
   | 'report_action_required'
   | 'report_finalized';
 
-export type ReportChatActionType = 'open_review' | 'fix_resubmit' | 'view';
+export type ReportChatActionType = 'open_review' | 'fix_resubmit' | 'complete_item' | 'view';
 
 export interface NormalizedReportNotification {
   eventType: ReportNotifyEventType;
@@ -136,6 +136,7 @@ export function resolveReportEventMeta(
     if (itemStatus === 'not_started') {
       return {
         ...base,
+        actionType: 'complete_item',
         requiredAction: 'Complete this item',
         defaultStatus: 'not_started',
       };
