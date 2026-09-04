@@ -2,12 +2,19 @@
  * @vitest-environment jsdom
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import type { Profile, Report, Store } from '../types';
 
-const { queryCalls, reportsState } = vi.hoisted(() => ({
+const { loadNextPage, infiniteState, queryCalls, pendingCountState } = vi.hoisted(() => ({
+  loadNextPage: vi.fn(),
+  infiniteState: {
+    data: null as { reports: Report[] } | null,
+    isLoading: false,
+    canLoadNextPage: false,
+    error: null as Error | null,
+  },
   queryCalls: [] as unknown[],
-  reportsState: {
+  pendingCountState: {
     data: null as { reports: Report[] } | null,
     isLoading: false,
     error: null as Error | null,
@@ -16,10 +23,20 @@ const { queryCalls, reportsState } = vi.hoisted(() => ({
 
 vi.mock('../db', () => ({
   db: {
+    useInfiniteQuery: (query: Record<string, unknown> | null) => {
+      queryCalls.push({ type: 'infinite', query });
+      return {
+        data: infiniteState.data,
+        isLoading: infiniteState.isLoading,
+        canLoadNextPage: infiniteState.canLoadNextPage,
+        loadNextPage,
+        error: infiniteState.error,
+      };
+    },
     useQuery: (query: Record<string, unknown> | null) => {
-      queryCalls.push(query);
+      queryCalls.push({ type: 'query', query });
       if (!query) return { data: null, isLoading: false, error: null };
-      if ('reports' in query) return reportsState;
+      if ('reports' in query) return pendingCountState;
       if ('reviewEvents' in query) return { data: { reviewEvents: [] }, isLoading: false, error: null };
       if ('profiles' in query) return { data: { profiles: [] }, isLoading: false, error: null };
       return { data: {}, isLoading: false, error: null };
@@ -37,6 +54,14 @@ vi.mock('../i18n', () => ({
       reportReviewStatus: {
         title: 'Report Review Status',
         noReports: 'No reports in your stores for the last 30 days.',
+        noPending: 'No pending reports',
+        pendingOnly: 'Pending',
+        showAll: 'Show all',
+        modeLabel: 'Report review status mode',
+        loadMore: 'Load more',
+        loadMoreError: 'Could not load more',
+        loadError: 'Could not load reports',
+        retry: 'Retry',
         submittedBy: 'Submitted by',
         submittedTime: 'Submitted time',
         latestReview: 'Latest review',
@@ -138,14 +163,38 @@ function reportInWindow(partial: Partial<Report> = {}): Report {
   };
 }
 
-function lastReportsQuery(): {
-  reports: { $?: { where?: Record<string, unknown>; limit?: number; order?: unknown } };
+function lastInfiniteReportsQuery(): {
+  reports: {
+    $?: { where?: Record<string, unknown>; limit?: number; order?: unknown };
+    responses?: unknown;
+  };
 } | null {
   for (let i = queryCalls.length - 1; i >= 0; i--) {
-    const q = queryCalls[i];
+    const call = queryCalls[i] as { type?: string; query?: unknown };
+    if (call?.type !== 'infinite') continue;
+    const q = call.query;
     if (q && typeof q === 'object' && 'reports' in q) {
       return q as {
-        reports: { $?: { where?: Record<string, unknown>; limit?: number; order?: unknown } };
+        reports: {
+          $?: { where?: Record<string, unknown>; limit?: number; order?: unknown };
+          responses?: unknown;
+        };
+      };
+    }
+  }
+  return null;
+}
+
+function lastPendingCountQuery(): {
+  reports: { $?: { where?: Record<string, unknown>; limit?: number }; responses?: unknown };
+} | null {
+  for (let i = queryCalls.length - 1; i >= 0; i--) {
+    const call = queryCalls[i] as { type?: string; query?: unknown };
+    if (call?.type !== 'query') continue;
+    const q = call.query;
+    if (q && typeof q === 'object' && 'reports' in q) {
+      return q as {
+        reports: { $?: { where?: Record<string, unknown>; limit?: number }; responses?: unknown };
       };
     }
   }
@@ -156,69 +205,133 @@ describe('ReportReviewStatusPanel query scoping', () => {
   beforeEach(() => {
     cleanup();
     queryCalls.length = 0;
-    reportsState.data = null;
-    reportsState.isLoading = false;
-    reportsState.error = null;
+    loadNextPage.mockReset();
+    infiniteState.data = null;
+    infiniteState.isLoading = false;
+    infiniteState.canLoadNextPage = false;
+    infiniteState.error = null;
+    pendingCountState.data = null;
+    pendingCountState.isLoading = false;
+    pendingCountState.error = null;
   });
 
   afterEach(() => {
     cleanup();
   });
 
-  it('scopes the Instant reports query to assigned stores and a date window', () => {
-    reportsState.data = { reports: [reportInWindow()] };
+  it('defaults to Pending mode with waiting_approval where and page size 20', () => {
+    infiniteState.data = { reports: [reportInWindow()] };
+    pendingCountState.data = { reports: [reportInWindow(), reportInWindow({ id: 'r2' })] };
     render(<ReportReviewStatusPanel profile={manager} />);
-    const query = lastReportsQuery();
-    expect(query?.reports.$?.where).toMatchObject({
+
+    const listQuery = lastInfiniteReportsQuery();
+    expect(listQuery?.reports.$?.where).toMatchObject({
       storeId: { $in: ['store-a'] },
+      status: 'waiting_approval',
     });
-    expect(query?.reports.$?.where?.reportDate).toMatchObject({
+    expect(listQuery?.reports.$?.where?.reportDate).toMatchObject({
       $gte: expect.any(String),
       $lte: expect.any(String),
     });
-    expect(query?.reports.$?.limit).toBe(200);
-    expect(query?.reports.$?.order).toEqual({ submittedAt: 'desc' });
+    expect(listQuery?.reports.$?.limit).toBe(20);
+    expect(listQuery?.reports.$?.order).toEqual({ submittedAt: 'desc' });
+    expect(listQuery?.reports.responses).toEqual({});
+
+    const pending = screen.getByRole('button', { name: 'Pending' });
+    const showAll = screen.getByRole('button', { name: 'Show all' });
+    expect(pending.getAttribute('aria-pressed')).toBe('true');
+    expect(showAll.getAttribute('aria-pressed')).toBe('false');
     expect(screen.getByText('XD')).toBeTruthy();
   });
 
-  it('does not subscribe to reports when the manager has no stores', () => {
+  it('shows exact pending badge from thin count query (not list page size)', () => {
+    infiniteState.data = { reports: [reportInWindow()] };
+    pendingCountState.data = {
+      reports: Array.from({ length: 23 }, (_, i) => reportInWindow({ id: `p${i}` })),
+    };
+    render(<ReportReviewStatusPanel profile={manager} />);
+    expect(screen.getByText(/23 pending/)).toBeTruthy();
+
+    const countQuery = lastPendingCountQuery();
+    expect(countQuery?.reports.$?.where).toMatchObject({ status: 'waiting_approval' });
+    expect(countQuery?.reports.$?.limit).toBe(1000);
+    expect(countQuery?.reports.responses).toBeUndefined();
+  });
+
+  it('switches to Show all without status filter', () => {
+    infiniteState.data = { reports: [reportInWindow({ status: 'approved' })] };
+    pendingCountState.data = { reports: [] };
+    render(<ReportReviewStatusPanel profile={manager} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Show all' }));
+    expect(screen.getByRole('button', { name: 'Show all' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    const listQuery = lastInfiniteReportsQuery();
+    expect(listQuery?.reports.$?.where?.status).toBeUndefined();
+    expect(listQuery?.reports.$?.where).toMatchObject({
+      storeId: { $in: ['store-a'] },
+    });
+  });
+
+  it('shows Load more when canLoadNextPage and calls loadNextPage', async () => {
+    infiniteState.data = { reports: [reportInWindow()] };
+    infiniteState.canLoadNextPage = true;
+    pendingCountState.data = { reports: [reportInWindow()] };
+    render(<ReportReviewStatusPanel profile={manager} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
+    await waitFor(() => expect(loadNextPage).toHaveBeenCalled());
+  });
+
+  it('does not subscribe meaningfully when the manager has no stores', () => {
     render(<ReportReviewStatusPanel profile={{ ...manager, stores: [] }} />);
-    expect(lastReportsQuery()).toBeNull();
-    expect(screen.getByText('No reports in your stores for the last 30 days.')).toBeTruthy();
+    expect(screen.getByText('No pending reports')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Show all' }).length).toBe(1);
   });
 
   it('shows loading instead of the empty copy while the first fetch is in flight', () => {
-    reportsState.isLoading = true;
-    reportsState.data = null;
+    infiniteState.isLoading = true;
+    infiniteState.data = null;
     render(<ReportReviewStatusPanel profile={manager} />);
     expect(screen.getByText('Loading…')).toBeTruthy();
-    expect(screen.queryByText('No reports in your stores for the last 30 days.')).toBeNull();
+    expect(screen.queryByText('No pending reports')).toBeNull();
   });
 
   it('treats a missing first result as loading, not empty', () => {
-    reportsState.isLoading = false;
-    reportsState.data = null;
+    infiniteState.isLoading = false;
+    infiniteState.data = null;
     render(<ReportReviewStatusPanel profile={manager} />);
     expect(screen.getByText('Loading…')).toBeTruthy();
-    expect(screen.queryByText('No reports in your stores for the last 30 days.')).toBeNull();
+    expect(screen.queryByText('No pending reports')).toBeNull();
   });
 
   it('keeps last-good rows when a later query errors empty', () => {
-    reportsState.data = { reports: [reportInWindow()] };
+    infiniteState.data = { reports: [reportInWindow()] };
+    pendingCountState.data = { reports: [reportInWindow()] };
     const { rerender } = render(<ReportReviewStatusPanel profile={manager} />);
     expect(screen.getByText('XD')).toBeTruthy();
 
-    reportsState.data = { reports: [] };
-    reportsState.error = new Error('payload too large');
+    infiniteState.data = { reports: [] };
+    infiniteState.error = new Error('payload too large');
     rerender(<ReportReviewStatusPanel profile={manager} />);
     expect(screen.getByText('XD')).toBeTruthy();
-    expect(screen.queryByText('No reports in your stores for the last 30 days.')).toBeNull();
+    expect(screen.queryByText('No pending reports')).toBeNull();
   });
 
-  it('shows the empty copy after a successful query with no rows', () => {
-    reportsState.data = { reports: [] };
-    reportsState.isLoading = false;
+  it('shows pending empty copy after a successful query with no rows', () => {
+    infiniteState.data = { reports: [] };
+    infiniteState.isLoading = false;
+    pendingCountState.data = { reports: [] };
     render(<ReportReviewStatusPanel profile={manager} />);
+    expect(screen.getByText('No pending reports')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Show all' }).length).toBe(1);
+  });
+
+  it('shows all-mode empty copy after switching with no rows', () => {
+    infiniteState.data = { reports: [] };
+    infiniteState.isLoading = false;
+    pendingCountState.data = { reports: [] };
+    render(<ReportReviewStatusPanel profile={manager} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Show all' }));
     expect(screen.getByText('No reports in your stores for the last 30 days.')).toBeTruthy();
   });
 });

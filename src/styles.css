@@ -3409,6 +3409,22 @@ body.wizard-active .page {
   margin-top: 0;
 }
 
+.report-review-status-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  min-width: 0;
+}
+
+.report-review-status-header-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 10px;
+}
+
 .report-review-status-chips {
   display: flex;
   flex-wrap: wrap;
@@ -3416,8 +3432,16 @@ body.wizard-active .page {
   margin-top: 10px;
 }
 
-.report-review-status-table {
+.report-review-status-scroll {
+  max-height: min(48vh, 420px);
+  overflow-y: auto;
+  overflow-x: auto;
   margin-top: 12px;
+  padding-right: 2px;
+}
+
+.report-review-status-table {
+  margin-top: 0;
   font-size: 12px;
 }
 

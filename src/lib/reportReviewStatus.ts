@@ -29,21 +29,32 @@ export interface BuildReportReviewStatusOptions {
   profile: Profile;
   defs?: RoleDefinition[];
   daysBack?: number;
+  /** When set, cap rows after access/date filters. Omit for paged list (no client slice). */
   limit?: number;
   now?: Date;
 }
 
-export const REVIEW_STATUS_DAYS_BACK = 30;
-export const REVIEW_STATUS_DISPLAY_LIMIT = 20;
+/** Infinite-query page size (also legacy display page size). */
+export const REVIEW_STATUS_PAGE_SIZE = 20;
+/** @deprecated Prefer REVIEW_STATUS_PAGE_SIZE — kept as alias for page size. */
+export const REVIEW_STATUS_DISPLAY_LIMIT = REVIEW_STATUS_PAGE_SIZE;
+/** Soft ceiling for export / Admin API limit param (unchanged). */
 export const REVIEW_STATUS_QUERY_LIMIT = 200;
+/** Soft ceiling for thin pending-count query; badge shows `1000+` if hit. */
+export const REVIEW_STATUS_PENDING_COUNT_LIMIT = 1000;
+export const REVIEW_STATUS_DAYS_BACK = 30;
+
+export type ReportReviewStatusMode = 'pending' | 'all';
 
 export type ReportReviewStatusWhereClause =
   | {
       storeId: { $in: string[] };
       reportDate: { $gte: string; $lte: string };
+      status?: 'waiting_approval';
     }
   | {
       reportDate: { $gte: string; $lte: string };
+      status?: 'waiting_approval';
     };
 
 export interface BuildReportReviewStatusWhereOptions {
@@ -68,7 +79,7 @@ export function reviewStatusDateWindow(
 }
 
 /**
- * Instant `where` for the manager-home review-status table.
+ * Instant `where` for the manager-home review-status table (all statuses).
  * Store-scoped reviewers with no stores skip the reports query (`null`).
  */
 export function buildReportReviewStatusWhere(
@@ -83,12 +94,41 @@ export function buildReportReviewStatusWhere(
   return { storeId: { $in: storeIds }, reportDate };
 }
 
-const STATUS_ORDER: Record<string, number> = {
-  waiting_approval: 0,
-  need_correction: 1,
-  rejected: 2,
-  approved: 3,
-};
+/** Adds `status: waiting_approval` to a base store/date where. */
+export function withWaitingApprovalStatus(
+  where: ReportReviewStatusWhereClause,
+): ReportReviewStatusWhereClause {
+  return { ...where, status: 'waiting_approval' };
+}
+
+/**
+ * Thin pending-only where (exact badge + pending list mode).
+ * Same store/date scope as {@link buildReportReviewStatusWhere}, plus waiting_approval.
+ */
+export function buildReportReviewStatusPendingWhere(
+  opts: BuildReportReviewStatusWhereOptions,
+): ReportReviewStatusWhereClause | null {
+  const base = buildReportReviewStatusWhere(opts);
+  if (!base) return null;
+  return withWaitingApprovalStatus(base);
+}
+
+/** List `where` for Pending vs Show all modes. */
+export function buildReportReviewStatusListWhere(
+  opts: BuildReportReviewStatusWhereOptions,
+  mode: ReportReviewStatusMode,
+): ReportReviewStatusWhereClause | null {
+  if (mode === 'pending') return buildReportReviewStatusPendingWhere(opts);
+  return buildReportReviewStatusWhere(opts);
+}
+
+/** Badge text for exact pending count; `1000+` when soft ceiling is hit. */
+export function formatReviewStatusPendingBadge(count: number): string {
+  if (count >= REVIEW_STATUS_PENDING_COUNT_LIMIT) {
+    return `${REVIEW_STATUS_PENDING_COUNT_LIMIT}+`;
+  }
+  return String(Math.max(0, count));
+}
 
 function parseMs(iso?: string): number | null {
   if (!iso?.trim()) return null;
@@ -185,10 +225,8 @@ function isWithinDateWindow(reportDate: string, daysBack: number, now?: Date): b
   return reportDate >= start && reportDate <= end;
 }
 
-function sortReports(a: Report, b: Report): number {
-  const orderA = STATUS_ORDER[a.status] ?? 99;
-  const orderB = STATUS_ORDER[b.status] ?? 99;
-  if (orderA !== orderB) return orderA - orderB;
+/** Newest-first to match Instant list order (Show all mixes statuses). */
+function sortReportsNewestFirst(a: Report, b: Report): number {
   return (b.submittedAt ?? '').localeCompare(a.submittedAt ?? '');
 }
 
@@ -220,16 +258,19 @@ export function buildReportReviewStatusRows(
     profile,
     defs,
     daysBack = REVIEW_STATUS_DAYS_BACK,
-    limit = REVIEW_STATUS_DISPLAY_LIMIT,
+    limit,
     now,
   } = options;
   const storeIds = (profile.stores ?? []).map((s) => s.id);
 
-  const filtered = reports
+  let filtered = reports
     .filter((r) => userCanAccessStore(profile.role as Role, storeIds, r.storeId, defs))
     .filter((r) => isWithinDateWindow(r.reportDate, daysBack, now))
-    .sort(sortReports)
-    .slice(0, limit);
+    .sort(sortReportsNewestFirst);
+
+  if (limit != null && Number.isFinite(limit) && limit >= 0) {
+    filtered = filtered.slice(0, limit);
+  }
 
   return filtered.map((report) => {
     const reportEvents = events.filter((e) => e.reportId === report.id);
