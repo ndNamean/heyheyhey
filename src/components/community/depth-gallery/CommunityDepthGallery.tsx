@@ -1,0 +1,273 @@
+import { useEffect, useMemo, useRef } from 'react';
+import { useLang } from '../../../i18n';
+import { resolveChatAttachmentUrl } from '../../../lib/chatAttachmentDisplay';
+import { BACK_PRIORITY, useNativeBack } from '../../../lib/nativeBack';
+import { usePointerCapabilities } from '../../media-interaction/pointerCapabilities';
+import type { CommunityPost } from '../../../types';
+import { AtmosphereCanvas } from './atmosphereCanvas';
+import { resolveGalleryMood, parseMoodHex, interpolateMoods } from './moodController';
+import {
+  GalleryLayers,
+  MOOD_SAMPLE_OFFSET,
+  PLANE_GAP,
+  getDepthProgress,
+  getPlaneZ,
+} from './galleryLayers';
+import {
+  SCROLL_TO_WORLD_FACTOR,
+  ScrollController,
+  VELOCITY_MAX,
+} from './scrollController';
+import { buildCommunityGalleryPosts } from './gallerySet';
+
+export { COMMUNITY_GALLERY_MAX_PLANES, buildCommunityGalleryPosts, isCommunityImagePost } from './gallerySet';
+
+function cameraZForPlaneIndex(index: number, planeGap = PLANE_GAP): number {
+  return getPlaneZ(index, planeGap) + planeGap * MOOD_SAMPLE_OFFSET;
+}
+
+function relativeLuminance(hex: string): number {
+  const rgb = parseMoodHex(hex);
+  if (!rgb) return 1;
+  const lin = (c: number) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(rgb.r) + 0.7152 * lin(rgb.g) + 0.0722 * lin(rgb.b);
+}
+
+interface Props {
+  sourcePosts: CommunityPost[];
+  startPostId: string;
+  onClose: () => void;
+}
+
+export default function CommunityDepthGallery({ sourcePosts, startPostId, onClose }: Props) {
+  const { t } = useLang();
+  const copy = t.community;
+  const { reducedMotion } = usePointerCapabilities();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fallbackRef = useRef<HTMLDivElement>(null);
+  const stackRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const imageRefs = useRef<Array<HTMLImageElement | null>>([]);
+  const reducedRef = useRef(reducedMotion);
+  reducedRef.current = reducedMotion;
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  const { posts, startIndex } = useMemo(
+    () => buildCommunityGalleryPosts(sourcePosts, startPostId),
+    [sourcePosts, startPostId],
+  );
+  const planeKey = posts.map((post) => post.id).join('|');
+
+  useNativeBack(
+    () => {
+      onClose();
+      return true;
+    },
+    true,
+    BACK_PRIORITY.MODAL,
+  );
+
+  useEffect(() => {
+    if (!posts.length) {
+      onCloseRef.current();
+      return;
+    }
+
+    const root = rootRef.current;
+    const canvas = canvasRef.current;
+    if (!root) return;
+
+    const overlayRoot = root;
+    const overlayCanvas = canvas;
+    const scroll = new ScrollController({ planeCount: posts.length });
+    const layers = new GalleryLayers(posts.length);
+    const atmosphere = new AtmosphereCanvas();
+    const usedCanvas = overlayCanvas ? atmosphere.attach(overlayCanvas) : false;
+
+    const targetZ = cameraZForPlaneIndex(startIndex);
+    const startScroll = scroll.scrollFromCameraZ(targetZ);
+    scroll.scrollTarget = startScroll;
+    scroll.scrollCurrent = startScroll;
+    scroll.previousScrollCurrent = startScroll;
+    scroll.update();
+
+    scroll.attach(root);
+
+    const moods = posts.map((post) =>
+      resolveGalleryMood({
+        postId: post.id,
+        moodBackgroundColor: post.moodBackgroundColor,
+        moodBlob1Color: post.moodBlob1Color,
+        moodBlob2Color: post.moodBlob2Color,
+      }),
+    );
+
+    let raf = 0;
+    let running = true;
+    let chromeDark = relativeLuminance(moods[startIndex]?.backgroundColor ?? '#fffaf0') < 0.5;
+    const started = performance.now();
+
+    function sizeCanvas() {
+      if (!overlayCanvas) return;
+      const cssW = Math.max(1, overlayRoot.clientWidth);
+      const cssH = Math.max(1, overlayRoot.clientHeight);
+      const w = Math.max(64, Math.min(240, Math.round(cssW * 0.4)));
+      const h = Math.max(64, Math.round(w * (cssH / cssW)));
+      if (overlayCanvas.width !== w) overlayCanvas.width = w;
+      if (overlayCanvas.height !== h) overlayCanvas.height = h;
+    }
+
+    function applyChrome(hex: string) {
+      const L = relativeLuminance(hex);
+      if (chromeDark && L > 0.55) chromeDark = false;
+      else if (!chromeDark && L < 0.45) chromeDark = true;
+      const btn = closeRef.current;
+      if (btn) btn.dataset.theme = chromeDark ? 'on-dark' : 'on-light';
+    }
+
+    function frame(now: number) {
+      if (!running || document.hidden) return;
+
+      sizeCanvas();
+      const state = scroll.update(layers.getDepthRange());
+      const blend = layers.getPlaneBlendData(state.cameraZ);
+      const opacities = layers.updateOpacities(state.cameraZ);
+      const mood = interpolateMoods(moods, blend);
+      const reduced = reducedRef.current;
+      const depthProgress = getDepthProgress(state.cameraZ, posts.length);
+      const velocityIntensity = Math.min(1, Math.abs(state.velocity) / VELOCITY_MAX);
+      const painted = atmosphere.draw({
+        mood,
+        uTime: now - started,
+        uVelocityIntensity: velocityIntensity,
+        depthProgress,
+        reducedMotion: reduced,
+      });
+
+      const fallback = fallbackRef.current;
+      if (fallback) {
+        fallback.style.background = painted.cssFallback;
+        fallback.style.opacity = painted.usedCanvas && usedCanvas ? '0' : '1';
+      }
+      if (overlayCanvas) overlayCanvas.style.opacity = painted.usedCanvas && usedCanvas ? '1' : '0';
+
+      applyChrome(mood.backgroundColor);
+
+      const portrait = overlayRoot.clientHeight > overlayRoot.clientWidth;
+      const baseScale = portrait ? 0.65 : 1;
+      const stack = stackRef.current;
+      if (stack) stack.style.transform = `translate(-50%, -50%) scale(${baseScale})`;
+
+      const drift = reduced ? 0 : state.velocity * 10;
+      const tilt = reduced ? 0 : state.velocity * 0.4;
+      const breath = reduced ? 0 : Math.sin((now - started) * 0.0012) * 0.008;
+      const velScale = reduced ? 0 : Math.min(0.025, Math.abs(state.velocity) * 0.012);
+
+      for (let i = 0; i < posts.length; i++) {
+        const img = imageRefs.current[i];
+        if (!img) continue;
+        img.style.opacity = String(opacities[i] ?? 0);
+        img.style.transform = `translateX(${drift}px) rotate(${tilt}deg) scale(${1 + breath + velScale})`;
+        img.style.zIndex = String(i === blend.currentPlaneIndex || i === blend.nextPlaneIndex ? 2 : 1);
+      }
+
+      raf = requestAnimationFrame(frame);
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      const step = PLANE_GAP / SCROLL_TO_WORLD_FACTOR;
+      if (event.key === 'Escape') return;
+      if (event.key === 'ArrowDown' || event.key === 'PageDown' || event.key === 'j') {
+        event.preventDefault();
+        scroll.scrollTarget += step;
+      } else if (event.key === 'ArrowUp' || event.key === 'PageUp' || event.key === 'k') {
+        event.preventDefault();
+        scroll.scrollTarget -= step;
+      } else if (event.key === 'Home') {
+        event.preventDefault();
+        scroll.scrollTarget = scroll.minScroll;
+      } else if (event.key === 'End') {
+        event.preventDefault();
+        scroll.scrollTarget = scroll.maxScroll;
+      }
+    }
+
+    function onVisibility() {
+      if (document.hidden) {
+        cancelAnimationFrame(raf);
+        return;
+      }
+      if (running) {
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(frame);
+      }
+    }
+
+    root.addEventListener('keydown', onKeyDown);
+    document.addEventListener('visibilitychange', onVisibility);
+    root.focus();
+    raf = requestAnimationFrame(frame);
+
+    return () => {
+      running = false;
+      cancelAnimationFrame(raf);
+      root.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('visibilitychange', onVisibility);
+      scroll.dispose();
+      atmosphere.dispose();
+    };
+  }, [planeKey, posts, startIndex]);
+
+  if (!posts.length) return null;
+
+  return (
+    <div
+      ref={rootRef}
+      className="community-depth-gallery"
+      role="dialog"
+      aria-modal="true"
+      aria-label={copy.galleryLabel}
+      tabIndex={-1}
+    >
+      <div ref={fallbackRef} className="community-depth-fallback" aria-hidden="true" />
+      <canvas ref={canvasRef} className="community-depth-canvas" aria-hidden="true" />
+      <div ref={stackRef} className="community-depth-stack">
+        {posts.map((post, index) => {
+          const url = resolveChatAttachmentUrl(post);
+          const eager = Math.abs(index - startIndex) <= 1;
+          return (
+            <img
+              key={post.id}
+              ref={(el) => {
+                imageRefs.current[index] = el;
+              }}
+              className="community-depth-image"
+              src={url}
+              alt={post.attachmentFileName || copy.photo}
+              width={Number.parseInt(post.attachmentWidth || '', 10) || undefined}
+              height={Number.parseInt(post.attachmentHeight || '', 10) || undefined}
+              loading={eager ? 'eager' : 'lazy'}
+              decoding="async"
+              draggable={false}
+              style={{ opacity: index === startIndex ? 1 : 0 }}
+            />
+          );
+        })}
+      </div>
+      <button
+        ref={closeRef}
+        type="button"
+        className="community-depth-close"
+        onClick={onClose}
+        aria-label={copy.closeGallery}
+      >
+        {t.common.close}
+      </button>
+    </div>
+  );
+}

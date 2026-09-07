@@ -263,9 +263,14 @@ export function buildChatAttachmentStoragePath({
   roomId,
   messageKey,
   fileName,
+  postId,
 }) {
   const key = String(messageKey || '').trim() || 'msg';
   const name = String(fileName || '').trim() || 'attachment';
+  if (scope === 'community') {
+    const post = String(postId || key).trim() || 'post';
+    return `stores/community/${post}/${name}`;
+  }
   if (scope === 'group') {
     const room = String(roomId || '').trim();
     return `stores/group-chat/${room}/${key}/${name}`;

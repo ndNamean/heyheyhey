@@ -45,6 +45,17 @@ describe('uploadChatAttachment', () => {
     ).rejects.toThrow(/roomId/i);
   });
 
+  it('requires postId or messageId for community scope', async () => {
+    await expect(
+      uploadChatAttachment({
+        blob: new Blob(['x'], { type: 'text/plain' }),
+        mimeType: 'text/plain',
+        scope: 'community',
+        enabled: true,
+      }),
+    ).rejects.toThrow(/postId/i);
+  });
+
   it('allows group upload without storeId and posts room-scoped body', async () => {
     const fetchImpl = vi.fn(async () =>
       new Response(
@@ -79,6 +90,43 @@ describe('uploadChatAttachment', () => {
     expect(body.roomId).toBe('room-1');
     expect(body.storeId).toBeUndefined();
     expect(body.clientMutationId).toBe('cm1');
+  });
+
+  it('allows community upload without storeId and posts community-scoped body', async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          fileId: 'f2',
+          url: 'https://example.com/f2',
+          path: 'stores/community/post-1/note.txt',
+          mimeType: 'text/plain',
+          bytes: 1,
+          fileName: 'note.txt',
+          kind: 'file',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+
+    const result = await uploadChatAttachment({
+      blob: new Blob(['x'], { type: 'text/plain' }),
+      mimeType: 'text/plain',
+      fileName: 'note.txt',
+      scope: 'community',
+      postId: 'post-1',
+      messageId: 'post-1',
+      clientMutationId: 'cm2',
+      enabled: true,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+
+    expect(result.path).toBe('stores/community/post-1/note.txt');
+    const body = JSON.parse(String(fetchImpl.mock.calls[0]?.[1]?.body ?? '{}'));
+    expect(body.scope).toBe('community');
+    expect(body.postId).toBe('post-1');
+    expect(body.storeId).toBeUndefined();
+    expect(body.roomId).toBeUndefined();
+    expect(body.clientMutationId).toBe('cm2');
   });
 
   it('rejects policy violations before fetch', async () => {

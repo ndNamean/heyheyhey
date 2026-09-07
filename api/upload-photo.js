@@ -76,15 +76,31 @@ function isChatAttachmentRequest(req, body) {
   const scope = String(body?.scope || '')
     .trim()
     .toLowerCase();
-  return action === 'chat_attachment' || scope === 'store' || scope === 'group';
+  return (
+    action === 'chat_attachment' ||
+    scope === 'store' ||
+    scope === 'group' ||
+    scope === 'community'
+  );
 }
 
 async function assertCanUploadChatAttachment(ctx, body, adminDb) {
   const scope = String(body.scope || '').trim().toLowerCase();
-  if (scope !== 'store' && scope !== 'group') {
-    const err = new Error('Invalid scope. Use store or group.');
+  if (scope !== 'store' && scope !== 'group' && scope !== 'community') {
+    const err = new Error('Invalid scope. Use store, group, or community.');
     err.status = 400;
     throw err;
+  }
+
+  if (scope === 'community') {
+    const postId = sanitizePathSegment(body.postId || body.messageId, '');
+    if (!postId) {
+      const err = new Error('Missing or invalid postId');
+      err.status = 400;
+      throw err;
+    }
+    // Any approved profile may upload Community media (including viewer).
+    return { scope, storeId: '', roomId: '', postId };
   }
 
   if (ctx.role === 'viewer') {
@@ -202,7 +218,8 @@ async function handleChatAttachmentUpload(req, res, body, adminDb) {
     scope: target.scope,
     storeId: target.storeId,
     roomId: target.roomId,
-    messageKey,
+    postId: target.postId,
+    messageKey: target.scope === 'community' ? target.postId : messageKey,
     fileName,
   });
 

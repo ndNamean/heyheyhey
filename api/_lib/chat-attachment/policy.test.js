@@ -29,6 +29,27 @@ describe('buildChatAttachmentStoragePath', () => {
       }),
     ).toBe('stores/group-chat/room-abc/msg-2/doc.pdf');
   });
+
+  it('builds community paths under stores/community/{postId}', () => {
+    expect(
+      buildChatAttachmentStoragePath({
+        scope: 'community',
+        postId: 'post-abc',
+        messageKey: 'ignored-key',
+        fileName: 'photo.jpg',
+      }),
+    ).toBe('stores/community/post-abc/photo.jpg');
+  });
+
+  it('reuses messageKey as the community post id when postId is omitted', () => {
+    expect(
+      buildChatAttachmentStoragePath({
+        scope: 'community',
+        messageKey: 'post-from-msg',
+        fileName: 'note.pdf',
+      }),
+    ).toBe('stores/community/post-from-msg/note.pdf');
+  });
 });
 
 describe('sanitizePathSegment + policy', () => {

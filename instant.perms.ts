@@ -917,6 +917,136 @@ const rules = {
     },
   },
 
+  // ── Community posts (approved viewers; Owner/Admin/AM moderate) ───────────
+  // Viewers: isApproved only — do not add !isViewer (unlike Store/Group Chat).
+  communityPosts: {
+    allow: {
+      view: "isApproved && (data.status == 'active' || isCommunityModerator)",
+      create:
+        "isApproved && isOwnAuthor && isOwnAuthorProfile && data.status == 'active' && bodySizeValid && hasContent && countersStartAtZero",
+      update: 'canAuthorSoftDelete || canModeratorModerate || canUpdateEngagementCounters',
+      delete: 'false',
+      link: {
+        author: 'isApproved && isOwnAuthor && isOwnAuthorProfile',
+        attachmentFile: 'isApproved && isOwnAuthor',
+        // Reverse halves: Instant evaluates these with an empty bind container
+        // (same pattern as groupChatRooms.messages / reactions / bookmarks).
+        comments: 'true',
+        reactions: 'true',
+        famousVotes: 'true',
+      },
+      unlink: {
+        author: 'false',
+        attachmentFile: 'false',
+        comments: 'false',
+        reactions: 'false',
+        famousVotes: 'false',
+      },
+    },
+    bind: {
+      ...LEGACY_BIND,
+      isCommunityModerator: 'isOwner || isAreaManagerTier',
+      isOwnAuthor: 'auth.id != null && data.authorUserId == auth.id',
+      isOwnAuthorProfile: "data.authorProfileId in auth.ref('$user.profile.id')",
+      bodySizeValid: 'size(data.body) <= 2000',
+      hasContent: "size(data.body) > 0 || data.attachmentPath != ''",
+      countersStartAtZero:
+        'data.famousVoteCount == 0 && data.uniqueReactorCount == 0 && data.uniqueCommenterCount == 0 && data.commentCount == 0',
+      onlyDeletedFields:
+        "request.modifiedFields.all(f, f in ['deletedAt', 'status'])",
+      authorSoftDeleteValid: "newData.status == 'deleted' && newData.deletedAt != ''",
+      canAuthorSoftDelete: 'isOwnAuthor && onlyDeletedFields && authorSoftDeleteValid',
+      moderatorStatusValid:
+        "newData.status == 'hidden' || (newData.status == 'deleted' && newData.deletedAt != '')",
+      canModeratorModerate:
+        'isCommunityModerator && onlyDeletedFields && moderatorStatusValid',
+      onlyEngagementCounterFields:
+        "request.modifiedFields.all(f, f in ['famousVoteCount', 'uniqueReactorCount', 'uniqueCommenterCount', 'commentCount', 'lastActivityAt'])",
+      canUpdateEngagementCounters: 'isApproved && onlyEngagementCounterFields',
+    },
+  },
+
+  communityComments: {
+    allow: {
+      view: "isApproved && (data.status == 'active' || isCommunityModerator)",
+      create:
+        "isApproved && isOwnAuthor && isOwnAuthorProfile && postIdValid && data.status == 'active' && bodySizeValid && size(data.body) > 0",
+      update: 'canAuthorSoftDelete || canModeratorModerate',
+      delete: 'false',
+      link: {
+        post: 'isApproved && isOwnAuthor',
+        author: 'isApproved && isOwnAuthor && isOwnAuthorProfile',
+      },
+      unlink: {
+        post: 'false',
+        author: 'false',
+      },
+    },
+    bind: {
+      ...LEGACY_BIND,
+      isCommunityModerator: 'isOwner || isAreaManagerTier',
+      isOwnAuthor: 'auth.id != null && data.authorUserId == auth.id',
+      isOwnAuthorProfile: "data.authorProfileId in auth.ref('$user.profile.id')",
+      postIdValid: "data.postId != ''",
+      bodySizeValid: 'size(data.body) <= 2000',
+      onlyDeletedFields:
+        "request.modifiedFields.all(f, f in ['deletedAt', 'status'])",
+      authorSoftDeleteValid: "newData.status == 'deleted' && newData.deletedAt != ''",
+      canAuthorSoftDelete: 'isOwnAuthor && onlyDeletedFields && authorSoftDeleteValid',
+      moderatorStatusValid:
+        "newData.status == 'hidden' || (newData.status == 'deleted' && newData.deletedAt != '')",
+      canModeratorModerate:
+        'isCommunityModerator && onlyDeletedFields && moderatorStatusValid',
+    },
+  },
+
+  communityReactions: {
+    allow: {
+      view: 'isApproved',
+      create:
+        'isApproved && isOwnReaction && postIdValid && (unicodeReactionValid || giphyReactionValid)',
+      update: 'false',
+      delete: 'isApproved && isOwnReaction',
+      link: {
+        post: 'isApproved && isOwnReaction',
+      },
+      unlink: {
+        post: 'false',
+      },
+    },
+    bind: {
+      ...LEGACY_BIND,
+      postIdValid: "data.postId != ''",
+      isOwnReaction: 'auth.id != null && data.userId == auth.id',
+      unicodeReactionValid:
+        "data.reactionType == 'unicode' && data.unicode != '' && data.giphyId == ''",
+      giphyReactionValid:
+        "data.reactionType == 'giphy' && data.giphyId != '' && data.unicode == '' && data.giphyUrl != ''",
+    },
+  },
+
+  communityFamousVotes: {
+    allow: {
+      view: 'isApproved',
+      create:
+        'isApproved && isOwnVote && postIdValid && voterPostKeyValid',
+      update: 'false',
+      delete: 'isApproved && isOwnVote',
+      link: {
+        post: 'isApproved && isOwnVote',
+      },
+      unlink: {
+        post: 'false',
+      },
+    },
+    bind: {
+      ...LEGACY_BIND,
+      postIdValid: "data.postId != ''",
+      isOwnVote: 'auth.id != null && data.userId == auth.id',
+      voterPostKeyValid: "data.voterPostKey == data.userId + ':' + data.postId",
+    },
+  },
+
   // ── User change requests ──────────────────────────────────────────────────
   userChangeRequests: {
     allow: {

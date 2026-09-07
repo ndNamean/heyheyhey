@@ -1147,6 +1147,95 @@ export interface GroupChatBookmark {
   createdAt: string;
 }
 
+export type CommunityPostStatus = 'active' | 'hidden' | 'deleted';
+
+/** InstantDB communityPosts — isolated Community / Cộng đồng feed (not chat). */
+export interface CommunityPost {
+  id: string;
+  authorUserId: string;
+  authorProfileId: string;
+  authorNameSnapshot: string;
+  authorRoleSnapshot: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+  status: CommunityPostStatus | string;
+  deletedAt: string; // '' = not deleted
+  clientMutationId?: string;
+  attachmentKind?: StoreChatAttachmentKind | string;
+  attachmentPath?: string;
+  attachmentFileId?: string;
+  attachmentUrl?: string;
+  attachmentMimeType?: string;
+  attachmentFileName?: string;
+  attachmentBytes?: string;
+  attachmentWidth?: string;
+  attachmentHeight?: string;
+  attachmentFile?: { id?: string; url?: string; path?: string };
+  famousVoteCount: number;
+  uniqueReactorCount: number;
+  uniqueCommenterCount: number;
+  commentCount: number;
+  lastActivityAt: string;
+  /** Authored gallery mood hex; '' on text-only posts. */
+  moodBackgroundColor: string;
+  moodBlob1Color: string;
+  moodBlob2Color: string;
+  author?: Pick<
+    Profile,
+    'id' | 'userId' | 'displayName' | 'email' | 'role' | 'avatarUrl' | 'avatarPath' | 'avatarFile'
+  >;
+}
+
+/** InstantDB communityComments — text only; parentId '' = top-level. */
+export interface CommunityComment {
+  id: string;
+  postId: string;
+  parentId: string; // '' = top-level
+  authorUserId: string;
+  authorProfileId: string;
+  authorNameSnapshot: string;
+  authorRoleSnapshot: string;
+  body: string;
+  createdAt: string;
+  status: CommunityPostStatus | string;
+  deletedAt: string;
+  clientMutationId?: string;
+  author?: Pick<
+    Profile,
+    'id' | 'userId' | 'displayName' | 'email' | 'role' | 'avatarUrl' | 'avatarPath' | 'avatarFile'
+  >;
+}
+
+/** InstantDB communityReactions — keyed by postId + userId (not storeId/roomId). */
+export interface CommunityReaction {
+  id: string;
+  postId: string;
+  userId: string;
+  /** '' on post reactions; reserved for later comment reactions (not in UI). */
+  commentId: string;
+  reactionType: StoreChatReactionType | string;
+  unicode: string;
+  giphyId: string;
+  giphyKind: string;
+  giphyTitle: string;
+  giphyUrl?: string;
+  giphyPreviewUrl?: string;
+  createdAt: string;
+  clientMutationId: string;
+}
+
+/** InstantDB communityFamousVotes — one row per user+post via unique voterPostKey. */
+export interface CommunityFamousVote {
+  id: string;
+  postId: string;
+  userId: string;
+  /** `${userId}:${postId}` — unique + indexed. */
+  voterPostKey: string;
+  createdAt: string;
+  clientMutationId: string;
+}
+
 export type ExportJobStatus = 'pending' | 'processing' | 'completed' | 'failed';
 export type ExportType = 'dashboard' | 'review_status' | 'failure_history';
 export type ExportFormat = 'csv' | 'pdf';

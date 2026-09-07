@@ -5,6 +5,7 @@ import FloatingAssistantShell from './components/floating-assistant/FloatingAssi
 import StaffHome from './pages/StaffHome';
 import DashboardPage from './pages/DashboardPage';
 import SubmitReportPage from './pages/SubmitReportPage';
+import CommunityPage from './pages/CommunityPage';
 import ReviewPage from './pages/ReviewPage';
 import ProfilePage from './pages/ProfilePage';
 import StoresPage from './pages/StoresPage';
@@ -196,6 +197,8 @@ export default function AppShell({ profile }: Props) {
             onProposeForTemplate={(prefill) => openProposalForm(prefill)}
           />
         );
+      case 'community':
+        return <CommunityPage profile={profile} />;
       case 'review':
         return (
           <ReviewPage

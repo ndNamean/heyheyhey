@@ -21,7 +21,7 @@ import { useUnreadNotificationCount } from '../hooks/useNotificationUnreadCount'
 import type { LogbookEntry, Profile } from '../types';
 
 export type Page =
-  | 'home' | 'submit' | 'review' | 'profile'
+  | 'home' | 'submit' | 'community' | 'review' | 'profile'
   | 'stores' | 'users' | 'templates' | 'proposals' | 'proposalForm'
   | 'corrective'
   | 'photos' | 'verify' | 'shifts' | 'logbook';
@@ -50,8 +50,9 @@ export function DesktopNav({ page, setPage, profile, onOpenLogbook }: NavProps) 
   const showLogbook = canOpenLogbook(profile, defs, assignedIssueExists);
 
   const links: { id: Page; label: string }[] = [
-    { id: 'home',    label: t.nav.dashboard },
-    { id: 'submit',  label: t.nav.submit },
+    { id: 'home',      label: t.nav.dashboard },
+    { id: 'submit',    label: t.nav.submit },
+    { id: 'community', label: t.nav.community },
   ];
 
   if (canReview(profile.role, defs)) {
@@ -124,9 +125,10 @@ export function MobileNav({ page, setPage, profile, onOpenLogbook }: NavProps) {
   const showLogbook = canOpenLogbook(profile, defs, assignedIssueExists);
 
   const tabs: { id: Page; label: string }[] = [
-    { id: 'home',    label: t.nav.dashboard },
-    { id: 'submit',  label: t.nav.submit },
-    { id: 'review',  label: t.nav.review },
+    { id: 'home',      label: t.nav.dashboard },
+    { id: 'submit',    label: t.nav.submit },
+    { id: 'community', label: t.nav.community },
+    { id: 'review',    label: t.nav.review },
   ];
   if (showLogbook) {
     tabs.push({ id: 'logbook', label: t.nav.logbook });

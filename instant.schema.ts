@@ -784,6 +784,79 @@ const _schema = i.schema({
       userId: i.string().indexed(),
       createdAt: i.string().indexed(),
     }),
+
+    // ─── Community / Cộng đồng posts (isolated from Store/Group Chat) ───────
+    communityPosts: i.entity({
+      authorUserId: i.string().indexed(), // auth.id — ownership for rules
+      authorProfileId: i.string().indexed(),
+      authorNameSnapshot: i.string(),
+      authorRoleSnapshot: i.string(),
+      body: i.string(),
+      createdAt: i.string().indexed(),
+      updatedAt: i.string(),
+      status: i.string().indexed(), // 'active' | 'hidden' | 'deleted'
+      deletedAt: i.string().clientRequired(), // '' = not deleted
+      clientMutationId: i.string().clientRequired(),
+      // Chat-equivalent attachments ('' when unused). Text-only posts leave these empty.
+      attachmentKind: i.string().clientRequired(), // '' | 'image' | 'file'
+      attachmentPath: i.string().clientRequired(),
+      attachmentFileId: i.string().clientRequired(),
+      attachmentUrl: i.string().clientRequired(),
+      attachmentMimeType: i.string().clientRequired(),
+      attachmentFileName: i.string().clientRequired(),
+      attachmentBytes: i.string().clientRequired(), // decimal string
+      attachmentWidth: i.string().clientRequired(),
+      attachmentHeight: i.string().clientRequired(),
+      // Denorm counters (never negative; client uses Math.max(0, n + delta)).
+      famousVoteCount: i.number().indexed(), // indexed: Famous orders by this
+      uniqueReactorCount: i.number(),
+      uniqueCommenterCount: i.number(),
+      commentCount: i.number(),
+      lastActivityAt: i.string().indexed(),
+      // Authored gallery mood hexes. clientRequired; '' on text-only posts.
+      moodBackgroundColor: i.string().clientRequired(),
+      moodBlob1Color: i.string().clientRequired(),
+      moodBlob2Color: i.string().clientRequired(),
+    }),
+
+    communityComments: i.entity({
+      postId: i.string().indexed(),
+      parentId: i.string().clientRequired(), // '' = top-level; else top-level comment id
+      authorUserId: i.string().indexed(),
+      authorProfileId: i.string().indexed(),
+      authorNameSnapshot: i.string(),
+      authorRoleSnapshot: i.string(),
+      body: i.string(),
+      createdAt: i.string().indexed(),
+      status: i.string().indexed(), // 'active' | 'hidden' | 'deleted'
+      deletedAt: i.string().clientRequired(), // '' = not deleted
+      clientMutationId: i.string().clientRequired(),
+    }),
+
+    // Same payload as chat reactions, keyed by postId + userId (not storeId/roomId).
+    // commentId is '' on post reactions so comment reactions can be added later.
+    communityReactions: i.entity({
+      postId: i.string().indexed(),
+      userId: i.string().indexed(), // auth.id — ownership for rules
+      commentId: i.string().clientRequired(), // '' on posts; reserved for comment reactions
+      reactionType: i.string(), // 'unicode' | 'giphy'
+      unicode: i.string().clientRequired(), // emoji; '' when giphy
+      giphyId: i.string().clientRequired(), // '' when unicode
+      giphyKind: i.string().clientRequired(),
+      giphyTitle: i.string().clientRequired(),
+      giphyUrl: i.string().clientRequired(), // '' when unicode
+      giphyPreviewUrl: i.string().clientRequired(), // '' when unicode
+      createdAt: i.string().indexed(),
+      clientMutationId: i.string().clientRequired(),
+    }),
+
+    communityFamousVotes: i.entity({
+      postId: i.string().indexed(),
+      userId: i.string().indexed(), // auth.id — ownership for rules
+      voterPostKey: i.string().unique().indexed(), // `${userId}:${postId}`
+      createdAt: i.string(),
+      clientMutationId: i.string().clientRequired(),
+    }),
   },
 
   links: {
@@ -1093,6 +1166,32 @@ const _schema = i.schema({
     groupChatRoomStore: {
       forward: { on: 'groupChatRooms', has: 'one', label: 'store' },
       reverse: { on: 'stores', has: 'one', label: 'opsLeadershipRoom' },
+    },
+
+    // ─── Community posts -> author profile / attachment file ────────────────
+    communityPostAuthor: {
+      forward: { on: 'communityPosts', has: 'one', label: 'author' },
+      reverse: { on: 'profiles', has: 'many', label: 'communityPosts' },
+    },
+    communityPostAttachmentFile: {
+      forward: { on: 'communityPosts', has: 'one', label: 'attachmentFile' },
+      reverse: { on: '$files', has: 'many', label: 'communityAttachmentPosts' },
+    },
+    communityCommentPost: {
+      forward: { on: 'communityComments', has: 'one', label: 'post' },
+      reverse: { on: 'communityPosts', has: 'many', label: 'comments' },
+    },
+    communityCommentAuthor: {
+      forward: { on: 'communityComments', has: 'one', label: 'author' },
+      reverse: { on: 'profiles', has: 'many', label: 'communityComments' },
+    },
+    communityReactionPost: {
+      forward: { on: 'communityReactions', has: 'one', label: 'post' },
+      reverse: { on: 'communityPosts', has: 'many', label: 'reactions' },
+    },
+    communityFamousVotePost: {
+      forward: { on: 'communityFamousVotes', has: 'one', label: 'post' },
+      reverse: { on: 'communityPosts', has: 'many', label: 'famousVotes' },
     },
   },
 });
