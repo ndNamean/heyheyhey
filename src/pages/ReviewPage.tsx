@@ -190,7 +190,16 @@ function mergeReportMedia(slim: Report[], rich: Report[]): Report[] {
   const byId = new Map(rich.map((report) => [report.id, report]));
   return slim.map((report) => {
     const full = byId.get(report.id);
-    return full ? { ...report, responses: full.responses ?? report.responses } : report;
+    if (!full) return report;
+    return {
+      ...report,
+      // Live follow-up query is source of truth for fields that change during review.
+      status: full.status ?? report.status,
+      compliancePercent: full.compliancePercent ?? report.compliancePercent,
+      submitterNeedsAction: full.submitterNeedsAction ?? report.submitterNeedsAction,
+      updatedAt: full.updatedAt ?? report.updatedAt,
+      responses: full.responses ?? report.responses,
+    };
   });
 }
 
@@ -423,11 +432,21 @@ export default function ReviewPage({
   const logbookInitialFailed =
     Boolean(logbookError) && !logbookHasLastGood && surface === 'logbook';
 
-  const displayReports = mergeReportMedia(
-    !reportsQueryOk && lastGoodReportsRef.current
-      ? lastGoodReportsRef.current.reports
-      : reports,
-    stableRichReports,
+  // Re-filter after merge so live header status (e.g. Finalise → approved)
+  // drops the card without a page refresh, while reportsQuery is held.
+  const displayReports = useMemo(
+    () =>
+      filterReportsAwaitingReview(
+        mergeReportMedia(
+          !reportsQueryOk && lastGoodReportsRef.current
+            ? lastGoodReportsRef.current.reports
+            : reports,
+          stableRichReports,
+        ),
+        profile,
+        defs,
+      ),
+    [defs, profile, reports, reportsQueryOk, stableRichReports],
   );
   const displayLogbookIssues =
     !logbookQueryOk && lastGoodLogbookRef.current
