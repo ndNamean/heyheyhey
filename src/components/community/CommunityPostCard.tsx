@@ -23,6 +23,7 @@ export interface CommunityPostCardProps {
   post: CommunityPost;
   profile: Profile;
   reactions?: CommunityReaction[];
+  reactorProfiles?: ReadonlyMap<string, AvatarProfileFields>;
   famousVoted?: boolean;
   famousInFlight?: boolean;
   swipeEnabled?: boolean;
@@ -63,6 +64,7 @@ export default function CommunityPostCard({
   post,
   profile,
   reactions = [],
+  reactorProfiles,
   famousVoted = false,
   famousInFlight = false,
   swipeEnabled = false,
@@ -288,7 +290,12 @@ export default function CommunityPostCard({
         {modError ? <span className="community-card-error">{modError}</span> : null}
       </footer>
 
-      <CommunityReactions post={post} reactions={reactions} userId={profile.userId} />
+      <CommunityReactions
+        post={post}
+        reactions={reactions}
+        userId={profile.userId}
+        reactorProfiles={reactorProfiles}
+      />
     </article>
   );
 }

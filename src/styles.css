@@ -715,6 +715,59 @@ textarea { min-height: 88px; resize: vertical; }
   margin-top: 8px;
 }
 
+.community-reaction-chip-wrap {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.community-reaction-who {
+  position: fixed;
+  z-index: 180;
+  min-width: 168px;
+  max-width: min(280px, calc(100vw - 24px));
+  max-height: min(240px, 50vh);
+  overflow: auto;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  box-shadow: var(--card-shadow);
+  color: var(--text-primary);
+}
+
+.community-reaction-who-heading {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.community-reaction-who-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.community-reaction-who-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.community-reaction-who-name {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .community-detail-overlay {
   position: fixed;
   inset: 0;

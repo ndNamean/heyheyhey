@@ -13,8 +13,11 @@ import {
   resolveUnicodeReactionToggle,
   type ChatReaction,
 } from '../../lib/storeChatReactions';
+import type { AvatarProfileFields } from '../../lib/avatarDisplay';
 import { nowIso } from '../../lib/utils';
 import type { CommunityPost, CommunityReaction } from '../../types';
+import { reactionWhoNames } from '../../lib/communityReactionPeople';
+import CommunityReactionWho from './CommunityReactionWho';
 
 const GiphyPicker = lazy(() =>
   import('../floating-assistant/GiphyPicker').then((m) => ({ default: m.GiphyPicker })),
@@ -44,13 +47,21 @@ function postReactions(rows: CommunityReaction[], postId: string): CommunityReac
   return rows.filter((row) => row.postId === postId && !(row.commentId || '').trim());
 }
 
+const EMPTY_PROFILES = new Map<string, AvatarProfileFields>();
+
 interface Props {
   post: CommunityPost;
   reactions: CommunityReaction[];
   userId: string;
+  reactorProfiles?: ReadonlyMap<string, AvatarProfileFields>;
 }
 
-export default function CommunityReactions({ post, reactions, userId }: Props) {
+export default function CommunityReactions({
+  post,
+  reactions,
+  userId,
+  reactorProfiles = EMPTY_PROFILES,
+}: Props) {
   const { t } = useLang();
   const sc = t.storeChat;
   const [trayOpen, setTrayOpen] = useState(false);
@@ -152,20 +163,28 @@ export default function CommunityReactions({ post, reactions, userId }: Props) {
             const countLabel = (
               group.count === 1 ? sc.reactionSingular : sc.reactionPlural
             ).replace('{count}', String(group.count));
+            const who = reactionWhoNames(group.userIds, reactorProfiles, sc.someone);
             return (
-              <button
+              <CommunityReactionWho
                 key={group.unicode}
-                type="button"
-                className={`fa-reaction-chip${group.reactedByMe ? ' fa-reaction-chip--mine' : ''}`}
-                aria-pressed={group.reactedByMe}
-                aria-label={`${group.unicode}, ${countLabel}. ${actionHint}`}
-                onClick={() => void applyUnicode(group.unicode)}
+                userIds={group.userIds}
+                profilesByUserId={reactorProfiles}
+                heading={sc.whoReacted}
+                unknownLabel={sc.someone}
               >
-                <span className="fa-reaction-chip-emoji" aria-hidden="true">
-                  {group.unicode}
-                </span>
-                <span className="fa-reaction-chip-count">{group.count}</span>
-              </button>
+                <button
+                  type="button"
+                  className={`fa-reaction-chip${group.reactedByMe ? ' fa-reaction-chip--mine' : ''}`}
+                  aria-pressed={group.reactedByMe}
+                  aria-label={`${group.unicode}, ${countLabel}. ${sc.whoReacted}: ${who}. ${actionHint}`}
+                  onClick={() => void applyUnicode(group.unicode)}
+                >
+                  <span className="fa-reaction-chip-emoji" aria-hidden="true">
+                    {group.unicode}
+                  </span>
+                  <span className="fa-reaction-chip-count">{group.count}</span>
+                </button>
+              </CommunityReactionWho>
             );
           })}
           {giphyGroups.map((group) => {
@@ -177,15 +196,22 @@ export default function CommunityReactions({ post, reactions, userId }: Props) {
             const countLabel = (
               group.count === 1 ? sc.reactionSingular : sc.reactionPlural
             ).replace('{count}', String(group.count));
+            const who = reactionWhoNames(group.userIds, reactorProfiles, sc.someone);
             return (
-              <button
+              <CommunityReactionWho
                 key={`giphy-${group.giphyId}`}
-                type="button"
-                className={`fa-reaction-chip fa-reaction-chip--giphy${group.reactedByMe ? ' fa-reaction-chip--mine' : ''}`}
-                aria-pressed={group.reactedByMe}
-                aria-label={`${title}, ${countLabel}. ${actionHint}`}
-                onClick={() => void applyGiphy(group.giphyId)}
+                userIds={group.userIds}
+                profilesByUserId={reactorProfiles}
+                heading={sc.whoReacted}
+                unknownLabel={sc.someone}
               >
+                <button
+                  type="button"
+                  className={`fa-reaction-chip fa-reaction-chip--giphy${group.reactedByMe ? ' fa-reaction-chip--mine' : ''}`}
+                  aria-pressed={group.reactedByMe}
+                  aria-label={`${title}, ${countLabel}. ${sc.whoReacted}: ${who}. ${actionHint}`}
+                  onClick={() => void applyGiphy(group.giphyId)}
+                >
                 {preview ? (
                   <img
                     className="fa-reaction-chip-giphy"
@@ -200,7 +226,8 @@ export default function CommunityReactions({ post, reactions, userId }: Props) {
                   </span>
                 )}
                 <span className="fa-reaction-chip-count">{group.count}</span>
-              </button>
+                </button>
+              </CommunityReactionWho>
             );
           })}
         </div>

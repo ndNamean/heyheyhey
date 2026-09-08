@@ -3,6 +3,7 @@ import { db } from '../../db';
 import { useLang } from '../../i18n';
 import { BACK_PRIORITY, useNativeBack } from '../../lib/nativeBack';
 import { isAreaManagerTier, isOwner } from '../../lib/roles';
+import type { AvatarProfileFields } from '../../lib/avatarDisplay';
 import type { CommunityComment, CommunityPost, CommunityReaction, Profile } from '../../types';
 import CommunityComments from './CommunityComments';
 import CommunityPostCard from './CommunityPostCard';
@@ -11,6 +12,7 @@ interface Props {
   post: CommunityPost | null;
   profile: Profile;
   reactions: CommunityReaction[];
+  reactorProfiles?: ReadonlyMap<string, AvatarProfileFields>;
   famousVoted: boolean;
   famousInFlight?: boolean;
   onClose: () => void;
@@ -23,6 +25,7 @@ export default function CommunityPostDetail({
   post,
   profile,
   reactions,
+  reactorProfiles,
   famousVoted,
   famousInFlight,
   onClose,
@@ -86,6 +89,7 @@ export default function CommunityPostDetail({
               post={post}
               profile={profile}
               reactions={reactions}
+              reactorProfiles={reactorProfiles}
               famousVoted={famousVoted}
               famousInFlight={famousInFlight}
               variant="detail"

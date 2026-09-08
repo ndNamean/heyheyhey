@@ -19,6 +19,11 @@ import {
   famousWindowCutoffIso,
   selectFamousPost,
 } from '../lib/communityRanking';
+import type { AvatarProfileFields } from '../lib/avatarDisplay';
+import {
+  indexProfilesByUserId,
+  uniqueReactionUserIds,
+} from '../lib/communityReactionPeople';
 import type { CommunityFamousVote, CommunityPost, CommunityReaction, Profile } from '../types';
 
 export const COMMUNITY_FEED_PAGE_SIZE = 15;
@@ -155,6 +160,24 @@ export default function CommunityPage({ profile }: Props) {
 
   const reactions = (engagementData?.communityReactions ?? []) as CommunityReaction[];
   const votes = (engagementData?.communityFamousVotes ?? []) as CommunityFamousVote[];
+  const reactorUserIds = useMemo(() => uniqueReactionUserIds(reactions), [reactions]);
+  const reactorUserKey = reactorUserIds.join('|');
+
+  const reactorProfileQuery = useMemo(() => {
+    if (!reactorUserIds.length) return null;
+    return {
+      profiles: {
+        $: { where: { userId: { $in: reactorUserIds } } },
+        avatarFile: {},
+      },
+    };
+  }, [reactorUserIds, reactorUserKey]);
+
+  const { data: reactorProfileData } = db.useQuery(reactorProfileQuery);
+  const reactorProfiles = useMemo(
+    () => indexProfilesByUserId((reactorProfileData?.profiles ?? []) as AvatarProfileFields[]),
+    [reactorProfileData?.profiles],
+  );
 
   const reactionsByPostId = useMemo(() => {
     const map = new Map<string, CommunityReaction[]>();
@@ -284,6 +307,7 @@ export default function CommunityPage({ profile }: Props) {
 
   const cardProps = {
     profile,
+    reactorProfiles,
     swipeEnabled,
     onImageTap: openGallery,
     onOpenDetail: (post: CommunityPost) => setSelectedPostId(post.id),
@@ -369,6 +393,7 @@ export default function CommunityPage({ profile }: Props) {
           post={selectedPost}
           profile={profile}
           reactions={selectedPost ? reactionsByPostId.get(selectedPost.id) ?? [] : []}
+          reactorProfiles={reactorProfiles}
           famousVoted={selectedPost ? myVoteByPostId.has(selectedPost.id) : false}
           famousInFlight={selectedPost ? famousBusy.has(selectedPost.id) : false}
           onClose={() => setSelectedPostId(null)}
