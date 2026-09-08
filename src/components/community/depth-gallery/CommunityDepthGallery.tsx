@@ -20,6 +20,12 @@ import {
   VELOCITY_MAX,
 } from './scrollController';
 import { buildCommunityGalleryPosts } from './gallerySet';
+import {
+  computeRotationMotion,
+  getStableOrientation,
+  layerTransformCss,
+  type Orientation,
+} from './rotationMotion';
 
 export { COMMUNITY_GALLERY_MAX_PLANES, buildCommunityGalleryPosts, isCommunityImagePost } from './gallerySet';
 
@@ -61,6 +67,7 @@ export default function CommunityDepthGallery({ sourcePosts, startPostId, onClos
   const fallbackRef = useRef<HTMLDivElement>(null);
   const stackRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const layerRefs = useRef<Array<HTMLDivElement | null>>([]);
   const imageRefs = useRef<Array<HTMLImageElement | null>>([]);
   const reducedRef = useRef(reducedMotion);
   reducedRef.current = reducedMotion;
@@ -122,6 +129,7 @@ export default function CommunityDepthGallery({ sourcePosts, startPostId, onClos
         moodBlob2Color: post.moodBlob2Color,
       }),
     );
+    const orientations: Orientation[] = posts.map((post) => getStableOrientation(post.id));
 
     let raf = 0;
     let running = true;
@@ -184,13 +192,36 @@ export default function CommunityDepthGallery({ sourcePosts, startPostId, onClos
       const tilt = reduced ? 0 : state.velocity * 0.4;
       const breath = reduced ? 0 : Math.sin((now - started) * 0.0012) * 0.008;
       const velScale = reduced ? 0 : Math.min(0.025, Math.abs(state.velocity) * 0.012);
+      const innerTransform = `translateX(${drift}px) rotate(${tilt}deg) scale(${1 + breath + velScale})`;
+
+      const currentIndex = blend.currentPlaneIndex;
+      const nextIndex = blend.nextPlaneIndex;
+      const rotation = computeRotationMotion({
+        currentOrientation: orientations[currentIndex] ?? orientations[0],
+        nextOrientation: orientations[nextIndex] ?? orientations[currentIndex] ?? orientations[0],
+        depthBlend: blend.depthBlend,
+        reducedMotion: reduced,
+        isPortrait: portrait,
+      });
 
       for (let i = 0; i < posts.length; i++) {
+        const layer = layerRefs.current[i];
         const img = imageRefs.current[i];
-        if (!img) continue;
-        img.style.opacity = String(opacities[i] ?? 0);
-        img.style.transform = `translateX(${drift}px) rotate(${tilt}deg) scale(${1 + breath + velScale})`;
-        img.style.zIndex = String(i === blend.currentPlaneIndex || i === blend.nextPlaneIndex ? 2 : 1);
+        const isPair = i === currentIndex || i === nextIndex;
+        if (layer) {
+          if (!isPair || reduced) {
+            layer.style.transform = 'none';
+          } else if (i === currentIndex) {
+            layer.style.transform = layerTransformCss(rotation.current);
+          } else {
+            layer.style.transform = layerTransformCss(rotation.next);
+          }
+          layer.style.zIndex = isPair ? '2' : '1';
+        }
+        if (img) {
+          img.style.opacity = String(opacities[i] ?? 0);
+          img.style.transform = innerTransform;
+        }
       }
 
       raf = requestAnimationFrame(frame);
@@ -258,21 +289,28 @@ export default function CommunityDepthGallery({ sourcePosts, startPostId, onClos
           const url = resolveChatAttachmentUrl(post);
           const eager = Math.abs(index - startIndex) <= 1;
           return (
-            <img
+            <div
               key={post.id}
+              className="community-depth-layer"
               ref={(el) => {
-                imageRefs.current[index] = el;
+                layerRefs.current[index] = el;
               }}
-              className="community-depth-image"
-              src={url}
-              alt={post.attachmentFileName || copy.photo}
-              width={Number.parseInt(post.attachmentWidth || '', 10) || undefined}
-              height={Number.parseInt(post.attachmentHeight || '', 10) || undefined}
-              loading={eager ? 'eager' : 'lazy'}
-              decoding="async"
-              draggable={false}
-              style={{ opacity: index === startIndex ? 1 : 0 }}
-            />
+            >
+              <img
+                ref={(el) => {
+                  imageRefs.current[index] = el;
+                }}
+                className="community-depth-image"
+                src={url}
+                alt={post.attachmentFileName || copy.photo}
+                width={Number.parseInt(post.attachmentWidth || '', 10) || undefined}
+                height={Number.parseInt(post.attachmentHeight || '', 10) || undefined}
+                loading={eager ? 'eager' : 'lazy'}
+                decoding="async"
+                draggable={false}
+                style={{ opacity: index === startIndex ? 1 : 0 }}
+              />
+            </div>
           );
         })}
       </div>

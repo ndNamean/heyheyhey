@@ -874,6 +874,17 @@ textarea { min-height: 88px; resize: vertical; }
   height: min(72vh, 720px);
   transform: translate(-50%, -50%);
   pointer-events: none;
+  perspective: 1200px;
+  transform-style: preserve-3d;
+}
+
+.community-depth-layer {
+  position: absolute;
+  inset: 0;
+  transform-origin: center center;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  will-change: transform;
 }
 
 .community-depth-image {
@@ -883,6 +894,8 @@ textarea { min-height: 88px; resize: vertical; }
   height: 100%;
   object-fit: contain;
   opacity: 0;
+  transform-origin: center center;
+  backface-visibility: hidden;
   will-change: opacity, transform;
   user-select: none;
 }
