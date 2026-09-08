@@ -3,8 +3,11 @@ import { useLang } from '../../../i18n';
 import { resolveChatAttachmentUrl } from '../../../lib/chatAttachmentDisplay';
 import { BACK_PRIORITY, useNativeBack } from '../../../lib/nativeBack';
 import { usePointerCapabilities } from '../../media-interaction/pointerCapabilities';
-import type { CommunityPost } from '../../../types';
+import type { AvatarProfileFields } from '../../../lib/avatarDisplay';
+import type { CommunityComment, CommunityPost, CommunityReaction } from '../../../types';
 import { AtmosphereCanvas } from './atmosphereCanvas';
+import CommunityDepthOrnaments from './CommunityDepthOrnaments';
+import { ornamentOpacity, ornamentRevealForIndex } from './galleryOrnaments';
 import { resolveGalleryMood, parseMoodHex, interpolateMoods } from './moodController';
 import {
   GalleryLayers,
@@ -54,13 +57,27 @@ function relativeLuminance(hex: string): number {
   return 0.2126 * lin(rgb.r) + 0.7152 * lin(rgb.g) + 0.0722 * lin(rgb.b);
 }
 
+const EMPTY_REACTIONS = new Map<string, CommunityReaction[]>();
+const EMPTY_COMMENTS = new Map<string, CommunityComment[]>();
+const EMPTY_PROFILES = new Map<string, AvatarProfileFields>();
+
 interface Props {
   sourcePosts: CommunityPost[];
   startPostId: string;
   onClose: (postId: string) => void;
+  reactionsByPostId?: ReadonlyMap<string, CommunityReaction[]>;
+  commentsByPostId?: ReadonlyMap<string, CommunityComment[]>;
+  reactorProfiles?: ReadonlyMap<string, AvatarProfileFields>;
 }
 
-export default function CommunityDepthGallery({ sourcePosts, startPostId, onClose }: Props) {
+export default function CommunityDepthGallery({
+  sourcePosts,
+  startPostId,
+  onClose,
+  reactionsByPostId = EMPTY_REACTIONS,
+  commentsByPostId = EMPTY_COMMENTS,
+  reactorProfiles = EMPTY_PROFILES,
+}: Props) {
   const { t } = useLang();
   const copy = t.community;
   const { reducedMotion } = usePointerCapabilities();
@@ -71,6 +88,7 @@ export default function CommunityDepthGallery({ sourcePosts, startPostId, onClos
   const closeRef = useRef<HTMLButtonElement>(null);
   const layerRefs = useRef<Array<HTMLDivElement | null>>([]);
   const imageRefs = useRef<Array<HTMLImageElement | null>>([]);
+  const ornamentRefs = useRef<Array<HTMLDivElement | null>>([]);
   const reducedRef = useRef(reducedMotion);
   reducedRef.current = reducedMotion;
   const onCloseRef = useRef(onClose);
@@ -228,6 +246,11 @@ export default function CommunityDepthGallery({ sourcePosts, startPostId, onClos
           img.style.opacity = String(opacities[i] ?? 0);
           img.style.transform = innerTransform;
         }
+        const ornament = ornamentRefs.current[i];
+        if (ornament) {
+          const reveal = ornamentRevealForIndex(i, currentIndex, nextIndex, blend.depthBlend);
+          ornament.style.opacity = String(ornamentOpacity(opacities[i] ?? 0, reveal));
+        }
       }
 
       raf = requestAnimationFrame(frame);
@@ -316,6 +339,21 @@ export default function CommunityDepthGallery({ sourcePosts, startPostId, onClos
                 draggable={false}
                 style={{ opacity: index === startIndex ? 1 : 0 }}
               />
+              <div
+                className="community-depth-ornaments"
+                ref={(el) => {
+                  ornamentRefs.current[index] = el;
+                }}
+                aria-hidden="true"
+                style={{ opacity: index === startIndex ? 1 : 0 }}
+              >
+                <CommunityDepthOrnaments
+                  post={post}
+                  reactions={reactionsByPostId.get(post.id) ?? []}
+                  comments={commentsByPostId.get(post.id) ?? []}
+                  reactorProfiles={reactorProfiles}
+                />
+              </div>
             </div>
           );
         })}

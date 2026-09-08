@@ -954,6 +954,120 @@ textarea { min-height: 88px; resize: vertical; }
   user-select: none;
 }
 
+.community-depth-ornaments,
+.community-depth-reacts,
+.community-depth-below {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.community-depth-ornaments {
+  z-index: 1;
+  opacity: 0;
+  will-change: opacity;
+  user-select: none;
+}
+
+.community-depth-ornaments * {
+  pointer-events: none;
+}
+
+.community-depth-react {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  transform: translate(-50%, -50%);
+  background: transparent;
+}
+
+.community-depth-react .avatar-circle {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.55);
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.community-depth-react-emoji,
+.community-depth-react-giphy {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  pointer-events: none;
+}
+
+.community-depth-react-emoji {
+  font-size: 12px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55));
+}
+
+.community-depth-react-giphy {
+  width: 14px;
+  height: 14px;
+  object-fit: cover;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7);
+}
+
+.community-depth-author,
+.community-depth-comment {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px 6px 6px;
+  border-radius: 10px;
+  background: rgba(12, 12, 14, 0.42);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+}
+
+.community-depth-author {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translate(-50%, 10px);
+  max-width: min(70%, 240px);
+}
+
+.community-depth-comment {
+  position: absolute;
+  width: min(46%, 160px);
+  transform: translate(-50%, -50%);
+}
+
+.community-depth-author-text,
+.community-depth-comment-text {
+  min-width: 0;
+}
+
+.community-depth-author-name,
+.community-depth-comment-name {
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.community-depth-author-body,
+.community-depth-comment-body {
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 1.25;
+  opacity: 0.88;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.community-depth-author .avatar-circle,
+.community-depth-comment .avatar-circle {
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
 .community-depth-close {
   position: absolute;
   top: calc(12px + env(safe-area-inset-top, 0px));

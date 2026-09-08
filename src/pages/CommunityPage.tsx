@@ -4,7 +4,7 @@ import CommunityPostCard from '../components/community/CommunityPostCard';
 import CommunityPostDetail from '../components/community/CommunityPostDetail';
 import FamousPost from '../components/community/FamousPost';
 import CommunityDepthGallery from '../components/community/depth-gallery/CommunityDepthGallery';
-import { isCommunityImagePost } from '../components/community/depth-gallery/gallerySet';
+import { buildCommunityGalleryPosts, isCommunityImagePost } from '../components/community/depth-gallery/gallerySet';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import {
@@ -24,7 +24,7 @@ import {
   indexProfilesByUserId,
   uniqueReactionUserIds,
 } from '../lib/communityReactionPeople';
-import type { CommunityFamousVote, CommunityPost, CommunityReaction, Profile } from '../types';
+import type { CommunityComment, CommunityFamousVote, CommunityPost, CommunityReaction, Profile } from '../types';
 
 export const COMMUNITY_FEED_PAGE_SIZE = 15;
 
@@ -213,6 +213,34 @@ export default function CommunityPage({ profile }: Props) {
   );
   const overlayOpen = Boolean(galleryPostId);
   const swipeEnabled = !overlayOpen;
+
+  const galleryPostIds = useMemo(() => {
+    if (!galleryPostId) return [] as string[];
+    return buildCommunityGalleryPosts(gallerySource, galleryPostId).posts.map((post) => post.id);
+  }, [galleryPostId, gallerySource]);
+
+  const galleryCommentsQuery = useMemo(() => {
+    if (!galleryPostIds.length) return null;
+    return {
+      communityComments: {
+        $: { where: { postId: { $in: galleryPostIds } } },
+        author: { avatarFile: {} },
+      },
+    };
+  }, [galleryPostIds]);
+
+  const { data: galleryCommentData } = db.useQuery(galleryCommentsQuery);
+  const commentsByPostId = useMemo(() => {
+    const map = new Map<string, CommunityComment[]>();
+    if (!overlayOpen) return map;
+    for (const row of (galleryCommentData?.communityComments ?? []) as CommunityComment[]) {
+      if (!row.postId) continue;
+      const list = map.get(row.postId);
+      if (list) list.push(row);
+      else map.set(row.postId, [row]);
+    }
+    return map;
+  }, [galleryCommentData?.communityComments, overlayOpen]);
 
   useEffect(() => {
     if (!undoToast) return;
@@ -406,6 +434,9 @@ export default function CommunityPage({ profile }: Props) {
         <CommunityDepthGallery
           sourcePosts={gallerySource}
           startPostId={galleryPostId}
+          reactionsByPostId={reactionsByPostId}
+          commentsByPostId={commentsByPostId}
+          reactorProfiles={reactorProfiles}
           onClose={(postId) => {
             setGalleryPostId(null);
             setSelectedPostId(postId);
