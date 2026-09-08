@@ -99,21 +99,16 @@ export function smoothstep(t: number): number {
   return x * x * (3 - 2 * x);
 }
 
+/** Forward scroll: outgoing exits right, incoming enters from the left. Reverse retraces. */
+export const FLOW_EXIT_X = 1;
+
 /**
- * Wrapper slide signs from the CURRENT plane's stable orientation.
- * exitX matches outgoing rotateY = -orientation.rotateY * blend (positive Y → leftward).
+ * Horizontal flow is a fixed left→right conveyor (not hashed per image).
+ * exitY stays a small complementary lift from CURRENT rotateZ.
  */
 export function exitSignsFromOrientation(orientation: Orientation): { exitX: number; exitY: number } {
-  let exitX: number;
-  if (orientation.rotateY !== 0) {
-    exitX = orientation.rotateY >= 0 ? -1 : 1;
-  } else if (orientation.rotateZ !== 0) {
-    exitX = orientation.rotateZ >= 0 ? -1 : 1;
-  } else {
-    exitX = 1;
-  }
   const exitY = orientation.rotateZ === 0 ? 0 : orientation.rotateZ > 0 ? -1 : 1;
-  return { exitX, exitY };
+  return { exitX: FLOW_EXIT_X, exitY };
 }
 
 export function computeGalleryOffsets(input: {

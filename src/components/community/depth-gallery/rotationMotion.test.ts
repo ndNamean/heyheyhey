@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  FLOW_EXIT_X,
   IDENTITY_LAYER_MOTION,
   PORTRAIT_STACK_SCALE,
   PORTRAIT_VIEWPORT_H_CAP,
@@ -85,16 +86,41 @@ describe('computeRotationMotion', () => {
     expect(motion.current.translateZ).toBeLessThan(0);
   });
 
-  it('keeps opposite-side XY gap equal to maxH at blend 0.5', () => {
+  it('flows left-to-right: next enters from the left, current exits right', () => {
+    const early = computeRotationMotion({
+      currentOrientation: current,
+      nextOrientation: next,
+      depthBlend: 0.25,
+      ...offsets,
+    });
+    const later = computeRotationMotion({
+      currentOrientation: current,
+      nextOrientation: next,
+      depthBlend: 0.75,
+      ...offsets,
+    });
+    expect(early.next.translateX).toBeLessThan(0);
+    expect(early.current.translateX).toBeGreaterThan(0);
+    expect(later.current.translateX).toBeGreaterThan(early.current.translateX);
+    expect(later.next.translateX).toBeGreaterThan(early.next.translateX);
+  });
+
+  it('keeps a left-to-right XY gap equal to maxH at blend 0.5', () => {
     const motion = computeRotationMotion({
       currentOrientation: current,
       nextOrientation: next,
       depthBlend: 0.5,
       ...offsets,
     });
-    expect(Math.sign(motion.current.translateX)).not.toBe(Math.sign(motion.next.translateX));
+    expect(motion.current.translateX).toBeGreaterThan(0);
+    expect(motion.next.translateX).toBeLessThan(0);
     expect(Math.abs(motion.current.translateX - motion.next.translateX)).toBeCloseTo(maxH, 8);
     expect(Math.abs(motion.current.translateY - motion.next.translateY)).toBeCloseTo(Math.abs(exitY) * maxV, 8);
+  });
+
+  it('does not flip horizontal direction from hashed rotateY', () => {
+    expect(exitSignsFromOrientation({ rotateX: 80, rotateY: 10, rotateZ: -8 }).exitX).toBe(FLOW_EXIT_X);
+    expect(exitSignsFromOrientation({ rotateX: 80, rotateY: -12, rotateZ: 6 }).exitX).toBe(FLOW_EXIT_X);
   });
 
   it('holds constant center-to-center distance for the whole blend', () => {
