@@ -21,8 +21,10 @@ import {
 } from './scrollController';
 import { buildCommunityGalleryPosts } from './gallerySet';
 import {
-  computeRotationMotion,
+  PORTRAIT_STACK_SCALE,
+  computeGalleryOffsets,
   getStableOrientation,
+  layerMotionForGalleryIndex,
   layerTransformCss,
   type Orientation,
 } from './rotationMotion';
@@ -184,7 +186,7 @@ export default function CommunityDepthGallery({ sourcePosts, startPostId, onClos
       applyChrome(mood.backgroundColor);
 
       const portrait = overlayRoot.clientHeight > overlayRoot.clientWidth;
-      const baseScale = portrait ? 0.65 : 1;
+      const baseScale = portrait ? PORTRAIT_STACK_SCALE : 1;
       const stack = stackRef.current;
       if (stack) stack.style.transform = `translate(-50%, -50%) scale(${baseScale})`;
 
@@ -196,11 +198,10 @@ export default function CommunityDepthGallery({ sourcePosts, startPostId, onClos
 
       const currentIndex = blend.currentPlaneIndex;
       const nextIndex = blend.nextPlaneIndex;
-      const rotation = computeRotationMotion({
-        currentOrientation: orientations[currentIndex] ?? orientations[0],
-        nextOrientation: orientations[nextIndex] ?? orientations[currentIndex] ?? orientations[0],
-        depthBlend: blend.depthBlend,
-        reducedMotion: reduced,
+      const offsets = computeGalleryOffsets({
+        stackWidth: stack?.clientWidth ?? 0,
+        stackHeight: stack?.clientHeight ?? 0,
+        overlayWidth: overlayRoot.clientWidth,
         isPortrait: portrait,
       });
 
@@ -209,13 +210,18 @@ export default function CommunityDepthGallery({ sourcePosts, startPostId, onClos
         const img = imageRefs.current[i];
         const isPair = i === currentIndex || i === nextIndex;
         if (layer) {
-          if (!isPair || reduced) {
-            layer.style.transform = 'none';
-          } else if (i === currentIndex) {
-            layer.style.transform = layerTransformCss(rotation.current);
-          } else {
-            layer.style.transform = layerTransformCss(rotation.next);
-          }
+          const motion = layerMotionForGalleryIndex({
+            index: i,
+            currentIndex,
+            nextIndex,
+            orientations,
+            depthBlend: blend.depthBlend,
+            reducedMotion: reduced,
+            isPortrait: portrait,
+            maxHorizontalOffset: offsets.maxHorizontalOffset,
+            maxVerticalOffset: offsets.maxVerticalOffset,
+          });
+          layer.style.transform = layerTransformCss(motion);
           layer.style.zIndex = isPair ? '2' : '1';
         }
         if (img) {

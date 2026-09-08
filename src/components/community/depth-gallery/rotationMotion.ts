@@ -14,6 +14,12 @@ export const PERSPECTIVE_PX = 1200;
 export const DESKTOP_MOTION_MULTIPLIER = 1;
 export const MOBILE_ROTATION_MULTIPLIER = 0.7;
 export const MOBILE_TRANSLATE_Z_MULTIPLIER = 0.7;
+export const PORTRAIT_STACK_SCALE = 0.65;
+export const DESKTOP_MAX_H_RATIO = 1.08;
+export const DESKTOP_MAX_V_RATIO = 0.14;
+export const PORTRAIT_MAX_H_RATIO = 1.08;
+export const PORTRAIT_MAX_V_RATIO = 0.1;
+export const PORTRAIT_VIEWPORT_H_CAP = 0.6;
 
 export type Orientation = {
   rotateX: number;
@@ -25,6 +31,8 @@ export type LayerMotion = {
   rotateX: number;
   rotateY: number;
   rotateZ: number;
+  translateX: number;
+  translateY: number;
   translateZ: number;
 };
 
@@ -32,12 +40,18 @@ export const IDENTITY_LAYER_MOTION: LayerMotion = {
   rotateX: 0,
   rotateY: 0,
   rotateZ: 0,
+  translateX: 0,
+  translateY: 0,
   translateZ: 0,
 };
 
 export function clamp01(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.min(1, Math.max(0, value));
+}
+
+function clampRange(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 function hashUnit01(hash: number): number {
@@ -79,7 +93,58 @@ export function motionMultipliers(isPortrait: boolean): { rotation: number; tran
   };
 }
 
-function scaleOrientation(orientation: Orientation, amount: number, rotationMul: number): Omit<LayerMotion, 'translateZ'> {
+/** Hermite smoothstep. smoothstep(t) + smoothstep(1 - t) === 1. */
+export function smoothstep(t: number): number {
+  const x = clamp01(t);
+  return x * x * (3 - 2 * x);
+}
+
+/**
+ * Wrapper slide signs from the CURRENT plane's stable orientation.
+ * exitX matches outgoing rotateY = -orientation.rotateY * blend (positive Y → leftward).
+ */
+export function exitSignsFromOrientation(orientation: Orientation): { exitX: number; exitY: number } {
+  let exitX: number;
+  if (orientation.rotateY !== 0) {
+    exitX = orientation.rotateY >= 0 ? -1 : 1;
+  } else if (orientation.rotateZ !== 0) {
+    exitX = orientation.rotateZ >= 0 ? -1 : 1;
+  } else {
+    exitX = 1;
+  }
+  const exitY = orientation.rotateZ === 0 ? 0 : orientation.rotateZ > 0 ? -1 : 1;
+  return { exitX, exitY };
+}
+
+export function computeGalleryOffsets(input: {
+  stackWidth: number;
+  stackHeight: number;
+  overlayWidth: number;
+  isPortrait: boolean;
+}): { maxHorizontalOffset: number; maxVerticalOffset: number } {
+  if (input.isPortrait) {
+    let maxH = clampRange(input.stackWidth * PORTRAIT_MAX_H_RATIO, 120, 420);
+    const viewportCap =
+      (Math.max(0, input.overlayWidth) * PORTRAIT_VIEWPORT_H_CAP) / PORTRAIT_STACK_SCALE;
+    if (Number.isFinite(viewportCap) && viewportCap > 0) {
+      maxH = Math.min(maxH, viewportCap);
+    }
+    return {
+      maxHorizontalOffset: maxH,
+      maxVerticalOffset: clampRange(input.stackHeight * PORTRAIT_MAX_V_RATIO, 16, 64),
+    };
+  }
+  return {
+    maxHorizontalOffset: clampRange(input.stackWidth * DESKTOP_MAX_H_RATIO, 200, 800),
+    maxVerticalOffset: clampRange(input.stackHeight * DESKTOP_MAX_V_RATIO, 24, 110),
+  };
+}
+
+function scaleOrientation(
+  orientation: Orientation,
+  amount: number,
+  rotationMul: number,
+): Pick<LayerMotion, 'rotateX' | 'rotateY' | 'rotateZ'> {
   const k = amount * rotationMul;
   return {
     rotateX: orientation.rotateX * k,
@@ -94,6 +159,8 @@ export function computeRotationMotion(input: {
   depthBlend: number;
   reducedMotion?: boolean;
   isPortrait?: boolean;
+  maxHorizontalOffset?: number;
+  maxVerticalOffset?: number;
 }): { current: LayerMotion; next: LayerMotion } {
   if (input.reducedMotion) {
     return { current: IDENTITY_LAYER_MOTION, next: IDENTITY_LAYER_MOTION };
@@ -105,10 +172,97 @@ export function computeRotationMotion(input: {
   const outgoing = scaleOrientation(input.currentOrientation, -blend, rotation);
   const incoming = scaleOrientation(input.nextOrientation, 1 - blend, rotation);
 
+  const maxH = Number.isFinite(input.maxHorizontalOffset) ? (input.maxHorizontalOffset as number) : 0;
+  const maxV = Number.isFinite(input.maxVerticalOffset) ? (input.maxVerticalOffset as number) : 0;
+  const { exitX, exitY } = exitSignsFromOrientation(input.currentOrientation);
+  const outgoingT = smoothstep(blend);
+  const incomingT = smoothstep(1 - blend);
+
   return {
-    current: { ...outgoing, translateZ: z },
-    next: { ...incoming, translateZ: z },
+    current: {
+      ...outgoing,
+      translateX: exitX * maxH * outgoingT,
+      translateY: exitY * maxV * outgoingT,
+      translateZ: z,
+    },
+    next: {
+      ...incoming,
+      translateX: -exitX * maxH * incomingT,
+      translateY: -exitY * maxV * incomingT,
+      translateZ: z,
+    },
   };
+}
+
+function fallbackOrientation(orientations: Orientation[], index: number): Orientation | undefined {
+  return orientations[index] ?? orientations[0];
+}
+
+/** Per-layer pose: live pair at depthBlend, previous at blend 1, ahead at blend 0 as next. */
+export function layerMotionForGalleryIndex(input: {
+  index: number;
+  currentIndex: number;
+  nextIndex: number;
+  orientations: Orientation[];
+  depthBlend: number;
+  reducedMotion?: boolean;
+  isPortrait?: boolean;
+  maxHorizontalOffset?: number;
+  maxVerticalOffset?: number;
+}): LayerMotion {
+  if (input.reducedMotion) return IDENTITY_LAYER_MOTION;
+  if (!input.orientations.length) return IDENTITY_LAYER_MOTION;
+
+  const currentOrientation = fallbackOrientation(input.orientations, input.currentIndex);
+  const nextOrientation = fallbackOrientation(input.orientations, input.nextIndex) ?? currentOrientation;
+  if (!currentOrientation || !nextOrientation) return IDENTITY_LAYER_MOTION;
+
+  const shared = {
+    reducedMotion: input.reducedMotion,
+    isPortrait: input.isPortrait,
+    maxHorizontalOffset: input.maxHorizontalOffset,
+    maxVerticalOffset: input.maxVerticalOffset,
+  };
+
+  if (input.index === input.currentIndex) {
+    return computeRotationMotion({
+      currentOrientation,
+      nextOrientation,
+      depthBlend: input.depthBlend,
+      ...shared,
+    }).current;
+  }
+
+  if (input.index === input.nextIndex) {
+    return computeRotationMotion({
+      currentOrientation,
+      nextOrientation,
+      depthBlend: input.depthBlend,
+      ...shared,
+    }).next;
+  }
+
+  if (input.index < input.currentIndex) {
+    const parkedCurrent = input.orientations[input.index];
+    if (!parkedCurrent) return IDENTITY_LAYER_MOTION;
+    const parkedNext = input.orientations[input.index + 1] ?? parkedCurrent;
+    return computeRotationMotion({
+      currentOrientation: parkedCurrent,
+      nextOrientation: parkedNext,
+      depthBlend: 1,
+      ...shared,
+    }).current;
+  }
+
+  const parkedNext = input.orientations[input.index];
+  if (!parkedNext) return IDENTITY_LAYER_MOTION;
+  const parkedCurrent = input.orientations[input.index - 1] ?? parkedNext;
+  return computeRotationMotion({
+    currentOrientation: parkedCurrent,
+    nextOrientation: parkedNext,
+    depthBlend: 0,
+    ...shared,
+  }).next;
 }
 
 export function layerTransformCss(motion: LayerMotion): string {
@@ -116,9 +270,11 @@ export function layerTransformCss(motion: LayerMotion): string {
     motion.rotateX === 0 &&
     motion.rotateY === 0 &&
     motion.rotateZ === 0 &&
+    motion.translateX === 0 &&
+    motion.translateY === 0 &&
     motion.translateZ === 0
   ) {
     return 'none';
   }
-  return `rotateX(${motion.rotateX}deg) rotateY(${motion.rotateY}deg) rotateZ(${motion.rotateZ}deg) translateZ(${motion.translateZ}px)`;
+  return `translate3d(${motion.translateX}px, ${motion.translateY}px, ${motion.translateZ}px) rotateX(${motion.rotateX}deg) rotateY(${motion.rotateY}deg) rotateZ(${motion.rotateZ}deg)`;
 }
