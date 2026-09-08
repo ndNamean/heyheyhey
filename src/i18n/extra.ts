@@ -1663,6 +1663,7 @@ export const sectionsEn = {
     hideFailed: 'Could not hide this post. Try again.',
     moreActions: 'More',
     closeGallery: 'Close gallery',
+    backToPost: 'Go back to post',
     galleryLabel: 'Photo gallery',
   },
 };
@@ -3230,6 +3231,7 @@ export const sectionsVi = {
     hideFailed: 'Không ẩn được bài viết. Thử lại.',
     moreActions: 'Thêm',
     closeGallery: 'Đóng thư viện',
+    backToPost: 'Về bài viết',
     galleryLabel: 'Thư viện ảnh',
   },
 };

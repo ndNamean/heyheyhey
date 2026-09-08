@@ -381,7 +381,10 @@ export default function CommunityPage({ profile }: Props) {
         <CommunityDepthGallery
           sourcePosts={gallerySource}
           startPostId={galleryPostId}
-          onClose={() => setGalleryPostId(null)}
+          onClose={(postId) => {
+            setGalleryPostId(null);
+            setSelectedPostId(postId);
+          }}
         />
       ) : null}
       {undoToast ? (

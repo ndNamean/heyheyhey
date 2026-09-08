@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CommunityPost } from '../../../types';
+import { dominantGalleryPostId } from './CommunityDepthGallery';
 import {
   COMMUNITY_GALLERY_MAX_PLANES,
   buildCommunityGalleryPosts,
@@ -73,5 +74,39 @@ describe('community gallery set', () => {
     );
     expect(posts.map((p) => p.id)).toEqual(['pin', 'a']);
     expect(startIndex).toBe(1);
+  });
+});
+
+describe('dominantGalleryPostId', () => {
+  const posts = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+
+  it('uses the current plane when blend is below halfway', () => {
+    expect(
+      dominantGalleryPostId(
+        posts,
+        { currentPlaneIndex: 1, nextPlaneIndex: 2, depthBlend: 0.49 },
+        'fallback',
+      ),
+    ).toBe('b');
+  });
+
+  it('uses the next plane at halfway and beyond', () => {
+    expect(
+      dominantGalleryPostId(
+        posts,
+        { currentPlaneIndex: 1, nextPlaneIndex: 2, depthBlend: 0.5 },
+        'fallback',
+      ),
+    ).toBe('c');
+  });
+
+  it('falls back when the index is missing', () => {
+    expect(
+      dominantGalleryPostId(
+        posts,
+        { currentPlaneIndex: 9, nextPlaneIndex: 9, depthBlend: 0 },
+        'fallback',
+      ),
+    ).toBe('fallback');
   });
 });

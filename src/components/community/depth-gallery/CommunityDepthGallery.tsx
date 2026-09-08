@@ -12,6 +12,7 @@ import {
   PLANE_GAP,
   getDepthProgress,
   getPlaneZ,
+  type DepthBlendData,
 } from './galleryLayers';
 import {
   SCROLL_TO_WORLD_FACTOR,
@@ -21,6 +22,15 @@ import {
 import { buildCommunityGalleryPosts } from './gallerySet';
 
 export { COMMUNITY_GALLERY_MAX_PLANES, buildCommunityGalleryPosts, isCommunityImagePost } from './gallerySet';
+
+export function dominantGalleryPostId(
+  posts: Array<{ id: string }>,
+  blend: Pick<DepthBlendData, 'currentPlaneIndex' | 'nextPlaneIndex' | 'depthBlend'>,
+  fallbackId: string,
+): string {
+  const index = blend.depthBlend < 0.5 ? blend.currentPlaneIndex : blend.nextPlaneIndex;
+  return posts[index]?.id || fallbackId;
+}
 
 function cameraZForPlaneIndex(index: number, planeGap = PLANE_GAP): number {
   return getPlaneZ(index, planeGap) + planeGap * MOOD_SAMPLE_OFFSET;
@@ -39,7 +49,7 @@ function relativeLuminance(hex: string): number {
 interface Props {
   sourcePosts: CommunityPost[];
   startPostId: string;
-  onClose: () => void;
+  onClose: (postId: string) => void;
 }
 
 export default function CommunityDepthGallery({ sourcePosts, startPostId, onClose }: Props) {
@@ -56,6 +66,7 @@ export default function CommunityDepthGallery({ sourcePosts, startPostId, onClos
   reducedRef.current = reducedMotion;
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const currentPostIdRef = useRef(startPostId);
 
   const { posts, startIndex } = useMemo(
     () => buildCommunityGalleryPosts(sourcePosts, startPostId),
@@ -63,9 +74,13 @@ export default function CommunityDepthGallery({ sourcePosts, startPostId, onClos
   );
   const planeKey = posts.map((post) => post.id).join('|');
 
+  function exitToPost() {
+    onCloseRef.current(currentPostIdRef.current || startPostId);
+  }
+
   useNativeBack(
     () => {
-      onClose();
+      exitToPost();
       return true;
     },
     true,
@@ -74,7 +89,7 @@ export default function CommunityDepthGallery({ sourcePosts, startPostId, onClos
 
   useEffect(() => {
     if (!posts.length) {
-      onCloseRef.current();
+      onCloseRef.current(startPostId);
       return;
     }
 
@@ -97,6 +112,7 @@ export default function CommunityDepthGallery({ sourcePosts, startPostId, onClos
     scroll.update();
 
     scroll.attach(root);
+    currentPostIdRef.current = posts[startIndex]?.id || startPostId;
 
     const moods = posts.map((post) =>
       resolveGalleryMood({
@@ -136,6 +152,7 @@ export default function CommunityDepthGallery({ sourcePosts, startPostId, onClos
       sizeCanvas();
       const state = scroll.update(layers.getDepthRange());
       const blend = layers.getPlaneBlendData(state.cameraZ);
+      currentPostIdRef.current = dominantGalleryPostId(posts, blend, startPostId);
       const opacities = layers.updateOpacities(state.cameraZ);
       const mood = interpolateMoods(moods, blend);
       const reduced = reducedRef.current;
@@ -263,10 +280,10 @@ export default function CommunityDepthGallery({ sourcePosts, startPostId, onClos
         ref={closeRef}
         type="button"
         className="community-depth-close"
-        onClick={onClose}
-        aria-label={copy.closeGallery}
+        onClick={exitToPost}
+        aria-label={copy.backToPost}
       >
-        {t.common.close}
+        {copy.backToPost}
       </button>
     </div>
   );
