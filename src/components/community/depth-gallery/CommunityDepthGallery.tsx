@@ -7,6 +7,12 @@ import type { AvatarProfileFields } from '../../../lib/avatarDisplay';
 import type { CommunityComment, CommunityPost, CommunityReaction } from '../../../types';
 import { AtmosphereCanvas } from './atmosphereCanvas';
 import CommunityDepthOrnaments from './CommunityDepthOrnaments';
+import {
+  composeIdleImageScale,
+  coverScaleForStack,
+  resolveIdleImageSize,
+  stepGalleryIdle,
+} from './galleryIdle';
 import { ornamentOpacity, ornamentRevealForIndex } from './galleryOrnaments';
 import { resolveGalleryMood, parseMoodHex, interpolateMoods } from './moodController';
 import {
@@ -154,6 +160,7 @@ export default function CommunityDepthGallery({
     let raf = 0;
     let running = true;
     let chromeDark = relativeLuminance(moods[startIndex]?.backgroundColor ?? '#fffaf0') < 0.5;
+    let idle = { lastNow: 0, stillMs: 0, idleAmount: 0 };
     const started = performance.now();
 
     function sizeCanvas() {
@@ -212,13 +219,25 @@ export default function CommunityDepthGallery({
       const tilt = reduced ? 0 : state.velocity * 0.4;
       const breath = reduced ? 0 : Math.sin((now - started) * 0.0012) * 0.008;
       const velScale = reduced ? 0 : Math.min(0.025, Math.abs(state.velocity) * 0.012);
-      const innerTransform = `translateX(${drift}px) rotate(${tilt}deg) scale(${1 + breath + velScale})`;
+      const garnishScale = 1 + breath + velScale;
+      idle = stepGalleryIdle({
+        now,
+        lastNow: idle.lastNow,
+        stillMs: idle.stillMs,
+        idleAmount: idle.idleAmount,
+        velocity: state.velocity,
+        scrollTarget: state.scrollTarget,
+        scrollCurrent: state.scrollCurrent,
+        reducedMotion: reduced,
+      });
 
       const currentIndex = blend.currentPlaneIndex;
       const nextIndex = blend.nextPlaneIndex;
+      const stackWidth = stack?.clientWidth ?? 0;
+      const stackHeight = stack?.clientHeight ?? 0;
       const offsets = computeGalleryOffsets({
-        stackWidth: stack?.clientWidth ?? 0,
-        stackHeight: stack?.clientHeight ?? 0,
+        stackWidth,
+        stackHeight,
         overlayWidth: overlayRoot.clientWidth,
         isPortrait: portrait,
       });
@@ -243,13 +262,26 @@ export default function CommunityDepthGallery({
           layer.style.zIndex = isPair ? '2' : '1';
         }
         if (img) {
+          const post = posts[i];
+          const fallbackW = Number.parseInt(post?.attachmentWidth || '', 10) || 0;
+          const fallbackH = Number.parseInt(post?.attachmentHeight || '', 10) || 0;
+          const size = resolveIdleImageSize(img, fallbackW, fallbackH);
+          const coverScale = isPair
+            ? coverScaleForStack(stackWidth, stackHeight, size.width, size.height)
+            : 1;
+          const scale = composeIdleImageScale(
+            garnishScale,
+            coverScale,
+            isPair ? idle.idleAmount : 0,
+          );
           img.style.opacity = String(opacities[i] ?? 0);
-          img.style.transform = innerTransform;
+          img.style.transform = `translateX(${drift}px) rotate(${tilt}deg) scale(${scale})`;
         }
         const ornament = ornamentRefs.current[i];
         if (ornament) {
           const reveal = ornamentRevealForIndex(i, currentIndex, nextIndex, blend.depthBlend);
           ornament.style.opacity = String(ornamentOpacity(opacities[i] ?? 0, reveal));
+          ornament.style.setProperty('--idle', String(isPair ? idle.idleAmount : 0));
         }
       }
 
@@ -325,20 +357,22 @@ export default function CommunityDepthGallery({
                 layerRefs.current[index] = el;
               }}
             >
-              <img
-                ref={(el) => {
-                  imageRefs.current[index] = el;
-                }}
-                className="community-depth-image"
-                src={url}
-                alt={post.attachmentFileName || copy.photo}
-                width={Number.parseInt(post.attachmentWidth || '', 10) || undefined}
-                height={Number.parseInt(post.attachmentHeight || '', 10) || undefined}
-                loading={eager ? 'eager' : 'lazy'}
-                decoding="async"
-                draggable={false}
-                style={{ opacity: index === startIndex ? 1 : 0 }}
-              />
+              <div className="community-depth-image-clip">
+                <img
+                  ref={(el) => {
+                    imageRefs.current[index] = el;
+                  }}
+                  className="community-depth-image"
+                  src={url}
+                  alt={post.attachmentFileName || copy.photo}
+                  width={Number.parseInt(post.attachmentWidth || '', 10) || undefined}
+                  height={Number.parseInt(post.attachmentHeight || '', 10) || undefined}
+                  loading={eager ? 'eager' : 'lazy'}
+                  decoding="async"
+                  draggable={false}
+                  style={{ opacity: index === startIndex ? 1 : 0 }}
+                />
+              </div>
               <div
                 className="community-depth-ornaments"
                 ref={(el) => {

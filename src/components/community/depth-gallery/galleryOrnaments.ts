@@ -34,11 +34,20 @@ export const SETTLE_NEXT_SPAN = 0.35;
 
 export type OrnamentRole = 'current' | 'next' | 'other';
 
+/** Inner polar band so idle can walk chips onto the photo (12–28% of stack). */
+export const INNER_RADIUS_MIN = 12;
+export const INNER_RADIUS_MAX = 28;
+/** Author rest is center-bottom; idle eases this far up onto the image. */
+export const AUTHOR_IDLE_TOP_PCT = 82;
+
 export type PolarSlot = {
   leftPct: number;
   topPct: number;
   angleDeg: number;
   radiusPct: number;
+  innerLeftPct: number;
+  innerTopPct: number;
+  innerRadiusPct: number;
 };
 
 export type GalleryReactionOrnament = PolarSlot & {
@@ -131,6 +140,10 @@ export function polarPercent(angleDeg: number, radiusPct: number): { leftPct: nu
   };
 }
 
+export function hashedInnerRadiusPct(postId: string, entityId: string): number {
+  return INNER_RADIUS_MIN + hashOrnamentUnit(postId, entityId, 'inner-r') * (INNER_RADIUS_MAX - INNER_RADIUS_MIN);
+}
+
 function hashedPolar(
   postId: string,
   entityId: string,
@@ -141,7 +154,18 @@ function hashedPolar(
 ): PolarSlot {
   const angleDeg = angleMin + hashOrnamentUnit(postId, entityId) * (angleMax - angleMin);
   const radiusPct = radiusMin + hashOrnamentUnit(postId, entityId, 'r') * (radiusMax - radiusMin);
-  return { angleDeg, radiusPct, ...polarPercent(angleDeg, radiusPct) };
+  const innerRadiusPct = hashedInnerRadiusPct(postId, entityId);
+  const rest = polarPercent(angleDeg, radiusPct);
+  const inner = polarPercent(angleDeg, innerRadiusPct);
+  return {
+    angleDeg,
+    radiusPct,
+    leftPct: rest.leftPct,
+    topPct: rest.topPct,
+    innerRadiusPct,
+    innerLeftPct: inner.leftPct,
+    innerTopPct: inner.topPct,
+  };
 }
 
 function isPostReaction(row: CommunityReaction, postId: string): boolean {

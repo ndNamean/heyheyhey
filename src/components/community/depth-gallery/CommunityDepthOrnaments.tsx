@@ -1,8 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 import type { AvatarProfileFields } from '../../../lib/avatarDisplay';
 import type { CommunityComment, CommunityPost, CommunityReaction } from '../../../types';
 import ProfileAvatar from '../../profileAvatar/ProfileAvatar';
-import { buildGalleryOrnamentLayout } from './galleryOrnaments';
+import { AUTHOR_IDLE_TOP_PCT, buildGalleryOrnamentLayout, type PolarSlot } from './galleryOrnaments';
 
 const AVATAR_PX = 22;
 
@@ -11,6 +11,15 @@ interface Props {
   reactions: CommunityReaction[];
   comments: CommunityComment[];
   reactorProfiles: ReadonlyMap<string, AvatarProfileFields>;
+}
+
+function slotStyle(row: PolarSlot): CSSProperties {
+  return {
+    '--rest-left': row.leftPct,
+    '--rest-top': row.topPct,
+    '--inner-left': row.innerLeftPct,
+    '--inner-top': row.innerTopPct,
+  } as CSSProperties;
 }
 
 export default function CommunityDepthOrnaments({
@@ -35,11 +44,7 @@ export default function CommunityDepthOrnaments({
       {layout.reactions.length ? (
         <div className="community-depth-reacts">
           {layout.reactions.map((row) => (
-            <div
-              key={row.id}
-              className="community-depth-react"
-              style={{ left: `${row.leftPct}%`, top: `${row.topPct}%` }}
-            >
+            <div key={row.id} className="community-depth-react" style={slotStyle(row)}>
               <ProfileAvatar profile={row.profile} size={AVATAR_PX} />
               {row.giphyUrl ? (
                 <img
@@ -56,7 +61,10 @@ export default function CommunityDepthOrnaments({
         </div>
       ) : null}
       <div className="community-depth-below">
-        <div className="community-depth-author">
+        <div
+          className="community-depth-author"
+          style={{ '--author-idle-top': AUTHOR_IDLE_TOP_PCT } as CSSProperties}
+        >
           <ProfileAvatar profile={layout.author.profile} size={AVATAR_PX} />
           <div className="community-depth-author-text">
             <div className="community-depth-author-name">{layout.author.name}</div>
@@ -66,11 +74,7 @@ export default function CommunityDepthOrnaments({
           </div>
         </div>
         {layout.comments.map((row) => (
-          <div
-            key={row.id}
-            className="community-depth-comment"
-            style={{ left: `${row.leftPct}%`, top: `${row.topPct}%` }}
-          >
+          <div key={row.id} className="community-depth-comment" style={slotStyle(row)}>
             <ProfileAvatar profile={row.profile} size={AVATAR_PX} />
             <div className="community-depth-comment-text">
               <div className="community-depth-comment-name">{row.name}</div>

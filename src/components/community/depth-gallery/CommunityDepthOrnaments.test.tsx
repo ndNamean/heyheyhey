@@ -118,8 +118,13 @@ describe('CommunityDepthOrnaments', () => {
     expect(container.textContent).not.toContain('Hidden reply');
 
     const chip = container.querySelector('.community-depth-react') as HTMLElement;
-    expect(chip.style.left).toMatch(/%$/);
-    expect(chip.style.top).toMatch(/%$/);
+    expect(chip.style.getPropertyValue('--rest-left')).not.toBe('');
+    expect(chip.style.getPropertyValue('--rest-top')).not.toBe('');
+    expect(chip.style.getPropertyValue('--inner-left')).not.toBe('');
+    expect(chip.style.getPropertyValue('--inner-top')).not.toBe('');
+    expect(Number(chip.style.getPropertyValue('--inner-left'))).not.toBe(
+      Number(chip.style.getPropertyValue('--rest-left')),
+    );
   });
 
   it('omits the reaction band when a post has no reactions but still shows the author', () => {

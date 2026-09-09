@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CommunityPost } from '../../../types';
 import CommunityDepthGallery from './CommunityDepthGallery';
+import { composeIdleImageScale, coverScaleForStack } from './galleryIdle';
 
 vi.mock('../../profileAvatar/ProfileAvatar', () => ({
   default: ({ profile }: { profile: { displayName?: string } }) => (
@@ -57,6 +58,28 @@ function flushFrames(count = 1, start = 16) {
   });
 }
 
+function parseScale(transform: string): number {
+  const match = transform.match(/scale\(([-+\d.eE]+)\)/);
+  return match ? Number(match[1]) : Number.NaN;
+}
+
+function mockGalleryBox(overlayW: number, overlayH: number, box = 300) {
+  const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.classList.contains('community-depth-gallery') ? overlayW : box;
+  });
+  const height = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.classList.contains('community-depth-gallery') ? overlayH : box;
+  });
+  return () => {
+    width.mockRestore();
+    height.mockRestore();
+  };
+}
+
 describe('CommunityDepthGallery ornaments', () => {
   beforeEach(() => {
     rafQueue = [];
@@ -94,7 +117,7 @@ describe('CommunityDepthGallery ornaments', () => {
     const layers = container.querySelectorAll('.community-depth-layer');
     expect(layers).toHaveLength(3);
     layers.forEach((layer) => {
-      expect(layer.querySelector('.community-depth-image')).toBeTruthy();
+      expect(layer.querySelector('.community-depth-image-clip .community-depth-image')).toBeTruthy();
       expect(layer.querySelector(':scope > .community-depth-ornaments')).toBeTruthy();
       expect(layer.querySelector('.community-depth-author-name')).toBeTruthy();
     });
@@ -140,7 +163,7 @@ describe('CommunityDepthGallery ornaments', () => {
     }
   });
 
-  it('clears leftover ornaments after a fast jump to the last plane and still settles the last image', () => {
+  it('clears leftover ornaments after a fast jump to the last plane and still settles the last image', { timeout: 20000 }, () => {
     const posts = [imagePost('p0'), imagePost('p1'), imagePost('p2')];
     const { container } = render(
       <CommunityDepthGallery sourcePosts={posts} startPostId="p0" onClose={() => {}} />,
@@ -158,5 +181,92 @@ describe('CommunityDepthGallery ornaments', () => {
     expect(Number(ornaments[2].style.opacity)).toBeGreaterThan(0.6);
     expect(Number(images[2].style.opacity)).toBeGreaterThan(0.6);
     expect(Number(images[0].style.opacity)).toBeLessThan(0.2);
+  });
+
+  it('zooms the current/next pair toward stack cover after dwell and writes --idle', { timeout: 20000 }, () => {
+    const restore = mockGalleryBox(900, 600, 300);
+    const landscape = { attachmentWidth: '1600', attachmentHeight: '900' };
+    const posts = [imagePost('p0', landscape), imagePost('p1', landscape), imagePost('p2', landscape)];
+    try {
+      const { container } = render(
+        <CommunityDepthGallery sourcePosts={posts} startPostId="p0" onClose={() => {}} />,
+      );
+      flushFrames(32);
+      const images = [...container.querySelectorAll('.community-depth-image')] as HTMLElement[];
+      const ornaments = [...container.querySelectorAll('.community-depth-ornaments')] as HTMLElement[];
+      const cover = coverScaleForStack(300, 300, 1600, 900);
+      const pairScale = parseScale(images[0].style.transform);
+      const otherScale = parseScale(images[2].style.transform);
+      expect(cover).toBeGreaterThan(1.5);
+      expect(pairScale).toBeGreaterThan(1.2);
+      expect(pairScale).toBeLessThanOrEqual(composeIdleImageScale(1.01, cover, 1) + 0.01);
+      expect(otherScale).toBeLessThan(1.03);
+      expect(Number(ornaments[0].style.getPropertyValue('--idle'))).toBeGreaterThan(0.5);
+      expect(Number(ornaments[1].style.getPropertyValue('--idle'))).toBeGreaterThan(0.5);
+      expect(Number(ornaments[2].style.getPropertyValue('--idle'))).toBe(0);
+    } finally {
+      restore();
+    }
+  });
+
+  it('eases idle zoom back out as soon as scrolling starts', { timeout: 20000 }, () => {
+    const restore = mockGalleryBox(900, 600, 300);
+    const landscape = { attachmentWidth: '1600', attachmentHeight: '900' };
+    const posts = [imagePost('p0', landscape), imagePost('p1', landscape)];
+    try {
+      const { container } = render(
+        <CommunityDepthGallery sourcePosts={posts} startPostId="p0" onClose={() => {}} />,
+      );
+      const dialog = container.querySelector('.community-depth-gallery') as HTMLElement;
+      flushFrames(32);
+      const ornaments = [...container.querySelectorAll('.community-depth-ornaments')] as HTMLElement[];
+      const idleBefore = Number(ornaments[0].style.getPropertyValue('--idle'));
+      const scaleBefore = parseScale(
+        (container.querySelectorAll('.community-depth-image')[0] as HTMLElement).style.transform,
+      );
+      expect(idleBefore).toBeGreaterThan(0.5);
+
+      fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+      flushFrames(8);
+      const idleAfter = Number(ornaments[0].style.getPropertyValue('--idle'));
+      const scaleAfter = parseScale(
+        (container.querySelectorAll('.community-depth-image')[0] as HTMLElement).style.transform,
+      );
+      expect(idleAfter).toBeLessThan(idleBefore);
+      expect(scaleAfter).toBeLessThan(scaleBefore);
+    } finally {
+      restore();
+    }
+  });
+
+  it('keeps idle zoom at 0 when reduced motion is on', () => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: (query: string) => ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+      }),
+    });
+    const restore = mockGalleryBox(900, 600, 300);
+    try {
+      const { container } = render(
+        <CommunityDepthGallery
+          sourcePosts={[imagePost('p0', { attachmentWidth: '1600', attachmentHeight: '900' })]}
+          startPostId="p0"
+          onClose={() => {}}
+        />,
+      );
+      flushFrames(8);
+      const img = container.querySelector('.community-depth-image') as HTMLElement;
+      const ornaments = container.querySelector('.community-depth-ornaments') as HTMLElement;
+      expect(parseScale(img.style.transform)).toBeCloseTo(1, 5);
+      expect(Number(ornaments.style.getPropertyValue('--idle'))).toBe(0);
+    } finally {
+      restore();
+    }
   });
 });

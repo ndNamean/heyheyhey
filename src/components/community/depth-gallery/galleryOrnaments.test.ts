@@ -242,3 +242,27 @@ describe('settleReveal', () => {
     expect(ornamentRevealForIndex(4, 4, 4, 0)).toBeCloseTo(1, 8);
   });
 });
+
+describe('idle rest slots', () => {
+  it('keeps rest polar slots unchanged when idle is 0', () => {
+    const layout = buildGalleryOrnamentLayout({
+      post: post(),
+      reactions: [reaction({ id: 'r1', createdAt: '2026-09-01T00:00:00.000Z' })],
+      comments: [comment({ id: 'c1', createdAt: '2026-09-08T00:00:00.000Z' })],
+      reactorProfiles: new Map(),
+    });
+    const idle = 0;
+    for (const row of [...layout.reactions, ...layout.comments]) {
+      const rest = polarPercent(row.angleDeg, row.radiusPct);
+      expect(row.leftPct).toBeCloseTo(rest.leftPct, 8);
+      expect(row.topPct).toBeCloseTo(rest.topPct, 8);
+      expect(row.leftPct + (row.innerLeftPct - row.leftPct) * idle).toBeCloseTo(row.leftPct, 8);
+      expect(row.topPct + (row.innerTopPct - row.topPct) * idle).toBeCloseTo(row.topPct, 8);
+      expect(row.innerRadiusPct).toBeLessThan(row.radiusPct);
+    }
+    expect(layout.reactions[0].angleDeg).toBeGreaterThanOrEqual(REACTION_ANGLE_MIN);
+    expect(layout.reactions[0].angleDeg).toBeLessThanOrEqual(REACTION_ANGLE_MAX);
+    expect(layout.comments[0].angleDeg).toBeGreaterThanOrEqual(COMMENT_ANGLE_MIN);
+    expect(layout.comments[0].angleDeg).toBeLessThanOrEqual(COMMENT_ANGLE_MAX);
+  });
+});
