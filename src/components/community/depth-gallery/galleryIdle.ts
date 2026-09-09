@@ -110,3 +110,43 @@ export function composeIdleImageScale(
   const cover = Number.isFinite(coverScale) && coverScale > 0 ? coverScale : 1;
   return garnish * lerp(1, cover, clamp(idleAmount, 0, 1));
 }
+
+/**
+ * First-contact scale from the visual stack card to the overlay.
+ * visualW/H = stack size × visualScale (portrait stack transform).
+ * Unknown or non-positive sizes → 1. Never shrinks below 1.
+ */
+export function frameExpandScaleForOverlay(
+  stackW: number,
+  stackH: number,
+  overlayW: number,
+  overlayH: number,
+  visualScale: number,
+): number {
+  const visualW = stackW * visualScale;
+  const visualH = stackH * visualScale;
+  if (
+    !(
+      stackW > 0 &&
+      stackH > 0 &&
+      overlayW > 0 &&
+      overlayH > 0 &&
+      visualScale > 0 &&
+      visualW > 0 &&
+      visualH > 0 &&
+      Number.isFinite(visualW) &&
+      Number.isFinite(visualH) &&
+      Number.isFinite(overlayW) &&
+      Number.isFinite(overlayH)
+    )
+  ) {
+    return 1;
+  }
+  return Math.max(1, Math.min(overlayW / visualW, overlayH / visualH));
+}
+
+/** lerp(1, frameExpand, idleAmount) */
+export function composeIdleFrameScale(frameExpand: number, idleAmount: number): number {
+  const expand = Number.isFinite(frameExpand) && frameExpand > 0 ? frameExpand : 1;
+  return lerp(1, expand, clamp(idleAmount, 0, 1));
+}

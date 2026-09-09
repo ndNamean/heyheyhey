@@ -8,8 +8,10 @@ import type { CommunityComment, CommunityPost, CommunityReaction } from '../../.
 import { AtmosphereCanvas } from './atmosphereCanvas';
 import CommunityDepthOrnaments from './CommunityDepthOrnaments';
 import {
+  composeIdleFrameScale,
   composeIdleImageScale,
   coverScaleForStack,
+  frameExpandScaleForOverlay,
   resolveIdleImageSize,
   stepGalleryIdle,
 } from './galleryIdle';
@@ -235,10 +237,20 @@ export default function CommunityDepthGallery({
       const nextIndex = blend.nextPlaneIndex;
       const stackWidth = stack?.clientWidth ?? 0;
       const stackHeight = stack?.clientHeight ?? 0;
+      const overlayWidth = overlayRoot.clientWidth;
+      const overlayHeight = overlayRoot.clientHeight;
+      const visualScale = portrait ? PORTRAIT_STACK_SCALE : 1;
+      const frameExpand = frameExpandScaleForOverlay(
+        stackWidth,
+        stackHeight,
+        overlayWidth,
+        overlayHeight,
+        visualScale,
+      );
       const offsets = computeGalleryOffsets({
         stackWidth,
         stackHeight,
-        overlayWidth: overlayRoot.clientWidth,
+        overlayWidth,
         isPortrait: portrait,
       });
 
@@ -260,6 +272,11 @@ export default function CommunityDepthGallery({
           });
           layer.style.transform = layerTransformCss(motion);
           layer.style.zIndex = isPair ? '2' : '1';
+          const clip = layer.querySelector('.community-depth-image-clip');
+          if (clip instanceof HTMLElement) {
+            const clipScale = isPair ? composeIdleFrameScale(frameExpand, idle.idleAmount) : 1;
+            clip.style.transform = `scale(${clipScale})`;
+          }
         }
         if (img) {
           const post = posts[i];

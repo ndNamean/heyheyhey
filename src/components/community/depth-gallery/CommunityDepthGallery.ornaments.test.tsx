@@ -239,6 +239,92 @@ describe('CommunityDepthGallery ornaments', () => {
     }
   });
 
+  it('expands current/next clips after dwell while img cover-zoom stays on the image', { timeout: 20000 }, () => {
+    const restore = mockGalleryBox(900, 600, 300);
+    const landscape = { attachmentWidth: '1600', attachmentHeight: '900' };
+    const posts = [imagePost('p0', landscape), imagePost('p1', landscape), imagePost('p2', landscape)];
+    try {
+      const { container } = render(
+        <CommunityDepthGallery sourcePosts={posts} startPostId="p0" onClose={() => {}} />,
+      );
+      flushFrames(32);
+      const clips = [...container.querySelectorAll('.community-depth-image-clip')] as HTMLElement[];
+      const images = [...container.querySelectorAll('.community-depth-image')] as HTMLElement[];
+      const cover = coverScaleForStack(300, 300, 1600, 900);
+      const pairClip = parseScale(clips[0].style.transform);
+      const nextClip = parseScale(clips[1].style.transform);
+      const otherClip = parseScale(clips[2].style.transform);
+      const pairImg = parseScale(images[0].style.transform);
+      expect(pairClip).toBeGreaterThan(1);
+      expect(nextClip).toBeGreaterThan(1);
+      expect(otherClip).toBeCloseTo(1, 5);
+      expect(pairImg).toBeGreaterThan(1.2);
+      expect(pairImg).toBeLessThanOrEqual(composeIdleImageScale(1.01, cover, 1) + 0.01);
+    } finally {
+      restore();
+    }
+  });
+
+  it('eases clip scale down with --idle as soon as scrolling starts', { timeout: 20000 }, () => {
+    const restore = mockGalleryBox(900, 600, 300);
+    const landscape = { attachmentWidth: '1600', attachmentHeight: '900' };
+    const posts = [imagePost('p0', landscape), imagePost('p1', landscape)];
+    try {
+      const { container } = render(
+        <CommunityDepthGallery sourcePosts={posts} startPostId="p0" onClose={() => {}} />,
+      );
+      const dialog = container.querySelector('.community-depth-gallery') as HTMLElement;
+      flushFrames(32);
+      const ornaments = [...container.querySelectorAll('.community-depth-ornaments')] as HTMLElement[];
+      const idleBefore = Number(ornaments[0].style.getPropertyValue('--idle'));
+      const clipBefore = parseScale(
+        (container.querySelectorAll('.community-depth-image-clip')[0] as HTMLElement).style.transform,
+      );
+      expect(idleBefore).toBeGreaterThan(0.5);
+      expect(clipBefore).toBeGreaterThan(1);
+
+      fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+      flushFrames(8);
+      const idleAfter = Number(ornaments[0].style.getPropertyValue('--idle'));
+      const clipAfter = parseScale(
+        (container.querySelectorAll('.community-depth-image-clip')[0] as HTMLElement).style.transform,
+      );
+      expect(idleAfter).toBeLessThan(idleBefore);
+      expect(clipAfter).toBeLessThan(clipBefore);
+    } finally {
+      restore();
+    }
+  });
+
+  it('keeps clip scale at 1 when reduced motion is on', () => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: (query: string) => ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+      }),
+    });
+    const restore = mockGalleryBox(900, 600, 300);
+    try {
+      const { container } = render(
+        <CommunityDepthGallery
+          sourcePosts={[imagePost('p0', { attachmentWidth: '1600', attachmentHeight: '900' })]}
+          startPostId="p0"
+          onClose={() => {}}
+        />,
+      );
+      flushFrames(8);
+      const clip = container.querySelector('.community-depth-image-clip') as HTMLElement;
+      expect(parseScale(clip.style.transform)).toBeCloseTo(1, 5);
+    } finally {
+      restore();
+    }
+  });
+
   it('keeps idle zoom at 0 when reduced motion is on', () => {
     Object.defineProperty(window, 'matchMedia', {
       writable: true,

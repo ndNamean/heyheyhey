@@ -3,8 +3,10 @@ import {
   IDLE_DWELL_MS,
   IDLE_LERP_DOWN,
   IDLE_LERP_UP,
+  composeIdleFrameScale,
   composeIdleImageScale,
   coverScaleForStack,
+  frameExpandScaleForOverlay,
   isGalleryScrollStill,
   resolveIdleImageSize,
   stepGalleryIdle,
@@ -181,6 +183,43 @@ describe('coverScaleForStack', () => {
     expect(composeIdleImageScale(1.01, 2, 0)).toBeCloseTo(1.01, 8);
     expect(composeIdleImageScale(1.01, 2, 1)).toBeCloseTo(2.02, 8);
     expect(composeIdleImageScale(1, 2, 0.5)).toBeCloseTo(1.5, 8);
+  });
+});
+
+describe('frameExpandScaleForOverlay', () => {
+  it('hits the overlay height first for a square stack in a wider overlay', () => {
+    const stackW = 100;
+    const stackH = 100;
+    const overlayW = 400;
+    const overlayH = 200;
+    const visualScale = 1;
+    const visualH = stackH * visualScale;
+    expect(frameExpandScaleForOverlay(stackW, stackH, overlayW, overlayH, visualScale)).toBeCloseTo(
+      overlayH / visualH,
+      8,
+    );
+  });
+
+  it('uses portrait visualScale instead of layout-only stack size', () => {
+    const layoutOnly = frameExpandScaleForOverlay(100, 100, 400, 200, 1);
+    const portrait = frameExpandScaleForOverlay(100, 100, 400, 200, 0.65);
+    expect(portrait).toBeCloseTo(200 / (100 * 0.65), 8);
+    expect(portrait).not.toBeCloseTo(layoutOnly, 8);
+    expect(portrait).toBeGreaterThan(layoutOnly);
+  });
+
+  it('is 1 when size is missing or non-positive', () => {
+    expect(frameExpandScaleForOverlay(0, 100, 400, 200, 1)).toBe(1);
+    expect(frameExpandScaleForOverlay(100, 100, 0, 200, 1)).toBe(1);
+    expect(frameExpandScaleForOverlay(100, 100, 400, 200, 0)).toBe(1);
+    expect(frameExpandScaleForOverlay(100, 100, Number.NaN, 200, 1)).toBe(1);
+    expect(frameExpandScaleForOverlay(100, 100, 400, 200, Number.NaN)).toBe(1);
+  });
+
+  it('composes frame expand with idleAmount', () => {
+    expect(composeIdleFrameScale(2, 0)).toBeCloseTo(1, 8);
+    expect(composeIdleFrameScale(2, 1)).toBeCloseTo(2, 8);
+    expect(composeIdleFrameScale(2, 0.5)).toBeCloseTo(1.5, 8);
   });
 });
 

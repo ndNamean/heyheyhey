@@ -945,6 +945,7 @@ textarea { min-height: 88px; resize: vertical; }
   position: absolute;
   inset: 0;
   overflow: hidden;
+  transform-origin: center;
 }
 
 .community-depth-image {
