@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CommunityComment, CommunityPost, CommunityReaction } from '../../../types';
@@ -122,9 +124,11 @@ describe('CommunityDepthOrnaments', () => {
     expect(chip.style.getPropertyValue('--rest-top')).not.toBe('');
     expect(chip.style.getPropertyValue('--inner-left')).not.toBe('');
     expect(chip.style.getPropertyValue('--inner-top')).not.toBe('');
-    expect(Number(chip.style.getPropertyValue('--inner-left'))).not.toBe(
-      Number(chip.style.getPropertyValue('--rest-left')),
-    );
+    const restLeft = Number(chip.style.getPropertyValue('--rest-left'));
+    const restTop = Number(chip.style.getPropertyValue('--rest-top'));
+    const innerLeft = Number(chip.style.getPropertyValue('--inner-left'));
+    const innerTop = Number(chip.style.getPropertyValue('--inner-top'));
+    expect(innerLeft !== restLeft || innerTop !== restTop).toBe(true);
   });
 
   it('omits the reaction band when a post has no reactions but still shows the author', () => {
@@ -139,5 +143,14 @@ describe('CommunityDepthOrnaments', () => {
     expect(container.querySelector('.community-depth-reacts')).toBeNull();
     expect(container.querySelector('.community-depth-author')).toBeTruthy();
     expect(container.querySelectorAll('.community-depth-comment')).toHaveLength(0);
+  });
+
+  it('lerps reaction chip scale from 2.5 at rest to 1.12 when idle', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
+    expect(css).toContain('scale(calc(2.5 + (1.12 - 2.5) * var(--idle, 0)))');
+    expect(css).toContain('scale(calc(1.4 + (1.12 - 1.4) * var(--idle, 0)))');
+    expect(css).toContain(
+      'translate(-50%, calc(10px * (1 - var(--idle, 0)))) scale(calc(1.4 + (1 - 1.4) * var(--idle, 0)))',
+    );
   });
 });

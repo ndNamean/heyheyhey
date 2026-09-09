@@ -16,14 +16,17 @@ export const GALLERY_ORNAMENT_TEXT_CHARS = 48;
 /** Top hemisphere, clockwise from east (CSS y-down). */
 export const REACTION_ANGLE_MIN = 200;
 export const REACTION_ANGLE_MAX = 340;
-export const REACTION_RADIUS_MIN = 42;
-export const REACTION_RADIUS_MAX = 58;
+export const REACTION_RADIUS_MIN = 48;
+export const REACTION_RADIUS_MAX = 64;
 
 /** Lower hemisphere, clockwise from east. */
 export const COMMENT_ANGLE_MIN = 20;
 export const COMMENT_ANGLE_MAX = 160;
-export const COMMENT_RADIUS_MIN = 58;
-export const COMMENT_RADIUS_MAX = 78;
+/** Skip the bottom of the lower arc so 1.4× pills miss the author. */
+export const COMMENT_AUTHOR_GAP_MIN = 70;
+export const COMMENT_AUTHOR_GAP_MAX = 110;
+export const COMMENT_RADIUS_MIN = 62;
+export const COMMENT_RADIUS_MAX = 82;
 
 /** Current-plane reveal: mostly on at blend 0, gone by ~0.5. */
 export const SETTLE_CURRENT_START = 0.15;
@@ -140,6 +143,38 @@ export function polarPercent(angleDeg: number, radiusPct: number): { leftPct: nu
   };
 }
 
+/** Midpoints of `count` equal slices on [min, max]. */
+export function spaceArcAngles(count: number, min: number, max: number): number[] {
+  if (!(count > 0)) return [];
+  const slice = (max - min) / count;
+  return Array.from({ length: count }, (_, i) => min + (i + 0.5) * slice);
+}
+
+/** Even rest angles on the comment arcs, skipping the author gap. */
+export function spaceCommentRestAngles(count: number): number[] {
+  const leftSpan = COMMENT_AUTHOR_GAP_MIN - COMMENT_ANGLE_MIN;
+  const rightSpan = COMMENT_ANGLE_MAX - COMMENT_AUTHOR_GAP_MAX;
+  return spaceArcAngles(count, 0, leftSpan + rightSpan).map((t) =>
+    t < leftSpan ? COMMENT_ANGLE_MIN + t : COMMENT_AUTHOR_GAP_MAX + (t - leftSpan),
+  );
+}
+
+export function applySpacedAngles<T extends PolarSlot>(slots: T[], angles: number[]): T[] {
+  return slots.map((slot, index) => {
+    const angleDeg = angles[index] ?? slot.angleDeg;
+    const rest = polarPercent(angleDeg, slot.radiusPct);
+    const inner = polarPercent(angleDeg, slot.innerRadiusPct);
+    return {
+      ...slot,
+      angleDeg,
+      leftPct: rest.leftPct,
+      topPct: rest.topPct,
+      innerLeftPct: inner.leftPct,
+      innerTopPct: inner.topPct,
+    };
+  });
+}
+
 export function hashedInnerRadiusPct(postId: string, entityId: string): number {
   return INNER_RADIUS_MIN + hashOrnamentUnit(postId, entityId, 'inner-r') * (INNER_RADIUS_MAX - INNER_RADIUS_MIN);
 }
@@ -248,7 +283,7 @@ export function buildGalleryOrnamentLayout(input: {
   reactorProfiles: ReadonlyMap<string, AvatarProfileFields>;
 }): GalleryOrnamentLayout {
   const { post } = input;
-  const reactions = selectGalleryReactions(input.reactions, post.id).map((row) => {
+  const reactionSlots = selectGalleryReactions(input.reactions, post.id).map((row) => {
     const polar = hashedPolar(
       post.id,
       row.id,
@@ -265,8 +300,12 @@ export function buildGalleryOrnamentLayout(input: {
       profile: reactorOrnamentProfile(row.userId, input.reactorProfiles),
     };
   });
+  const reactions = applySpacedAngles(
+    reactionSlots,
+    spaceArcAngles(reactionSlots.length, REACTION_ANGLE_MIN, REACTION_ANGLE_MAX),
+  );
 
-  const comments = selectGalleryComments(input.comments, post.id).map((row) => {
+  const commentSlots = selectGalleryComments(input.comments, post.id).map((row) => {
     const polar = hashedPolar(
       post.id,
       row.id,
@@ -284,6 +323,10 @@ export function buildGalleryOrnamentLayout(input: {
       profile,
     };
   });
+  const commentsById = [...commentSlots].sort((a, b) => a.id.localeCompare(b.id));
+  const spacedComments = applySpacedAngles(commentsById, spaceCommentRestAngles(commentsById.length));
+  const commentById = new Map(spacedComments.map((row) => [row.id, row]));
+  const comments = commentSlots.map((row) => commentById.get(row.id) ?? row);
 
   return {
     reactions,

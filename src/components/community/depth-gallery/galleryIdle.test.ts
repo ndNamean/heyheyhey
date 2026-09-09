@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  IDLE_CHIP_SCALE,
   IDLE_DWELL_MS,
   IDLE_LERP_DOWN,
   IDLE_LERP_UP,
+  ORNAMENT_SCROLL_REACTION_SCALE,
+  ORNAMENT_SCROLL_TEXT_SCALE,
   composeIdleFrameScale,
   composeIdleImageScale,
+  composeOrnamentScale,
   coverScaleForStack,
   frameExpandScaleForOverlay,
   isGalleryScrollStill,
@@ -220,6 +224,30 @@ describe('frameExpandScaleForOverlay', () => {
     expect(composeIdleFrameScale(2, 0)).toBeCloseTo(1, 8);
     expect(composeIdleFrameScale(2, 1)).toBeCloseTo(2, 8);
     expect(composeIdleFrameScale(2, 0.5)).toBeCloseTo(1.5, 8);
+  });
+});
+
+describe('composeOrnamentScale', () => {
+  it('lerps reaction scale 2.5 → 1.12 with idle', () => {
+    expect(composeOrnamentScale(ORNAMENT_SCROLL_REACTION_SCALE, IDLE_CHIP_SCALE, 0)).toBeCloseTo(2.5, 8);
+    expect(composeOrnamentScale(ORNAMENT_SCROLL_REACTION_SCALE, IDLE_CHIP_SCALE, 0.5)).toBeCloseTo(
+      (2.5 + 1.12) / 2,
+      8,
+    );
+    expect(composeOrnamentScale(ORNAMENT_SCROLL_REACTION_SCALE, IDLE_CHIP_SCALE, 1)).toBeCloseTo(1.12, 8);
+  });
+
+  it('lerps comment 1.4 → 1.12 and author 1.4 → 1.0 with idle', () => {
+    expect(composeOrnamentScale(ORNAMENT_SCROLL_TEXT_SCALE, IDLE_CHIP_SCALE, 0)).toBeCloseTo(1.4, 8);
+    expect(composeOrnamentScale(ORNAMENT_SCROLL_TEXT_SCALE, IDLE_CHIP_SCALE, 0.5)).toBeCloseTo(
+      (1.4 + 1.12) / 2,
+      8,
+    );
+    expect(composeOrnamentScale(ORNAMENT_SCROLL_TEXT_SCALE, IDLE_CHIP_SCALE, 1)).toBeCloseTo(1.12, 8);
+
+    expect(composeOrnamentScale(ORNAMENT_SCROLL_TEXT_SCALE, 1, 0)).toBeCloseTo(1.4, 8);
+    expect(composeOrnamentScale(ORNAMENT_SCROLL_TEXT_SCALE, 1, 0.5)).toBeCloseTo(1.2, 8);
+    expect(composeOrnamentScale(ORNAMENT_SCROLL_TEXT_SCALE, 1, 1)).toBeCloseTo(1, 8);
   });
 });
 

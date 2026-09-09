@@ -3,10 +3,18 @@ import type { CommunityComment, CommunityPost, CommunityReaction } from '../../.
 import {
   COMMENT_ANGLE_MAX,
   COMMENT_ANGLE_MIN,
+  COMMENT_AUTHOR_GAP_MAX,
+  COMMENT_AUTHOR_GAP_MIN,
+  COMMENT_RADIUS_MAX,
+  COMMENT_RADIUS_MIN,
   GALLERY_ORNAMENT_COMMENT_CAP,
   GALLERY_ORNAMENT_REACTION_CAP,
+  INNER_RADIUS_MAX,
+  INNER_RADIUS_MIN,
   REACTION_ANGLE_MAX,
   REACTION_ANGLE_MIN,
+  REACTION_RADIUS_MAX,
+  REACTION_RADIUS_MIN,
   buildGalleryOrnamentLayout,
   hashOrnamentUnit,
   ornamentRevealForIndex,
@@ -14,6 +22,8 @@ import {
   selectGalleryComments,
   selectGalleryReactions,
   settleReveal,
+  spaceArcAngles,
+  spaceCommentRestAngles,
   truncateOrnamentText,
 } from './galleryOrnaments';
 
@@ -264,5 +274,139 @@ describe('idle rest slots', () => {
     expect(layout.reactions[0].angleDeg).toBeLessThanOrEqual(REACTION_ANGLE_MAX);
     expect(layout.comments[0].angleDeg).toBeGreaterThanOrEqual(COMMENT_ANGLE_MIN);
     expect(layout.comments[0].angleDeg).toBeLessThanOrEqual(COMMENT_ANGLE_MAX);
+  });
+});
+
+describe('even rest spacing', () => {
+  it('places slice midpoints on an arc', () => {
+    expect(spaceArcAngles(0, 200, 340)).toEqual([]);
+    expect(spaceArcAngles(1, 200, 340)[0]).toBeCloseTo(270, 8);
+    expect(spaceArcAngles(2, 0, 10)[0]).toBeCloseTo(2.5, 8);
+    expect(spaceArcAngles(2, 0, 10)[1]).toBeCloseTo(7.5, 8);
+  });
+
+  it('gives 8 reactions even rest-angle gaps on the upper arc', () => {
+    const reactions = Array.from({ length: 8 }, (_, i) =>
+      reaction({
+        id: `r${i}`,
+        createdAt: `2026-09-01T${String(i).padStart(2, '0')}:00:00.000Z`,
+      }),
+    );
+    const layout = buildGalleryOrnamentLayout({
+      post: post(),
+      reactions,
+      comments: [],
+      reactorProfiles: new Map(),
+    });
+    expect(layout.reactions).toHaveLength(GALLERY_ORNAMENT_REACTION_CAP);
+    const expected = spaceArcAngles(
+      GALLERY_ORNAMENT_REACTION_CAP,
+      REACTION_ANGLE_MIN,
+      REACTION_ANGLE_MAX,
+    );
+    expect(layout.reactions.map((row) => row.angleDeg)).toEqual(expected);
+    const gaps = expected.slice(1).map((angle, i) => angle - expected[i]);
+    for (const gap of gaps) {
+      expect(gap).toBeCloseTo(gaps[0], 8);
+    }
+    for (const row of layout.reactions) {
+      expect(row.angleDeg).toBeGreaterThanOrEqual(REACTION_ANGLE_MIN);
+      expect(row.angleDeg).toBeLessThanOrEqual(REACTION_ANGLE_MAX);
+      expect(row.radiusPct).toBeGreaterThanOrEqual(REACTION_RADIUS_MIN);
+      expect(row.radiusPct).toBeLessThanOrEqual(REACTION_RADIUS_MAX);
+      expect(row.innerRadiusPct).toBeGreaterThanOrEqual(INNER_RADIUS_MIN);
+      expect(row.innerRadiusPct).toBeLessThanOrEqual(INNER_RADIUS_MAX);
+      const inner = polarPercent(row.angleDeg, row.innerRadiusPct);
+      expect(row.innerLeftPct).toBeCloseTo(inner.leftPct, 8);
+      expect(row.innerTopPct).toBeCloseTo(inner.topPct, 8);
+    }
+  });
+
+  it('keeps inner radii hashed in 12–28 and rest/inner on the same angle', () => {
+    const layout = buildGalleryOrnamentLayout({
+      post: post(),
+      reactions: [
+        reaction({ id: 'r1', createdAt: '2026-09-01T00:00:00.000Z' }),
+        reaction({ id: 'r2', createdAt: '2026-09-02T00:00:00.000Z' }),
+      ],
+      comments: [
+        comment({ id: 'c1', createdAt: '2026-09-03T00:00:00.000Z' }),
+        comment({ id: 'c2', createdAt: '2026-09-04T00:00:00.000Z' }),
+      ],
+      reactorProfiles: new Map(),
+    });
+    for (const row of [...layout.reactions, ...layout.comments]) {
+      expect(row.innerRadiusPct).toBeGreaterThanOrEqual(INNER_RADIUS_MIN);
+      expect(row.innerRadiusPct).toBeLessThanOrEqual(INNER_RADIUS_MAX);
+      const rest = polarPercent(row.angleDeg, row.radiusPct);
+      const inner = polarPercent(row.angleDeg, row.innerRadiusPct);
+      expect(row.leftPct).toBeCloseTo(rest.leftPct, 8);
+      expect(row.topPct).toBeCloseTo(rest.topPct, 8);
+      expect(row.innerLeftPct).toBeCloseTo(inner.leftPct, 8);
+      expect(row.innerTopPct).toBeCloseTo(inner.topPct, 8);
+    }
+  });
+
+  it('spaces comments around the author gap and fills by sorted id', () => {
+    const comments = Array.from({ length: 6 }, (_, i) =>
+      comment({
+        id: `c${i}`,
+        createdAt: `2026-09-0${i + 1}T00:00:00.000Z`,
+      }),
+    );
+    const layout = buildGalleryOrnamentLayout({
+      post: post(),
+      reactions: [],
+      comments,
+      reactorProfiles: new Map(),
+    });
+    expect(layout.comments).toHaveLength(GALLERY_ORNAMENT_COMMENT_CAP);
+    const expectedById = spaceCommentRestAngles(GALLERY_ORNAMENT_COMMENT_CAP);
+    const sortedIds = [...layout.comments].map((row) => row.id).sort((a, b) => a.localeCompare(b));
+    const angleById = Object.fromEntries(layout.comments.map((row) => [row.id, row.angleDeg]));
+    sortedIds.forEach((id, i) => {
+      expect(angleById[id]).toBeCloseTo(expectedById[i], 8);
+    });
+    for (const row of layout.comments) {
+      const inLeft = row.angleDeg >= COMMENT_ANGLE_MIN && row.angleDeg <= COMMENT_AUTHOR_GAP_MIN;
+      const inRight = row.angleDeg >= COMMENT_AUTHOR_GAP_MAX && row.angleDeg <= COMMENT_ANGLE_MAX;
+      expect(inLeft || inRight).toBe(true);
+      expect(row.angleDeg > COMMENT_AUTHOR_GAP_MIN && row.angleDeg < COMMENT_AUTHOR_GAP_MAX).toBe(
+        false,
+      );
+      expect(row.radiusPct).toBeGreaterThanOrEqual(COMMENT_RADIUS_MIN);
+      expect(row.radiusPct).toBeLessThanOrEqual(COMMENT_RADIUS_MAX);
+      expect(row.innerRadiusPct).toBeGreaterThanOrEqual(INNER_RADIUS_MIN);
+      expect(row.innerRadiusPct).toBeLessThanOrEqual(INNER_RADIUS_MAX);
+    }
+  });
+
+  it('keeps rest layout stable for the same ids', () => {
+    const reactions = [
+      reaction({ id: 'r1', createdAt: '2026-09-01T00:00:00.000Z' }),
+      reaction({ id: 'r2', createdAt: '2026-09-02T00:00:00.000Z' }),
+    ];
+    const comments = [
+      comment({ id: 'c1', createdAt: '2026-09-03T00:00:00.000Z' }),
+      comment({ id: 'c2', createdAt: '2026-09-04T00:00:00.000Z' }),
+    ];
+    const a = buildGalleryOrnamentLayout({
+      post: post(),
+      reactions,
+      comments,
+      reactorProfiles: new Map(),
+    });
+    const b = buildGalleryOrnamentLayout({
+      post: post(),
+      reactions: [...reactions].reverse(),
+      comments: [...comments].reverse(),
+      reactorProfiles: new Map(),
+    });
+    expect(a.reactions.map((row) => [row.id, row.angleDeg, row.radiusPct, row.innerRadiusPct])).toEqual(
+      b.reactions.map((row) => [row.id, row.angleDeg, row.radiusPct, row.innerRadiusPct]),
+    );
+    expect(a.comments.map((row) => [row.id, row.angleDeg, row.radiusPct, row.innerRadiusPct])).toEqual(
+      b.comments.map((row) => [row.id, row.angleDeg, row.radiusPct, row.innerRadiusPct]),
+    );
   });
 });

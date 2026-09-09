@@ -15,6 +15,8 @@ export const IDLE_LERP_UP = 0.07;
 /** Faster return to swipe layout. */
 export const IDLE_LERP_DOWN = 0.18;
 export const IDLE_CHIP_SCALE = 1.12;
+export const ORNAMENT_SCROLL_REACTION_SCALE = 2.5;
+export const ORNAMENT_SCROLL_TEXT_SCALE = 1.4;
 
 export type GalleryIdleInput = {
   now: number;
@@ -149,4 +151,9 @@ export function frameExpandScaleForOverlay(
 export function composeIdleFrameScale(frameExpand: number, idleAmount: number): number {
   const expand = Number.isFinite(frameExpand) && frameExpand > 0 ? frameExpand : 1;
   return lerp(1, expand, clamp(idleAmount, 0, 1));
+}
+
+/** lerp(scroll, inward, idleAmount) — CSS uses the same numbers via --idle. */
+export function composeOrnamentScale(scroll: number, inward: number, idleAmount: number): number {
+  return lerp(scroll, inward, clamp(idleAmount, 0, 1));
 }
