@@ -178,7 +178,6 @@ describe('CommunityDepthGallery ornaments', () => {
     const images = [...container.querySelectorAll('.community-depth-image')] as HTMLElement[];
     expect(Number(ornaments[0].style.opacity)).toBe(0);
     expect(Number(ornaments[1].style.opacity)).toBeLessThan(0.15);
-    expect(Number(ornaments[2].style.opacity)).toBeGreaterThan(0.6);
     expect(Number(images[2].style.opacity)).toBeGreaterThan(0.6);
     expect(Number(images[0].style.opacity)).toBeLessThan(0.2);
   });
@@ -204,6 +203,34 @@ describe('CommunityDepthGallery ornaments', () => {
       expect(Number(ornaments[0].style.getPropertyValue('--idle'))).toBeGreaterThan(0.5);
       expect(Number(ornaments[1].style.getPropertyValue('--idle'))).toBeGreaterThan(0.5);
       expect(Number(ornaments[2].style.getPropertyValue('--idle'))).toBe(0);
+    } finally {
+      restore();
+    }
+  });
+
+  it('vanishes pair ornaments after inward then restores on scroll', { timeout: 20000 }, () => {
+    const restore = mockGalleryBox(900, 600, 300);
+    const landscape = { attachmentWidth: '1600', attachmentHeight: '900' };
+    const posts = [imagePost('p0', landscape), imagePost('p1', landscape)];
+    try {
+      const { container } = render(
+        <CommunityDepthGallery sourcePosts={posts} startPostId="p0" onClose={() => {}} />,
+      );
+      const dialog = container.querySelector('.community-depth-gallery') as HTMLElement;
+      flushFrames(160);
+      const ornaments = [...container.querySelectorAll('.community-depth-ornaments')] as HTMLElement[];
+      const idleBefore = Number(ornaments[0].style.getPropertyValue('--idle'));
+      const opacityBefore = Number(ornaments[0].style.opacity);
+      expect(opacityBefore).toBeLessThan(0.15);
+      expect(idleBefore).toBeGreaterThan(0.9);
+
+      fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+      flushFrames(3);
+      const idleAfter = Number(ornaments[0].style.getPropertyValue('--idle'));
+      const opacityAfter = Number(ornaments[0].style.opacity);
+      expect(opacityAfter).toBeGreaterThan(opacityBefore);
+      expect(opacityAfter).toBeGreaterThan(0.2);
+      expect(idleAfter).toBeLessThan(idleBefore);
     } finally {
       restore();
     }

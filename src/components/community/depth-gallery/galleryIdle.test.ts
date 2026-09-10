@@ -4,6 +4,7 @@ import {
   IDLE_DWELL_MS,
   IDLE_LERP_DOWN,
   IDLE_LERP_UP,
+  IDLE_VANISH_START,
   ORNAMENT_SCROLL_REACTION_SCALE,
   ORNAMENT_SCROLL_TEXT_SCALE,
   composeIdleFrameScale,
@@ -33,6 +34,7 @@ function stillStep(
     lastNow: state.lastNow,
     stillMs: state.stillMs,
     idleAmount: state.idleAmount,
+    vanishAmount: state.vanishAmount,
     velocity: 0,
     scrollTarget: 10,
     scrollCurrent: 10,
@@ -93,9 +95,10 @@ describe('gallery idle amount', () => {
   });
 
   it('stays at 0 while still until the dwell elapses, then rises', () => {
-    let state: GalleryIdleState = { lastNow: 0, stillMs: 0, idleAmount: 0 };
+    let state: GalleryIdleState = { lastNow: 0, stillMs: 0, idleAmount: 0, vanishAmount: 0 };
     state = stillStep(state, 16);
     expect(state.idleAmount).toBe(0);
+    expect(state.vanishAmount).toBe(0);
     expect(state.stillMs).toBe(0);
 
     state = stillStep(state, 16 + (IDLE_DWELL_MS - 20));
@@ -113,6 +116,7 @@ describe('gallery idle amount', () => {
       lastNow: 984,
       stillMs: 400,
       idleAmount: 0.8,
+      vanishAmount: 0.6,
       velocity: 0.4,
       scrollTarget: 40,
       scrollCurrent: 10,
@@ -120,6 +124,7 @@ describe('gallery idle amount', () => {
     });
     expect(down.stillMs).toBe(0);
     expect(down.idleAmount).toBeCloseTo(0.8 * (1 - IDLE_LERP_DOWN), 8);
+    expect(down.vanishAmount).toBeCloseTo(0.6 * (1 - IDLE_LERP_DOWN), 8);
   });
 
   it('zooms out faster than it zooms in', () => {
@@ -127,6 +132,7 @@ describe('gallery idle amount', () => {
       lastNow: 500,
       stillMs: IDLE_DWELL_MS,
       idleAmount: 0,
+      vanishAmount: 0,
     };
     const zoomIn = stillStep(afterDwell, 516);
     const zoomOut = stepGalleryIdle({
@@ -134,6 +140,7 @@ describe('gallery idle amount', () => {
       lastNow: 500,
       stillMs: IDLE_DWELL_MS,
       idleAmount: 1,
+      vanishAmount: 1,
       velocity: 0.5,
       scrollTarget: 80,
       scrollCurrent: 10,
@@ -144,11 +151,57 @@ describe('gallery idle amount', () => {
   });
 
   it('stays at 0 under reduced motion even after a long still dwell', () => {
-    let state: GalleryIdleState = { lastNow: 0, stillMs: 0, idleAmount: 0.9 };
+    let state: GalleryIdleState = { lastNow: 0, stillMs: 0, idleAmount: 0.9, vanishAmount: 0.8 };
     state = stillStep(state, 16, { reducedMotion: true });
     state = stillStep(state, 800, { reducedMotion: true });
     expect(state.idleAmount).toBe(0);
+    expect(state.vanishAmount).toBe(0);
     expect(state.stillMs).toBe(0);
+  });
+});
+
+describe('gallery idle vanish', () => {
+  it('keeps vanish at 0 while idle walks in, then rises after 0.98', () => {
+    let state: GalleryIdleState = {
+      lastNow: 500,
+      stillMs: IDLE_DWELL_MS,
+      idleAmount: 0,
+      vanishAmount: 0,
+    };
+    state = stillStep(state, 516);
+    expect(state.idleAmount).toBeCloseTo(IDLE_LERP_UP, 8);
+    expect(state.vanishAmount).toBe(0);
+
+    state = stillStep(
+      { lastNow: 516, stillMs: IDLE_DWELL_MS, idleAmount: 0.97, vanishAmount: 0 },
+      532,
+    );
+    expect(state.idleAmount).toBeGreaterThan(0.97);
+    expect(state.idleAmount).toBeLessThan(IDLE_VANISH_START);
+    expect(state.vanishAmount).toBe(0);
+
+    const afterGate = stillStep(
+      { lastNow: 532, stillMs: IDLE_DWELL_MS, idleAmount: IDLE_VANISH_START, vanishAmount: 0 },
+      548,
+    );
+    expect(afterGate.idleAmount).toBeGreaterThanOrEqual(IDLE_VANISH_START);
+    expect(afterGate.vanishAmount).toBeCloseTo(IDLE_LERP_UP, 8);
+  });
+
+  it('eases vanish back on move at idle-out speed', () => {
+    const down = stepGalleryIdle({
+      now: 1000,
+      lastNow: 984,
+      stillMs: 400,
+      idleAmount: 1,
+      vanishAmount: 0.8,
+      velocity: 0.4,
+      scrollTarget: 40,
+      scrollCurrent: 10,
+      reducedMotion: false,
+    });
+    expect(down.idleAmount).toBeCloseTo(1 * (1 - IDLE_LERP_DOWN), 8);
+    expect(down.vanishAmount).toBeCloseTo(0.8 * (1 - IDLE_LERP_DOWN), 8);
   });
 });
 

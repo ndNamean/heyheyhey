@@ -17,6 +17,7 @@ import {
   REACTION_RADIUS_MIN,
   buildGalleryOrnamentLayout,
   hashOrnamentUnit,
+  ornamentOpacity,
   ornamentRevealForIndex,
   polarPercent,
   selectGalleryComments,
@@ -250,6 +251,13 @@ describe('settleReveal', () => {
 
   it('stays visible on the last plane when current and next share an index', () => {
     expect(ornamentRevealForIndex(4, 4, 4, 0)).toBeCloseTo(1, 8);
+  });
+
+  it('multiplies plane and reveal by (1 - vanishAmount)', () => {
+    expect(ornamentOpacity(1, 1, 0)).toBe(1);
+    expect(ornamentOpacity(1, 1, 1)).toBe(0);
+    expect(ornamentOpacity(1, 1, 0.5)).toBe(0.5);
+    expect(ornamentOpacity(1, 1)).toBe(1);
   });
 });
 

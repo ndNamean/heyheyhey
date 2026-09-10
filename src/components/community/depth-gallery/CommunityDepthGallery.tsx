@@ -162,7 +162,7 @@ export default function CommunityDepthGallery({
     let raf = 0;
     let running = true;
     let chromeDark = relativeLuminance(moods[startIndex]?.backgroundColor ?? '#fffaf0') < 0.5;
-    let idle = { lastNow: 0, stillMs: 0, idleAmount: 0 };
+    let idle = { lastNow: 0, stillMs: 0, idleAmount: 0, vanishAmount: 0 };
     const started = performance.now();
 
     function sizeCanvas() {
@@ -227,6 +227,7 @@ export default function CommunityDepthGallery({
         lastNow: idle.lastNow,
         stillMs: idle.stillMs,
         idleAmount: idle.idleAmount,
+        vanishAmount: idle.vanishAmount,
         velocity: state.velocity,
         scrollTarget: state.scrollTarget,
         scrollCurrent: state.scrollCurrent,
@@ -297,7 +298,7 @@ export default function CommunityDepthGallery({
         const ornament = ornamentRefs.current[i];
         if (ornament) {
           const reveal = ornamentRevealForIndex(i, currentIndex, nextIndex, blend.depthBlend);
-          ornament.style.opacity = String(ornamentOpacity(opacities[i] ?? 0, reveal));
+          ornament.style.opacity = String(ornamentOpacity(opacities[i] ?? 0, reveal, idle.vanishAmount));
           ornament.style.setProperty('--idle', String(isPair ? idle.idleAmount : 0));
         }
       }

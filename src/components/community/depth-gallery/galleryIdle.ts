@@ -14,6 +14,8 @@ export const IDLE_DWELL_MS = 220;
 export const IDLE_LERP_UP = 0.07;
 /** Faster return to swipe layout. */
 export const IDLE_LERP_DOWN = 0.18;
+/** Start fading ornaments after idle walk-in is essentially done. */
+export const IDLE_VANISH_START = 0.98;
 export const IDLE_CHIP_SCALE = 1.12;
 export const ORNAMENT_SCROLL_REACTION_SCALE = 2.5;
 export const ORNAMENT_SCROLL_TEXT_SCALE = 1.4;
@@ -23,6 +25,7 @@ export type GalleryIdleInput = {
   lastNow: number;
   stillMs: number;
   idleAmount: number;
+  vanishAmount: number;
   velocity: number;
   scrollTarget: number;
   scrollCurrent: number;
@@ -33,6 +36,7 @@ export type GalleryIdleState = {
   lastNow: number;
   stillMs: number;
   idleAmount: number;
+  vanishAmount: number;
 };
 
 export function isGalleryScrollStill(
@@ -52,13 +56,15 @@ export function stepGalleryIdle(input: GalleryIdleInput): GalleryIdleState {
   const dt = lastNow > 0 ? Math.max(0, now - lastNow) : 0;
 
   if (input.reducedMotion) {
-    return { lastNow: now, stillMs: 0, idleAmount: 0 };
+    return { lastNow: now, stillMs: 0, idleAmount: 0, vanishAmount: 0 };
   }
 
   let stillMs = Number.isFinite(input.stillMs) ? Math.max(0, input.stillMs) : 0;
   let idleAmount = clamp(Number.isFinite(input.idleAmount) ? input.idleAmount : 0, 0, 1);
+  let vanishAmount = clamp(Number.isFinite(input.vanishAmount) ? input.vanishAmount : 0, 0, 1);
+  const still = isGalleryScrollStill(input.velocity, input.scrollTarget, input.scrollCurrent);
 
-  if (isGalleryScrollStill(input.velocity, input.scrollTarget, input.scrollCurrent)) {
+  if (still) {
     stillMs += dt;
     if (stillMs >= IDLE_DWELL_MS) {
       idleAmount = lerp(idleAmount, 1, IDLE_LERP_UP);
@@ -68,7 +74,18 @@ export function stepGalleryIdle(input: GalleryIdleInput): GalleryIdleState {
     idleAmount = lerp(idleAmount, 0, IDLE_LERP_DOWN);
   }
 
-  return { lastNow: now, stillMs, idleAmount: clamp(idleAmount, 0, 1) };
+  if (still && idleAmount >= IDLE_VANISH_START) {
+    vanishAmount = lerp(vanishAmount, 1, IDLE_LERP_UP);
+  } else if (!still) {
+    vanishAmount = lerp(vanishAmount, 0, IDLE_LERP_DOWN);
+  }
+
+  return {
+    lastNow: now,
+    stillMs,
+    idleAmount: clamp(idleAmount, 0, 1),
+    vanishAmount: clamp(vanishAmount, 0, 1),
+  };
 }
 
 /**

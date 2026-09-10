@@ -115,8 +115,9 @@ export function ornamentRevealForIndex(
   return reveal;
 }
 
-export function ornamentOpacity(planeOpacity: number, reveal: number): number {
-  const opacity = (Number.isFinite(planeOpacity) ? planeOpacity : 0) * reveal;
+export function ornamentOpacity(planeOpacity: number, reveal: number, vanishAmount = 0): number {
+  const vanish = clamp(Number.isFinite(vanishAmount) ? vanishAmount : 0, 0, 1);
+  const opacity = (Number.isFinite(planeOpacity) ? planeOpacity : 0) * reveal * (1 - vanish);
   return clamp(opacity, 0, 1);
 }
 
