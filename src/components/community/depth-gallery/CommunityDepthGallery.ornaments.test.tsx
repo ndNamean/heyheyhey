@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CommunityPost } from '../../../types';
 import CommunityDepthGallery from './CommunityDepthGallery';
-import { composeIdleImageScale, coverScaleForStack } from './galleryIdle';
+import { containRectForStack } from './galleryIdle';
 
 vi.mock('../../profileAvatar/ProfileAvatar', () => ({
   default: ({ profile }: { profile: { displayName?: string } }) => (
@@ -61,6 +61,20 @@ function flushFrames(count = 1, start = 16) {
 function parseScale(transform: string): number {
   const match = transform.match(/scale\(([-+\d.eE]+)\)/);
   return match ? Number(match[1]) : Number.NaN;
+}
+
+function parsePx(value: string): number {
+  return Number.parseFloat(value);
+}
+
+function expectNativeClipBox(clip: HTMLElement, stackW: number, stackH: number, imageW: number, imageH: number) {
+  const rect = containRectForStack(stackW, stackH, imageW, imageH);
+  expect(parsePx(clip.style.width)).toBeCloseTo(rect.width, 5);
+  expect(parsePx(clip.style.height)).toBeCloseTo(rect.height, 5);
+  expect(parsePx(clip.style.left)).toBeCloseTo(rect.left, 5);
+  expect(parsePx(clip.style.top)).toBeCloseTo(rect.top, 5);
+  expect(clip.style.right).toBe('auto');
+  expect(clip.style.bottom).toBe('auto');
 }
 
 function mockGalleryBox(overlayW: number, overlayH: number, box = 300) {
@@ -193,12 +207,10 @@ describe('CommunityDepthGallery ornaments', () => {
       flushFrames(32);
       const images = [...container.querySelectorAll('.community-depth-image')] as HTMLElement[];
       const ornaments = [...container.querySelectorAll('.community-depth-ornaments')] as HTMLElement[];
-      const cover = coverScaleForStack(300, 300, 1600, 900);
       const pairScale = parseScale(images[0].style.transform);
       const otherScale = parseScale(images[2].style.transform);
-      expect(cover).toBeGreaterThan(1.5);
-      expect(pairScale).toBeGreaterThan(1.2);
-      expect(pairScale).toBeLessThanOrEqual(composeIdleImageScale(1.01, cover, 1) + 0.01);
+      expect(pairScale).toBeGreaterThan(0.99);
+      expect(pairScale).toBeLessThan(1.03);
       expect(otherScale).toBeLessThan(1.03);
       expect(Number(ornaments[0].style.getPropertyValue('--idle'))).toBeGreaterThan(0.5);
       expect(Number(ornaments[1].style.getPropertyValue('--idle'))).toBeGreaterThan(0.5);
@@ -260,7 +272,32 @@ describe('CommunityDepthGallery ornaments', () => {
         (container.querySelectorAll('.community-depth-image')[0] as HTMLElement).style.transform,
       );
       expect(idleAfter).toBeLessThan(idleBefore);
-      expect(scaleAfter).toBeLessThan(scaleBefore);
+      expect(scaleBefore).toBeLessThan(1.03);
+      expect(scaleAfter).toBeLessThan(1.03);
+    } finally {
+      restore();
+    }
+  });
+
+  it('sizes landscape clips to the contain-fitted photo ratio', { timeout: 20000 }, () => {
+    const restore = mockGalleryBox(900, 600, 300);
+    const landscape = { attachmentWidth: '1600', attachmentHeight: '900' };
+    const posts = [imagePost('p0', landscape), imagePost('p1', landscape), imagePost('p2', landscape)];
+    try {
+      const { container } = render(
+        <CommunityDepthGallery sourcePosts={posts} startPostId="p0" onClose={() => {}} />,
+      );
+      flushFrames(32);
+      const clips = [...container.querySelectorAll('.community-depth-image-clip')] as HTMLElement[];
+      const images = [...container.querySelectorAll('.community-depth-image')] as HTMLElement[];
+      const stack = 300;
+      expect(parsePx(clips[0].style.width)).toBeCloseTo(stack, 5);
+      expect(parsePx(clips[0].style.height)).toBeLessThan(stack);
+      expectNativeClipBox(clips[0], stack, stack, 1600, 900);
+      expectNativeClipBox(clips[2], stack, stack, 1600, 900);
+      expect(parseScale(images[0].style.transform)).toBeLessThan(1.03);
+      expect(parseScale(clips[0].style.transform)).toBeGreaterThan(1);
+      expect(parseScale(clips[2].style.transform)).toBeCloseTo(1, 5);
     } finally {
       restore();
     }
@@ -277,7 +314,6 @@ describe('CommunityDepthGallery ornaments', () => {
       flushFrames(32);
       const clips = [...container.querySelectorAll('.community-depth-image-clip')] as HTMLElement[];
       const images = [...container.querySelectorAll('.community-depth-image')] as HTMLElement[];
-      const cover = coverScaleForStack(300, 300, 1600, 900);
       const pairClip = parseScale(clips[0].style.transform);
       const nextClip = parseScale(clips[1].style.transform);
       const otherClip = parseScale(clips[2].style.transform);
@@ -285,8 +321,8 @@ describe('CommunityDepthGallery ornaments', () => {
       expect(pairClip).toBeGreaterThan(1);
       expect(nextClip).toBeGreaterThan(1);
       expect(otherClip).toBeCloseTo(1, 5);
-      expect(pairImg).toBeGreaterThan(1.2);
-      expect(pairImg).toBeLessThanOrEqual(composeIdleImageScale(1.01, cover, 1) + 0.01);
+      expect(pairImg).toBeGreaterThan(0.99);
+      expect(pairImg).toBeLessThan(1.03);
     } finally {
       restore();
     }
@@ -346,6 +382,8 @@ describe('CommunityDepthGallery ornaments', () => {
       );
       flushFrames(8);
       const clip = container.querySelector('.community-depth-image-clip') as HTMLElement;
+      expectNativeClipBox(clip, 300, 300, 1600, 900);
+      expect(parsePx(clip.style.height)).toBeLessThan(300);
       expect(parseScale(clip.style.transform)).toBeCloseTo(1, 5);
     } finally {
       restore();

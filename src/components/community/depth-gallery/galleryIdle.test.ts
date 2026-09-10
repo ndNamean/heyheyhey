@@ -11,6 +11,7 @@ import {
   composeIdleFrameScale,
   composeIdleImageScale,
   composeOrnamentScale,
+  containRectForStack,
   coverScaleForStack,
   frameExpandScaleForOverlay,
   isGalleryScrollStill,
@@ -242,6 +243,44 @@ describe('coverScaleForStack', () => {
     expect(composeIdleImageScale(1.01, 2, 0)).toBeCloseTo(1.01, 8);
     expect(composeIdleImageScale(1.01, 2, 1)).toBeCloseTo(2.02, 8);
     expect(composeIdleImageScale(1, 2, 0.5)).toBeCloseTo(1.5, 8);
+  });
+});
+
+describe('containRectForStack', () => {
+  it('letterboxes a 16:9 photo in a square stack', () => {
+    const rect = containRectForStack(300, 300, 16, 9);
+    expect(rect.width).toBe(300);
+    expect(rect.height).toBeCloseTo(168.75, 8);
+    expect(rect.left).toBe(0);
+    expect(rect.top).toBeCloseTo((300 - 168.75) / 2, 8);
+  });
+
+  it('pillarboxes a 9:16 photo in a square stack', () => {
+    const rect = containRectForStack(300, 300, 9, 16);
+    expect(rect.height).toBe(300);
+    expect(rect.width).toBeCloseTo(168.75, 8);
+    expect(rect.top).toBe(0);
+    expect(rect.left).toBeCloseTo((300 - 168.75) / 2, 8);
+  });
+
+  it('fills the stack when the photo is already square', () => {
+    expect(containRectForStack(300, 300, 100, 100)).toEqual({
+      left: 0,
+      top: 0,
+      width: 300,
+      height: 300,
+    });
+  });
+
+  it('falls back to the full stack when size is missing', () => {
+    expect(containRectForStack(300, 300, 0, 80)).toEqual({ left: 0, top: 0, width: 300, height: 300 });
+    expect(containRectForStack(0, 100, 80, 80)).toEqual({ left: 0, top: 0, width: 0, height: 100 });
+    expect(containRectForStack(300, 300, Number.NaN, 80)).toEqual({
+      left: 0,
+      top: 0,
+      width: 300,
+      height: 300,
+    });
   });
 });
 

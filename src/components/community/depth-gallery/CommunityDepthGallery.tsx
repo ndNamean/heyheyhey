@@ -10,6 +10,7 @@ import CommunityDepthOrnaments from './CommunityDepthOrnaments';
 import {
   composeIdleFrameScale,
   composeIdleImageScale,
+  containRectForStack,
   coverScaleForStack,
   frameExpandScaleForOverlay,
   resolveIdleImageSize,
@@ -241,13 +242,6 @@ export default function CommunityDepthGallery({
       const overlayWidth = overlayRoot.clientWidth;
       const overlayHeight = overlayRoot.clientHeight;
       const visualScale = portrait ? PORTRAIT_STACK_SCALE : 1;
-      const frameExpand = frameExpandScaleForOverlay(
-        stackWidth,
-        stackHeight,
-        overlayWidth,
-        overlayHeight,
-        visualScale,
-      );
       const offsets = computeGalleryOffsets({
         stackWidth,
         stackHeight,
@@ -259,6 +253,11 @@ export default function CommunityDepthGallery({
         const layer = layerRefs.current[i];
         const img = imageRefs.current[i];
         const isPair = i === currentIndex || i === nextIndex;
+        const post = posts[i];
+        const fallbackW = Number.parseInt(post?.attachmentWidth || '', 10) || 0;
+        const fallbackH = Number.parseInt(post?.attachmentHeight || '', 10) || 0;
+        const size = resolveIdleImageSize(img, fallbackW, fallbackH);
+        const rect = containRectForStack(stackWidth, stackHeight, size.width, size.height);
         if (layer) {
           const motion = layerMotionForGalleryIndex({
             index: i,
@@ -275,17 +274,26 @@ export default function CommunityDepthGallery({
           layer.style.zIndex = isPair ? '2' : '1';
           const clip = layer.querySelector('.community-depth-image-clip');
           if (clip instanceof HTMLElement) {
+            clip.style.left = `${rect.left}px`;
+            clip.style.top = `${rect.top}px`;
+            clip.style.width = `${rect.width}px`;
+            clip.style.height = `${rect.height}px`;
+            clip.style.right = 'auto';
+            clip.style.bottom = 'auto';
+            const frameExpand = frameExpandScaleForOverlay(
+              rect.width,
+              rect.height,
+              overlayWidth,
+              overlayHeight,
+              visualScale,
+            );
             const clipScale = isPair ? composeIdleFrameScale(frameExpand, idle.idleAmount) : 1;
             clip.style.transform = `scale(${clipScale})`;
           }
         }
         if (img) {
-          const post = posts[i];
-          const fallbackW = Number.parseInt(post?.attachmentWidth || '', 10) || 0;
-          const fallbackH = Number.parseInt(post?.attachmentHeight || '', 10) || 0;
-          const size = resolveIdleImageSize(img, fallbackW, fallbackH);
           const coverScale = isPair
-            ? coverScaleForStack(stackWidth, stackHeight, size.width, size.height)
+            ? coverScaleForStack(rect.width, rect.height, size.width, size.height)
             : 1;
           const scale = composeIdleImageScale(
             garnishScale,

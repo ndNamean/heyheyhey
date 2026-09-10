@@ -121,6 +121,32 @@ export function resolveIdleImageSize(
   return { width, height };
 }
 
+/**
+ * Contain-fit the photo inside the stack box (letterbox).
+ * S = stackW/stackH, I = imageW/imageH.
+ * Unknown or non-positive sizes → full stack (0, 0, stackW, stackH).
+ */
+export function containRectForStack(
+  stackW: number,
+  stackH: number,
+  imageW: number,
+  imageH: number,
+): { left: number; top: number; width: number; height: number } {
+  const full = { left: 0, top: 0, width: stackW, height: stackH };
+  if (!(stackW > 0 && stackH > 0 && imageW > 0 && imageH > 0)) return full;
+  const S = stackW / stackH;
+  const I = imageW / imageH;
+  if (!(S > 0 && I > 0) || !Number.isFinite(S) || !Number.isFinite(I)) return full;
+  if (I >= S) {
+    const width = stackW;
+    const height = stackW / I;
+    return { left: 0, top: (stackH - height) / 2, width, height };
+  }
+  const height = stackH;
+  const width = stackH * I;
+  return { left: (stackW - width) / 2, top: 0, width, height };
+}
+
 /** (1 + breath + velScale) * lerp(1, coverScale, idleAmount) */
 export function composeIdleImageScale(
   garnishScale: number,
