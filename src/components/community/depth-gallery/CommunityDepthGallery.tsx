@@ -7,16 +7,23 @@ import type { AvatarProfileFields } from '../../../lib/avatarDisplay';
 import type { CommunityComment, CommunityPost, CommunityReaction } from '../../../types';
 import { AtmosphereCanvas } from './atmosphereCanvas';
 import CommunityDepthOrnaments from './CommunityDepthOrnaments';
+import CommunityDepthRipples from './CommunityDepthRipples';
 import {
   composeIdleFrameScale,
   composeIdleImageScale,
   containRectForStack,
   coverScaleForStack,
   frameExpandScaleForOverlay,
+  isGalleryScrollStill,
   resolveIdleImageSize,
   stepGalleryIdle,
 } from './galleryIdle';
 import { ornamentOpacity, ornamentRevealForIndex } from './galleryOrnaments';
+import {
+  RIPPLE_VANISH_THRESHOLD,
+  ornamentRippleShouldFire,
+  ornamentRippleShouldReset,
+} from './ornamentRipple';
 import { resolveGalleryMood, parseMoodHex, interpolateMoods } from './moodController';
 import {
   GalleryLayers,
@@ -98,6 +105,7 @@ export default function CommunityDepthGallery({
   const layerRefs = useRef<Array<HTMLDivElement | null>>([]);
   const imageRefs = useRef<Array<HTMLImageElement | null>>([]);
   const ornamentRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const rippleRefs = useRef<Array<HTMLDivElement | null>>([]);
   const reducedRef = useRef(reducedMotion);
   reducedRef.current = reducedMotion;
   const onCloseRef = useRef(onClose);
@@ -164,6 +172,7 @@ export default function CommunityDepthGallery({
     let running = true;
     let chromeDark = relativeLuminance(moods[startIndex]?.backgroundColor ?? '#fffaf0') < 0.5;
     let idle = { lastNow: 0, stillMs: 0, idleAmount: 0, vanishAmount: 0 };
+    const firedRipples = new Set<string>();
     const started = performance.now();
 
     function sizeCanvas() {
@@ -235,6 +244,8 @@ export default function CommunityDepthGallery({
         reducedMotion: reduced,
       });
 
+      const still = isGalleryScrollStill(state.velocity, state.scrollTarget, state.scrollCurrent);
+      const rippleReset = ornamentRippleShouldReset({ still, reducedMotion: reduced });
       const currentIndex = blend.currentPlaneIndex;
       const nextIndex = blend.nextPlaneIndex;
       const stackWidth = stack?.clientWidth ?? 0;
@@ -309,6 +320,41 @@ export default function CommunityDepthGallery({
           ornament.style.opacity = String(ornamentOpacity(opacities[i] ?? 0, reveal, idle.vanishAmount));
           ornament.style.setProperty('--idle', String(isPair ? idle.idleAmount : 0));
         }
+        const rippleRoot = rippleRefs.current[i];
+        if (!rippleRoot) continue;
+        if (rippleReset) {
+          if (firedRipples.size === 0) continue;
+          firedRipples.clear();
+          rippleRoot.querySelectorAll('.community-depth-ripple.is-firing').forEach((node) => {
+            node.classList.remove('is-firing');
+          });
+          continue;
+        }
+        if (!(idle.vanishAmount >= RIPPLE_VANISH_THRESHOLD)) continue;
+        const reveal = ornamentRevealForIndex(i, currentIndex, nextIndex, blend.depthBlend);
+        const preVanishOpacity = ornamentOpacity(opacities[i] ?? 0, reveal, 0);
+        rippleRoot.querySelectorAll('.community-depth-ripple').forEach((node) => {
+          if (!(node instanceof HTMLElement)) return;
+          const key = node.getAttribute('data-ripple-key');
+          if (!key) return;
+          if (
+            !ornamentRippleShouldFire({
+              still,
+              reducedMotion: reduced,
+              vanishAmount: idle.vanishAmount,
+              preVanishOpacity,
+              alreadyFired: firedRipples.has(key),
+            })
+          ) {
+            return;
+          }
+          firedRipples.add(key);
+          if (node.classList.contains('is-firing')) {
+            node.classList.remove('is-firing');
+            void node.offsetWidth;
+          }
+          node.classList.add('is-firing');
+        });
       }
 
       raf = requestAnimationFrame(frame);
@@ -408,6 +454,20 @@ export default function CommunityDepthGallery({
                 style={{ opacity: index === startIndex ? 1 : 0 }}
               >
                 <CommunityDepthOrnaments
+                  post={post}
+                  reactions={reactionsByPostId.get(post.id) ?? []}
+                  comments={commentsByPostId.get(post.id) ?? []}
+                  reactorProfiles={reactorProfiles}
+                />
+              </div>
+              <div
+                className="community-depth-ripples"
+                ref={(el) => {
+                  rippleRefs.current[index] = el;
+                }}
+                aria-hidden="true"
+              >
+                <CommunityDepthRipples
                   post={post}
                   reactions={reactionsByPostId.get(post.id) ?? []}
                   comments={commentsByPostId.get(post.id) ?? []}

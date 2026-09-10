@@ -981,6 +981,69 @@ textarea { min-height: 88px; resize: vertical; }
   pointer-events: none;
 }
 
+.community-depth-ripples {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.community-depth-ripple {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.community-depth-ripple.is-firing {
+  opacity: 1;
+}
+
+.community-depth-ripple-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.72);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.community-depth-ripple.is-firing .community-depth-ripple-ring {
+  animation: community-depth-ripple-pulse 600ms ease-out 1 forwards;
+}
+
+.community-depth-ripple.is-firing .community-depth-ripple-ring:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.community-depth-ripple.is-firing .community-depth-ripple-ring:nth-child(2) {
+  animation-delay: 90ms;
+}
+
+.community-depth-ripple.is-firing .community-depth-ripple-ring:nth-child(3) {
+  animation-delay: 180ms;
+}
+
+@keyframes community-depth-ripple-pulse {
+  0% {
+    transform: scale(0.45);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.85);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .community-depth-ripple.is-firing .community-depth-ripple-ring {
+    animation: none;
+  }
+}
+
 .community-depth-react,
 .community-depth-comment {
   left: calc((var(--rest-left) + (var(--inner-left) - var(--rest-left)) * var(--idle, 0)) * 1%);
