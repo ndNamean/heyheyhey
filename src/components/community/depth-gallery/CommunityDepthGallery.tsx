@@ -20,8 +20,8 @@ import {
 } from './galleryIdle';
 import { ornamentOpacity, ornamentRevealForIndex } from './galleryOrnaments';
 import {
-  RIPPLE_VANISH_THRESHOLD,
   ornamentRippleShouldFire,
+  ornamentRippleShouldFireStart,
   ornamentRippleShouldReset,
 } from './ornamentRipple';
 import { resolveGalleryMood, parseMoodHex, interpolateMoods } from './moodController';
@@ -172,7 +172,8 @@ export default function CommunityDepthGallery({
     let running = true;
     let chromeDark = relativeLuminance(moods[startIndex]?.backgroundColor ?? '#fffaf0') < 0.5;
     let idle = { lastNow: 0, stillMs: 0, idleAmount: 0, vanishAmount: 0 };
-    const firedRipples = new Set<string>();
+    const firedStartRipples = new Set<string>();
+    const firedEndRipples = new Set<string>();
     const started = performance.now();
 
     function sizeCanvas() {
@@ -323,32 +324,55 @@ export default function CommunityDepthGallery({
         const rippleRoot = rippleRefs.current[i];
         if (!rippleRoot) continue;
         if (rippleReset) {
-          if (firedRipples.size === 0) continue;
-          firedRipples.clear();
+          if (firedStartRipples.size === 0 && firedEndRipples.size === 0) continue;
+          firedStartRipples.clear();
+          firedEndRipples.clear();
           rippleRoot.querySelectorAll('.community-depth-ripple.is-firing').forEach((node) => {
             node.classList.remove('is-firing');
           });
           continue;
         }
-        if (!(idle.vanishAmount >= RIPPLE_VANISH_THRESHOLD)) continue;
+        if (!(idle.vanishAmount > 0)) continue;
         const reveal = ornamentRevealForIndex(i, currentIndex, nextIndex, blend.depthBlend);
         const preVanishOpacity = ornamentOpacity(opacities[i] ?? 0, reveal, 0);
+        const startReady = ornamentRippleShouldFireStart({
+          still,
+          reducedMotion: reduced,
+          idleAmount: idle.idleAmount,
+          vanishAmount: idle.vanishAmount,
+          preVanishOpacity,
+          alreadyFired: false,
+        });
+        const endReady = ornamentRippleShouldFire({
+          still,
+          reducedMotion: reduced,
+          vanishAmount: idle.vanishAmount,
+          preVanishOpacity,
+          alreadyFired: false,
+        });
+        if (!startReady && !endReady) continue;
         rippleRoot.querySelectorAll('.community-depth-ripple').forEach((node) => {
           if (!(node instanceof HTMLElement)) return;
           const key = node.getAttribute('data-ripple-key');
           if (!key) return;
-          if (
-            !ornamentRippleShouldFire({
-              still,
-              reducedMotion: reduced,
-              vanishAmount: idle.vanishAmount,
-              preVanishOpacity,
-              alreadyFired: firedRipples.has(key),
-            })
-          ) {
-            return;
-          }
-          firedRipples.add(key);
+          const fireStart = ornamentRippleShouldFireStart({
+            still,
+            reducedMotion: reduced,
+            idleAmount: idle.idleAmount,
+            vanishAmount: idle.vanishAmount,
+            preVanishOpacity,
+            alreadyFired: firedStartRipples.has(key),
+          });
+          const fireEnd = ornamentRippleShouldFire({
+            still,
+            reducedMotion: reduced,
+            vanishAmount: idle.vanishAmount,
+            preVanishOpacity,
+            alreadyFired: firedEndRipples.has(key),
+          });
+          if (!fireStart && !fireEnd) return;
+          if (fireStart) firedStartRipples.add(key);
+          if (fireEnd) firedEndRipples.add(key);
           if (node.classList.contains('is-firing')) {
             node.classList.remove('is-firing');
             void node.offsetWidth;

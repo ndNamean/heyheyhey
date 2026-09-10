@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { IDLE_VANISH_START } from './galleryIdle';
 import {
   RIPPLE_PRE_VANISH_MIN,
   RIPPLE_VANISH_THRESHOLD,
@@ -6,6 +7,7 @@ import {
   ornamentRippleCommentKey,
   ornamentRippleReactionKey,
   ornamentRippleShouldFire,
+  ornamentRippleShouldFireStart,
   ornamentRippleShouldReset,
 } from './ornamentRipple';
 
@@ -13,6 +15,15 @@ const ready = {
   still: true,
   reducedMotion: false,
   vanishAmount: RIPPLE_VANISH_THRESHOLD,
+  preVanishOpacity: 1,
+  alreadyFired: false,
+};
+
+const startReady = {
+  still: true,
+  reducedMotion: false,
+  idleAmount: IDLE_VANISH_START,
+  vanishAmount: 0.004375,
   preVanishOpacity: 1,
   alreadyFired: false,
 };
@@ -50,6 +61,29 @@ describe('ornamentRippleShouldFire', () => {
 
   it('is false when the gallery is not still', () => {
     expect(ornamentRippleShouldFire({ ...ready, still: false })).toBe(false);
+  });
+});
+
+describe('ornamentRippleShouldFireStart', () => {
+  it('is true on the first vanish lerp after idle walk-in, not at 0.99', () => {
+    expect(ornamentRippleShouldFireStart({ ...startReady, vanishAmount: 0 })).toBe(false);
+    expect(ornamentRippleShouldFireStart({ ...startReady, idleAmount: 0.97, vanishAmount: 0.01 })).toBe(
+      false,
+    );
+    expect(ornamentRippleShouldFireStart(startReady)).toBe(true);
+    expect(ornamentRippleShouldFireStart({ ...startReady, vanishAmount: RIPPLE_VANISH_THRESHOLD })).toBe(
+      false,
+    );
+  });
+
+  it('does not share the gone-pulse alreadyFired flag', () => {
+    expect(ornamentRippleShouldFireStart({ ...startReady, alreadyFired: true })).toBe(false);
+    expect(ornamentRippleShouldFire({ ...ready, alreadyFired: false })).toBe(true);
+  });
+
+  it('is false when reduced motion is on or the gallery is moving', () => {
+    expect(ornamentRippleShouldFireStart({ ...startReady, reducedMotion: true })).toBe(false);
+    expect(ornamentRippleShouldFireStart({ ...startReady, still: false })).toBe(false);
   });
 });
 

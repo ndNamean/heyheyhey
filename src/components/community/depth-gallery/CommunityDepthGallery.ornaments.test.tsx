@@ -461,7 +461,7 @@ describe('CommunityDepthGallery ornaments', () => {
     }
   });
 
-  it('does not fire ripples during walk-in or early vanish', { timeout: 20000 }, () => {
+  it('does not fire ripples during walk-in', { timeout: 20000 }, () => {
     const restore = mockGalleryBox(900, 600, 300);
     const landscape = { attachmentWidth: '1600', attachmentHeight: '900' };
     const posts = [imagePost('p0', landscape), imagePost('p1', landscape)];
@@ -480,11 +480,41 @@ describe('CommunityDepthGallery ornaments', () => {
       flushFrames(32);
       const ornaments = [...container.querySelectorAll('.community-depth-ornaments')] as HTMLElement[];
       expect(Number(ornaments[0].style.getPropertyValue('--idle'))).toBeGreaterThan(0.5);
+      expect(Number(ornaments[0].style.getPropertyValue('--idle'))).toBeLessThan(0.98);
       expect(container.querySelector('.community-depth-ripple.is-firing')).toBeNull();
+    } finally {
+      restore();
+    }
+  });
 
-      flushFrames(668);
-      expect(Number(ornaments[0].style.opacity)).toBeLessThan(0.15);
-      expect(container.querySelector('.community-depth-ripple.is-firing')).toBeNull();
+  it('fires one ripple per inner slot when vanish fade starts', { timeout: 20000 }, () => {
+    const restore = mockGalleryBox(900, 600, 300);
+    const landscape = { attachmentWidth: '1600', attachmentHeight: '900' };
+    const posts = [imagePost('p0', landscape), imagePost('p1', landscape)];
+    const reactionsByPostId = new Map([['p0', [reaction('p0', { id: 'r1' })]]]);
+    const commentsByPostId = new Map([['p0', [comment('p0', { id: 'c1', authorNameSnapshot: 'Minh' })]]]);
+    try {
+      const { container } = render(
+        <CommunityDepthGallery
+          sourcePosts={posts}
+          startPostId="p0"
+          onClose={() => {}}
+          reactionsByPostId={reactionsByPostId}
+          commentsByPostId={commentsByPostId}
+        />,
+      );
+      flushFrames(90);
+      const layers = [...container.querySelectorAll('.community-depth-layer')] as HTMLElement[];
+      const firing = [...layers[0].querySelectorAll('.community-depth-ripple.is-firing')] as HTMLElement[];
+      expect(firing).toHaveLength(3);
+      expect(firing.map((el) => el.getAttribute('data-ripple-key')).sort()).toEqual(
+        [
+          ornamentRippleAuthorKey('p0'),
+          ornamentRippleCommentKey('p0', 'c1'),
+          ornamentRippleReactionKey('p0', 'r1'),
+        ].sort(),
+      );
+      expect(layers[1].querySelector('.community-depth-ripple.is-firing')).toBeNull();
     } finally {
       restore();
     }
