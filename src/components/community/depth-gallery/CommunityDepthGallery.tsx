@@ -118,6 +118,14 @@ export default function CommunityDepthGallery({
   );
   const planeKey = posts.map((post) => post.id).join('|');
 
+  // Keep latest posts/startIndex accessible inside the imperative effect
+  // without letting their reference-only changes tear down the RAF loop,
+  // ScrollController, and AtmosphereCanvas on every live update.
+  const postsRef = useRef(posts);
+  postsRef.current = posts;
+  const startIndexRef = useRef(startIndex);
+  startIndexRef.current = startIndex;
+
   function exitToPost() {
     onCloseRef.current(currentPostIdRef.current || startPostId);
   }
@@ -132,7 +140,9 @@ export default function CommunityDepthGallery({
   );
 
   useEffect(() => {
-    if (!posts.length) {
+    const effectPosts = postsRef.current;
+    const effectStartIndex = startIndexRef.current;
+    if (!effectPosts.length) {
       onCloseRef.current(startPostId);
       return;
     }
@@ -143,12 +153,12 @@ export default function CommunityDepthGallery({
 
     const overlayRoot = root;
     const overlayCanvas = canvas;
-    const scroll = new ScrollController({ planeCount: posts.length });
-    const layers = new GalleryLayers(posts.length);
+    const scroll = new ScrollController({ planeCount: effectPosts.length });
+    const layers = new GalleryLayers(effectPosts.length);
     const atmosphere = new AtmosphereCanvas();
     const usedCanvas = overlayCanvas ? atmosphere.attach(overlayCanvas) : false;
 
-    const targetZ = cameraZForPlaneIndex(startIndex);
+    const targetZ = cameraZForPlaneIndex(effectStartIndex);
     const startScroll = scroll.scrollFromCameraZ(targetZ);
     scroll.scrollTarget = startScroll;
     scroll.scrollCurrent = startScroll;
@@ -156,9 +166,9 @@ export default function CommunityDepthGallery({
     scroll.update();
 
     scroll.attach(root);
-    currentPostIdRef.current = posts[startIndex]?.id || startPostId;
+    currentPostIdRef.current = effectPosts[effectStartIndex]?.id || startPostId;
 
-    const moods = posts.map((post) =>
+    const moods = effectPosts.map((post) =>
       resolveGalleryMood({
         postId: post.id,
         moodBackgroundColor: post.moodBackgroundColor,
@@ -166,11 +176,11 @@ export default function CommunityDepthGallery({
         moodBlob2Color: post.moodBlob2Color,
       }),
     );
-    const orientations: Orientation[] = posts.map((post) => getStableOrientation(post.id));
+    const orientations: Orientation[] = effectPosts.map((post) => getStableOrientation(post.id));
 
     let raf = 0;
     let running = true;
-    let chromeDark = relativeLuminance(moods[startIndex]?.backgroundColor ?? '#fffaf0') < 0.5;
+    let chromeDark = relativeLuminance(moods[effectStartIndex]?.backgroundColor ?? '#fffaf0') < 0.5;
     let idle = { lastNow: 0, stillMs: 0, idleAmount: 0, vanishAmount: 0 };
     const firedStartRipples = new Set<string>();
     const firedEndRipples = new Set<string>();
@@ -200,11 +210,11 @@ export default function CommunityDepthGallery({
       sizeCanvas();
       const state = scroll.update(layers.getDepthRange());
       const blend = layers.getPlaneBlendData(state.cameraZ);
-      currentPostIdRef.current = dominantGalleryPostId(posts, blend, startPostId);
+      currentPostIdRef.current = dominantGalleryPostId(effectPosts, blend, startPostId);
       const opacities = layers.updateOpacities(state.cameraZ);
       const mood = interpolateMoods(moods, blend);
       const reduced = reducedRef.current;
-      const depthProgress = getDepthProgress(state.cameraZ, posts.length);
+      const depthProgress = getDepthProgress(state.cameraZ, effectPosts.length);
       const velocityIntensity = Math.min(1, Math.abs(state.velocity) / VELOCITY_MAX);
       const painted = atmosphere.draw({
         mood,
@@ -261,11 +271,14 @@ export default function CommunityDepthGallery({
         isPortrait: portrait,
       });
 
-      for (let i = 0; i < posts.length; i++) {
+      // Read latest posts for attachment metadata (planeKey guarantees IDs are stable,
+      // but fields like attachmentWidth/Height should still track the newest data).
+      const framePosts = postsRef.current;
+      for (let i = 0; i < framePosts.length; i++) {
         const layer = layerRefs.current[i];
         const img = imageRefs.current[i];
         const isPair = i === currentIndex || i === nextIndex;
-        const post = posts[i];
+        const post = framePosts[i];
         const fallbackW = Number.parseInt(post?.attachmentWidth || '', 10) || 0;
         const fallbackH = Number.parseInt(post?.attachmentHeight || '', 10) || 0;
         const size = resolveIdleImageSize(img, fallbackW, fallbackH);
@@ -426,7 +439,14 @@ export default function CommunityDepthGallery({
       scroll.dispose();
       atmosphere.dispose();
     };
-  }, [planeKey, posts, startIndex]);
+    // NOTE: posts/startIndex intentionally omitted. Effect re-runs only when
+    // the actual plane set changes (planeKey encodes post IDs). Latest posts
+    // and startIndex are read from refs; this prevents the entire RAF loop,
+    // ScrollController, and AtmosphereCanvas from being torn down and rebuilt
+    // (with a visible scroll-position + atmosphere reset) on every InstantDB
+    // live update to reactions/comments/famous counts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planeKey]);
 
   if (!posts.length) return null;
 
