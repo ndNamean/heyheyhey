@@ -217,7 +217,7 @@ describe('CommunityDepthGallery ornaments', () => {
         <CommunityDepthGallery sourcePosts={posts} startPostId="p0" onClose={() => {}} />,
       );
       const dialog = container.querySelector('.community-depth-gallery') as HTMLElement;
-      flushFrames(160);
+      flushFrames(400);
       const ornaments = [...container.querySelectorAll('.community-depth-ornaments')] as HTMLElement[];
       const idleBefore = Number(ornaments[0].style.getPropertyValue('--idle'));
       const opacityBefore = Number(ornaments[0].style.opacity);

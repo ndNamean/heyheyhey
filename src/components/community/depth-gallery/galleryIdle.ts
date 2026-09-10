@@ -16,6 +16,8 @@ export const IDLE_LERP_UP = 0.07;
 export const IDLE_LERP_DOWN = 0.18;
 /** Start fading ornaments after idle walk-in is essentially done. */
 export const IDLE_VANISH_START = 0.98;
+/** Vanish-out only — 4× slower than idle-in until ornaments are gone. */
+export const IDLE_VANISH_LERP_UP = IDLE_LERP_UP / 4;
 export const IDLE_CHIP_SCALE = 1.12;
 export const ORNAMENT_SCROLL_REACTION_SCALE = 2.5;
 export const ORNAMENT_SCROLL_TEXT_SCALE = 1.4;
@@ -75,7 +77,7 @@ export function stepGalleryIdle(input: GalleryIdleInput): GalleryIdleState {
   }
 
   if (still && idleAmount >= IDLE_VANISH_START) {
-    vanishAmount = lerp(vanishAmount, 1, IDLE_LERP_UP);
+    vanishAmount = lerp(vanishAmount, 1, IDLE_VANISH_LERP_UP);
   } else if (!still) {
     vanishAmount = lerp(vanishAmount, 0, IDLE_LERP_DOWN);
   }
