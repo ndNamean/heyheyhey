@@ -16,8 +16,8 @@ export const IDLE_LERP_UP = 0.07;
 export const IDLE_LERP_DOWN = 0.18;
 /** Start fading ornaments after idle walk-in is essentially done. */
 export const IDLE_VANISH_START = 0.98;
-/** Vanish-out only — 4× slower than idle-in until ornaments are gone. */
-export const IDLE_VANISH_LERP_UP = IDLE_LERP_UP / 4;
+/** Vanish-out only — 16× slower than idle-in until ornaments are gone. */
+export const IDLE_VANISH_LERP_UP = IDLE_LERP_UP / 16;
 export const IDLE_CHIP_SCALE = 1.12;
 export const ORNAMENT_SCROLL_REACTION_SCALE = 2.5;
 export const ORNAMENT_SCROLL_TEXT_SCALE = 1.4;

@@ -188,7 +188,7 @@ describe('gallery idle vanish', () => {
     );
     expect(afterGate.idleAmount).toBeGreaterThanOrEqual(IDLE_VANISH_START);
     expect(afterGate.vanishAmount).toBeCloseTo(IDLE_VANISH_LERP_UP, 8);
-    expect(IDLE_VANISH_LERP_UP).toBeCloseTo(IDLE_LERP_UP / 4, 8);
+    expect(IDLE_VANISH_LERP_UP).toBeCloseTo(IDLE_LERP_UP / 16, 8);
   });
 
   it('eases vanish back on move at idle-out speed', () => {
