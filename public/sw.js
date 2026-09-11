@@ -1,5 +1,5 @@
 /* Minimal shell service worker — no authenticated / invite data caching */
-const CACHE = 'heypelo-shell-v2';
+const CACHE = 'heypelo-shell-v3';
 const PRECACHE = ['/', '/index.html', '/manifest.webmanifest', '/favicon.svg', '/offline.html'];
 
 self.addEventListener('install', (event) => {
@@ -21,6 +21,11 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
 
   const url = new URL(req.url);
+  // Cache Storage only supports http(s); extension-injected requests
+  // (e.g. chrome-extension:) would throw on cache.put. Also skip any
+  // cross-origin request so we never accidentally cache 3rd-party assets.
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+  if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/')) return;
   if (url.searchParams.has('token') || url.searchParams.has('code') || url.searchParams.has('invite')) {
     return;
