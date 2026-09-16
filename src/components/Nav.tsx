@@ -30,10 +30,12 @@ interface NavProps {
   page: Page;
   setPage: (p: Page) => void;
   profile: Profile;
+  assignedIssueExists: boolean;
   onOpenLogbook?: () => void;
 }
 
-function useAssignedIssueExists(profile: Profile): boolean {
+/** Single Instant `logbookEntries: {}` subscription for both navs. Call once from AppShell. */
+export function useAssignedIssueExists(profile: Profile): boolean {
   const { defs } = useRoleDefinitions();
   const { data: logbookData } = db.useQuery({
     logbookEntries: {},
@@ -43,10 +45,9 @@ function useAssignedIssueExists(profile: Profile): boolean {
   );
 }
 
-export function DesktopNav({ page, setPage, profile, onOpenLogbook }: NavProps) {
+export function DesktopNav({ page, setPage, profile, assignedIssueExists, onOpenLogbook }: NavProps) {
   const { t } = useLang();
   const { defs } = useRoleDefinitions();
-  const assignedIssueExists = useAssignedIssueExists(profile);
   const showLogbook = canOpenLogbook(profile, defs, assignedIssueExists);
 
   const links: { id: Page; label: string }[] = [
@@ -117,11 +118,10 @@ export function DesktopNav({ page, setPage, profile, onOpenLogbook }: NavProps) 
   );
 }
 
-export function MobileNav({ page, setPage, profile, onOpenLogbook }: NavProps) {
+export function MobileNav({ page, setPage, profile, assignedIssueExists, onOpenLogbook }: NavProps) {
   const { t } = useLang();
   const { defs } = useRoleDefinitions();
   const unreadCount = useUnreadNotificationCount(profile.userId);
-  const assignedIssueExists = useAssignedIssueExists(profile);
   const showLogbook = canOpenLogbook(profile, defs, assignedIssueExists);
 
   const tabs: { id: Page; label: string }[] = [

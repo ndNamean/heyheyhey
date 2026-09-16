@@ -16,13 +16,21 @@ import { LinkifiedText } from './LinkifiedText';
 interface Props {
   profile: Profile;
   entries: LogbookEntry[];
+  /** When the parent already loaded profiles+avatars, skip a second Instant receive. */
+  profiles?: Profile[];
   highlightEntryId?: string | null;
   onHighlightConsumed?: () => void;
+}
+
+/** Skip the Instant profiles+avatar receive when the parent already loaded the same shape. */
+export function notesAnnouncementsProfilesQuery(parentProfiles?: Profile[] | null) {
+  return parentProfiles != null ? null : { profiles: { stores: {}, avatarFile: {} } };
 }
 
 export default function NotesAnnouncementsCard({
   profile,
   entries,
+  profiles: parentProfiles,
   highlightEntryId,
   onHighlightConsumed,
 }: Props) {
@@ -30,10 +38,8 @@ export default function NotesAnnouncementsCard({
   const { defs } = useRoleDefinitions();
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  const { data: profilesData } = db.useQuery({
-    profiles: { stores: {}, avatarFile: {} },
-  });
-  const allProfiles = (profilesData?.profiles ?? []) as Profile[];
+  const { data: profilesData } = db.useQuery(notesAnnouncementsProfilesQuery(parentProfiles));
+  const allProfiles = parentProfiles ?? ((profilesData?.profiles ?? []) as Profile[]);
 
   const { pending, acknowledgedByMe } = useMemo(
     () => splitNotesAnnouncementsForHome(profile, entries, defs),

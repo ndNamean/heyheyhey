@@ -39,6 +39,8 @@ import {
   overdueDurationMs,
 } from '../lib/logbookMetrics';
 import { maybeNotifyLogbookDueStates } from '../lib/logbookDueNotify';
+import { shouldHoldDashLive } from '../lib/dashboardHold';
+import { dashboardReportsQuery } from '../lib/dashboardReportsQuery';
 import type {
   ChecklistItemProposal,
   ExportFormat,
@@ -61,6 +63,8 @@ function firstDayOfMonth() {
   const d = new Date();
   return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
 }
+
+const NO_DASH_EVENTS: ReviewEvent[] = [];
 
 export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook }: Props) {
   const { t } = useLang();
@@ -94,31 +98,24 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
   const recentReportsTableScrollerRef = useRef<HTMLDivElement | null>(null);
   const recentReportsTableRef = useRef<HTMLTableElement | null>(null);
   const [holdDashLive, setHoldDashLive] = useState(false);
+  const rangeKey = `${from}|${to}`;
+  const rangeKeyRef = useRef(rangeKey);
+  useEffect(() => {
+    if (rangeKeyRef.current === rangeKey) return;
+    rangeKeyRef.current = rangeKey;
+    setHoldDashLive(false);
+  }, [rangeKey]);
   const lastGoodDashRef = useRef<{ reports: Report[]; stores: Store[] } | null>(null);
   const lastGoodProfilesRef = useRef<Profile[]>([]);
-  const lastGoodEventsRef = useRef<ReviewEvent[]>([]);
   const lastGoodTemplatesRef = useRef<Template[]>([]);
   const lastGoodProposalsRef = useRef<ChecklistItemProposal[]>([]);
   const lastGoodLogbookRef = useRef<LogbookEntry[]>([]);
 
   const reportsQuery = useMemo(
-    () =>
-      holdDashLive
-        ? null
-        : {
-            reports: {
-              responses: {},
-              store: {},
-            },
-            stores: {},
-          },
-    [holdDashLive],
+    () => dashboardReportsQuery(holdDashLive, from, to),
+    [holdDashLive, from, to],
   );
   const profilesQuery = useMemo(() => ({ profiles: { stores: {}, avatarFile: {} } }), []);
-  const eventsQuery = useMemo(
-    () => (holdDashLive ? { reviewEvents: {} } : null),
-    [holdDashLive],
-  );
   const templatesQuery = useMemo(
     () =>
       holdDashLive
@@ -141,10 +138,9 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
     error: reportsError,
   } = db.useQuery(reportsQuery);
   useEffect(() => {
-    if (reportsData && !reportsError) setHoldDashLive(true);
+    if (shouldHoldDashLive(reportsData, reportsError)) setHoldDashLive(true);
   }, [reportsData, reportsError]);
   const { data: profilesData } = db.useQuery(profilesQuery);
-  const { data: eventsData } = db.useQuery(eventsQuery);
   const { data: templatesData } = db.useQuery(templatesQuery);
   const { data: proposalsData } = db.useQuery(proposalsQuery);
   const { data: logbookData } = db.useQuery(logbookQuery);
@@ -156,8 +152,6 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
   }
   const queryProfiles = (profilesData?.profiles ?? []) as Profile[];
   if (queryProfiles.length) lastGoodProfilesRef.current = queryProfiles;
-  const queryEvents = (eventsData?.reviewEvents ?? []) as ReviewEvent[];
-  if (queryEvents.length) lastGoodEventsRef.current = queryEvents;
   const queryTemplates = (templatesData?.templates ?? []) as Template[];
   if (queryTemplates.length) lastGoodTemplatesRef.current = queryTemplates;
   const queryProposals = (proposalsData?.checklistItemProposals ?? []) as ChecklistItemProposal[];
@@ -170,7 +164,7 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
     : (lastGoodDashRef.current?.reports ?? []);
   const stores = queryStores.length ? queryStores : (lastGoodDashRef.current?.stores ?? []);
   const profiles = queryProfiles.length ? queryProfiles : lastGoodProfilesRef.current;
-  const allEvents = queryEvents.length ? queryEvents : lastGoodEventsRef.current;
+  const allEvents = NO_DASH_EVENTS;
   const allTemplates: Template[] = queryTemplates.length
     ? queryTemplates
     : lastGoodTemplatesRef.current;
@@ -438,9 +432,6 @@ export default function DashboardPage({ profile, onOpenProposals, onOpenLogbook 
         userId={profile.userId}
         title={t.dashboard.teamFeedback}
         stickySection
-        reports={allReports}
-        events={allEvents}
-        profileRecords={profiles as Profile[]}
         onOpenLogbookEntry={(entryId, type, deepLinkFilter) => {
           const entry = allLogbookEntries.find((e) => e.id === entryId);
           if (decideLogbookNotificationClick(type || '', profile, entry, defs) === 'preview') {

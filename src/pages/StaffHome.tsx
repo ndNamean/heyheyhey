@@ -177,6 +177,7 @@ export default function StaffHome({
       <NotesAnnouncementsCard
         profile={profile}
         entries={logbookEntries}
+        profiles={profiles}
         highlightEntryId={highlightNoteId}
         onHighlightConsumed={clearHighlightNote}
       />

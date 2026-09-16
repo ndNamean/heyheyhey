@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { DesktopNav, MobileNav, type Page } from './components/Nav';
+import { DesktopNav, MobileNav, useAssignedIssueExists, type Page } from './components/Nav';
 import WifiNotifyStatus from './components/WifiNotifyStatus';
 import FloatingAssistantShell from './components/floating-assistant/FloatingAssistantShell';
 import StaffHome from './pages/StaffHome';
@@ -43,6 +43,7 @@ interface Props {
 
 export default function AppShell({ profile }: Props) {
   const { defs } = useRoleDefinitions();
+  const assignedIssueExists = useAssignedIssueExists(profile);
   const [page, setPage] = useState<Page>('home');
   const [correctionReportId, setCorrectionReportId] = useState<string | null>(null);
   const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
@@ -274,10 +275,22 @@ export default function AppShell({ profile }: Props) {
   return (
     <div className="app-shell">
       <main className="page">
-        <DesktopNav page={page} setPage={setPage} profile={profile} onOpenLogbook={() => goLogbook()} />
+        <DesktopNav
+          page={page}
+          setPage={setPage}
+          profile={profile}
+          assignedIssueExists={assignedIssueExists}
+          onOpenLogbook={() => goLogbook()}
+        />
         <WifiNotifyStatus profile={profile} />
         {renderPage()}
-        <MobileNav page={page} setPage={setPage} profile={profile} onOpenLogbook={() => goLogbook()} />
+        <MobileNav
+          page={page}
+          setPage={setPage}
+          profile={profile}
+          assignedIssueExists={assignedIssueExists}
+          onOpenLogbook={() => goLogbook()}
+        />
       </main>
       <FloatingAssistantShell profile={profile} />
     </div>
