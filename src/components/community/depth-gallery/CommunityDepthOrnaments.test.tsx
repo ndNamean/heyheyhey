@@ -167,7 +167,7 @@ describe('CommunityDepthOrnaments', () => {
     expect(container.querySelector('.community-depth-comment-body')).toBeNull();
   });
 
-  it('shows the attached GIF thumb next to truncated text on text+GIF comment pills', () => {
+  it('shows the attached GIF thumb next to text on text+GIF comment pills', () => {
     const { container } = render(
       <CommunityDepthOrnaments
         post={post()}
@@ -262,6 +262,43 @@ describe('CommunityDepthOrnaments', () => {
     );
     expect(container.querySelector('.community-depth-comment-badge-count')).toBeNull();
     expect(container.querySelectorAll('button')).toHaveLength(0);
+  });
+
+  it('keeps a long comment body uncut in the DOM and wraps body CSS without ellipsis', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
+    const bodyBlock = css.match(
+      /\.community-depth-author-body,\s*\.community-depth-comment-body \{[^}]+\}/,
+    )?.[0];
+    expect(bodyBlock).toContain('white-space: normal');
+    expect(bodyBlock).toContain('overflow: visible');
+    expect(bodyBlock).toContain('word-break: break-word');
+    expect(bodyBlock).not.toContain('nowrap');
+    expect(bodyBlock).not.toContain('ellipsis');
+    expect(css).toMatch(
+      /\.community-depth-author-name,\s*\.community-depth-comment-name \{[\s\S]*?text-overflow: ellipsis/,
+    );
+    expect(css).toMatch(
+      /\.community-depth-author,\s*\.community-depth-comment \{[\s\S]*?align-items: flex-start/,
+    );
+
+    const long =
+      'abcdefghijklmnopqrstuvwxyz 1234567890 plus extra words that go well past forty eight characters';
+    const { container } = render(
+      <CommunityDepthOrnaments
+        post={post({ body: long })}
+        reactions={[]}
+        comments={[
+          comment({
+            id: 'c-long',
+            authorNameSnapshot: 'Minh',
+            body: long,
+          }),
+        ]}
+        reactorProfiles={new Map()}
+      />,
+    );
+    expect(container.querySelector('.community-depth-author-body')?.textContent).toBe(long);
+    expect(container.querySelector('.community-depth-comment-body')?.textContent).toBe(long);
   });
 
   it('omits the reaction band when a post has no reactions but still shows the author', () => {

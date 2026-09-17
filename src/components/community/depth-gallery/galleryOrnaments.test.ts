@@ -10,7 +10,6 @@ import {
   GALLERY_COMMENT_REACTION_BADGE_CAP,
   GALLERY_ORNAMENT_COMMENT_CAP,
   GALLERY_ORNAMENT_REACTION_CAP,
-  GALLERY_ORNAMENT_TEXT_CHARS,
   INNER_RADIUS_MAX,
   INNER_RADIUS_MIN,
   REACTION_ANGLE_MAX,
@@ -28,7 +27,6 @@ import {
   settleReveal,
   spaceArcAngles,
   spaceCommentRestAngles,
-  truncateOrnamentText,
 } from './galleryOrnaments';
 
 function reaction(
@@ -226,10 +224,18 @@ describe('caps and filters', () => {
     expect(layout.author.body).toBe('A title that should be kept');
   });
 
-  it('truncates comment bodies around 48 characters', () => {
-    const long = 'abcdefghijklmnopqrstuvwxyz 1234567890 plus extra words';
-    expect(truncateOrnamentText(long)).toHaveLength(48);
-    expect(truncateOrnamentText(long).endsWith('…')).toBe(true);
+  it('stores the full author and comment body on ornament slots', () => {
+    const long = 'abcdefghijklmnopqrstuvwxyz 1234567890 plus extra words that go well past forty eight characters';
+    const layout = buildGalleryOrnamentLayout({
+      post: post({ body: long }),
+      reactions: [],
+      comments: [comment({ id: 'c-long', body: long, createdAt: '2026-09-08T00:00:00.000Z' })],
+      reactorProfiles: new Map(),
+    });
+    expect(layout.author.body).toBe(long);
+    expect(layout.comments[0]?.body).toBe(long);
+    expect(layout.author.body.length).toBeGreaterThan(48);
+    expect(layout.comments[0]?.body.length).toBeGreaterThan(48);
   });
 
   it('shows a GIF-content thumb on GIF-only and text+GIF pills, never on the post arc', () => {
@@ -348,7 +354,6 @@ describe('caps and filters', () => {
     const badges = selectCommentReactionBadges(reactions, 'post-a', 'c-pill');
     expect(badges).toHaveLength(GALLERY_COMMENT_REACTION_BADGE_CAP);
     expect(badges.map((row) => row.unicode)).toEqual(['❤️', '🔥', '🙏']);
-    expect(truncateOrnamentText('x'.repeat(80)).length).toBe(GALLERY_ORNAMENT_TEXT_CHARS);
 
     const layout = buildGalleryOrnamentLayout({
       post: post(),
@@ -359,7 +364,6 @@ describe('caps and filters', () => {
     expect(layout.comments).toHaveLength(1);
     expect(layout.comments[0].id).toBe('c-pill');
     expect(layout.comments[0].reactionBadges.map((row) => row.unicode)).toEqual(['❤️', '🔥', '🙏']);
-    expect(layout.comments[0].body.length).toBeLessThanOrEqual(GALLERY_ORNAMENT_TEXT_CHARS);
     expect(layout.reactions.map((row) => row.id)).toEqual(['post-arc']);
     expect(layout.reactions.some((row) => row.unicode === '❤️')).toBe(false);
   });

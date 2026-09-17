@@ -15,7 +15,6 @@ import { hashPostId } from './communityGalleryMoods';
 
 export const GALLERY_ORNAMENT_REACTION_CAP = 8;
 export const GALLERY_ORNAMENT_COMMENT_CAP = 6;
-export const GALLERY_ORNAMENT_TEXT_CHARS = 48;
 export const GALLERY_COMMENT_REACTION_BADGE_CAP = 3;
 
 /** Top hemisphere, clockwise from east (CSS y-down). */
@@ -135,16 +134,6 @@ export function ornamentOpacity(planeOpacity: number, reveal: number, vanishAmou
   const vanish = clamp(Number.isFinite(vanishAmount) ? vanishAmount : 0, 0, 1);
   const opacity = (Number.isFinite(planeOpacity) ? planeOpacity : 0) * reveal * (1 - vanish);
   return clamp(opacity, 0, 1);
-}
-
-export function truncateOrnamentText(
-  text: string,
-  maxChars = GALLERY_ORNAMENT_TEXT_CHARS,
-): string {
-  const trimmed = (text || '').replace(/\s+/g, ' ').trim();
-  if (trimmed.length <= maxChars) return trimmed;
-  const cut = Math.max(1, maxChars - 1);
-  return `${trimmed.slice(0, cut).trimEnd()}…`;
 }
 
 export function hashOrnamentUnit(postId: string, entityId: string, salt = ''): number {
@@ -302,7 +291,7 @@ export function authorOrnamentFields(
   const name = (linked?.displayName || post.authorNameSnapshot || '').trim();
   return {
     name,
-    body: truncateOrnamentText(post.body || ''),
+    body: post.body || '',
     profile: {
       displayName: name,
       email: linked?.email || '',
@@ -375,7 +364,7 @@ export function buildGalleryOrnamentLayout(input: {
       COMMENT_RADIUS_MAX,
     );
     const profile = commentOrnamentProfile(row);
-    const body = truncateOrnamentText(row.body || '');
+    const body = row.body || '';
     return {
       ...polar,
       id: row.id,

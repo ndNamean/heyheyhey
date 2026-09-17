@@ -1132,7 +1132,7 @@ textarea { min-height: 88px; resize: vertical; }
 .community-depth-author,
 .community-depth-comment {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   min-width: 0;
   padding: 6px 8px 6px 6px;
@@ -1227,9 +1227,9 @@ textarea { min-height: 88px; resize: vertical; }
   font-size: 10px;
   line-height: 1.25;
   opacity: 0.88;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow: visible;
+  word-break: break-word;
 }
 
 .community-depth-comment-giphy {
