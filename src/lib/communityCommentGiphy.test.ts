@@ -84,11 +84,10 @@ describe('communityCommentGiphy', () => {
     expect(commentHasGiphyContent({ giphyId: '', giphyUrl: '' })).toBe(false);
   });
 
-  it('Instant comment GIF perms use == kinds, not data-string in-list', () => {
+  it('Instant comment GIF perms require id+url like chat, not a kind in-list', () => {
     const perms = readFileSync(resolve(process.cwd(), 'instant.perms.ts'), 'utf8');
     expect(perms).not.toMatch(/giphyKind in \[/);
-    expect(perms).toContain("data.giphyKind == 'gif'");
-    expect(perms).toContain("data.giphyKind == 'sticker'");
+    expect(perms).toContain("data.giphyId != '' && data.giphyUrl != ''");
   });
 
   it('treats legacy body-only rows (omitted GIF keys) as text comments', () => {
