@@ -192,6 +192,31 @@ describe('CommunityDepthOrnaments', () => {
     );
   });
 
+  it('shows an attached photo thumb on the same large comment pill as GIF content', () => {
+    const { container } = render(
+      <CommunityDepthOrnaments
+        post={post()}
+        reactions={[]}
+        comments={[
+          comment({
+            id: 'c-photo',
+            authorNameSnapshot: 'Minh',
+            body: 'catch',
+            attachmentKind: 'image',
+            attachmentUrl: 'https://example.com/c.jpg',
+            attachmentPath: 'stores/community/post-a/c.jpg',
+          }),
+        ]}
+        reactorProfiles={new Map()}
+      />,
+    );
+    expect(container.querySelector('.community-depth-comment--photo')).toBeTruthy();
+    expect(container.querySelector('.community-depth-comment-giphy')?.getAttribute('src')).toContain(
+      'c.jpg',
+    );
+    expect(container.querySelector('.community-depth-comment-body')?.textContent).toBe('catch');
+  });
+
   it('renders up to 3 reaction badges on the comment pill without a count or click target', () => {
     const css = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
     expect(css).toContain('.community-depth-gallery .community-depth-comment-badges');
@@ -261,6 +286,7 @@ describe('CommunityDepthOrnaments', () => {
       'translate(-50%, calc(10px * (1 - var(--idle, 0)))) scale(calc(1.4 + (1 - 1.4) * var(--idle, 0)))',
     );
     expect(css).toContain('.community-depth-comment--giphy');
+    expect(css).toContain('.community-depth-comment--photo');
     expect(css).toContain('min(70%, 280px)');
     expect(css).toMatch(/\.community-depth-comment-giphy \{[\s\S]*?width: 120px;/);
     expect(css).not.toMatch(/\.community-depth-comment--giphy \{[\s\S]*?scale\(calc\(2\.5/);

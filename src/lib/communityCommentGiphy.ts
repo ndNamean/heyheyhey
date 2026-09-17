@@ -66,11 +66,13 @@ export function commentToGiphyMediaItem(
 export function canSendCommunityComment(
   body: string,
   giphy?: GiphyMediaItem | null,
+  photo?: { bytes?: number } | null,
 ): boolean {
   const text = body.trim();
   if (text.length > COMMENT_MAX_BODY) return false;
   if (text) return true;
-  return Boolean(giphy && giphy.id.trim() && giphy.url.trim());
+  if (giphy && giphy.id.trim() && giphy.url.trim()) return true;
+  return Boolean(photo && Number(photo.bytes) > 0);
 }
 
 /** Client-side mirror of Instant comment-create GIF rules. */

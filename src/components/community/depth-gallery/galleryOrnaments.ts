@@ -5,6 +5,7 @@
 
 import type { AvatarProfileFields } from '../../../lib/avatarDisplay';
 import { commentGiphyDisplayUrl } from '../../../lib/communityCommentGiphy';
+import { commentPhotoDisplayUrl } from '../../../lib/communityCommentPhoto';
 import { isPostReaction } from '../../../lib/communityReactionPeople';
 import { commentReactions } from '../../../lib/communityReactions';
 import { giphyReactionDisplayUrl } from '../../../lib/storeChatReactions';
@@ -74,8 +75,10 @@ export type GalleryCommentOrnament = PolarSlot & {
   id: string;
   name: string;
   body: string;
-  /** GIF-as-content thumb; only when the pill has no text. Not a reaction badge. */
+  /** GIF-as-content thumb. Not a reaction badge. */
   contentGiphyUrl: string;
+  /** Photo-as-content thumb. Not a reaction badge. XOR with GIF. */
+  contentPhotoUrl: string;
   reactionBadges: GalleryCommentReactionBadge[];
   profile: AvatarProfileFields;
 };
@@ -379,6 +382,7 @@ export function buildGalleryOrnamentLayout(input: {
       name: profile.displayName,
       body,
       contentGiphyUrl: commentGiphyDisplayUrl(row),
+      contentPhotoUrl: commentPhotoDisplayUrl(row),
       reactionBadges: selectCommentReactionBadges(input.reactions, post.id, row.id),
       profile,
     };

@@ -826,7 +826,7 @@ const _schema = i.schema({
       authorProfileId: i.string().indexed(),
       authorNameSnapshot: i.string(),
       authorRoleSnapshot: i.string(),
-      body: i.string(), // may be '' when GIF-only (perms require body and/or giphyId)
+      body: i.string(), // may be '' when GIF-only or photo-only
       // GIF as comment/reply content (not a reaction). '' on text-only rows.
       giphyId: i.string().clientRequired(),
       giphyKind: i.string().clientRequired(), // 'gif' | 'sticker' | 'meme' | 'emoji' | ''
@@ -835,6 +835,16 @@ const _schema = i.schema({
       giphyHeight: i.string().clientRequired(),
       giphyUrl: i.string().clientRequired(),
       giphyPreviewUrl: i.string().clientRequired(),
+      // Photo as comment/reply content (jpeg/png/webp). '' when unused. XOR with GIF.
+      attachmentKind: i.string().clientRequired(), // '' | 'image'
+      attachmentPath: i.string().clientRequired(),
+      attachmentFileId: i.string().clientRequired(),
+      attachmentUrl: i.string().clientRequired(),
+      attachmentMimeType: i.string().clientRequired(),
+      attachmentFileName: i.string().clientRequired(),
+      attachmentBytes: i.string().clientRequired(),
+      attachmentWidth: i.string().clientRequired(),
+      attachmentHeight: i.string().clientRequired(),
       createdAt: i.string().indexed(),
       status: i.string().indexed(), // 'active' | 'hidden' | 'deleted'
       deletedAt: i.string().clientRequired(), // '' = not deleted
@@ -1192,6 +1202,10 @@ const _schema = i.schema({
     communityCommentAuthor: {
       forward: { on: 'communityComments', has: 'one', label: 'author' },
       reverse: { on: 'profiles', has: 'many', label: 'communityComments' },
+    },
+    communityCommentAttachmentFile: {
+      forward: { on: 'communityComments', has: 'one', label: 'attachmentFile' },
+      reverse: { on: '$files', has: 'many', label: 'communityAttachmentComments' },
     },
     communityReactionPost: {
       forward: { on: 'communityReactions', has: 'one', label: 'post' },

@@ -9,15 +9,28 @@ import {
   canSendCommunityComment,
   commentHasGiphyContent,
 } from '../../lib/communityCommentGiphy';
+import {
+  buildCommunityCommentPhotoPayload,
+  commentHasPhotoContent,
+  commentPhotoPayloadFromUpload,
+  emptyCommunityCommentPhotoFields,
+  revokeCommunityCommentPhoto,
+  stageCommunityCommentPhoto,
+  type StagedCommunityCommentPhoto,
+} from '../../lib/communityCommentPhoto';
+import { chatAttachmentPolicyErrorCopy } from '../../lib/chatAttachmentDisplay';
+import { uploadChatAttachment } from '../../lib/chatAttachmentUpload';
 import { isGiphyConfigured, type GiphyMediaItem } from '../../lib/giphyClient';
 import { isAreaManagerTier, isOwner } from '../../lib/roles';
 import { nowIso } from '../../lib/utils';
 import type { CommunityComment, CommunityPost, CommunityReaction, Profile } from '../../types';
 import { MessageBody } from '../floating-assistant/MessageBody';
+import { ChatAttachmentPreview } from '../floating-assistant/ChatAttachmentPreview';
 import { GiphyMediaPreview } from '../floating-assistant/GiphyMediaPreview';
 import IdentityWithAvatar from '../profileAvatar/IdentityWithAvatar';
 import type { AvatarProfileFields } from '../../lib/avatarDisplay';
 import CommunityCommentGiphy from './CommunityCommentGiphy';
+import CommunityCommentPhoto from './CommunityCommentPhoto';
 import CommunityCommentReactions from './CommunityCommentReactions';
 
 const GiphyPicker = lazy(() =>
@@ -68,12 +81,14 @@ export default function CommunityComments({
   const copy = t.community;
   const [draft, setDraft] = useState('');
   const [stagedGiphy, setStagedGiphy] = useState<GiphyMediaItem | null>(null);
+  const [stagedPhoto, setStagedPhoto] = useState<StagedCommunityCommentPhoto | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [replyToId, setReplyToId] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState('');
   const giphyBtnRef = useRef<HTMLButtonElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const giphyConfigured = isGiphyConfigured();
 
   const canModerate = isOwner(profile.role) || isAreaManagerTier(profile.role);
@@ -106,13 +121,33 @@ export default function CommunityComments({
   const activeComments = comments.filter((row) => isActive(row.status));
   const replyTarget = replyToId ? byId.get(replyToId) : undefined;
   const placeholder = replyTarget ? copy.replyPlaceholder : copy.commentPlaceholder;
-  const canSend = canSendCommunityComment(draft, stagedGiphy);
+  const canSend = canSendCommunityComment(draft, stagedGiphy, stagedPhoto);
+
+  function clearStagedPhoto() {
+    revokeCommunityCommentPhoto(stagedPhoto);
+    setStagedPhoto(null);
+    if (photoInputRef.current) photoInputRef.current.value = '';
+  }
+
+  async function onPickPhoto(file: File | undefined) {
+    if (!file || sending) return;
+    const result = await stageCommunityCommentPhoto(file);
+    if (!result.ok) {
+      setError(chatAttachmentPolicyErrorCopy(result.code, t.storeChat));
+      if (photoInputRef.current) photoInputRef.current.value = '';
+      return;
+    }
+    revokeCommunityCommentPhoto(stagedPhoto);
+    setStagedPhoto(result.photo);
+    setStagedGiphy(null);
+    setPickerOpen(false);
+    setError(null);
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     const body = draft.trim().slice(0, COMMENT_MAX_BODY);
-    const giphyFields = buildCommunityCommentGiphyPayload(stagedGiphy);
-    if (!canSendCommunityComment(body, stagedGiphy) || sending) return;
+    if (!canSendCommunityComment(body, stagedGiphy, stagedPhoto) || sending) return;
     if (!isActive(post.status)) return;
     setSending(true);
     setError(null);
@@ -126,7 +161,33 @@ export default function CommunityComments({
       profile.userId,
       'add',
     );
+    const giphyFields = stagedPhoto
+      ? buildCommunityCommentGiphyPayload(null)
+      : buildCommunityCommentGiphyPayload(stagedGiphy);
+    let photoFields = emptyCommunityCommentPhotoFields();
+    let attachmentFileId = '';
     try {
+      if (stagedPhoto) {
+        const uploaded = await uploadChatAttachment({
+          blob: stagedPhoto.blob,
+          mimeType: stagedPhoto.mimeType,
+          fileName: `${commentId}-${stagedPhoto.fileName}`,
+          scope: 'community',
+          postId: post.id,
+          messageId: commentId,
+          clientMutationId: commentId,
+          enabled: true,
+        });
+        attachmentFileId = uploaded.fileId;
+        photoFields = buildCommunityCommentPhotoPayload(
+          commentPhotoPayloadFromUpload(uploaded, {
+            width: stagedPhoto.width,
+            height: stagedPhoto.height,
+          }),
+        );
+      }
+      const linkAttrs: Record<string, string> = { post: post.id, author: profile.id };
+      if (attachmentFileId) linkAttrs.attachmentFile = attachmentFileId;
       await db.transact([
         db.tx.communityComments[commentId]
           .update({
@@ -138,12 +199,13 @@ export default function CommunityComments({
             authorRoleSnapshot: profile.role || '',
             body,
             ...giphyFields,
+            ...photoFields,
             createdAt,
             status: 'active',
             deletedAt: '',
             clientMutationId: commentId,
           })
-          .link({ post: post.id, author: profile.id }),
+          .link(linkAttrs),
         db.tx.communityPosts[post.id].update({
           commentCount: applyCounterDelta(post.commentCount, 1),
           uniqueCommenterCount: applyCounterDelta(post.uniqueCommenterCount, uniqueDelta),
@@ -152,6 +214,7 @@ export default function CommunityComments({
       ]);
       setDraft('');
       setStagedGiphy(null);
+      clearStagedPhoto();
       setPickerOpen(false);
       setReplyToId('');
     } catch (err) {
@@ -212,6 +275,9 @@ export default function CommunityComments({
           <>
             {commentHasGiphyContent(comment) ? (
               <CommunityCommentGiphy comment={comment} unavailableLabel={copy.commentGifUnavailable} />
+            ) : null}
+            {commentHasPhotoContent(comment) ? (
+              <CommunityCommentPhoto comment={comment} unavailableLabel={copy.commentPhotoUnavailable} />
             ) : null}
             {body ? (
               <MessageBody body={comment.body} candidates={[]} className="community-comment-body" />
@@ -317,7 +383,46 @@ export default function CommunityComments({
               previewAriaLabel={copy.commentGifPreview}
             />
           ) : null}
+          {stagedPhoto ? (
+            <ChatAttachmentPreview
+              item={{
+                localId: 'comment-photo',
+                blob: stagedPhoto.blob,
+                objectUrl: stagedPhoto.objectUrl,
+                mimeType: stagedPhoto.mimeType,
+                fileName: stagedPhoto.fileName,
+                bytes: stagedPhoto.bytes,
+                kind: 'image',
+                width: stagedPhoto.width || null,
+                height: stagedPhoto.height || null,
+              }}
+              onClear={clearStagedPhoto}
+              className="community-comment-giphy-preview"
+              hint={copy.commentPhotoReady}
+              removeLabel={copy.removeCommentPhoto}
+              previewAriaLabel={copy.commentPhotoPreview}
+            />
+          ) : null}
           <div className="community-comment-composer-actions">
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                void onPickPhoto(file);
+              }}
+            />
+            <button
+              type="button"
+              className="community-react-btn community-comment-gif-btn"
+              disabled={sending}
+              aria-label={copy.addCommentPhoto}
+              onClick={() => photoInputRef.current?.click()}
+            >
+              {copy.addCommentPhoto}
+            </button>
             {giphyConfigured ? (
               <button
                 ref={giphyBtnRef}
@@ -344,6 +449,7 @@ export default function CommunityComments({
             onClose={() => setPickerOpen(false)}
             anchorRef={giphyBtnRef}
             onSelect={(item) => {
+              clearStagedPhoto();
               setStagedGiphy(item);
               setPickerOpen(false);
             }}

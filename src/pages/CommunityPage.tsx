@@ -225,6 +225,7 @@ export default function CommunityPage({ profile }: Props) {
       communityComments: {
         $: { where: { postId: { $in: galleryPostIds } } },
         author: { avatarFile: {} },
+        attachmentFile: {},
       },
     };
   }, [galleryPostIds]);

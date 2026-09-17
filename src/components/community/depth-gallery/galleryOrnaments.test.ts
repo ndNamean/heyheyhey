@@ -275,6 +275,26 @@ describe('caps and filters', () => {
     expect(layout.comments).toHaveLength(2);
   });
 
+  it('shows a photo-content thumb on comment pills, never on the post arc', () => {
+    const layout = buildGalleryOrnamentLayout({
+      post: post(),
+      reactions: [],
+      comments: [
+        comment({
+          id: 'photo-only',
+          body: '',
+          createdAt: '2026-09-08T00:00:00.000Z',
+          attachmentKind: 'image',
+          attachmentPath: 'stores/community/post-a/c.jpg',
+          attachmentUrl: 'https://example.com/c.jpg',
+        }),
+      ],
+      reactorProfiles: new Map(),
+    });
+    expect(layout.comments[0]?.contentPhotoUrl).toBe('https://example.com/c.jpg');
+    expect(layout.comments[0]?.contentGiphyUrl).toBe('');
+  });
+
   it('attaches 1–3 comment-scoped badges by count then recency, not post or reply reactions', () => {
     const comments = [
       comment({ id: 'c-pill', createdAt: '2026-09-08T00:00:00.000Z' }),

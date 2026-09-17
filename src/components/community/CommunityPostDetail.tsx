@@ -55,6 +55,7 @@ export default function CommunityPostDetail({
           order: { createdAt: 'asc' as const },
         },
         author: { avatarFile: {} },
+        attachmentFile: {},
       },
     };
   }, [post?.id]);

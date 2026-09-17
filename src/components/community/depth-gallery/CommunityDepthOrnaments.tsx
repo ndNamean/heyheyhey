@@ -73,12 +73,15 @@ export default function CommunityDepthOrnaments({
             ) : null}
           </div>
         </div>
-        {layout.comments.map((row) => (
+        {layout.comments.map((row) => {
+          const mediaUrl = row.contentGiphyUrl || row.contentPhotoUrl;
+          const isPhoto = Boolean(row.contentPhotoUrl) && !row.contentGiphyUrl;
+          return (
           <div
             key={row.id}
             className={
-              row.contentGiphyUrl
-                ? 'community-depth-comment community-depth-comment--giphy'
+              mediaUrl
+                ? `community-depth-comment ${isPhoto ? 'community-depth-comment--photo' : 'community-depth-comment--giphy'}`
                 : 'community-depth-comment'
             }
             style={slotStyle(row)}
@@ -88,10 +91,10 @@ export default function CommunityDepthOrnaments({
               <div className="community-depth-comment-copy">
                 <div className="community-depth-comment-name">{row.name}</div>
                 {row.body ? <div className="community-depth-comment-body">{row.body}</div> : null}
-                {row.contentGiphyUrl ? (
+                {mediaUrl ? (
                   <img
                     className="community-depth-comment-giphy"
-                    src={row.contentGiphyUrl}
+                    src={mediaUrl}
                     alt=""
                     draggable={false}
                   />
@@ -118,7 +121,8 @@ export default function CommunityDepthOrnaments({
               ) : null}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </>
   );

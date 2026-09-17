@@ -970,16 +970,18 @@ const rules = {
     allow: {
       view: "isApproved && (data.status == 'active' || isCommunityModerator)",
       create:
-        "isApproved && isOwnAuthor && isOwnAuthorProfile && postIdValid && data.status == 'active' && bodySizeValid && hasCommentContent && giphyFieldsValid",
+        "isApproved && isOwnAuthor && isOwnAuthorProfile && postIdValid && data.status == 'active' && bodySizeValid && hasCommentContent && giphyFieldsValid && attachmentFieldsValid && mediaXor",
       update: 'canAuthorSoftDelete || canModeratorModerate',
       delete: 'false',
       link: {
         post: 'isApproved && isOwnAuthor',
         author: 'isApproved && isOwnAuthor && isOwnAuthorProfile',
+        attachmentFile: 'isApproved && isOwnAuthor',
       },
       unlink: {
         post: 'false',
         author: 'false',
+        attachmentFile: 'false',
       },
     },
     bind: {
@@ -989,10 +991,14 @@ const rules = {
       isOwnAuthorProfile: "data.authorProfileId in auth.ref('$user.profile.id')",
       postIdValid: "data.postId != ''",
       bodySizeValid: 'size(data.body) <= 2000',
-      hasCommentContent: "size(data.body) > 0 || size(data.giphyId) > 0",
+      hasCommentContent:
+        "size(data.body) > 0 || size(data.giphyId) > 0 || size(data.attachmentPath) > 0",
       // Match chat GIF creates: id+url only. Do not use `in [...]` on data strings.
       giphyFieldsValid:
         "data.giphyId == '' || (data.giphyId != '' && data.giphyUrl != '')",
+      attachmentFieldsValid:
+        "data.attachmentPath == '' || (data.attachmentUrl != '' && data.attachmentKind == 'image')",
+      mediaXor: "data.giphyId == '' || data.attachmentPath == ''",
       onlyDeletedFields:
         "request.modifiedFields.all(f, f in ['deletedAt', 'status'])",
       authorSoftDeleteValid: "newData.status == 'deleted' && newData.deletedAt != ''",

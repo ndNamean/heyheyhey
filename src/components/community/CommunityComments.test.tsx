@@ -88,6 +88,35 @@ vi.mock('../floating-assistant/GiphyMediaPreview', () => ({
   ),
 }));
 
+vi.mock('../floating-assistant/ChatAttachmentPreview', () => ({
+  ChatAttachmentPreview: ({
+    item,
+    onClear,
+  }: {
+    item: { fileName: string };
+    onClear?: () => void;
+  }) => (
+    <div>
+      <span>{item.fileName}</span>
+      <button type="button" onClick={onClear}>
+        Remove photo
+      </button>
+    </div>
+  ),
+}));
+
+vi.mock('../../lib/chatAttachmentUpload', () => ({
+  uploadChatAttachment: vi.fn(async () => ({
+    fileId: 'file-1',
+    url: 'https://example.com/c.jpg',
+    path: 'stores/community/post-a/c.jpg',
+    mimeType: 'image/jpeg',
+    bytes: 12,
+    fileName: 'c.jpg',
+    kind: 'image',
+  })),
+}));
+
 vi.mock('../floating-assistant/GiphyPicker', () => ({
   GiphyPicker: ({
     open,
@@ -129,6 +158,9 @@ vi.mock('../floating-assistant/GiphyPicker', () => ({
 }));
 
 import CommunityComments from './CommunityComments';
+import { uploadChatAttachment } from '../../lib/chatAttachmentUpload';
+
+const uploadMock = vi.mocked(uploadChatAttachment);
 
 function profile(extra: Partial<Profile> = {}): Profile {
   return {
@@ -195,6 +227,7 @@ describe('CommunityComments GIF content', () => {
     commentStatusMock.mockClear();
     postUpdateMock.mockClear();
     giphyConfiguredMock.mockReturnValue(true);
+    uploadMock.mockClear();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
@@ -222,6 +255,10 @@ describe('CommunityComments GIF content', () => {
         giphyHeight: '',
         giphyUrl: '',
         giphyPreviewUrl: '',
+        attachmentKind: '',
+        attachmentPath: '',
+        attachmentFileId: '',
+        attachmentUrl: '',
       }),
     );
   });
@@ -437,6 +474,37 @@ describe('CommunityComments GIF content', () => {
     expect(screen.queryByLabelText(/😮/)).toBeNull();
     expect(document.querySelectorAll('.community-comment--reply .community-reactions--comment')).toHaveLength(
       1,
+    );
+  });
+
+  it('uploads a jpeg and persists photo fields without GIF keys', async () => {
+    render(<CommunityComments post={post()} comments={[]} profile={profile()} />);
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['abc'], 'fish.jpg', { type: 'image/jpeg' });
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => {
+      fireEvent.change(input);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    });
+    expect(uploadMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: 'community',
+        postId: 'post-a',
+        mimeType: 'image/jpeg',
+        enabled: true,
+      }),
+    );
+    expect(commentUpdateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: '',
+        giphyId: '',
+        attachmentKind: 'image',
+        attachmentUrl: 'https://example.com/c.jpg',
+        attachmentPath: 'stores/community/post-a/c.jpg',
+        attachmentFileId: 'file-1',
+      }),
     );
   });
 });

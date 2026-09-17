@@ -69,6 +69,8 @@ describe('communityCommentGiphy', () => {
     expect(canSendCommunityComment('caption', sampleGif)).toBe(true);
     expect(canSendCommunityComment('   ', null)).toBe(false);
     expect(canSendCommunityComment('', { ...sampleGif, url: '' })).toBe(false);
+    expect(canSendCommunityComment('', null, { bytes: 12 })).toBe(true);
+    expect(canSendCommunityComment('', null, { bytes: 0 })).toBe(false);
 
     const stored = buildCommunityCommentGiphyPayload(sampleGif);
     const item = commentToGiphyMediaItem(stored);
@@ -88,6 +90,8 @@ describe('communityCommentGiphy', () => {
     const perms = readFileSync(resolve(process.cwd(), 'instant.perms.ts'), 'utf8');
     expect(perms).not.toMatch(/giphyKind in \[/);
     expect(perms).toContain("data.giphyId != '' && data.giphyUrl != ''");
+    expect(perms).toContain("data.attachmentKind == 'image'");
+    expect(perms).toContain("data.giphyId == '' || data.attachmentPath == ''");
   });
 
   it('treats legacy body-only rows (omitted GIF keys) as text comments', () => {

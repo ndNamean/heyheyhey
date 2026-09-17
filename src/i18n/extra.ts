@@ -1670,6 +1670,11 @@ export const sectionsEn = {
     commentGifPreview: 'GIF preview',
     commentGifReady: 'Ready to send — tap Send when ready',
     commentGifUnavailable: 'GIF unavailable',
+    addCommentPhoto: 'Add photo',
+    removeCommentPhoto: 'Remove photo',
+    commentPhotoPreview: 'Photo preview',
+    commentPhotoReady: 'Ready to send — tap Send when ready',
+    commentPhotoUnavailable: 'Photo unavailable',
   },
 };
 
@@ -3243,6 +3248,11 @@ export const sectionsVi = {
     commentGifPreview: 'Xem trước GIF',
     commentGifReady: 'Sẵn sàng gửi — nhấn Gửi khi sẵn sàng',
     commentGifUnavailable: 'GIF không dùng được',
+    addCommentPhoto: 'Thêm ảnh',
+    removeCommentPhoto: 'Gỡ ảnh',
+    commentPhotoPreview: 'Xem trước ảnh',
+    commentPhotoReady: 'Sẵn sàng gửi — nhấn Gửi khi sẵn sàng',
+    commentPhotoUnavailable: 'Ảnh không dùng được',
   },
 };
 

@@ -1187,7 +1187,7 @@ export interface CommunityPost {
   >;
 }
 
-/** InstantDB communityComments — text and/or GIF content; parentId '' = top-level. */
+/** InstantDB communityComments — text and/or GIF or photo content; parentId '' = top-level. */
 export interface CommunityComment {
   id: string;
   postId: string;
@@ -1205,6 +1205,17 @@ export interface CommunityComment {
   giphyHeight?: string;
   giphyUrl?: string;
   giphyPreviewUrl?: string;
+  /** Photo as comment/reply content. Omitted/'' when unused. XOR with GIF. */
+  attachmentKind?: string;
+  attachmentPath?: string;
+  attachmentFileId?: string;
+  attachmentUrl?: string;
+  attachmentMimeType?: string;
+  attachmentFileName?: string;
+  attachmentBytes?: string;
+  attachmentWidth?: string;
+  attachmentHeight?: string;
+  attachmentFile?: { id?: string; url?: string; path?: string };
   createdAt: string;
   status: CommunityPostStatus | string;
   deletedAt: string;
