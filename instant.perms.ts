@@ -990,8 +990,10 @@ const rules = {
       postIdValid: "data.postId != ''",
       bodySizeValid: 'size(data.body) <= 2000',
       hasCommentContent: "size(data.body) > 0 || size(data.giphyId) > 0",
+      // Instant CEL `in [...]` is for field names / auth.ref ids, not data strings.
+      // Chat GIF rules only require giphyId + giphyUrl; kinds use == ORs.
       giphyFieldsValid:
-        "data.giphyId == '' || (data.giphyUrl != '' && data.giphyKind in ['gif', 'sticker', 'meme', 'emoji'])",
+        "data.giphyId == '' || (data.giphyUrl != '' && (data.giphyKind == 'gif' || data.giphyKind == 'sticker' || data.giphyKind == 'meme' || data.giphyKind == 'emoji'))",
       onlyDeletedFields:
         "request.modifiedFields.all(f, f in ['deletedAt', 'status'])",
       authorSoftDeleteValid: "newData.status == 'deleted' && newData.deletedAt != ''",

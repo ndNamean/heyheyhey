@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { GiphyMediaItem } from './giphyClient';
 import {
@@ -80,6 +82,13 @@ describe('communityCommentGiphy', () => {
     expect(commentGiphyDisplayUrl(stored)).toBe(sampleGif.previewUrl);
     expect(commentToGiphyMediaItem(emptyCommunityCommentGiphyFields())).toBeNull();
     expect(commentHasGiphyContent({ giphyId: '', giphyUrl: '' })).toBe(false);
+  });
+
+  it('Instant comment GIF perms use == kinds, not data-string in-list', () => {
+    const perms = readFileSync(resolve(process.cwd(), 'instant.perms.ts'), 'utf8');
+    expect(perms).not.toMatch(/giphyKind in \[/);
+    expect(perms).toContain("data.giphyKind == 'gif'");
+    expect(perms).toContain("data.giphyKind == 'sticker'");
   });
 
   it('treats legacy body-only rows (omitted GIF keys) as text comments', () => {
