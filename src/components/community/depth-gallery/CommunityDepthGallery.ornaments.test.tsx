@@ -620,4 +620,124 @@ describe('CommunityDepthGallery ornaments', () => {
       restore();
     }
   });
+
+  it('renders text/file bodies instead of an empty img and keeps image posts on community-depth-image', () => {
+    const posts = [
+      imagePost('p0'),
+      imagePost('txt', {
+        attachmentKind: '',
+        attachmentPath: '',
+        attachmentUrl: '',
+        attachmentFileId: '',
+        body: 'Readable text body',
+      }),
+      imagePost('file', {
+        attachmentKind: 'file',
+        attachmentPath: 'stores/community/file/a.pdf',
+        attachmentUrl: 'https://example.com/a.pdf',
+        attachmentFileId: 'f2',
+        attachmentFileName: 'notes.pdf',
+        attachmentMimeType: 'application/pdf',
+        body: 'File caption',
+      }),
+    ];
+    const { container } = render(
+      <CommunityDepthGallery sourcePosts={posts} startPostId="p0" onClose={() => {}} />,
+    );
+    const layers = container.querySelectorAll('.community-depth-layer');
+    expect(layers).toHaveLength(3);
+    expect(layers[0].querySelector('.community-depth-image')).toBeTruthy();
+    expect(layers[0].querySelector('.community-depth-text-card')).toBeNull();
+    expect(layers[1].querySelector('.community-depth-image')).toBeNull();
+    expect(layers[1].querySelector('.community-depth-text-card')?.textContent).toContain('Readable text body');
+    expect(layers[2].querySelector('.community-depth-image')).toBeNull();
+    expect(layers[2].querySelector('.community-depth-text-file')?.textContent).toContain('notes.pdf');
+    expect(layers[2].querySelector('.community-depth-text-card')?.textContent).toContain('File caption');
+  });
+
+  it('mounts only a small window of planes for a long sequence', () => {
+    const posts = Array.from({ length: 12 }, (_, i) => imagePost(`p${i}`));
+    const { container } = render(
+      <CommunityDepthGallery sourcePosts={posts} startPostId="p0" onClose={() => {}} />,
+    );
+    const layers = container.querySelectorAll('.community-depth-layer');
+    expect(layers.length).toBeGreaterThan(0);
+    expect(layers.length).toBeLessThanOrEqual(5);
+    expect(layers.length).toBeLessThan(12);
+  });
+
+  it('reports only the mounted window for comments', () => {
+    const posts = Array.from({ length: 12 }, (_, i) => imagePost(`p${i}`));
+    const onMountedPostIdsChange = vi.fn();
+    render(
+      <CommunityDepthGallery
+        sourcePosts={posts}
+        startPostId="p0"
+        onClose={() => {}}
+        onMountedPostIdsChange={onMountedPostIdsChange}
+      />,
+    );
+    expect(onMountedPostIdsChange).toHaveBeenCalled();
+    const last = onMountedPostIdsChange.mock.calls.at(-1)?.[0] as string[];
+    expect(last.length).toBeLessThanOrEqual(5);
+    expect(last).toContain('p0');
+    expect(last).not.toContain('p11');
+  });
+
+  it('prefetches when the current plane is near the end of the loaded set', () => {
+    const posts = Array.from({ length: 5 }, (_, i) => imagePost(`p${i}`));
+    const onNeedMore = vi.fn();
+    render(
+      <CommunityDepthGallery
+        sourcePosts={posts}
+        startPostId="p4"
+        onClose={() => {}}
+        onNeedMore={onNeedMore}
+        canLoadNextPage
+      />,
+    );
+    expect(onNeedMore).toHaveBeenCalled();
+  });
+
+  it('does not auto-retry gallery prefetch after an error', () => {
+    const posts = Array.from({ length: 5 }, (_, i) => imagePost(`p${i}`));
+    const onNeedMore = vi.fn();
+    render(
+      <CommunityDepthGallery
+        sourcePosts={posts}
+        startPostId="p4"
+        onClose={() => {}}
+        onNeedMore={onNeedMore}
+        canLoadNextPage
+        loadMoreError
+      />,
+    );
+    expect(onNeedMore).not.toHaveBeenCalled();
+  });
+
+  it('keeps the current plane after a trailing page append', { timeout: 20000 }, () => {
+    const initial = [imagePost('p0'), imagePost('p1'), imagePost('p2')];
+    const { container, rerender } = render(
+      <CommunityDepthGallery sourcePosts={initial} startPostId="p0" onClose={() => {}} />,
+    );
+    const dialog = container.querySelector('.community-depth-gallery') as HTMLElement;
+    flushFrames(4);
+    fireEvent.keyDown(dialog, { key: 'End' });
+    flushFrames(90);
+    const imagesBefore = [...container.querySelectorAll('.community-depth-image')] as HTMLElement[];
+    expect(Number(imagesBefore[2].style.opacity)).toBeGreaterThan(0.6);
+    expect(Number(imagesBefore[0].style.opacity)).toBeLessThan(0.2);
+
+    rerender(
+      <CommunityDepthGallery
+        sourcePosts={[...initial, imagePost('p3')]}
+        startPostId="p0"
+        onClose={() => {}}
+      />,
+    );
+    flushFrames(8);
+    const imagesAfter = [...container.querySelectorAll('.community-depth-image')] as HTMLElement[];
+    expect(Number(imagesAfter[0].style.opacity)).toBeLessThan(0.2);
+    expect(Number(imagesAfter[2].style.opacity)).toBeGreaterThan(0.4);
+  });
 });

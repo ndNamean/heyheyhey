@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLang } from '../../../i18n';
 import { resolveChatAttachmentUrl } from '../../../lib/chatAttachmentDisplay';
 import { BACK_PRIORITY, useNativeBack } from '../../../lib/nativeBack';
 import { usePointerCapabilities } from '../../media-interaction/pointerCapabilities';
 import type { AvatarProfileFields } from '../../../lib/avatarDisplay';
 import type { CommunityComment, CommunityPost, CommunityReaction } from '../../../types';
+import { MessageBody } from '../../floating-assistant/MessageBody';
 import { AtmosphereCanvas } from './atmosphereCanvas';
 import CommunityDepthOrnaments from './CommunityDepthOrnaments';
 import CommunityDepthRipples from './CommunityDepthRipples';
@@ -24,7 +25,8 @@ import {
   ornamentRippleShouldFireStart,
   ornamentRippleShouldReset,
 } from './ornamentRipple';
-import { resolveGalleryMood, parseMoodHex, interpolateMoods } from './moodController';
+import { resolveGalleryMood, parseMoodHex, lerpMood } from './moodController';
+import { HEY_PELO_FALLBACK_MOOD } from './communityGalleryMoods';
 import {
   GalleryLayers,
   MOOD_SAMPLE_OFFSET,
@@ -38,7 +40,15 @@ import {
   ScrollController,
   VELOCITY_MAX,
 } from './scrollController';
-import { buildCommunityGalleryPosts } from './gallerySet';
+import {
+  appendGallerySession,
+  buildCommunityGalleryPosts,
+  galleryRenderWindow,
+  galleryWindowPostIds,
+  isCommunityImagePost,
+  shouldPrefetchGallery,
+  shouldShowGalleryEnd,
+} from './gallerySet';
 import {
   PORTRAIT_STACK_SCALE,
   computeGalleryOffsets,
@@ -48,7 +58,14 @@ import {
   type Orientation,
 } from './rotationMotion';
 
-export { COMMUNITY_GALLERY_MAX_PLANES, buildCommunityGalleryPosts, isCommunityImagePost } from './gallerySet';
+export {
+  COMMUNITY_GALLERY_RENDER_RADIUS,
+  buildCommunityGalleryPosts,
+  isCommunityImagePost,
+} from './gallerySet';
+
+/** Stable 4:5 stand-in so text/file planes share contain/idle math without a bitmap. */
+const TEXT_CARD_FALLBACK = { width: 4, height: 5 };
 
 export function dominantGalleryPostId(
   posts: Array<{ id: string }>,
@@ -73,6 +90,22 @@ function relativeLuminance(hex: string): number {
   return 0.2126 * lin(rgb.r) + 0.7152 * lin(rgb.g) + 0.0722 * lin(rgb.b);
 }
 
+function moodForPost(post: CommunityPost | undefined) {
+  if (!post) return HEY_PELO_FALLBACK_MOOD;
+  return resolveGalleryMood({
+    postId: post.id,
+    moodBackgroundColor: post.moodBackgroundColor,
+    moodBlob1Color: post.moodBlob1Color,
+    moodBlob2Color: post.moodBlob2Color,
+  });
+}
+
+function growLayerCount(layers: GalleryLayers, planeCount: number) {
+  const prev = layers.opacities.slice();
+  layers.setPlaneCount(planeCount);
+  layers.opacities = Array.from({ length: planeCount }, (_, i) => prev[i] ?? 0);
+}
+
 const EMPTY_REACTIONS = new Map<string, CommunityReaction[]>();
 const EMPTY_COMMENTS = new Map<string, CommunityComment[]>();
 const EMPTY_PROFILES = new Map<string, AvatarProfileFields>();
@@ -84,6 +117,11 @@ interface Props {
   reactionsByPostId?: ReadonlyMap<string, CommunityReaction[]>;
   commentsByPostId?: ReadonlyMap<string, CommunityComment[]>;
   reactorProfiles?: ReadonlyMap<string, AvatarProfileFields>;
+  onNeedMore?: () => void;
+  canLoadNextPage?: boolean;
+  isLoadingMore?: boolean;
+  loadMoreError?: boolean;
+  onMountedPostIdsChange?: (postIds: string[]) => void;
 }
 
 export default function CommunityDepthGallery({
@@ -93,6 +131,11 @@ export default function CommunityDepthGallery({
   reactionsByPostId = EMPTY_REACTIONS,
   commentsByPostId = EMPTY_COMMENTS,
   reactorProfiles = EMPTY_PROFILES,
+  onNeedMore,
+  canLoadNextPage = true,
+  isLoadingMore = false,
+  loadMoreError = false,
+  onMountedPostIdsChange,
 }: Props) {
   const { t } = useLang();
   const copy = t.community;
@@ -102,29 +145,63 @@ export default function CommunityDepthGallery({
   const fallbackRef = useRef<HTMLDivElement>(null);
   const stackRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
-  const layerRefs = useRef<Array<HTMLDivElement | null>>([]);
-  const imageRefs = useRef<Array<HTMLImageElement | null>>([]);
-  const ornamentRefs = useRef<Array<HTMLDivElement | null>>([]);
-  const rippleRefs = useRef<Array<HTMLDivElement | null>>([]);
+  const layerRefs = useRef(new Map<string, HTMLDivElement>());
+  const visualRefs = useRef(new Map<string, HTMLElement>());
+  const ornamentRefs = useRef(new Map<string, HTMLDivElement>());
+  const rippleRefs = useRef(new Map<string, HTMLDivElement>());
   const reducedRef = useRef(reducedMotion);
   reducedRef.current = reducedMotion;
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const currentPostIdRef = useRef(startPostId);
+  const scrollRef = useRef<ScrollController | null>(null);
+  const layersRef = useRef<GalleryLayers | null>(null);
+  const lastPlaneCountRef = useRef(0);
+  const onNeedMoreRef = useRef(onNeedMore);
+  onNeedMoreRef.current = onNeedMore;
 
-  const { posts, startIndex } = useMemo(
-    () => buildCommunityGalleryPosts(sourcePosts, startPostId),
-    [sourcePosts, startPostId],
+  const startIndexRef = useRef(
+    buildCommunityGalleryPosts(sourcePosts, startPostId).startIndex,
   );
-  const planeKey = posts.map((post) => post.id).join('|');
+  const [posts, setPosts] = useState(() => buildCommunityGalleryPosts(sourcePosts, startPostId).posts);
+  const startIndex = startIndexRef.current;
+  const [planePair, setPlanePair] = useState(() => ({
+    current: startIndex,
+    next: Math.min(startIndex + 1, Math.max(0, buildCommunityGalleryPosts(sourcePosts, startPostId).posts.length - 1)),
+  }));
 
-  // Keep latest posts/startIndex accessible inside the imperative effect
-  // without letting their reference-only changes tear down the RAF loop,
-  // ScrollController, and AtmosphereCanvas on every live update.
   const postsRef = useRef(posts);
   postsRef.current = posts;
-  const startIndexRef = useRef(startIndex);
-  startIndexRef.current = startIndex;
+
+  useLayoutEffect(() => {
+    setPosts((prev) => appendGallerySession(prev, sourcePosts));
+  }, [sourcePosts]);
+
+  useLayoutEffect(() => {
+    const n = posts.length;
+    const scroll = scrollRef.current;
+    const layers = layersRef.current;
+    if (!scroll || !layers || n <= lastPlaneCountRef.current) return;
+    scroll.setPlaneCount(n);
+    growLayerCount(layers, n);
+    lastPlaneCountRef.current = n;
+  }, [posts.length]);
+
+  const mountedIds = useMemo(
+    () => galleryWindowPostIds(posts, planePair.current, planePair.next),
+    [posts, planePair.current, planePair.next],
+  );
+
+  useEffect(() => {
+    onMountedPostIdsChange?.(mountedIds);
+  }, [mountedIds, onMountedPostIdsChange]);
+
+  useEffect(() => {
+    if (!onNeedMoreRef.current) return;
+    if (!canLoadNextPage || isLoadingMore || loadMoreError) return;
+    if (!shouldPrefetchGallery(planePair.current, posts.length)) return;
+    onNeedMoreRef.current();
+  }, [planePair.current, posts.length, canLoadNextPage, isLoadingMore, loadMoreError]);
 
   function exitToPost() {
     onCloseRef.current(currentPostIdRef.current || startPostId);
@@ -157,6 +234,9 @@ export default function CommunityDepthGallery({
     const layers = new GalleryLayers(effectPosts.length);
     const atmosphere = new AtmosphereCanvas();
     const usedCanvas = overlayCanvas ? atmosphere.attach(overlayCanvas) : false;
+    scrollRef.current = scroll;
+    layersRef.current = layers;
+    lastPlaneCountRef.current = effectPosts.length;
 
     const targetZ = cameraZForPlaneIndex(effectStartIndex);
     const startScroll = scroll.scrollFromCameraZ(targetZ);
@@ -168,23 +248,15 @@ export default function CommunityDepthGallery({
     scroll.attach(root);
     currentPostIdRef.current = effectPosts[effectStartIndex]?.id || startPostId;
 
-    const moods = effectPosts.map((post) =>
-      resolveGalleryMood({
-        postId: post.id,
-        moodBackgroundColor: post.moodBackgroundColor,
-        moodBlob1Color: post.moodBlob1Color,
-        moodBlob2Color: post.moodBlob2Color,
-      }),
-    );
-    const orientations: Orientation[] = effectPosts.map((post) => getStableOrientation(post.id));
-
     let raf = 0;
     let running = true;
-    let chromeDark = relativeLuminance(moods[effectStartIndex]?.backgroundColor ?? '#fffaf0') < 0.5;
+    let chromeDark = relativeLuminance(moodForPost(effectPosts[effectStartIndex]).backgroundColor) < 0.5;
     let idle = { lastNow: 0, stillMs: 0, idleAmount: 0, vanishAmount: 0 };
     const firedStartRipples = new Set<string>();
     const firedEndRipples = new Set<string>();
     const started = performance.now();
+    let lastNotifiedCurrent = Number.NaN;
+    let lastNotifiedNext = Number.NaN;
 
     function sizeCanvas() {
       if (!overlayCanvas) return;
@@ -208,13 +280,17 @@ export default function CommunityDepthGallery({
       if (!running || document.hidden) return;
 
       sizeCanvas();
+      const framePosts = postsRef.current;
+      const planeCount = framePosts.length;
       const state = scroll.update(layers.getDepthRange());
       const blend = layers.getPlaneBlendData(state.cameraZ);
-      currentPostIdRef.current = dominantGalleryPostId(effectPosts, blend, startPostId);
+      currentPostIdRef.current = dominantGalleryPostId(framePosts, blend, startPostId);
       const opacities = layers.updateOpacities(state.cameraZ);
-      const mood = interpolateMoods(moods, blend);
+      const currentMood = moodForPost(framePosts[blend.currentPlaneIndex]);
+      const nextMood = moodForPost(framePosts[blend.nextPlaneIndex] ?? framePosts[blend.currentPlaneIndex]);
+      const mood = lerpMood(currentMood, nextMood, blend.depthBlend);
       const reduced = reducedRef.current;
-      const depthProgress = getDepthProgress(state.cameraZ, effectPosts.length);
+      const depthProgress = getDepthProgress(state.cameraZ, planeCount);
       const velocityIntensity = Math.min(1, Math.abs(state.velocity) / VELOCITY_MAX);
       const painted = atmosphere.draw({
         mood,
@@ -259,6 +335,17 @@ export default function CommunityDepthGallery({
       const rippleReset = ornamentRippleShouldReset({ still, reducedMotion: reduced });
       const currentIndex = blend.currentPlaneIndex;
       const nextIndex = blend.nextPlaneIndex;
+      if (currentIndex !== lastNotifiedCurrent || nextIndex !== lastNotifiedNext) {
+        lastNotifiedCurrent = currentIndex;
+        lastNotifiedNext = nextIndex;
+        startTransition(() => {
+          setPlanePair((prev) =>
+            prev.current === currentIndex && prev.next === nextIndex
+              ? prev
+              : { current: currentIndex, next: nextIndex },
+          );
+        });
+      }
       const stackWidth = stack?.clientWidth ?? 0;
       const stackHeight = stack?.clientHeight ?? 0;
       const overlayWidth = overlayRoot.clientWidth;
@@ -271,17 +358,27 @@ export default function CommunityDepthGallery({
         isPortrait: portrait,
       });
 
-      // Read latest posts for attachment metadata (planeKey guarantees IDs are stable,
-      // but fields like attachmentWidth/Height should still track the newest data).
-      const framePosts = postsRef.current;
-      for (let i = 0; i < framePosts.length; i++) {
-        const layer = layerRefs.current[i];
-        const img = imageRefs.current[i];
-        const isPair = i === currentIndex || i === nextIndex;
+      const { from, to } = galleryRenderWindow(currentIndex, nextIndex, planeCount);
+      const orientations: Orientation[] = [];
+      const orientFrom = Math.max(0, from - 1);
+      const orientTo = Math.min(planeCount - 1, to + 1);
+      for (let i = orientFrom; i <= orientTo; i++) {
         const post = framePosts[i];
-        const fallbackW = Number.parseInt(post?.attachmentWidth || '', 10) || 0;
-        const fallbackH = Number.parseInt(post?.attachmentHeight || '', 10) || 0;
-        const size = resolveIdleImageSize(img, fallbackW, fallbackH);
+        if (post) orientations[i] = getStableOrientation(post.id);
+      }
+
+      for (let i = from; i <= to; i++) {
+        const post = framePosts[i];
+        if (!post) continue;
+        const layer = layerRefs.current.get(post.id);
+        const visual = visualRefs.current.get(post.id);
+        const isPair = i === currentIndex || i === nextIndex;
+        const isImage = isCommunityImagePost(post);
+        const fallbackW = isImage ? Number.parseInt(post.attachmentWidth || '', 10) || 0 : TEXT_CARD_FALLBACK.width;
+        const fallbackH = isImage ? Number.parseInt(post.attachmentHeight || '', 10) || 0 : TEXT_CARD_FALLBACK.height;
+        const size = isImage
+          ? resolveIdleImageSize(visual instanceof HTMLImageElement ? visual : null, fallbackW, fallbackH)
+          : { width: TEXT_CARD_FALLBACK.width, height: TEXT_CARD_FALLBACK.height };
         const rect = containRectForStack(stackWidth, stackHeight, size.width, size.height);
         if (layer) {
           const motion = layerMotionForGalleryIndex({
@@ -316,7 +413,7 @@ export default function CommunityDepthGallery({
             clip.style.transform = `scale(${clipScale})`;
           }
         }
-        if (img) {
+        if (visual) {
           const coverScale = isPair
             ? coverScaleForStack(rect.width, rect.height, size.width, size.height)
             : 1;
@@ -325,16 +422,16 @@ export default function CommunityDepthGallery({
             coverScale,
             isPair ? idle.idleAmount : 0,
           );
-          img.style.opacity = String(opacities[i] ?? 0);
-          img.style.transform = `translateX(${drift}px) rotate(${tilt}deg) scale(${scale})`;
+          visual.style.opacity = String(opacities[i] ?? 0);
+          visual.style.transform = `translateX(${drift}px) rotate(${tilt}deg) scale(${scale})`;
         }
-        const ornament = ornamentRefs.current[i];
+        const ornament = ornamentRefs.current.get(post.id);
         if (ornament) {
           const reveal = ornamentRevealForIndex(i, currentIndex, nextIndex, blend.depthBlend);
           ornament.style.opacity = String(ornamentOpacity(opacities[i] ?? 0, reveal, idle.vanishAmount));
           ornament.style.setProperty('--idle', String(isPair ? idle.idleAmount : 0));
         }
-        const rippleRoot = rippleRefs.current[i];
+        const rippleRoot = rippleRefs.current.get(post.id);
         if (!rippleRoot) continue;
         if (rippleReset) {
           if (firedStartRipples.size === 0 && firedEndRipples.size === 0) continue;
@@ -438,17 +535,28 @@ export default function CommunityDepthGallery({
       document.removeEventListener('visibilitychange', onVisibility);
       scroll.dispose();
       atmosphere.dispose();
+      if (scrollRef.current === scroll) scrollRef.current = null;
+      if (layersRef.current === layers) layersRef.current = null;
     };
-    // NOTE: posts/startIndex intentionally omitted. Effect re-runs only when
-    // the actual plane set changes (planeKey encodes post IDs). Latest posts
-    // and startIndex are read from refs; this prevents the entire RAF loop,
-    // ScrollController, and AtmosphereCanvas from being torn down and rebuilt
-    // (with a visible scroll-position + atmosphere reset) on every InstantDB
-    // live update to reactions/comments/famous counts.
+    // Mount once per overlay session. Length growth uses setPlaneCount above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [planeKey]);
+  }, [startPostId]);
 
   if (!posts.length) return null;
+
+  const { from: mountFrom, to: mountTo } = galleryRenderWindow(
+    planePair.current,
+    planePair.next,
+    posts.length,
+  );
+  const showEnd = shouldShowGalleryEnd({
+    canLoadNextPage,
+    isLoadingMore,
+    loadMoreError,
+    currentIndex: planePair.current,
+    length: posts.length,
+  });
+  const showStatus = isLoadingMore || loadMoreError || showEnd;
 
   return (
     <div
@@ -462,37 +570,66 @@ export default function CommunityDepthGallery({
       <div ref={fallbackRef} className="community-depth-fallback" aria-hidden="true" />
       <canvas ref={canvasRef} className="community-depth-canvas" aria-hidden="true" />
       <div ref={stackRef} className="community-depth-stack">
-        {posts.map((post, index) => {
+        {posts.slice(mountFrom, mountTo + 1).map((post, offset) => {
+          const index = mountFrom + offset;
           const url = resolveChatAttachmentUrl(post);
-          const eager = Math.abs(index - startIndex) <= 1;
+          const isImage = isCommunityImagePost(post);
+          const isFile = String(post.attachmentKind || '').trim() === 'file';
+          const eager = index === planePair.current || index === planePair.next;
+          const mood = moodForPost(post);
+          const onDark = relativeLuminance(mood.backgroundColor) < 0.5;
           return (
             <div
               key={post.id}
               className="community-depth-layer"
               ref={(el) => {
-                layerRefs.current[index] = el;
+                if (el) layerRefs.current.set(post.id, el);
+                else layerRefs.current.delete(post.id);
               }}
             >
               <div className="community-depth-image-clip">
-                <img
-                  ref={(el) => {
-                    imageRefs.current[index] = el;
-                  }}
-                  className="community-depth-image"
-                  src={url}
-                  alt={post.attachmentFileName || copy.photo}
-                  width={Number.parseInt(post.attachmentWidth || '', 10) || undefined}
-                  height={Number.parseInt(post.attachmentHeight || '', 10) || undefined}
-                  loading={eager ? 'eager' : 'lazy'}
-                  decoding="async"
-                  draggable={false}
-                  style={{ opacity: index === startIndex ? 1 : 0 }}
-                />
+                {isImage ? (
+                  <img
+                    ref={(el) => {
+                      if (el) visualRefs.current.set(post.id, el);
+                      else visualRefs.current.delete(post.id);
+                    }}
+                    className="community-depth-image"
+                    src={url}
+                    alt={post.attachmentFileName || copy.photo}
+                    width={Number.parseInt(post.attachmentWidth || '', 10) || undefined}
+                    height={Number.parseInt(post.attachmentHeight || '', 10) || undefined}
+                    loading={eager ? 'eager' : 'lazy'}
+                    decoding="async"
+                    draggable={false}
+                    style={{ opacity: index === startIndex ? 1 : 0 }}
+                  />
+                ) : (
+                  <div
+                    ref={(el) => {
+                      if (el) visualRefs.current.set(post.id, el);
+                      else visualRefs.current.delete(post.id);
+                    }}
+                    className={`community-depth-text-card${onDark ? ' community-depth-text-card--on-dark' : ' community-depth-text-card--on-light'}`}
+                    style={{
+                      background: `linear-gradient(160deg, ${mood.backgroundColor} 0%, ${mood.blob1Color} 58%, ${mood.blob2Color} 100%)`,
+                      opacity: index === startIndex ? 1 : 0,
+                    }}
+                  >
+                    {post.body.trim() ? (
+                      <MessageBody body={post.body} candidates={[]} className="community-depth-text-body" />
+                    ) : null}
+                    {isFile ? (
+                      <div className="community-depth-text-file">{post.attachmentFileName || copy.downloadFile}</div>
+                    ) : null}
+                  </div>
+                )}
               </div>
               <div
                 className="community-depth-ornaments"
                 ref={(el) => {
-                  ornamentRefs.current[index] = el;
+                  if (el) ornamentRefs.current.set(post.id, el);
+                  else ornamentRefs.current.delete(post.id);
                 }}
                 aria-hidden="true"
                 style={{ opacity: index === startIndex ? 1 : 0 }}
@@ -507,7 +644,8 @@ export default function CommunityDepthGallery({
               <div
                 className="community-depth-ripples"
                 ref={(el) => {
-                  rippleRefs.current[index] = el;
+                  if (el) rippleRefs.current.set(post.id, el);
+                  else rippleRefs.current.delete(post.id);
                 }}
                 aria-hidden="true"
               >
@@ -522,6 +660,17 @@ export default function CommunityDepthGallery({
           );
         })}
       </div>
+      {showStatus ? (
+        <div className="community-depth-status" role="status">
+          {isLoadingMore ? <span>{copy.loadingMore}</span> : null}
+          {loadMoreError ? (
+            <button type="button" className="community-depth-status-retry" onClick={() => onNeedMore?.()}>
+              {copy.retry}
+            </button>
+          ) : null}
+          {showEnd ? <span>{copy.galleryEnd}</span> : null}
+        </div>
+      ) : null}
       <button
         ref={closeRef}
         type="button"

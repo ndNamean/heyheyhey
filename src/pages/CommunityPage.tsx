@@ -1,10 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CommunityComposer from '../components/community/CommunityComposer';
+import CommunityFeedSentinel, {
+  canStartCommunityLoadMore,
+  shouldEnableFeedSentinel,
+} from '../components/community/CommunityFeedSentinel';
 import CommunityPostCard from '../components/community/CommunityPostCard';
 import CommunityPostDetail from '../components/community/CommunityPostDetail';
 import FamousPost from '../components/community/FamousPost';
 import CommunityDepthGallery from '../components/community/depth-gallery/CommunityDepthGallery';
-import { buildCommunityGalleryPosts, isCommunityImagePost } from '../components/community/depth-gallery/gallerySet';
+import { isCommunityImagePost } from '../components/community/depth-gallery/gallerySet';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import {
@@ -68,7 +72,9 @@ export default function CommunityPage({ profile }: Props) {
   const [undoToast, setUndoToast] = useState<{ postId: string; voteId: string } | null>(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadMoreError, setLoadMoreError] = useState(false);
+  const [galleryCommentPostIds, setGalleryCommentPostIds] = useState<string[]>([]);
   const [famousCutoffIso] = useState(() => famousWindowCutoffIso());
+  const loadMoreInFlightRef = useRef(false);
 
   const infiniteQuery = useMemo(
     () => ({
@@ -214,21 +220,16 @@ export default function CommunityPage({ profile }: Props) {
   const overlayOpen = Boolean(galleryPostId);
   const swipeEnabled = !overlayOpen;
 
-  const galleryPostIds = useMemo(() => {
-    if (!galleryPostId) return [] as string[];
-    return buildCommunityGalleryPosts(gallerySource, galleryPostId).posts.map((post) => post.id);
-  }, [galleryPostId, gallerySource]);
-
   const galleryCommentsQuery = useMemo(() => {
-    if (!galleryPostIds.length) return null;
+    if (!overlayOpen || !galleryCommentPostIds.length) return null;
     return {
       communityComments: {
-        $: { where: { postId: { $in: galleryPostIds } } },
+        $: { where: { postId: { $in: galleryCommentPostIds } } },
         author: { avatarFile: {} },
         attachmentFile: {},
       },
     };
-  }, [galleryPostIds]);
+  }, [galleryCommentPostIds, overlayOpen]);
 
   const { data: galleryCommentData } = db.useQuery(galleryCommentsQuery);
   const commentsByPostId = useMemo(() => {
@@ -316,8 +317,18 @@ export default function CommunityPage({ profile }: Props) {
     }
   }
 
-  async function handleLoadMore() {
-    if (!canLoadNextPage || isLoadingMore || typeof loadNextPage !== 'function') return;
+  const handleLoadMore = useCallback(async () => {
+    if (
+      !canStartCommunityLoadMore({
+        canLoadNextPage,
+        isLoadingMore: loadMoreInFlightRef.current,
+        inFlight: loadMoreInFlightRef.current,
+        loadNextPage,
+      })
+    ) {
+      return;
+    }
+    loadMoreInFlightRef.current = true;
     setIsLoadingMore(true);
     setLoadMoreError(false);
     try {
@@ -325,13 +336,26 @@ export default function CommunityPage({ profile }: Props) {
     } catch {
       setLoadMoreError(true);
     } finally {
+      loadMoreInFlightRef.current = false;
       setIsLoadingMore(false);
     }
-  }
+  }, [canLoadNextPage, loadNextPage]);
+
+  const handleMountedGalleryIds = useCallback((postIds: string[]) => {
+    setGalleryCommentPostIds(postIds);
+  }, []);
 
   function openGallery(post: CommunityPost) {
     if (!isCommunityImagePost(post)) return;
+    setGalleryCommentPostIds([post.id]);
     setGalleryPostId(post.id);
+  }
+
+  function closeGallery(postId: string) {
+    setGalleryPostId(null);
+    setGalleryCommentPostIds([]);
+    setSelectedPostId(postId);
+    document.querySelector(`[data-post-id="${CSS.escape(postId)}"]`)?.scrollIntoView({ block: 'center' });
   }
 
   const cardProps = {
@@ -383,24 +407,43 @@ export default function CommunityPage({ profile }: Props) {
             {...cardProps}
           />
         ))}
-        {(canLoadNextPage || loadMoreError) && (
+        {feedPosts.length > 0 ? (
           <div className="community-feed-more">
+            <CommunityFeedSentinel
+              enabled={shouldEnableFeedSentinel({
+                overlayOpen,
+                canLoadNextPage,
+                isLoadingMore,
+                loadMoreError,
+              })}
+              observeKey={feedPosts.length}
+              onVisible={() => {
+                if (loadMoreError) return;
+                void handleLoadMore();
+              }}
+            />
             {loadMoreError ? (
               <div className="community-feed-status">{copy.loadMoreError}</div>
             ) : null}
-            <button
-              type="button"
-              onClick={() => void handleLoadMore()}
-              disabled={isLoadingMore}
-            >
-              {isLoadingMore
-                ? `${copy.loadMore}...`
-                : loadMoreError
-                  ? copy.retry
-                  : copy.loadMore}
-            </button>
+            {canLoadNextPage || loadMoreError ? (
+              <button
+                type="button"
+                onClick={() => void handleLoadMore()}
+                disabled={isLoadingMore}
+              >
+                {isLoadingMore
+                  ? `${copy.loadMore}...`
+                  : loadMoreError
+                    ? copy.retry
+                    : copy.loadMore}
+              </button>
+            ) : (
+              <div className="community-feed-status" role="status">
+                {copy.endOfFeed}
+              </div>
+            )}
           </div>
-        )}
+        ) : null}
       </>
     );
   })();
@@ -438,10 +481,12 @@ export default function CommunityPage({ profile }: Props) {
           reactionsByPostId={reactionsByPostId}
           commentsByPostId={commentsByPostId}
           reactorProfiles={reactorProfiles}
-          onClose={(postId) => {
-            setGalleryPostId(null);
-            setSelectedPostId(postId);
-          }}
+          onNeedMore={() => void handleLoadMore()}
+          canLoadNextPage={canLoadNextPage}
+          isLoadingMore={isLoadingMore}
+          loadMoreError={loadMoreError}
+          onMountedPostIdsChange={handleMountedGalleryIds}
+          onClose={closeGallery}
         />
       ) : null}
       {undoToast ? (

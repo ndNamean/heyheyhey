@@ -2,9 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { CommunityPost } from '../../../types';
 import { dominantGalleryPostId } from './CommunityDepthGallery';
 import {
-  COMMUNITY_GALLERY_MAX_PLANES,
+  COMMUNITY_GALLERY_RENDER_RADIUS,
+  appendGallerySession,
   buildCommunityGalleryPosts,
+  galleryRenderWindow,
+  galleryWindowPostIds,
   isCommunityImagePost,
+  shouldPrefetchGallery,
+  shouldShowGalleryEnd,
 } from './gallerySet';
 
 function imagePost(id: string, extra: Partial<CommunityPost> = {}): CommunityPost {
@@ -40,40 +45,86 @@ function imagePost(id: string, extra: Partial<CommunityPost> = {}): CommunityPos
   };
 }
 
+function textPost(id: string, body = 'hello'): CommunityPost {
+  return imagePost(id, {
+    body,
+    attachmentKind: '',
+    attachmentPath: '',
+    attachmentUrl: '',
+    attachmentFileId: '',
+    attachmentFileName: '',
+    attachmentMimeType: '',
+  });
+}
+
 describe('community gallery set', () => {
-  it('caps at 24 image posts and starts at the tapped index', () => {
-    expect(COMMUNITY_GALLERY_MAX_PLANES).toBe(24);
-    const posts = Array.from({ length: 30 }, (_, i) => imagePost(`p${i}`));
-    const { posts: slice, startIndex } = buildCommunityGalleryPosts(posts, 'p20');
-    expect(slice).toHaveLength(24);
-    expect(slice[startIndex]?.id).toBe('p20');
+  it('keeps the full sequence including text and does not cap at 24', () => {
+    expect(COMMUNITY_GALLERY_RENDER_RADIUS).toBe(2);
+    const posts = Array.from({ length: 30 }, (_, i) =>
+      i % 2 === 0 ? imagePost(`p${i}`) : textPost(`p${i}`, `text ${i}`),
+    );
+    const { posts: sequence, startIndex } = buildCommunityGalleryPosts(posts, 'p20');
+    expect(sequence).toHaveLength(30);
+    expect(sequence[startIndex]?.id).toBe('p20');
+    expect(sequence.some((post) => post.id === 'p21' && !isCommunityImagePost(post))).toBe(true);
     expect(isCommunityImagePost(imagePost('x'))).toBe(true);
-    expect(
-      isCommunityImagePost(
-        imagePost('text', {
-          attachmentKind: '',
-          attachmentPath: '',
-          attachmentUrl: '',
-          attachmentFileId: '',
-        }),
-      ),
-    ).toBe(false);
+    expect(isCommunityImagePost(textPost('text'))).toBe(false);
   });
 
-  it('dedupes Famous + feed and ignores text posts', () => {
+  it('dedupes Famous + feed, keeps text posts, and starts at the tapped image', () => {
     const famous = imagePost('pin');
-    const text = imagePost('txt', {
-      attachmentKind: '',
-      attachmentPath: '',
-      attachmentUrl: '',
-      attachmentFileId: '',
-    });
+    const text = textPost('txt', 'later text');
     const { posts, startIndex } = buildCommunityGalleryPosts(
       [famous, famous, text, imagePost('a')],
       'a',
     );
-    expect(posts.map((p) => p.id)).toEqual(['pin', 'a']);
-    expect(startIndex).toBe(1);
+    expect(posts.map((p) => p.id)).toEqual(['pin', 'txt', 'a']);
+    expect(startIndex).toBe(2);
+  });
+
+  it('appendGallerySession ignores prepends and only appends trailing ids', () => {
+    const session = [imagePost('a'), textPost('b')];
+    const next = [imagePost('new'), imagePost('a'), textPost('b'), imagePost('c'), textPost('d')];
+    expect(appendGallerySession(session, next).map((p) => p.id)).toEqual(['a', 'b', 'c', 'd']);
+    expect(appendGallerySession(session, [imagePost('new'), imagePost('a'), textPost('b')]).map((p) => p.id)).toEqual([
+      'a',
+      'b',
+    ]);
+  });
+
+  it('shouldPrefetchGallery is true within 3 of the last loaded plane', () => {
+    expect(shouldPrefetchGallery(11, 15)).toBe(false);
+    expect(shouldPrefetchGallery(12, 15)).toBe(true);
+    expect(shouldPrefetchGallery(14, 15)).toBe(true);
+    expect(shouldPrefetchGallery(0, 3)).toBe(true);
+    expect(shouldPrefetchGallery(0, 0)).toBe(false);
+  });
+
+  it('shouldShowGalleryEnd only on the last plane after Instant has no next page', () => {
+    const base = {
+      canLoadNextPage: false,
+      isLoadingMore: false,
+      loadMoreError: false,
+      length: 20,
+    };
+    expect(shouldShowGalleryEnd({ ...base, currentIndex: 0 })).toBe(false);
+    expect(shouldShowGalleryEnd({ ...base, currentIndex: 18 })).toBe(false);
+    expect(shouldShowGalleryEnd({ ...base, currentIndex: 19 })).toBe(true);
+    expect(shouldShowGalleryEnd({ ...base, canLoadNextPage: true, currentIndex: 19 })).toBe(false);
+    expect(shouldShowGalleryEnd({ ...base, isLoadingMore: true, currentIndex: 19 })).toBe(false);
+    expect(shouldShowGalleryEnd({ ...base, loadMoreError: true, currentIndex: 19 })).toBe(false);
+  });
+
+  it('galleryRenderWindow stays within radius 2 of the live pair', () => {
+    expect(galleryRenderWindow(0, 1, 30)).toEqual({ from: 0, to: 3 });
+    expect(galleryRenderWindow(10, 11, 30)).toEqual({ from: 8, to: 13 });
+    expect(galleryRenderWindow(29, 29, 30)).toEqual({ from: 27, to: 29 });
+    const ids = galleryWindowPostIds(
+      Array.from({ length: 10 }, (_, i) => ({ id: `p${i}` })),
+      0,
+      1,
+    );
+    expect(ids).toEqual(['p0', 'p1', 'p2', 'p3']);
   });
 });
 

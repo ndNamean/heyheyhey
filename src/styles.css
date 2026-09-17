@@ -459,6 +459,13 @@ textarea { min-height: 88px; resize: vertical; }
   margin: 8px 0 16px;
 }
 
+.community-feed-sentinel {
+  width: 100%;
+  height: 1px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .community-card {
   background: var(--card-bg);
   border: 1px solid var(--card-border);
@@ -1003,6 +1010,48 @@ textarea { min-height: 88px; resize: vertical; }
   user-select: none;
 }
 
+.community-depth-text-card {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 12px;
+  box-sizing: border-box;
+  padding: 28px 22px;
+  overflow: hidden;
+  opacity: 0;
+  transform-origin: center center;
+  backface-visibility: hidden;
+  will-change: opacity, transform;
+  user-select: none;
+}
+
+.community-depth-text-card--on-light {
+  color: #1a1a1a;
+}
+
+.community-depth-text-card--on-dark {
+  color: #fff;
+}
+
+.community-depth-text-body {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: hidden;
+}
+
+.community-depth-text-file {
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.3;
+  word-break: break-word;
+  opacity: 0.88;
+}
+
 .community-depth-ornaments,
 .community-depth-reacts,
 .community-depth-below {
@@ -1272,6 +1321,39 @@ textarea { min-height: 88px; resize: vertical; }
 
 .community-depth-close[data-theme='on-dark'] {
   color: #fff;
+}
+
+.community-depth-status {
+  position: absolute;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-width: min(90vw, 420px);
+  padding: 8px 14px;
+  border-radius: var(--radius-btn);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(0, 0, 0, 0.32);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.3;
+  text-align: center;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.community-depth-status-retry {
+  pointer-events: auto;
+  font: inherit;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: var(--radius-btn);
+  padding: 6px 12px;
+  cursor: pointer;
 }
 
 .card.report-card--highlight {
