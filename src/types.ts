@@ -1187,7 +1187,7 @@ export interface CommunityPost {
   >;
 }
 
-/** InstantDB communityComments — text only; parentId '' = top-level. */
+/** InstantDB communityComments — text and/or GIF content; parentId '' = top-level. */
 export interface CommunityComment {
   id: string;
   postId: string;
@@ -1197,6 +1197,14 @@ export interface CommunityComment {
   authorNameSnapshot: string;
   authorRoleSnapshot: string;
   body: string;
+  /** GIF as comment/reply content (not a reaction). Omitted/'' on text-only rows. */
+  giphyId?: string;
+  giphyKind?: string;
+  giphyTitle?: string;
+  giphyWidth?: string;
+  giphyHeight?: string;
+  giphyUrl?: string;
+  giphyPreviewUrl?: string;
   createdAt: string;
   status: CommunityPostStatus | string;
   deletedAt: string;
@@ -1212,7 +1220,7 @@ export interface CommunityReaction {
   id: string;
   postId: string;
   userId: string;
-  /** '' on post reactions; reserved for later comment reactions (not in UI). */
+  /** '' on post reactions; comment/reply id when reacting to that comment. */
   commentId: string;
   reactionType: StoreChatReactionType | string;
   unicode: string;

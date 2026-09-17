@@ -3,6 +3,7 @@ import { id } from '@instantdb/react';
 import { db } from '../../db';
 import { useLang } from '../../i18n';
 import { applyCounterDelta, uniqueReactorDelta } from '../../lib/communityCounters';
+import { commentReactions, postReactions } from '../../lib/communityReactions';
 import { isGiphyConfigured, type GiphyMediaItem } from '../../lib/giphyClient';
 import {
   QUICK_UNICODE_REACTIONS,
@@ -25,11 +26,11 @@ const GiphyPicker = lazy(() =>
 
 const reactionLocks = new Set<string>();
 
-function asChatReaction(row: CommunityReaction): ChatReaction {
+function asChatReaction(row: CommunityReaction, messageId: string): ChatReaction {
   return {
     id: row.id,
     storeId: '',
-    messageId: row.postId,
+    messageId,
     userId: row.userId,
     reactionType: row.reactionType,
     unicode: row.unicode,
@@ -43,10 +44,6 @@ function asChatReaction(row: CommunityReaction): ChatReaction {
   };
 }
 
-function postReactions(rows: CommunityReaction[], postId: string): CommunityReaction[] {
-  return rows.filter((row) => row.postId === postId && !(row.commentId || '').trim());
-}
-
 const EMPTY_PROFILES = new Map<string, AvatarProfileFields>();
 
 interface Props {
@@ -54,6 +51,8 @@ interface Props {
   reactions: CommunityReaction[];
   userId: string;
   reactorProfiles?: ReadonlyMap<string, AvatarProfileFields>;
+  /** '' = post reactions (default). Nonempty = that comment/reply. */
+  commentId?: string;
 }
 
 export default function CommunityReactions({
@@ -61,6 +60,7 @@ export default function CommunityReactions({
   reactions,
   userId,
   reactorProfiles = EMPTY_PROFILES,
+  commentId = '',
 }: Props) {
   const { t } = useLang();
   const sc = t.storeChat;
@@ -69,19 +69,25 @@ export default function CommunityReactions({
   const [error, setError] = useState<string | null>(null);
   const giphyBtnRef = useRef<HTMLButtonElement>(null);
   const giphyConfigured = isGiphyConfigured();
+  const scopedCommentId = (commentId || '').trim();
+  const isCommentScope = Boolean(scopedCommentId);
+  const identityMessageId = isCommentScope ? scopedCommentId : post.id;
 
-  const existing = postReactions(reactions, post.id);
-  const asChat = existing.map(asChatReaction);
+  const existing = isCommentScope
+    ? commentReactions(reactions, post.id, scopedCommentId)
+    : postReactions(reactions, post.id);
+  const asChat = existing.map((row) => asChatReaction(row, identityMessageId));
   const unicodeGroups = groupUnicodeReactions(asChat, userId);
   const giphyGroups = groupGiphyReactions(asChat, userId);
   const hasReactions = unicodeGroups.length > 0 || giphyGroups.length > 0;
+  const scopeLock = isCommentScope ? `comment:${scopedCommentId}` : `post:${post.id}`;
 
   async function applyUnicode(unicode: string) {
     if (!userId) return;
     let decision;
     try {
       decision = resolveUnicodeReactionToggle(asChat, {
-        messageId: post.id,
+        messageId: identityMessageId,
         userId,
         unicode,
       });
@@ -96,7 +102,7 @@ export default function CommunityReactions({
     let decision;
     try {
       decision = resolveGiphyReactionToggle(asChat, {
-        messageId: post.id,
+        messageId: identityMessageId,
         userId,
         giphyId,
         item,
@@ -111,36 +117,45 @@ export default function CommunityReactions({
     decision: ReturnType<typeof resolveUnicodeReactionToggle> | ReturnType<typeof resolveGiphyReactionToggle>,
     existingRows: CommunityReaction[],
   ) {
-    if (reactionLocks.has(decision.identityKey) || reactionLocks.has(`post:${post.id}`)) return;
+    if (reactionLocks.has(decision.identityKey) || reactionLocks.has(scopeLock)) return;
     reactionLocks.add(decision.identityKey);
-    reactionLocks.add(`post:${post.id}`);
+    reactionLocks.add(scopeLock);
     setError(null);
-    const delta = uniqueReactorDelta(existingRows, userId, decision.action);
-    const uniqueReactorCount = applyCounterDelta(post.uniqueReactorCount, delta);
     const lastActivityAt = nowIso();
     try {
       if (decision.action === 'add') {
         const reactionId = id();
-        await db.transact([
-          db.tx.communityReactions[reactionId]
-            .update({
-              postId: post.id,
-              userId: decision.payload.userId,
-              commentId: '',
-              reactionType: decision.payload.reactionType,
-              unicode: decision.payload.unicode,
-              giphyId: decision.payload.giphyId,
-              giphyKind: decision.payload.giphyKind,
-              giphyTitle: decision.payload.giphyTitle,
-              giphyUrl: decision.payload.giphyUrl,
-              giphyPreviewUrl: decision.payload.giphyPreviewUrl,
-              createdAt: lastActivityAt,
-              clientMutationId: decision.clientMutationId,
-            })
-            .link({ post: post.id }),
-          db.tx.communityPosts[post.id].update({ uniqueReactorCount, lastActivityAt }),
-        ]);
+        const reactionTx = db.tx.communityReactions[reactionId]
+          .update({
+            postId: post.id,
+            userId: decision.payload.userId,
+            commentId: isCommentScope ? scopedCommentId : '',
+            reactionType: decision.payload.reactionType,
+            unicode: decision.payload.unicode,
+            giphyId: decision.payload.giphyId,
+            giphyKind: decision.payload.giphyKind,
+            giphyTitle: decision.payload.giphyTitle,
+            giphyUrl: decision.payload.giphyUrl,
+            giphyPreviewUrl: decision.payload.giphyPreviewUrl,
+            createdAt: lastActivityAt,
+            clientMutationId: decision.clientMutationId,
+          })
+          .link({ post: post.id });
+        if (isCommentScope) {
+          await db.transact([reactionTx]);
+        } else {
+          const delta = uniqueReactorDelta(existingRows, userId, decision.action);
+          const uniqueReactorCount = applyCounterDelta(post.uniqueReactorCount, delta);
+          await db.transact([
+            reactionTx,
+            db.tx.communityPosts[post.id].update({ uniqueReactorCount, lastActivityAt }),
+          ]);
+        }
+      } else if (isCommentScope) {
+        await db.transact([db.tx.communityReactions[decision.reactionId].delete()]);
       } else {
+        const delta = uniqueReactorDelta(existingRows, userId, decision.action);
+        const uniqueReactorCount = applyCounterDelta(post.uniqueReactorCount, delta);
         await db.transact([
           db.tx.communityReactions[decision.reactionId].delete(),
           db.tx.communityPosts[post.id].update({ uniqueReactorCount, lastActivityAt }),
@@ -150,12 +165,12 @@ export default function CommunityReactions({
       setError(err instanceof Error ? err.message : 'Could not update reaction. Try again.');
     } finally {
       reactionLocks.delete(decision.identityKey);
-      reactionLocks.delete(`post:${post.id}`);
+      reactionLocks.delete(scopeLock);
     }
   }
 
   return (
-    <div className="community-reactions">
+    <div className={`community-reactions${isCommentScope ? ' community-reactions--comment' : ''}`}>
       {hasReactions ? (
         <div className="fa-msg-reactions" role="group" aria-label={sc.reactions}>
           {unicodeGroups.map((group) => {

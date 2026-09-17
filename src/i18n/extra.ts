@@ -1665,6 +1665,11 @@ export const sectionsEn = {
     closeGallery: 'Close gallery',
     backToPost: 'Go back to post',
     galleryLabel: 'Photo gallery',
+    addCommentGif: 'Add GIF',
+    removeCommentGif: 'Remove GIF',
+    commentGifPreview: 'GIF preview',
+    commentGifReady: 'Ready to send — tap Send when ready',
+    commentGifUnavailable: 'GIF unavailable',
   },
 };
 
@@ -3233,6 +3238,11 @@ export const sectionsVi = {
     closeGallery: 'Đóng thư viện',
     backToPost: 'Về bài viết',
     galleryLabel: 'Thư viện ảnh',
+    addCommentGif: 'Thêm GIF',
+    removeCommentGif: 'Gỡ GIF',
+    commentGifPreview: 'Xem trước GIF',
+    commentGifReady: 'Sẵn sàng gửi — nhấn Gửi khi sẵn sàng',
+    commentGifUnavailable: 'GIF không dùng được',
   },
 };
 

@@ -4,6 +4,9 @@
  */
 
 import type { AvatarProfileFields } from '../../../lib/avatarDisplay';
+import { commentGiphyDisplayUrl } from '../../../lib/communityCommentGiphy';
+import { isPostReaction } from '../../../lib/communityReactionPeople';
+import { commentReactions } from '../../../lib/communityReactions';
 import { giphyReactionDisplayUrl } from '../../../lib/storeChatReactions';
 import type { CommunityComment, CommunityPost, CommunityReaction } from '../../../types';
 import { clamp } from './galleryLayers';
@@ -12,6 +15,7 @@ import { hashPostId } from './communityGalleryMoods';
 export const GALLERY_ORNAMENT_REACTION_CAP = 8;
 export const GALLERY_ORNAMENT_COMMENT_CAP = 6;
 export const GALLERY_ORNAMENT_TEXT_CHARS = 48;
+export const GALLERY_COMMENT_REACTION_BADGE_CAP = 3;
 
 /** Top hemisphere, clockwise from east (CSS y-down). */
 export const REACTION_ANGLE_MIN = 200;
@@ -60,10 +64,19 @@ export type GalleryReactionOrnament = PolarSlot & {
   profile: AvatarProfileFields;
 };
 
+export type GalleryCommentReactionBadge = {
+  key: string;
+  unicode: string;
+  giphyUrl: string;
+};
+
 export type GalleryCommentOrnament = PolarSlot & {
   id: string;
   name: string;
   body: string;
+  /** GIF-as-content thumb; only when the pill has no text. Not a reaction badge. */
+  contentGiphyUrl: string;
+  reactionBadges: GalleryCommentReactionBadge[];
   profile: AvatarProfileFields;
 };
 
@@ -204,9 +217,9 @@ function hashedPolar(
   };
 }
 
-function isPostReaction(row: CommunityReaction, postId: string): boolean {
+function isDisplayablePostReaction(row: CommunityReaction, postId: string): boolean {
   if ((row.postId || '') !== postId) return false;
-  if ((row.commentId || '').trim()) return false;
+  if (!isPostReaction(row)) return false;
   const unicode = (row.unicode || '').trim();
   const giphyUrl = giphyReactionDisplayUrl(row);
   return Boolean(unicode || giphyUrl);
@@ -217,7 +230,7 @@ export function selectGalleryReactions(
   postId: string,
 ): CommunityReaction[] {
   return reactions
-    .filter((row) => isPostReaction(row, postId))
+    .filter((row) => isDisplayablePostReaction(row, postId))
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
     .slice(0, GALLERY_ORNAMENT_REACTION_CAP);
 }
@@ -234,6 +247,49 @@ export function selectGalleryComments(
     })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
     .slice(0, GALLERY_ORNAMENT_COMMENT_CAP);
+}
+
+/** Top 1–3 reaction groups on a comment pill: count desc, then latest createdAt desc. */
+export function selectCommentReactionBadges(
+  reactions: CommunityReaction[],
+  postId: string,
+  commentId: string,
+): GalleryCommentReactionBadge[] {
+  const groups = new Map<
+    string,
+    { unicode: string; giphyUrl: string; count: number; latest: string }
+  >();
+  for (const row of commentReactions(reactions, postId, commentId)) {
+    const unicode = (row.unicode || '').trim();
+    const giphyId = (row.giphyId || '').trim();
+    const giphyUrl = giphyReactionDisplayUrl(row);
+    if (!unicode && !giphyUrl) continue;
+    const key = unicode ? `unicode:${unicode}` : `giphy:${giphyId || giphyUrl}`;
+    const existing = groups.get(key);
+    const created = row.createdAt || '';
+    if (!existing) {
+      groups.set(key, { unicode, giphyUrl, count: 1, latest: created });
+      continue;
+    }
+    existing.count += 1;
+    if (created.localeCompare(existing.latest) > 0) {
+      existing.latest = created;
+      if (giphyUrl) existing.giphyUrl = giphyUrl;
+    }
+  }
+  return [...groups.entries()]
+    .sort((a, b) => {
+      if (b[1].count !== a[1].count) return b[1].count - a[1].count;
+      const recency = b[1].latest.localeCompare(a[1].latest);
+      if (recency !== 0) return recency;
+      return a[0].localeCompare(b[0]);
+    })
+    .slice(0, GALLERY_COMMENT_REACTION_BADGE_CAP)
+    .map(([key, group]) => ({
+      key,
+      unicode: group.unicode,
+      giphyUrl: group.giphyUrl,
+    }));
 }
 
 export function authorOrnamentFields(
@@ -316,11 +372,14 @@ export function buildGalleryOrnamentLayout(input: {
       COMMENT_RADIUS_MAX,
     );
     const profile = commentOrnamentProfile(row);
+    const body = truncateOrnamentText(row.body || '');
     return {
       ...polar,
       id: row.id,
       name: profile.displayName,
-      body: truncateOrnamentText(row.body || ''),
+      body,
+      contentGiphyUrl: body ? '' : commentGiphyDisplayUrl(row),
+      reactionBadges: selectCommentReactionBadges(input.reactions, post.id, row.id),
       profile,
     };
   });

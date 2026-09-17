@@ -131,6 +131,87 @@ describe('CommunityDepthOrnaments', () => {
     expect(innerLeft !== restLeft || innerTop !== restTop).toBe(true);
   });
 
+  it('shows a GIF-content thumb on GIF-only comment pills, not on the post reaction arc', () => {
+    const { container } = render(
+      <CommunityDepthOrnaments
+        post={post()}
+        reactions={[
+          reaction({
+            id: 'r-gif',
+            reactionType: 'giphy',
+            unicode: '',
+            giphyId: 'rxn',
+            giphyUrl: 'https://media.giphy.com/media/rxn/200.gif',
+          }),
+        ]}
+        comments={[
+          comment({
+            id: 'c-gif',
+            authorNameSnapshot: 'Minh',
+            body: '',
+            giphyId: 'body-gif',
+            giphyPreviewUrl: 'https://media.giphy.com/media/body-gif/100.gif',
+            giphyUrl: 'https://media.giphy.com/media/body-gif/200.gif',
+          }),
+        ]}
+        reactorProfiles={new Map()}
+      />,
+    );
+    expect(container.querySelector('.community-depth-react-giphy')?.getAttribute('src')).toContain(
+      'rxn/200.gif',
+    );
+    const thumb = container.querySelector('.community-depth-comment-giphy') as HTMLImageElement | null;
+    expect(thumb?.src).toContain('body-gif/100.gif');
+    expect(container.querySelector('.community-depth-comment-body')).toBeNull();
+  });
+
+  it('renders up to 3 reaction badges on the comment pill without a count or click target', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
+    expect(css).toContain('.community-depth-gallery .community-depth-comment-badges');
+    expect(css).toContain('flex-basis: 100%');
+    expect(css).toContain('white-space: nowrap');
+
+    const { container } = render(
+      <CommunityDepthOrnaments
+        post={post()}
+        reactions={[
+          reaction({ id: 'post-arc', unicode: '😮' }),
+          reaction({ id: 'b1', commentId: 'c-gif', unicode: '❤️', userId: 'u1' }),
+          reaction({ id: 'b2', commentId: 'c-gif', unicode: '❤️', userId: 'u2' }),
+          reaction({
+            id: 'b3',
+            commentId: 'c-gif',
+            reactionType: 'giphy',
+            unicode: '',
+            giphyId: 'badge-gif',
+            giphyUrl: 'https://media.giphy.com/media/badge-gif/200.gif',
+          }),
+        ]}
+        comments={[
+          comment({
+            id: 'c-gif',
+            authorNameSnapshot: 'Minh',
+            body: '',
+            giphyId: 'body-gif',
+            giphyPreviewUrl: 'https://media.giphy.com/media/body-gif/100.gif',
+            giphyUrl: 'https://media.giphy.com/media/body-gif/200.gif',
+          }),
+        ]}
+        reactorProfiles={new Map()}
+      />,
+    );
+    expect(container.querySelector('.community-depth-react-emoji')?.textContent).toBe('😮');
+    expect(container.querySelector('.community-depth-comment-badge-emoji')?.textContent).toBe('❤️');
+    expect(container.querySelector('.community-depth-comment-badge-giphy')?.getAttribute('src')).toContain(
+      'badge-gif',
+    );
+    expect(container.querySelector('.community-depth-comment-giphy')?.getAttribute('src')).toContain(
+      'body-gif/100.gif',
+    );
+    expect(container.querySelector('.community-depth-comment-badge-count')).toBeNull();
+    expect(container.querySelectorAll('button')).toHaveLength(0);
+  });
+
   it('omits the reaction band when a post has no reactions but still shows the author', () => {
     const { container } = render(
       <CommunityDepthOrnaments

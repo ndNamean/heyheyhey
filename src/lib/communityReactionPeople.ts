@@ -1,6 +1,11 @@
 import type { AvatarProfileFields } from './avatarDisplay';
 import type { CommunityReaction } from '../types';
 
+/** Post reactions persist commentId as ''. Comment reactions are a nonempty comment id. */
+export function isPostReaction(row: Pick<CommunityReaction, 'commentId'>): boolean {
+  return !(row.commentId || '').trim();
+}
+
 export function uniqueReactionUserIds(rows: CommunityReaction[]): string[] {
   const seen = new Set<string>();
   for (const row of rows) {

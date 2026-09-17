@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   indexProfilesByUserId,
+  isPostReaction,
   reactionPersonLabel,
   reactionWhoNames,
   uniqueReactionUserIds,
@@ -22,6 +23,14 @@ function reaction(userId: string, id = userId): CommunityReaction {
     clientMutationId: id,
   };
 }
+
+describe('isPostReaction', () => {
+  it('treats only empty commentId as a post reaction', () => {
+    expect(isPostReaction(reaction('a'))).toBe(true);
+    expect(isPostReaction({ ...reaction('a'), commentId: '   ' })).toBe(true);
+    expect(isPostReaction({ ...reaction('a'), commentId: 'c1' })).toBe(false);
+  });
+});
 
 describe('uniqueReactionUserIds', () => {
   it('returns sorted unique ids and skips blanks', () => {

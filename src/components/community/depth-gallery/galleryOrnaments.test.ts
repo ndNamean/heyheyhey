@@ -7,8 +7,10 @@ import {
   COMMENT_AUTHOR_GAP_MIN,
   COMMENT_RADIUS_MAX,
   COMMENT_RADIUS_MIN,
+  GALLERY_COMMENT_REACTION_BADGE_CAP,
   GALLERY_ORNAMENT_COMMENT_CAP,
   GALLERY_ORNAMENT_REACTION_CAP,
+  GALLERY_ORNAMENT_TEXT_CHARS,
   INNER_RADIUS_MAX,
   INNER_RADIUS_MIN,
   REACTION_ANGLE_MAX,
@@ -22,6 +24,7 @@ import {
   polarPercent,
   selectGalleryComments,
   selectGalleryReactions,
+  selectCommentReactionBadges,
   settleReveal,
   spaceArcAngles,
   spaceCommentRestAngles,
@@ -227,6 +230,118 @@ describe('caps and filters', () => {
     const long = 'abcdefghijklmnopqrstuvwxyz 1234567890 plus extra words';
     expect(truncateOrnamentText(long)).toHaveLength(48);
     expect(truncateOrnamentText(long).endsWith('…')).toBe(true);
+  });
+
+  it('shows a GIF-content thumb on GIF-only pills and keeps text for text+GIF', () => {
+    const layout = buildGalleryOrnamentLayout({
+      post: post(),
+      reactions: [
+        reaction({
+          id: 'post-rxn',
+          createdAt: '2026-09-01T00:00:00.000Z',
+          reactionType: 'giphy',
+          unicode: '',
+          giphyId: 'rxn-gif',
+          giphyUrl: 'https://media.giphy.com/media/rxn-gif/200.gif',
+        }),
+      ],
+      comments: [
+        comment({
+          id: 'gif-only',
+          body: '',
+          createdAt: '2026-09-08T00:00:00.000Z',
+          giphyId: 'body-gif',
+          giphyUrl: 'https://media.giphy.com/media/body-gif/200.gif',
+          giphyPreviewUrl: 'https://media.giphy.com/media/body-gif/100.gif',
+        }),
+        comment({
+          id: 'text-gif',
+          body: 'caption with gif',
+          createdAt: '2026-09-07T00:00:00.000Z',
+          giphyId: 'body-gif-2',
+          giphyUrl: 'https://media.giphy.com/media/body-gif-2/200.gif',
+        }),
+      ],
+      reactorProfiles: new Map(),
+    });
+    const gifOnly = layout.comments.find((row) => row.id === 'gif-only');
+    const textGif = layout.comments.find((row) => row.id === 'text-gif');
+    expect(gifOnly?.body).toBe('');
+    expect(gifOnly?.contentGiphyUrl).toBe('https://media.giphy.com/media/body-gif/100.gif');
+    expect(textGif?.body).toBe('caption with gif');
+    expect(textGif?.contentGiphyUrl).toBe('');
+    expect(layout.reactions.some((row) => row.id === 'post-rxn')).toBe(true);
+    expect(layout.reactions.some((row) => row.giphyUrl.includes('body-gif'))).toBe(false);
+    expect(layout.comments).toHaveLength(2);
+  });
+
+  it('attaches 1–3 comment-scoped badges by count then recency, not post or reply reactions', () => {
+    const comments = [
+      comment({ id: 'c-pill', createdAt: '2026-09-08T00:00:00.000Z' }),
+      comment({
+        id: 'c-reply',
+        parentId: 'c-pill',
+        createdAt: '2026-09-09T00:00:00.000Z',
+      }),
+    ];
+    const reactions = [
+      reaction({ id: 'post-arc', unicode: '😮', createdAt: '2026-09-10T00:00:00.000Z' }),
+      reaction({
+        id: 'heart-1',
+        commentId: 'c-pill',
+        unicode: '❤️',
+        userId: 'u1',
+        createdAt: '2026-09-01T00:00:00.000Z',
+      }),
+      reaction({
+        id: 'heart-2',
+        commentId: 'c-pill',
+        unicode: '❤️',
+        userId: 'u2',
+        createdAt: '2026-09-04T00:00:00.000Z',
+      }),
+      reaction({
+        id: 'laugh',
+        commentId: 'c-pill',
+        unicode: '😂',
+        createdAt: '2026-09-05T00:00:00.000Z',
+      }),
+      reaction({
+        id: 'pray',
+        commentId: 'c-pill',
+        unicode: '🙏',
+        createdAt: '2026-09-06T00:00:00.000Z',
+      }),
+      reaction({
+        id: 'fire',
+        commentId: 'c-pill',
+        unicode: '🔥',
+        createdAt: '2026-09-07T00:00:00.000Z',
+      }),
+      reaction({
+        id: 'reply-only',
+        commentId: 'c-reply',
+        unicode: '👍',
+        createdAt: '2026-09-08T00:00:00.000Z',
+      }),
+    ];
+    const badges = selectCommentReactionBadges(reactions, 'post-a', 'c-pill');
+    expect(badges).toHaveLength(GALLERY_COMMENT_REACTION_BADGE_CAP);
+    expect(badges.map((row) => row.unicode)).toEqual(['❤️', '🔥', '🙏']);
+    expect(truncateOrnamentText('x'.repeat(80)).length).toBe(GALLERY_ORNAMENT_TEXT_CHARS);
+
+    const layout = buildGalleryOrnamentLayout({
+      post: post(),
+      reactions,
+      comments,
+      reactorProfiles: new Map(),
+    });
+    expect(layout.comments).toHaveLength(1);
+    expect(layout.comments[0].id).toBe('c-pill');
+    expect(layout.comments[0].reactionBadges.map((row) => row.unicode)).toEqual(['❤️', '🔥', '🙏']);
+    expect(layout.comments[0].body.length).toBeLessThanOrEqual(GALLERY_ORNAMENT_TEXT_CHARS);
+    expect(layout.reactions.map((row) => row.id)).toEqual(['post-arc']);
+    expect(layout.reactions.some((row) => row.unicode === '❤️')).toBe(false);
   });
 });
 

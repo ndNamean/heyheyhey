@@ -826,7 +826,15 @@ const _schema = i.schema({
       authorProfileId: i.string().indexed(),
       authorNameSnapshot: i.string(),
       authorRoleSnapshot: i.string(),
-      body: i.string(),
+      body: i.string(), // may be '' when GIF-only (perms require body and/or giphyId)
+      // GIF as comment/reply content (not a reaction). '' on text-only rows.
+      giphyId: i.string().clientRequired(),
+      giphyKind: i.string().clientRequired(), // 'gif' | 'sticker' | 'meme' | 'emoji' | ''
+      giphyTitle: i.string().clientRequired(),
+      giphyWidth: i.string().clientRequired(),
+      giphyHeight: i.string().clientRequired(),
+      giphyUrl: i.string().clientRequired(),
+      giphyPreviewUrl: i.string().clientRequired(),
       createdAt: i.string().indexed(),
       status: i.string().indexed(), // 'active' | 'hidden' | 'deleted'
       deletedAt: i.string().clientRequired(), // '' = not deleted
@@ -834,11 +842,11 @@ const _schema = i.schema({
     }),
 
     // Same payload as chat reactions, keyed by postId + userId (not storeId/roomId).
-    // commentId is '' on post reactions so comment reactions can be added later.
+    // commentId is '' on post reactions; comment/reply id on comment reactions.
     communityReactions: i.entity({
       postId: i.string().indexed(),
       userId: i.string().indexed(), // auth.id — ownership for rules
-      commentId: i.string().clientRequired(), // '' on posts; reserved for comment reactions
+      commentId: i.string().clientRequired(), // '' on posts; comment/reply id on comment reactions
       reactionType: i.string(), // 'unicode' | 'giphy'
       unicode: i.string().clientRequired(), // emoji; '' when giphy
       giphyId: i.string().clientRequired(), // '' when unicode

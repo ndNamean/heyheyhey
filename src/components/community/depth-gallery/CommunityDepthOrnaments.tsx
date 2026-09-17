@@ -77,8 +77,37 @@ export default function CommunityDepthOrnaments({
           <div key={row.id} className="community-depth-comment" style={slotStyle(row)}>
             <ProfileAvatar profile={row.profile} size={AVATAR_PX} />
             <div className="community-depth-comment-text">
-              <div className="community-depth-comment-name">{row.name}</div>
-              {row.body ? <div className="community-depth-comment-body">{row.body}</div> : null}
+              <div className="community-depth-comment-copy">
+                <div className="community-depth-comment-name">{row.name}</div>
+                {row.body ? <div className="community-depth-comment-body">{row.body}</div> : null}
+                {row.contentGiphyUrl ? (
+                  <img
+                    className="community-depth-comment-giphy"
+                    src={row.contentGiphyUrl}
+                    alt=""
+                    draggable={false}
+                  />
+                ) : null}
+              </div>
+              {row.reactionBadges.length ? (
+                <div className="community-depth-comment-badges">
+                  {row.reactionBadges.map((badge) =>
+                    badge.giphyUrl ? (
+                      <img
+                        key={badge.key}
+                        className="community-depth-comment-badge-giphy"
+                        src={badge.giphyUrl}
+                        alt=""
+                        draggable={false}
+                      />
+                    ) : (
+                      <span key={badge.key} className="community-depth-comment-badge-emoji">
+                        {badge.unicode}
+                      </span>
+                    ),
+                  )}
+                </div>
+              ) : null}
             </div>
           </div>
         ))}

@@ -98,7 +98,13 @@ export default function CommunityPostDetail({
               onFamousToggle={onFamousToggle}
               onFamousCast={onFamousCast}
             />
-            <CommunityComments post={post} comments={comments} profile={profile} />
+            <CommunityComments
+              post={post}
+              comments={comments}
+              profile={profile}
+              reactions={reactions}
+              reactorProfiles={reactorProfiles}
+            />
           </>
         )}
       </div>

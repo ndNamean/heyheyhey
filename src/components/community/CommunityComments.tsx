@@ -1,21 +1,35 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useMemo, useRef, useState, type FormEvent } from 'react';
 import { id } from '@instantdb/react';
 import { db } from '../../db';
 import { useLang } from '../../i18n';
 import { applyCounterDelta, uniqueCommenterDelta } from '../../lib/communityCounters';
+import {
+  COMMENT_MAX_BODY,
+  buildCommunityCommentGiphyPayload,
+  canSendCommunityComment,
+  commentHasGiphyContent,
+} from '../../lib/communityCommentGiphy';
+import { isGiphyConfigured, type GiphyMediaItem } from '../../lib/giphyClient';
 import { isAreaManagerTier, isOwner } from '../../lib/roles';
 import { nowIso } from '../../lib/utils';
-import type { CommunityComment, CommunityPost, Profile } from '../../types';
+import type { CommunityComment, CommunityPost, CommunityReaction, Profile } from '../../types';
 import { MessageBody } from '../floating-assistant/MessageBody';
+import { GiphyMediaPreview } from '../floating-assistant/GiphyMediaPreview';
 import IdentityWithAvatar from '../profileAvatar/IdentityWithAvatar';
 import type { AvatarProfileFields } from '../../lib/avatarDisplay';
+import CommunityCommentGiphy from './CommunityCommentGiphy';
+import CommunityCommentReactions from './CommunityCommentReactions';
 
-const COMMENT_MAX_BODY = 2000;
+const GiphyPicker = lazy(() =>
+  import('../floating-assistant/GiphyPicker').then((m) => ({ default: m.GiphyPicker })),
+);
 
 interface Props {
   post: CommunityPost;
   comments: CommunityComment[];
   profile: Profile;
+  reactions?: CommunityReaction[];
+  reactorProfiles?: ReadonlyMap<string, AvatarProfileFields>;
 }
 
 function commentAvatar(comment: CommunityComment): AvatarProfileFields {
@@ -43,14 +57,24 @@ function threadParentId(comment: CommunityComment, byId: Map<string, CommunityCo
   return grand || parent.id;
 }
 
-export default function CommunityComments({ post, comments, profile }: Props) {
+export default function CommunityComments({
+  post,
+  comments,
+  profile,
+  reactions = [],
+  reactorProfiles,
+}: Props) {
   const { t } = useLang();
   const copy = t.community;
   const [draft, setDraft] = useState('');
+  const [stagedGiphy, setStagedGiphy] = useState<GiphyMediaItem | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [replyToId, setReplyToId] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState('');
+  const giphyBtnRef = useRef<HTMLButtonElement>(null);
+  const giphyConfigured = isGiphyConfigured();
 
   const canModerate = isOwner(profile.role) || isAreaManagerTier(profile.role);
   const byId = useMemo(() => {
@@ -82,11 +106,13 @@ export default function CommunityComments({ post, comments, profile }: Props) {
   const activeComments = comments.filter((row) => isActive(row.status));
   const replyTarget = replyToId ? byId.get(replyToId) : undefined;
   const placeholder = replyTarget ? copy.replyPlaceholder : copy.commentPlaceholder;
+  const canSend = canSendCommunityComment(draft, stagedGiphy);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     const body = draft.trim().slice(0, COMMENT_MAX_BODY);
-    if (!body || sending) return;
+    const giphyFields = buildCommunityCommentGiphyPayload(stagedGiphy);
+    if (!canSendCommunityComment(body, stagedGiphy) || sending) return;
     if (!isActive(post.status)) return;
     setSending(true);
     setError(null);
@@ -111,6 +137,7 @@ export default function CommunityComments({ post, comments, profile }: Props) {
             authorNameSnapshot: profile.displayName || profile.email || 'You',
             authorRoleSnapshot: profile.role || '',
             body,
+            ...giphyFields,
             createdAt,
             status: 'active',
             deletedAt: '',
@@ -124,6 +151,8 @@ export default function CommunityComments({ post, comments, profile }: Props) {
         }),
       ]);
       setDraft('');
+      setStagedGiphy(null);
+      setPickerOpen(false);
       setReplyToId('');
     } catch (err) {
       setError(err instanceof Error ? err.message : copy.commentFailed);
@@ -172,6 +201,7 @@ export default function CommunityComments({ post, comments, profile }: Props) {
     const active = isActive(comment.status);
     const name = comment.authorNameSnapshot?.trim() || comment.author?.displayName || '';
     const isOwn = comment.authorUserId === profile.userId;
+    const body = (comment.body || '').trim();
     if (!active && !canModerate) return null;
     return (
       <li key={comment.id} className={`community-comment${isReply ? ' community-comment--reply' : ''}${active ? '' : ' community-comment--muted'}`}>
@@ -179,7 +209,21 @@ export default function CommunityComments({ post, comments, profile }: Props) {
           <span className="community-comment-name">{name}</span>
         </IdentityWithAvatar>
         {active ? (
-          <MessageBody body={comment.body} candidates={[]} className="community-comment-body" />
+          <>
+            {commentHasGiphyContent(comment) ? (
+              <CommunityCommentGiphy comment={comment} unavailableLabel={copy.commentGifUnavailable} />
+            ) : null}
+            {body ? (
+              <MessageBody body={comment.body} candidates={[]} className="community-comment-body" />
+            ) : null}
+            <CommunityCommentReactions
+              post={post}
+              commentId={comment.id}
+              reactions={reactions}
+              userId={profile.userId}
+              reactorProfiles={reactorProfiles}
+            />
+          </>
         ) : (
           <p className="community-comment-body">
             {comment.status === 'hidden' ? copy.commentHidden : copy.commentDeleted}
@@ -263,11 +307,50 @@ export default function CommunityComments({ post, comments, profile }: Props) {
             disabled={sending}
             onChange={(e) => setDraft(e.target.value.slice(0, COMMENT_MAX_BODY))}
           />
-          <button type="submit" disabled={sending || !draft.trim()}>
-            {sending ? copy.commenting : copy.sendComment}
-          </button>
+          {stagedGiphy ? (
+            <GiphyMediaPreview
+              item={stagedGiphy}
+              onClear={() => setStagedGiphy(null)}
+              className="community-comment-giphy-preview"
+              hint={copy.commentGifReady}
+              removeLabel={copy.removeCommentGif}
+              previewAriaLabel={copy.commentGifPreview}
+            />
+          ) : null}
+          <div className="community-comment-composer-actions">
+            {giphyConfigured ? (
+              <button
+                ref={giphyBtnRef}
+                type="button"
+                className="community-react-btn community-comment-gif-btn"
+                disabled={sending}
+                aria-label={copy.addCommentGif}
+                onClick={() => setPickerOpen(true)}
+              >
+                {copy.addCommentGif}
+              </button>
+            ) : null}
+            <button type="submit" disabled={sending || !canSend}>
+              {sending ? copy.commenting : copy.sendComment}
+            </button>
+          </div>
         </form>
       ) : null}
+
+      {pickerOpen && giphyConfigured ? (
+        <Suspense fallback={null}>
+          <GiphyPicker
+            open={pickerOpen}
+            onClose={() => setPickerOpen(false)}
+            anchorRef={giphyBtnRef}
+            onSelect={(item) => {
+              setStagedGiphy(item);
+              setPickerOpen(false);
+            }}
+          />
+        </Suspense>
+      ) : null}
+
       {error ? <p className="community-card-error">{error}</p> : null}
     </section>
   );

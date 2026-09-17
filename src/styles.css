@@ -880,6 +880,48 @@ textarea { min-height: 88px; resize: vertical; }
   color: inherit;
 }
 
+.community-comment-giphy {
+  margin: 6px 0 8px;
+  max-width: min(100%, 280px);
+}
+
+.community-comment-giphy-img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.community-comment-giphy-fallback {
+  padding: 10px 12px;
+  border: 1px dashed var(--card-border);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.community-comment-giphy-attribution {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.community-comment-composer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.community-comment-giphy-preview {
+  max-width: min(100%, 280px);
+}
+
+.community-reactions--comment {
+  margin: 4px 0 8px;
+}
+
 .community-undo-toast {
   position: fixed;
   left: 50%;
@@ -1112,12 +1154,55 @@ textarea { min-height: 88px; resize: vertical; }
 .community-depth-comment {
   position: absolute;
   width: min(46%, 160px);
+  flex-wrap: wrap;
   transform: translate(-50%, -50%) scale(calc(1.4 + (1.12 - 1.4) * var(--idle, 0)));
 }
 
 .community-depth-author-text,
 .community-depth-comment-text {
   min-width: 0;
+}
+
+.community-depth-comment-text {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.community-depth-comment-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.community-depth-comment-badges {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 2px;
+  align-items: center;
+}
+
+.community-depth-comment-badge-emoji {
+  font-size: 16px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55));
+}
+
+.community-depth-comment-badge-giphy {
+  width: 18px;
+  height: 18px;
+  max-width: 22px;
+  max-height: 22px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+@media (max-width: 480px) {
+  .community-depth-gallery .community-depth-comment-badges {
+    flex-basis: 100%;
+  }
 }
 
 .community-depth-author-name,
@@ -1139,6 +1224,18 @@ textarea { min-height: 88px; resize: vertical; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.community-depth-comment-giphy {
+  display: block;
+  width: 18px;
+  height: 18px;
+  max-width: 22px;
+  max-height: 22px;
+  margin-top: 2px;
+  object-fit: contain;
+  border-radius: 4px;
+  flex: 0 0 auto;
 }
 
 .community-depth-author .avatar-circle,

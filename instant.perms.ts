@@ -970,7 +970,7 @@ const rules = {
     allow: {
       view: "isApproved && (data.status == 'active' || isCommunityModerator)",
       create:
-        "isApproved && isOwnAuthor && isOwnAuthorProfile && postIdValid && data.status == 'active' && bodySizeValid && size(data.body) > 0",
+        "isApproved && isOwnAuthor && isOwnAuthorProfile && postIdValid && data.status == 'active' && bodySizeValid && hasCommentContent && giphyFieldsValid",
       update: 'canAuthorSoftDelete || canModeratorModerate',
       delete: 'false',
       link: {
@@ -989,6 +989,9 @@ const rules = {
       isOwnAuthorProfile: "data.authorProfileId in auth.ref('$user.profile.id')",
       postIdValid: "data.postId != ''",
       bodySizeValid: 'size(data.body) <= 2000',
+      hasCommentContent: "size(data.body) > 0 || size(data.giphyId) > 0",
+      giphyFieldsValid:
+        "data.giphyId == '' || (data.giphyUrl != '' && data.giphyKind in ['gif', 'sticker', 'meme', 'emoji'])",
       onlyDeletedFields:
         "request.modifiedFields.all(f, f in ['deletedAt', 'status'])",
       authorSoftDeleteValid: "newData.status == 'deleted' && newData.deletedAt != ''",
