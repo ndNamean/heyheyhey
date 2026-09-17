@@ -1159,7 +1159,7 @@ textarea { min-height: 88px; resize: vertical; }
 }
 
 .community-depth-comment--giphy {
-  width: min(52%, 184px);
+  width: min(70%, 280px);
   align-items: flex-start;
 }
 
@@ -1233,10 +1233,10 @@ textarea { min-height: 88px; resize: vertical; }
 
 .community-depth-comment-giphy {
   display: block;
-  width: 40px;
-  height: 40px;
-  max-width: 48px;
-  max-height: 48px;
+  width: 120px;
+  height: 120px;
+  max-width: 144px;
+  max-height: 144px;
   margin-top: 2px;
   object-fit: contain;
   border-radius: 6px;

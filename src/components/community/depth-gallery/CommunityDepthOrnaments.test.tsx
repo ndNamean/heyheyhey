@@ -261,8 +261,8 @@ describe('CommunityDepthOrnaments', () => {
       'translate(-50%, calc(10px * (1 - var(--idle, 0)))) scale(calc(1.4 + (1 - 1.4) * var(--idle, 0)))',
     );
     expect(css).toContain('.community-depth-comment--giphy');
-    expect(css).toContain('min(52%, 184px)');
-    expect(css).toMatch(/\.community-depth-comment-giphy \{[\s\S]*?width: 40px;/);
+    expect(css).toContain('min(70%, 280px)');
+    expect(css).toMatch(/\.community-depth-comment-giphy \{[\s\S]*?width: 120px;/);
     expect(css).not.toMatch(/\.community-depth-comment--giphy \{[\s\S]*?scale\(calc\(2\.5/);
   });
 });
