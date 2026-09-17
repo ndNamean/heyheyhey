@@ -74,7 +74,15 @@ export default function CommunityDepthOrnaments({
           </div>
         </div>
         {layout.comments.map((row) => (
-          <div key={row.id} className="community-depth-comment" style={slotStyle(row)}>
+          <div
+            key={row.id}
+            className={
+              row.contentGiphyUrl
+                ? 'community-depth-comment community-depth-comment--giphy'
+                : 'community-depth-comment'
+            }
+            style={slotStyle(row)}
+          >
             <ProfileAvatar profile={row.profile} size={AVATAR_PX} />
             <div className="community-depth-comment-text">
               <div className="community-depth-comment-copy">

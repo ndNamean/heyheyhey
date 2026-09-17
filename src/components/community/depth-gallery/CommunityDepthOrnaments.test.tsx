@@ -117,6 +117,7 @@ describe('CommunityDepthOrnaments', () => {
       'Sunset from the terrace',
     );
     expect(container.querySelector('.community-depth-comment-name')?.textContent).toBe('Minh');
+    expect(container.querySelector('.community-depth-comment--giphy')).toBeNull();
     expect(container.textContent).not.toContain('Hidden reply');
 
     const chip = container.querySelector('.community-depth-react') as HTMLElement;
@@ -162,6 +163,7 @@ describe('CommunityDepthOrnaments', () => {
     );
     const thumb = container.querySelector('.community-depth-comment-giphy') as HTMLImageElement | null;
     expect(thumb?.src).toContain('body-gif/100.gif');
+    expect(container.querySelector('.community-depth-comment--giphy')).toBeTruthy();
     expect(container.querySelector('.community-depth-comment-body')).toBeNull();
   });
 
@@ -184,6 +186,7 @@ describe('CommunityDepthOrnaments', () => {
       />,
     );
     expect(container.querySelector('.community-depth-comment-body')?.textContent).toBe('🐟');
+    expect(container.querySelector('.community-depth-comment--giphy')).toBeTruthy();
     expect(container.querySelector('.community-depth-comment-giphy')?.getAttribute('src')).toContain(
       'body-gif/100.gif',
     );
@@ -257,5 +260,9 @@ describe('CommunityDepthOrnaments', () => {
     expect(css).toContain(
       'translate(-50%, calc(10px * (1 - var(--idle, 0)))) scale(calc(1.4 + (1 - 1.4) * var(--idle, 0)))',
     );
+    expect(css).toContain('.community-depth-comment--giphy');
+    expect(css).toContain('min(52%, 184px)');
+    expect(css).toMatch(/\.community-depth-comment-giphy \{[\s\S]*?width: 40px;/);
+    expect(css).not.toMatch(/\.community-depth-comment--giphy \{[\s\S]*?scale\(calc\(2\.5/);
   });
 });

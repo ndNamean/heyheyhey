@@ -1158,6 +1158,11 @@ textarea { min-height: 88px; resize: vertical; }
   transform: translate(-50%, -50%) scale(calc(1.4 + (1.12 - 1.4) * var(--idle, 0)));
 }
 
+.community-depth-comment--giphy {
+  width: min(52%, 184px);
+  align-items: flex-start;
+}
+
 .community-depth-author-text,
 .community-depth-comment-text {
   min-width: 0;
@@ -1228,13 +1233,13 @@ textarea { min-height: 88px; resize: vertical; }
 
 .community-depth-comment-giphy {
   display: block;
-  width: 18px;
-  height: 18px;
-  max-width: 22px;
-  max-height: 22px;
+  width: 40px;
+  height: 40px;
+  max-width: 48px;
+  max-height: 48px;
   margin-top: 2px;
   object-fit: contain;
-  border-radius: 4px;
+  border-radius: 6px;
   flex: 0 0 auto;
 }
 
