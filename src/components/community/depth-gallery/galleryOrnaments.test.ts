@@ -232,7 +232,7 @@ describe('caps and filters', () => {
     expect(truncateOrnamentText(long).endsWith('…')).toBe(true);
   });
 
-  it('shows a GIF-content thumb on GIF-only pills and keeps text for text+GIF', () => {
+  it('shows a GIF-content thumb on GIF-only and text+GIF pills, never on the post arc', () => {
     const layout = buildGalleryOrnamentLayout({
       post: post(),
       reactions: [
@@ -269,7 +269,7 @@ describe('caps and filters', () => {
     expect(gifOnly?.body).toBe('');
     expect(gifOnly?.contentGiphyUrl).toBe('https://media.giphy.com/media/body-gif/100.gif');
     expect(textGif?.body).toBe('caption with gif');
-    expect(textGif?.contentGiphyUrl).toBe('');
+    expect(textGif?.contentGiphyUrl).toBe('https://media.giphy.com/media/body-gif-2/200.gif');
     expect(layout.reactions.some((row) => row.id === 'post-rxn')).toBe(true);
     expect(layout.reactions.some((row) => row.giphyUrl.includes('body-gif'))).toBe(false);
     expect(layout.comments).toHaveLength(2);

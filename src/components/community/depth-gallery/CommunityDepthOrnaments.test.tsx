@@ -165,6 +165,30 @@ describe('CommunityDepthOrnaments', () => {
     expect(container.querySelector('.community-depth-comment-body')).toBeNull();
   });
 
+  it('shows the attached GIF thumb next to truncated text on text+GIF comment pills', () => {
+    const { container } = render(
+      <CommunityDepthOrnaments
+        post={post()}
+        reactions={[]}
+        comments={[
+          comment({
+            id: 'c-text-gif',
+            authorNameSnapshot: 'Minh',
+            body: '🐟',
+            giphyId: 'body-gif',
+            giphyPreviewUrl: 'https://media.giphy.com/media/body-gif/100.gif',
+            giphyUrl: 'https://media.giphy.com/media/body-gif/200.gif',
+          }),
+        ]}
+        reactorProfiles={new Map()}
+      />,
+    );
+    expect(container.querySelector('.community-depth-comment-body')?.textContent).toBe('🐟');
+    expect(container.querySelector('.community-depth-comment-giphy')?.getAttribute('src')).toContain(
+      'body-gif/100.gif',
+    );
+  });
+
   it('renders up to 3 reaction badges on the comment pill without a count or click target', () => {
     const css = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
     expect(css).toContain('.community-depth-gallery .community-depth-comment-badges');

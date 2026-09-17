@@ -378,7 +378,7 @@ export function buildGalleryOrnamentLayout(input: {
       id: row.id,
       name: profile.displayName,
       body,
-      contentGiphyUrl: body ? '' : commentGiphyDisplayUrl(row),
+      contentGiphyUrl: commentGiphyDisplayUrl(row),
       reactionBadges: selectCommentReactionBadges(input.reactions, post.id, row.id),
       profile,
     };
