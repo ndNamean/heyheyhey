@@ -1,4 +1,4 @@
-export const FEED_VIDEO_MIN_INTERSECTION = 0.6;
+export const FEED_VIDEO_MIN_INTERSECTION = 0.25;
 /** Gallery playback settle only — do not use for ornament/idle zoom. */
 export const GALLERY_PLAYBACK_DWELL_MS = 100;
 export const FRAME_TAP_MOVE_THRESHOLD_PX = 10;

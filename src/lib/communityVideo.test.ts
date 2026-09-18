@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  FEED_VIDEO_MIN_INTERSECTION,
   GALLERY_PLAYBACK_DWELL_MS,
   canAttachVideoSource,
   galleryPlayPostId,
@@ -38,15 +39,21 @@ describe('communityVideo helpers', () => {
 });
 
 describe('communityVideoPlayback', () => {
-  it('picks the largest feed candidate at or above 0.6', () => {
+  it('picks the largest feed candidate at or above 0.25', () => {
+    expect(FEED_VIDEO_MIN_INTERSECTION).toBe(0.25);
     expect(
       pickDominantFeedVideo([
-        { postId: 'a', surface: 'feed', ratio: 0.4 },
-        { postId: 'b', surface: 'feed', ratio: 0.7 },
-        { postId: 'c', surface: 'famous', ratio: 0.65 },
+        { postId: 'a', surface: 'feed', ratio: 0.3 },
+        { postId: 'b', surface: 'feed', ratio: 0.45 },
+        { postId: 'c', surface: 'famous', ratio: 0.4 },
       ]),
-    ).toEqual({ postId: 'b', surface: 'feed', ratio: 0.7 });
-    expect(pickDominantFeedVideo([{ postId: 'a', surface: 'feed', ratio: 0.59 }])).toBeNull();
+    ).toEqual({ postId: 'b', surface: 'feed', ratio: 0.45 });
+    expect(pickDominantFeedVideo([{ postId: 'a', surface: 'feed', ratio: 0.24 }])).toBeNull();
+    expect(pickDominantFeedVideo([{ postId: 'a', surface: 'feed', ratio: 0.25 }])).toEqual({
+      postId: 'a',
+      surface: 'feed',
+      ratio: 0.25,
+    });
   });
 
   it('keeps gallery playback dwell shorter than ornament idle', () => {
