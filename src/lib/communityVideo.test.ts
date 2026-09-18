@@ -1,10 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
+  FEED_VIDEO_SETTLE_MS,
+  GALLERY_PLAYBACK_DWELL_MS,
   canAttachVideoSource,
+  firstAutoplaySoundAttempt,
+  isLowMovementFrameTap,
+  isPlaybackOutputMuted,
   isWindowScrollSettled,
   pickDominantFeedVideo,
   resolvePlaybackToken,
+  shouldAbandonPlayAttempt,
+  shouldAttemptMutedAutoplayFallback,
+  shouldShowTransportPlay,
   shouldWantPlay,
+  soundPolicyAfterTokenChange,
+  soundPolicyAfterUserMuteChange,
 } from './communityVideoPlayback';
 import { isCommunityVideoPost } from './communityVideo';
 
@@ -39,10 +49,123 @@ describe('communityVideoPlayback', () => {
     expect(pickDominantFeedVideo([{ postId: 'a', surface: 'feed', ratio: 0.59 }])).toBeNull();
   });
 
-  it('uses 250ms window-scroll settle', () => {
+  it('uses 120ms window-scroll settle', () => {
+    expect(FEED_VIDEO_SETTLE_MS).toBe(120);
     expect(isWindowScrollSettled(0, 1000)).toBe(true);
-    expect(isWindowScrollSettled(1000, 1200)).toBe(false);
-    expect(isWindowScrollSettled(1000, 1250)).toBe(true);
+    expect(isWindowScrollSettled(1000, 1119)).toBe(false);
+    expect(isWindowScrollSettled(1000, 1120)).toBe(true);
+  });
+
+  it('keeps gallery playback dwell shorter than ornament idle', () => {
+    expect(GALLERY_PLAYBACK_DWELL_MS).toBe(100);
+  });
+
+  it('treats user mute and autoplay-muted fallback as distinct', () => {
+    expect(isPlaybackOutputMuted({ userMuted: false, autoplayMutedFallback: false })).toBe(false);
+    expect(isPlaybackOutputMuted({ userMuted: true, autoplayMutedFallback: false })).toBe(true);
+    expect(isPlaybackOutputMuted({ userMuted: false, autoplayMutedFallback: true })).toBe(true);
+    expect(soundPolicyAfterTokenChange(true)).toEqual({
+      userMuted: true,
+      autoplayMutedFallback: false,
+    });
+    expect(soundPolicyAfterUserMuteChange(false)).toEqual({
+      userMuted: false,
+      autoplayMutedFallback: false,
+    });
+    expect(firstAutoplaySoundAttempt(false)).toBe('unmuted');
+    expect(firstAutoplaySoundAttempt(true)).toBe('muted');
+    expect(firstAutoplaySoundAttempt(false, true)).toBe('muted');
+    expect(
+      shouldAttemptMutedAutoplayFallback({
+        userMuted: false,
+        unmutedRejected: true,
+        mutedFallbackTried: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldAttemptMutedAutoplayFallback({
+        userMuted: false,
+        unmutedRejected: true,
+        mutedFallbackTried: true,
+      }),
+    ).toBe(false);
+    expect(
+      shouldAttemptMutedAutoplayFallback({
+        userMuted: true,
+        unmutedRejected: true,
+        mutedFallbackTried: false,
+      }),
+    ).toBe(false);
+  });
+
+  it('does not show first-view Play merely because wantPlay is false', () => {
+    expect(
+      shouldShowTransportPlay({
+        playRejected: false,
+        error: false,
+        userPaused: false,
+        autoplayRestricted: false,
+        holdsToken: false,
+        wantPlay: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldShowTransportPlay({
+        playRejected: true,
+        error: false,
+        userPaused: false,
+        autoplayRestricted: false,
+        holdsToken: false,
+        wantPlay: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowTransportPlay({
+        playRejected: false,
+        error: false,
+        userPaused: true,
+        autoplayRestricted: false,
+        holdsToken: true,
+        wantPlay: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowTransportPlay({
+        playRejected: false,
+        error: true,
+        userPaused: false,
+        autoplayRestricted: false,
+        holdsToken: true,
+        wantPlay: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowTransportPlay({
+        playRejected: false,
+        error: false,
+        userPaused: false,
+        autoplayRestricted: true,
+        holdsToken: true,
+        wantPlay: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldShowTransportPlay({
+        playRejected: false,
+        error: false,
+        userPaused: false,
+        autoplayRestricted: true,
+        holdsToken: false,
+        wantPlay: false,
+      }),
+    ).toBe(false);
+  });
+
+  it('abandons stale play generations and ignores large pointer movement as taps', () => {
+    expect(shouldAbandonPlayAttempt(2, 1)).toBe(true);
+    expect(shouldAbandonPlayAttempt(1, 1)).toBe(false);
+    expect(isLowMovementFrameTap(0, 0, 6, 6)).toBe(true);
+    expect(isLowMovementFrameTap(0, 0, 40, 0)).toBe(false);
   });
 
   it('lets gallery settled current win over detail and feed', () => {

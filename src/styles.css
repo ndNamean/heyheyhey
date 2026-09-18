@@ -646,6 +646,15 @@ textarea { min-height: 88px; resize: vertical; }
   cursor: pointer;
 }
 
+.community-video-transport {
+  display: none;
+}
+
+.community-video-controls[data-show-transport='true'] .community-video-transport,
+.community-video-controls:focus-within .community-video-transport {
+  display: inline-block;
+}
+
 .community-video-progress {
   flex: 1 1 auto;
   min-width: 0;

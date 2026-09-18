@@ -5,11 +5,20 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
   type SyntheticEvent,
 } from 'react';
 import { useLang } from '../../i18n';
 import { communityVideoAspectRatio } from '../../lib/communityVideo';
-import type { CommunityVideoSurface } from '../../lib/communityVideoPlayback';
+import {
+  firstAutoplaySoundAttempt,
+  isLowMovementFrameTap,
+  isPlaybackOutputMuted,
+  shouldAbandonPlayAttempt,
+  shouldAttemptMutedAutoplayFallback,
+  shouldShowTransportPlay,
+  type CommunityVideoSurface,
+} from '../../lib/communityVideoPlayback';
 import { useCommunityVideoPlayback } from './CommunityVideoPlayback';
 
 export type CommunityVideoPlayerProps = {
@@ -47,6 +56,13 @@ export function CommunityVideoPlayer({
   const canAttach = canAttachOverride ?? playback?.canAttachSource(postId, surface) ?? false;
   const wantPlay = wantPlayOverride ?? playback?.wantPlay(postId, surface) ?? false;
   const userPaused = playback?.isUserPaused(postId, surface) ?? false;
+  const holdsToken = playback?.holdsToken(postId, surface) ?? false;
+  const [localUserMuted, setLocalUserMuted] = useState(false);
+  const userMuted = playback?.userMuted ?? localUserMuted;
+  const autoplayRestricted = playback?.autoplayRestricted ?? false;
+  const [localMutedFallback, setLocalMutedFallback] = useState(false);
+  const autoplayMutedFallback = Boolean(playback?.autoplayMutedFallback) || localMutedFallback;
+  const outputMuted = isPlaybackOutputMuted({ userMuted, autoplayMutedFallback });
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -55,10 +71,17 @@ export function CommunityVideoPlayer({
   const retryOnceRef = useRef(false);
   const progressRafRef = useRef(0);
   const userPlayRef = useRef(false);
-  const [ended, setEnded] = useState(false);
+  const grantPlayStartedRef = useRef(false);
+  const tapPointerRef = useRef<{ id: number; x: number; y: number } | null>(null);
+  const playbackRef = useRef(playback);
+  const userMutedRef = useRef(userMuted);
+  const autoplayMutedFallbackRef = useRef(autoplayMutedFallback);
+  playbackRef.current = playback;
+  userMutedRef.current = userMuted;
+  autoplayMutedFallbackRef.current = autoplayMutedFallback;
   const [playRejected, setPlayRejected] = useState(false);
   const [error, setError] = useState(false);
-  const [muted, setMuted] = useState(true);
+  const [elementPlaying, setElementPlaying] = useState(false);
   const labelId = useId();
 
   const setVideoNode = useCallback(
@@ -77,6 +100,12 @@ export function CommunityVideoPlayer({
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
+    el.muted = outputMuted;
+  }, [outputMuted]);
+
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
     if (canAttach && src) {
       if (el.getAttribute('src') !== src) {
         el.src = src;
@@ -86,6 +115,7 @@ export function CommunityVideoPlayer({
     }
     if (el.getAttribute('src') || el.src) {
       playGenRef.current += 1;
+      grantPlayStartedRef.current = false;
       try {
         el.pause();
       } catch {
@@ -103,15 +133,21 @@ export function CommunityVideoPlayer({
   }, [canAttach, src]);
 
   useEffect(() => {
+    if (!canAttach) setElementPlaying(false);
+  }, [canAttach]);
+
+  useEffect(() => {
     const el = videoRef.current;
     if (!el || !canAttach) return;
-    const shouldPlay = wantPlay && !userPaused && !ended && !error;
+    const shouldPlay = wantPlay && !userPaused && !error;
     if (!shouldPlay) {
-      if (userPlayRef.current && !userPaused && !ended && !error && canAttach) {
+      setLocalMutedFallback(false);
+      if (userPlayRef.current && !userPaused && !error && canAttach) {
         return;
       }
       userPlayRef.current = false;
       playGenRef.current += 1;
+      grantPlayStartedRef.current = false;
       try {
         el.pause();
       } catch {
@@ -119,23 +155,87 @@ export function CommunityVideoPlayer({
       }
       return;
     }
+    if (grantPlayStartedRef.current) return;
+    if (!el.paused && !el.ended) {
+      grantPlayStartedRef.current = true;
+      return;
+    }
+    grantPlayStartedRef.current = true;
     userPlayRef.current = false;
-    if (!el.paused && !el.ended) return;
     playGenRef.current += 1;
     const gen = playGenRef.current;
     setPlayRejected(false);
-    const attempt = el.play();
-    if (attempt && typeof attempt.then === 'function') {
-      void attempt.catch(() => {
-        if (playGenRef.current !== gen) return;
+
+    const abandon = () => shouldAbandonPlayAttempt(playGenRef.current, gen);
+
+    const settle = async (): Promise<boolean> => {
+      const attempt = el.play();
+      if (attempt && typeof attempt.then === 'function') {
+        try {
+          await attempt;
+          if (abandon()) {
+            try {
+              el.pause();
+            } catch {
+              /* ignore */
+            }
+            return false;
+          }
+          return true;
+        } catch {
+          if (abandon()) return false;
+          return false;
+        }
+      }
+      if (abandon()) {
+        try {
+          el.pause();
+        } catch {
+          /* ignore */
+        }
+        return false;
+      }
+      return true;
+    };
+
+    void (async () => {
+      const preferMuted =
+        firstAutoplaySoundAttempt(userMutedRef.current, autoplayMutedFallbackRef.current) ===
+        'muted';
+      if (preferMuted) {
+        el.muted = true;
+        const ok = await settle();
+        if (!ok && !abandon()) setPlayRejected(true);
+        return;
+      }
+      setLocalMutedFallback(false);
+      el.muted = false;
+      const unmutedOk = await settle();
+      if (abandon()) return;
+      if (unmutedOk) return;
+      if (
+        !shouldAttemptMutedAutoplayFallback({
+          userMuted: userMutedRef.current,
+          unmutedRejected: true,
+          mutedFallbackTried: false,
+        })
+      ) {
         setPlayRejected(true);
-      });
-    }
-  }, [canAttach, ended, error, userPaused, wantPlay]);
+        return;
+      }
+      setLocalMutedFallback(true);
+      playbackRef.current?.markAutoplayMutedFallback();
+      el.muted = true;
+      const mutedOk = await settle();
+      if (abandon()) return;
+      if (!mutedOk) setPlayRejected(true);
+    })();
+  }, [canAttach, error, userPaused, wantPlay]);
 
   useEffect(
     () => () => {
       playGenRef.current += 1;
+      grantPlayStartedRef.current = false;
       if (progressRafRef.current) cancelAnimationFrame(progressRafRef.current);
       const el = videoRef.current;
       if (!el) return;
@@ -173,10 +273,12 @@ export function CommunityVideoPlayer({
       }
     };
     const onPlay = () => {
+      setElementPlaying(true);
       if (progressRafRef.current) cancelAnimationFrame(progressRafRef.current);
       progressRafRef.current = requestAnimationFrame(tick);
     };
     const onPause = () => {
+      setElementPlaying(false);
       if (progressRafRef.current) cancelAnimationFrame(progressRafRef.current);
       syncProgress();
     };
@@ -190,17 +292,6 @@ export function CommunityVideoPlayer({
       if (progressRafRef.current) cancelAnimationFrame(progressRafRef.current);
     };
   }, [syncProgress, canAttach, src]);
-
-  function handleEnded() {
-    setEnded(true);
-    setPlayRejected(false);
-    try {
-      videoRef.current?.pause();
-    } catch {
-      /* ignore */
-    }
-    syncProgress();
-  }
 
   function handleError() {
     setError(true);
@@ -221,37 +312,81 @@ export function CommunityVideoPlayer({
         }
       }
     }
-    if (ended) {
-      try {
-        el.currentTime = 0;
-      } catch {
-        /* ignore */
-      }
-      setEnded(false);
-    }
     playback?.setUserPaused(postId, surface, false);
     playback?.claimPlayback(postId, surface);
     userPlayRef.current = true;
+    grantPlayStartedRef.current = true;
     setPlayRejected(false);
+    el.muted = userMutedRef.current;
     playGenRef.current += 1;
     const gen = playGenRef.current;
     const attempt = el.play();
     if (attempt && typeof attempt.then === 'function') {
-      void attempt.catch(() => {
-        if (playGenRef.current !== gen) return;
-        setPlayRejected(true);
-      });
+      void attempt.then(
+        () => {
+          if (shouldAbandonPlayAttempt(playGenRef.current, gen)) {
+            try {
+              el.pause();
+            } catch {
+              /* ignore */
+            }
+          }
+        },
+        () => {
+          if (shouldAbandonPlayAttempt(playGenRef.current, gen)) return;
+          setPlayRejected(true);
+        },
+      );
     }
   }
 
   function handlePauseClick() {
     playback?.setUserPaused(postId, surface, true);
     playGenRef.current += 1;
+    grantPlayStartedRef.current = false;
     try {
       videoRef.current?.pause();
     } catch {
       /* ignore */
     }
+  }
+
+  function handleFramePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('.community-video-controls')) return;
+    tapPointerRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
+  }
+
+  function handleFramePointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    const start = tapPointerRef.current;
+    tapPointerRef.current = null;
+    if (!start || start.id !== event.pointerId) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('.community-video-controls')) return;
+    if (!isLowMovementFrameTap(start.x, start.y, event.clientX, event.clientY)) return;
+    const el = videoRef.current;
+    const playingNow = elementPlaying || Boolean(el && !el.paused);
+    if (playingNow) {
+      handlePauseClick();
+      return;
+    }
+    if (
+      shouldShowTransportPlay({
+        playRejected,
+        error,
+        userPaused,
+        autoplayRestricted,
+        holdsToken,
+        wantPlay,
+      })
+    ) {
+      handlePlayPause();
+    }
+  }
+
+  function handleFramePointerCancel() {
+    tapPointerRef.current = null;
   }
 
   function handleSeek(value: string) {
@@ -269,19 +404,49 @@ export function CommunityVideoPlayer({
         /* ignore */
       }
     }
-    setEnded(false);
   }
 
   function handleMuteToggle() {
-    const next = !muted;
-    setMuted(next);
-    if (videoRef.current) videoRef.current.muted = next;
+    const nextUserMuted = !outputMuted;
+    playback?.setUserMuted(nextUserMuted);
+    if (!playback) setLocalUserMuted(nextUserMuted);
+    if (!nextUserMuted) setLocalMutedFallback(false);
+    const el = videoRef.current;
+    if (!el) return;
+    el.muted = nextUserMuted;
+    if (nextUserMuted || userPaused) return;
+    if (!(wantPlay || elementPlaying)) return;
+    const attempt = el.play();
+    if (attempt && typeof attempt.then === 'function') {
+      const gen = playGenRef.current;
+      void attempt.then(
+        () => {
+          if (shouldAbandonPlayAttempt(playGenRef.current, gen)) {
+            try {
+              el.pause();
+            } catch {
+              /* ignore */
+            }
+          }
+        },
+        () => {
+          if (shouldAbandonPlayAttempt(playGenRef.current, gen)) return;
+          setPlayRejected(true);
+        },
+      );
+    }
   }
 
   const aspect = communityVideoAspectRatio(width, height);
-  const showReplay = ended;
-  const showPlay = showReplay || playRejected || error || !wantPlay || userPaused;
-  const playing = wantPlay && !userPaused && !ended && !error && !playRejected;
+  const showPlay = shouldShowTransportPlay({
+    playRejected,
+    error,
+    userPaused,
+    autoplayRestricted,
+    holdsToken,
+    wantPlay,
+  });
+  const showPause = elementPlaying && !showPlay;
   const rootClass = [
     surface === 'gallery' ? 'community-depth-video-slot' : 'community-card-video',
     className,
@@ -307,19 +472,24 @@ export function CommunityVideoPlayer({
       data-want-play={wantPlay ? 'true' : 'false'}
       style={{ '--video-aspect': aspect } as CSSProperties}
     >
-      <div className={frameClass} style={{ aspectRatio: aspect }}>
+      <div
+        className={frameClass}
+        style={{ aspectRatio: aspect }}
+        onPointerDown={handleFramePointerDown}
+        onPointerUp={handleFramePointerUp}
+        onPointerCancel={handleFramePointerCancel}
+      >
         <video
           ref={setVideoNode}
           className={videoClass}
           playsInline
-          muted={muted}
+          muted={outputMuted}
           preload={canAttach ? 'metadata' : 'none'}
           controls={false}
-          loop={false}
+          loop
           width={width || undefined}
           height={height || undefined}
           aria-labelledby={labelId}
-          onEnded={handleEnded}
           onError={handleError}
         />
         <span id={labelId} className="visually-hidden">
@@ -332,6 +502,7 @@ export function CommunityVideoPlayer({
         ) : null}
         <div
           className="community-video-controls"
+          data-show-transport={showPlay ? 'true' : undefined}
           onPointerDown={stopNav}
           onPointerMove={stopNav}
           onPointerUp={stopNav}
@@ -343,23 +514,23 @@ export function CommunityVideoPlayer({
           {showPlay ? (
             <button
               type="button"
-              className="community-video-control-btn"
+              className="community-video-control-btn community-video-transport"
               onClick={handlePlayPause}
-              aria-label={showReplay ? copy.replayVideo : copy.playVideo}
+              aria-label={copy.playVideo}
             >
-              {showReplay ? copy.replayVideo : copy.playVideo}
+              {copy.playVideo}
             </button>
-          ) : (
+          ) : showPause ? (
             <button
               type="button"
-              className="community-video-control-btn"
+              className="community-video-control-btn community-video-transport"
               onClick={handlePauseClick}
               aria-label={copy.pauseVideo}
-              data-playing={playing ? 'true' : undefined}
+              data-playing="true"
             >
               {copy.pauseVideo}
             </button>
-          )}
+          ) : null}
           <input
             ref={progressRef}
             type="range"
@@ -375,9 +546,9 @@ export function CommunityVideoPlayer({
             type="button"
             className="community-video-control-btn"
             onClick={handleMuteToggle}
-            aria-label={muted ? copy.unmuteVideo : copy.muteVideo}
+            aria-label={outputMuted ? copy.unmuteVideo : copy.muteVideo}
           >
-            {muted ? copy.unmuteVideo : copy.muteVideo}
+            {outputMuted ? copy.unmuteVideo : copy.muteVideo}
           </button>
         </div>
       </div>

@@ -5,6 +5,7 @@
  */
 
 import { clamp, lerp } from './galleryLayers';
+import { GALLERY_PLAYBACK_DWELL_MS } from '../../../lib/communityVideoPlayback';
 
 /** Wider than VELOCITY_STOP_THRESHOLD so tiny residual motion still counts as still. */
 export const IDLE_VELOCITY_THRESHOLD = 0.02;
@@ -144,7 +145,7 @@ export function stepGalleryPlaybackDwell(input: {
   return {
     lastNow: now,
     stillMs,
-    settled: stillMs >= IDLE_DWELL_MS,
+    settled: stillMs >= GALLERY_PLAYBACK_DWELL_MS,
   };
 }
 

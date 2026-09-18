@@ -20,6 +20,7 @@ import {
   stepGalleryPlaybackDwell,
   type GalleryIdleState,
 } from './galleryIdle';
+import { GALLERY_PLAYBACK_DWELL_MS } from '../../../lib/communityVideoPlayback';
 import {
   INNER_RADIUS_MAX,
   INNER_RADIUS_MIN,
@@ -245,9 +246,18 @@ describe('coverScaleForStack', () => {
   });
 
   it('tracks playback dwell independently of reduced-motion idle', () => {
+    expect(GALLERY_PLAYBACK_DWELL_MS).toBe(100);
+    expect(IDLE_DWELL_MS).toBe(220);
     const moving = stepGalleryPlaybackDwell({ now: 16, lastNow: 0, stillMs: 0, still: true });
+    const notYet = stepGalleryPlaybackDwell({
+      now: moving.lastNow + (GALLERY_PLAYBACK_DWELL_MS - 1),
+      lastNow: moving.lastNow,
+      stillMs: moving.stillMs,
+      still: true,
+    });
+    expect(notYet.settled).toBe(false);
     const settled = stepGalleryPlaybackDwell({
-      now: moving.lastNow + IDLE_DWELL_MS,
+      now: moving.lastNow + GALLERY_PLAYBACK_DWELL_MS,
       lastNow: moving.lastNow,
       stillMs: moving.stillMs,
       still: true,
@@ -281,6 +291,22 @@ describe('coverScaleForStack', () => {
         still: true,
       }).settled,
     ).toBe(true);
+  });
+
+  it('can settle playback before ornament idle zoom starts', () => {
+    let idle: GalleryIdleState = { lastNow: 0, stillMs: 0, idleAmount: 0, vanishAmount: 0 };
+    idle = stillStep(idle, 16);
+    idle = stillStep(idle, 16 + GALLERY_PLAYBACK_DWELL_MS);
+    expect(idle.stillMs).toBe(GALLERY_PLAYBACK_DWELL_MS);
+    expect(idle.stillMs).toBeLessThan(IDLE_DWELL_MS);
+    expect(idle.idleAmount).toBe(0);
+    const playback = stepGalleryPlaybackDwell({
+      now: 16 + GALLERY_PLAYBACK_DWELL_MS,
+      lastNow: 16,
+      stillMs: 0,
+      still: true,
+    });
+    expect(playback.settled).toBe(true);
   });
 
   it('composes garnish scale with contain-to-cover idle', () => {

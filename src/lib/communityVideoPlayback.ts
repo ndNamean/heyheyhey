@@ -1,5 +1,8 @@
-export const FEED_VIDEO_SETTLE_MS = 250;
+export const FEED_VIDEO_SETTLE_MS = 120;
 export const FEED_VIDEO_MIN_INTERSECTION = 0.6;
+/** Gallery playback settle only — do not use for ornament/idle zoom. */
+export const GALLERY_PLAYBACK_DWELL_MS = 100;
+export const FRAME_TAP_MOVE_THRESHOLD_PX = 10;
 
 export type CommunityVideoSurface = 'gallery' | 'detail' | 'famous' | 'feed';
 
@@ -143,4 +146,70 @@ export function shouldWantPlay(args: {
 
 export function userPauseKey(postId: string, surface: CommunityVideoSurface): string {
   return `${surface}:${postId}`;
+}
+
+export type CommunityVideoSoundPolicy = {
+  userMuted: boolean;
+  autoplayMutedFallback: boolean;
+};
+
+export type AutoplaySoundAttempt = 'unmuted' | 'muted';
+
+export function isPlaybackOutputMuted(policy: CommunityVideoSoundPolicy): boolean {
+  return Boolean(policy.userMuted || policy.autoplayMutedFallback);
+}
+
+export function soundPolicyAfterTokenChange(userMuted: boolean): CommunityVideoSoundPolicy {
+  return { userMuted: Boolean(userMuted), autoplayMutedFallback: false };
+}
+
+export function soundPolicyAfterUserMuteChange(userMuted: boolean): CommunityVideoSoundPolicy {
+  return { userMuted: Boolean(userMuted), autoplayMutedFallback: false };
+}
+
+export function firstAutoplaySoundAttempt(
+  userMuted: boolean,
+  autoplayMutedFallback = false,
+): AutoplaySoundAttempt {
+  return userMuted || autoplayMutedFallback ? 'muted' : 'unmuted';
+}
+
+export function shouldAttemptMutedAutoplayFallback(args: {
+  userMuted: boolean;
+  unmutedRejected: boolean;
+  mutedFallbackTried: boolean;
+}): boolean {
+  return !args.userMuted && args.unmutedRejected && !args.mutedFallbackTried;
+}
+
+export function shouldAbandonPlayAttempt(
+  currentGeneration: number,
+  attemptGeneration: number,
+): boolean {
+  return currentGeneration !== attemptGeneration;
+}
+
+export function shouldShowTransportPlay(args: {
+  playRejected: boolean;
+  error: boolean;
+  userPaused: boolean;
+  autoplayRestricted: boolean;
+  holdsToken: boolean;
+  wantPlay: boolean;
+}): boolean {
+  if (args.playRejected || args.error || args.userPaused) return true;
+  if (args.autoplayRestricted && args.holdsToken && !args.wantPlay) return true;
+  return false;
+}
+
+export function isLowMovementFrameTap(
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number,
+  thresholdPx = FRAME_TAP_MOVE_THRESHOLD_PX,
+): boolean {
+  const dx = endX - startX;
+  const dy = endY - startY;
+  return dx * dx + dy * dy <= thresholdPx * thresholdPx;
 }

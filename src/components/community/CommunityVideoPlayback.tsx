@@ -6,6 +6,7 @@ import {
   pickDominantFeedVideo,
   resolvePlaybackToken,
   shouldWantPlay,
+  soundPolicyAfterUserMuteChange,
   userPauseKey,
   type CommunityVideoPlaybackToken,
   type CommunityVideoSurface,
@@ -22,6 +23,7 @@ type FeedEntry = {
 type PlaybackContextValue = {
   canAttachSource: (postId: string, surface: CommunityVideoSurface) => boolean;
   wantPlay: (postId: string, surface: CommunityVideoSurface) => boolean;
+  holdsToken: (postId: string, surface: CommunityVideoSurface) => boolean;
   isUserPaused: (postId: string, surface: CommunityVideoSurface) => boolean;
   setUserPaused: (postId: string, surface: CommunityVideoSurface, paused: boolean) => void;
   claimPlayback: (postId: string, surface: CommunityVideoSurface) => void;
@@ -30,6 +32,11 @@ type PlaybackContextValue = {
     surface: 'feed' | 'famous',
     el: Element | null,
   ) => () => void;
+  userMuted: boolean;
+  autoplayMutedFallback: boolean;
+  setUserMuted: (muted: boolean) => void;
+  markAutoplayMutedFallback: () => void;
+  autoplayRestricted: boolean;
 };
 
 const CommunityVideoPlaybackContext = createContext<PlaybackContextValue | null>(null);
@@ -62,6 +69,8 @@ export function CommunityVideoPlaybackProvider({
   const [feedDominant, setFeedDominant] = useState<FeedVideoCandidate | null>(null);
   const [userPausedKeys, setUserPausedKeys] = useState<Set<string>>(() => new Set());
   const [claim, setClaim] = useState<CommunityVideoPlaybackToken | null>(null);
+  const [userMuted, setUserMutedState] = useState(false);
+  const [autoplayMutedFallback, setAutoplayMutedFallback] = useState(false);
   const lastScrollAtRef = useRef(0);
   const settleTimerRef = useRef<number | null>(null);
   const feedEntriesRef = useRef(new Map<string, FeedEntry>());
@@ -185,6 +194,11 @@ export function CommunityVideoPlaybackProvider({
     });
   }, [token]);
 
+  const tokenKey = token ? userPauseKey(token.postId, token.surface) : '';
+  useEffect(() => {
+    setAutoplayMutedFallback(false);
+  }, [tokenKey]);
+
   const registerFeedElement = useCallback(
     (postId: string, surface: 'feed' | 'famous', el: Element | null) => {
       const key = userPauseKey(postId, surface);
@@ -232,6 +246,16 @@ export function CommunityVideoPlaybackProvider({
     });
   }, []);
 
+  const setUserMuted = useCallback((muted: boolean) => {
+    const next = soundPolicyAfterUserMuteChange(muted);
+    setUserMutedState(next.userMuted);
+    setAutoplayMutedFallback(next.autoplayMutedFallback);
+  }, []);
+
+  const markAutoplayMutedFallback = useCallback(() => {
+    setAutoplayMutedFallback(true);
+  }, []);
+
   const value = useMemo<PlaybackContextValue>(() => {
     const galleryForAttach = galleryState
       ? { currentPostId: galleryState.currentPostId, nextPostId: galleryState.nextPostId }
@@ -259,23 +283,34 @@ export function CommunityVideoPlaybackProvider({
           claimed: claim?.postId === postId && claim?.surface === surface,
         }),
       isUserPaused: (postId, surface) => userPausedKeys.has(userPauseKey(postId, surface)),
+      holdsToken: (postId, surface) =>
+        Boolean(token && token.postId === postId && token.surface === surface),
       setUserPaused,
       claimPlayback,
       registerFeedElement,
+      userMuted,
+      autoplayMutedFallback,
+      setUserMuted,
+      markAutoplayMutedFallback,
+      autoplayRestricted: reducedMotion || saveData,
     };
   }, [
+    autoplayMutedFallback,
     claim,
+    claimPlayback,
     composerOpen,
     documentHidden,
     feedDominant,
     galleryState,
+    markAutoplayMutedFallback,
     reducedMotion,
     registerFeedElement,
     saveData,
     selectedPostId,
+    setUserMuted,
     setUserPaused,
-    claimPlayback,
     token,
+    userMuted,
     userPausedKeys,
   ]);
 
