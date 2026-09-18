@@ -270,6 +270,99 @@ describe('CommunityVideoPlayer', () => {
     expect(screen.getByRole('button', { name: /^play$/i })).toBeTruthy();
   });
 
+  it('keeps the dominant feed clip attached after playback state updates', async () => {
+    type MockObserver = IntersectionObserver & {
+      callback: IntersectionObserverCallback;
+      targets: Set<Element>;
+    };
+    const observers: MockObserver[] = [];
+    class MockIntersectionObserver implements IntersectionObserver {
+      readonly root = null;
+      readonly rootMargin = '';
+      readonly thresholds = [];
+      callback: IntersectionObserverCallback;
+      targets = new Set<Element>();
+      constructor(callback: IntersectionObserverCallback) {
+        this.callback = callback;
+        observers.push(this as MockObserver);
+      }
+      observe = (el: Element) => {
+        this.targets.add(el);
+      };
+      unobserve = (el: Element) => {
+        this.targets.delete(el);
+      };
+      disconnect = () => {
+        this.targets.clear();
+      };
+      takeRecords = () => [];
+    }
+    vi.stubGlobal('IntersectionObserver', MockIntersectionObserver);
+
+    try {
+      render(
+        <CommunityVideoPlaybackProvider
+          overlayOpen={false}
+          selectedPostId={null}
+          composerOpen={false}
+          gallery={null}
+        >
+          <CommunityVideoPlayer postId="p1" surface="feed" src={`${src}?a`} />
+          <CommunityVideoPlayer postId="p2" surface="feed" src={`${src}?b`} />
+        </CommunityVideoPlaybackProvider>,
+      );
+
+      expect(observers.length).toBeGreaterThan(0);
+      const observer = observers[0];
+      const roots = [...observer.targets] as HTMLElement[];
+      const first = roots.find((el) => el.getAttribute('data-post-id') === 'p1');
+      const second = roots.find((el) => el.getAttribute('data-post-id') === 'p2');
+      expect(first).toBeTruthy();
+      expect(second).toBeTruthy();
+
+      act(() => {
+        observer.callback(
+          [
+            {
+              target: first as Element,
+              intersectionRatio: 1,
+              isIntersecting: true,
+            } as IntersectionObserverEntry,
+            {
+              target: second as Element,
+              intersectionRatio: 1,
+              isIntersecting: true,
+            } as IntersectionObserverEntry,
+          ],
+          observer,
+        );
+      });
+
+      await waitFor(() => {
+        expect(first?.getAttribute('data-attached')).toBe('true');
+        expect(first?.getAttribute('data-want-play')).toBe('true');
+      });
+      expect(second?.getAttribute('data-attached')).toBe('false');
+      expect(second?.getAttribute('data-want-play')).toBe('false');
+      expect((first?.querySelector('video') as HTMLVideoElement).getAttribute('src')).toBe(
+        `${src}?a`,
+      );
+      expect((second?.querySelector('video') as HTMLVideoElement).getAttribute('src')).toBeNull();
+
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(first?.getAttribute('data-attached')).toBe('true');
+      expect(first?.getAttribute('data-want-play')).toBe('true');
+      expect(second?.getAttribute('data-attached')).toBe('false');
+      expect(observers).toHaveLength(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('does not treat src detach as unplayable and resumes when reattached', async () => {
     const { rerender } = render(
       <CommunityVideoPlayer postId="p1" surface="gallery" src={src} canAttachSource wantPlay />,

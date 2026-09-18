@@ -68,6 +68,7 @@ export function CommunityVideoPlayer({
   const { t } = useLang();
   const copy = t.community;
   const playback = useCommunityVideoPlayback();
+  const registerFeedElement = playback?.registerFeedElement;
   const canAttach = canAttachOverride ?? playback?.canAttachSource(postId, surface) ?? false;
   const wantPlay = wantPlayOverride ?? playback?.wantPlay(postId, surface) ?? false;
   const userPaused = playback?.isUserPaused(postId, surface) ?? false;
@@ -190,8 +191,10 @@ export function CommunityVideoPlayer({
 
   useEffect(() => {
     if (surface !== 'feed' && surface !== 'famous') return;
-    return playback?.registerFeedElement(postId, surface, rootRef.current);
-  }, [playback, postId, surface]);
+    const el = rootRef.current;
+    if (!el) return;
+    return registerFeedElement?.(postId, surface, el);
+  }, [postId, registerFeedElement, surface]);
 
   useEffect(() => {
     const el = videoRef.current;

@@ -204,7 +204,8 @@ export function CommunityVideoPlaybackProvider({
       observerRef.current?.observe(el);
       return () => {
         const mapped = feedEntriesRef.current.get(key);
-        if (mapped?.el) observerRef.current?.unobserve(mapped.el);
+        if (!mapped) return;
+        if (mapped.el) observerRef.current?.unobserve(mapped.el);
         feedEntriesRef.current.delete(key);
         ratiosRef.current.delete(key);
         syncDominant();
