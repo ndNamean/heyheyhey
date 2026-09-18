@@ -679,6 +679,34 @@ describe('CommunityDepthGallery ornaments', () => {
     expect(layers[1].querySelector(':scope > .community-depth-ornaments')).toBeTruthy();
   });
 
+  it('fades neighbor video slots when another plane is centered', () => {
+    const posts = [
+      imagePost('p0'),
+      imagePost('vid', {
+        attachmentKind: 'video',
+        attachmentMimeType: 'video/mp4',
+        attachmentFileName: 'clip.mp4',
+        attachmentUrl: 'https://example.com/clip.mp4',
+        attachmentPath: 'stores/community/vid/clip.mp4',
+        attachmentWidth: '1080',
+        attachmentHeight: '1920',
+        body: '',
+      }),
+    ];
+    const { container } = render(
+      <CommunityDepthGallery sourcePosts={posts} startPostId="p0" onClose={() => {}} />,
+    );
+    flushFrames(12);
+    const image = container.querySelector('.community-depth-image') as HTMLElement;
+    const videoSlot = container.querySelector('.community-depth-video-slot') as HTMLElement;
+    const video = container.querySelector('.community-depth-video') as HTMLElement;
+    const frame = container.querySelector('.community-depth-video-frame') as HTMLElement;
+    expect(Number(image.style.opacity)).toBeGreaterThan(0.6);
+    expect(Number(videoSlot.style.opacity)).toBeLessThan(0.2);
+    expect(video.style.opacity).toBe('');
+    expect(frame.style.opacity).toBe('');
+  });
+
   it('publishes gallerySettled from the existing rAF dwell', () => {
     const onGalleryPlaybackChange = vi.fn();
     render(

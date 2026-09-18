@@ -33,7 +33,7 @@ export type CommunityVideoPlayerProps = {
   videoClassName?: string;
   canAttachSource?: boolean;
   wantPlay?: boolean;
-  visualRef?: (el: HTMLVideoElement | null) => void;
+  visualRef?: (el: HTMLElement | null) => void;
 };
 
 type ChromeState = 'visible' | 'hiding' | 'hidden';
@@ -122,13 +122,17 @@ export function CommunityVideoPlayer({
   showPlayRef.current = showPlay;
   errorRef.current = error;
 
-  const setVideoNode = useCallback(
-    (el: HTMLVideoElement | null) => {
-      videoRef.current = el;
+  const setRootNode = useCallback(
+    (el: HTMLDivElement | null) => {
+      rootRef.current = el;
       visualRef?.(el);
     },
     [visualRef],
   );
+
+  const setVideoNode = useCallback((el: HTMLVideoElement | null) => {
+    videoRef.current = el;
+  }, []);
 
   const revealChrome = useCallback(() => {
     hideGenRef.current += 1;
@@ -641,7 +645,7 @@ export function CommunityVideoPlayer({
 
   return (
     <div
-      ref={rootRef}
+      ref={setRootNode}
       className={rootClass}
       data-post-id={postId}
       data-surface={surface}

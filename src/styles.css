@@ -596,6 +596,10 @@ textarea { min-height: 88px; resize: vertical; }
 .community-depth-video-slot {
   position: absolute;
   inset: 0;
+  opacity: 0;
+  transform-origin: center center;
+  backface-visibility: hidden;
+  will-change: opacity, transform;
 }
 
 .community-depth-video-frame {
@@ -604,16 +608,14 @@ textarea { min-height: 88px; resize: vertical; }
   border-radius: 0;
   max-height: none;
   aspect-ratio: auto;
+  opacity: 1;
 }
 
 .community-depth-video {
   position: absolute;
   inset: 0;
   max-height: none;
-  opacity: 0;
-  transform-origin: center center;
-  backface-visibility: hidden;
-  will-change: opacity, transform;
+  opacity: 1;
   user-select: none;
   touch-action: none;
 }
