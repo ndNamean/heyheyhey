@@ -35,6 +35,20 @@ export function galleryPlayPostId(
   return gallery.currentPostId;
 }
 
+/** Forward: current keeps playing until it leaves the pair (opacity target 0); next starts as it fades in. */
+export function galleryWantPlay(
+  postId: string,
+  gallery: Pick<GalleryPlaybackState, 'currentPostId' | 'nextPostId' | 'depthBlend'>,
+): boolean {
+  if (!postId) return false;
+  if (postId === gallery.currentPostId) return true;
+  return (
+    postId === gallery.nextPostId &&
+    postId !== gallery.currentPostId &&
+    (gallery.depthBlend ?? 0) > 0
+  );
+}
+
 export function surfacePriority(surface: CommunityVideoSurface): number {
   if (surface === 'gallery') return 3;
   if (surface === 'detail') return 2;

@@ -3,6 +3,7 @@ import { usePointerCapabilities } from '../media-interaction/pointerCapabilities
 import {
   canAttachVideoSource,
   galleryPlayPostId,
+  galleryWantPlay,
   pickDominantFeedVideo,
   resolvePlaybackToken,
   shouldWantPlay,
@@ -164,14 +165,31 @@ export function CommunityVideoPlaybackProvider({
   }, [claim, feedDominant, galleryState, selectedPostId]);
 
   useEffect(() => {
-    if (!token) return;
-    const keep = userPauseKey(token.postId, token.surface);
+    const keep = new Set<string>();
+    if (galleryState) {
+      if (galleryWantPlay(galleryState.currentPostId, galleryState)) {
+        keep.add(userPauseKey(galleryState.currentPostId, 'gallery'));
+      }
+      if (galleryState.nextPostId && galleryWantPlay(galleryState.nextPostId, galleryState)) {
+        keep.add(userPauseKey(galleryState.nextPostId, 'gallery'));
+      }
+    } else if (token) {
+      keep.add(userPauseKey(token.postId, token.surface));
+    } else {
+      return;
+    }
     setUserPausedKeys((prev) => {
-      if (prev.size === 0 || (prev.size === 1 && prev.has(keep))) return prev;
-      if (!prev.has(keep)) return new Set();
-      return new Set([keep]);
+      if (prev.size === 0) return prev;
+      let changed = false;
+      const next = new Set<string>();
+      for (const key of prev) {
+        if (keep.has(key)) next.add(key);
+        else changed = true;
+      }
+      if (!changed && next.size === prev.size) return prev;
+      return next;
     });
-  }, [token]);
+  }, [galleryState, token]);
 
   const tokenKey = token ? userPauseKey(token.postId, token.surface) : '';
   useEffect(() => {
@@ -249,9 +267,13 @@ export function CommunityVideoPlaybackProvider({
           feedDominant,
           claim,
         }),
-      wantPlay: (postId, surface) =>
-        shouldWantPlay({
-          token,
+      wantPlay: (postId, surface) => {
+        const galleryToken =
+          surface === 'gallery' && galleryState && galleryWantPlay(postId, galleryState)
+            ? { postId, surface: 'gallery' as const }
+            : null;
+        return shouldWantPlay({
+          token: galleryToken ?? (surface === 'gallery' ? null : token),
           postId,
           surface,
           userPaused: userPausedKeys.has(userPauseKey(postId, surface)),
@@ -260,10 +282,13 @@ export function CommunityVideoPlaybackProvider({
           documentHidden,
           composerOpen,
           claimed: claim?.postId === postId && claim?.surface === surface,
-        }),
-      isUserPaused: (postId, surface) => userPausedKeys.has(userPauseKey(postId, surface)),
+        });
+      },
       holdsToken: (postId, surface) =>
-        Boolean(token && token.postId === postId && token.surface === surface),
+        surface === 'gallery' && galleryState
+          ? galleryWantPlay(postId, galleryState)
+          : Boolean(token && token.postId === postId && token.surface === surface),
+      isUserPaused: (postId, surface) => userPausedKeys.has(userPauseKey(postId, surface)),
       setUserPaused,
       claimPlayback,
       registerFeedElement,

@@ -3,6 +3,7 @@ import {
   GALLERY_PLAYBACK_DWELL_MS,
   canAttachVideoSource,
   galleryPlayPostId,
+  galleryWantPlay,
   firstAutoplaySoundAttempt,
   isLowMovementFrameTap,
   isPlaybackOutputMuted,
@@ -196,6 +197,15 @@ describe('communityVideoPlayback', () => {
         feedDominant: { postId: 'f', surface: 'feed', ratio: 0.9 },
       }),
     ).toEqual({ postId: 'n', surface: 'gallery' });
+  });
+
+  it('keeps the outgoing gallery clip playing until its plane leaves the pair', () => {
+    const fading = { currentPostId: 'g', nextPostId: 'n', depthBlend: 0.01 };
+    expect(galleryWantPlay('g', fading)).toBe(true);
+    expect(galleryWantPlay('n', fading)).toBe(true);
+    expect(galleryWantPlay('g', { currentPostId: 'g', nextPostId: 'n', depthBlend: 0 })).toBe(true);
+    expect(galleryWantPlay('n', { currentPostId: 'g', nextPostId: 'n', depthBlend: 0 })).toBe(false);
+    expect(galleryWantPlay('g', { currentPostId: 'n', nextPostId: 'o', depthBlend: 0 })).toBe(false);
   });
 
   it('keeps the feed token while scrolling if the same clip stays dominant', () => {
