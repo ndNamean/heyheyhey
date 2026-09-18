@@ -129,6 +129,7 @@ export function buildChatAttachmentGrant(body, target, opts) {
     mimeType,
     bytes,
     fileName: body?.fileName,
+    scope: target.scope,
   });
   if (!policy.ok) {
     const err = new Error(policy.errorMessage || 'Invalid attachment');

@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom';
 import {
   CHAT_FILE_MIME_TYPES,
   CHAT_IMAGE_MIME_TYPES,
+  CHAT_VIDEO_MIME_TYPES,
 } from '../../lib/chatAttachmentPolicy';
 import {
   QUICK_MESSAGE_IDS,
@@ -24,6 +25,7 @@ export type ComposerAttachMenuLabels = {
   attachMenuTitle: string;
   camera: string;
   photos: string;
+  video?: string;
   file: string;
   quickMessage: string;
   closeMenu: string;
@@ -42,10 +44,12 @@ export type ComposerAttachMenuProps = {
   labels: ComposerAttachMenuLabels;
   cameraDenied?: boolean;
   onCameraDeniedDismiss?: () => void;
-  onFileChosen: (file: File, source: 'camera' | 'photos' | 'file') => void;
+  onFileChosen: (file: File, source: 'camera' | 'photos' | 'file' | 'video') => void;
   onQuickMessage: (text: string, id: QuickMessageId) => void;
   /** When camera permission is denied, parent sets cameraDenied; Photos still works. */
   onCameraPermissionDenied?: () => void;
+  /** Community-only. Default false so Store/Group Chat never show Video. */
+  showVideo?: boolean;
   className?: string;
 };
 
@@ -54,6 +58,7 @@ type MenuView = 'actions' | 'quick';
 
 const IMAGE_ACCEPT = CHAT_IMAGE_MIME_TYPES.join(',');
 const FILE_ACCEPT = CHAT_FILE_MIME_TYPES.join(',');
+const VIDEO_ACCEPT = CHAT_VIDEO_MIME_TYPES.join(',');
 
 function useSurface(): Surface {
   const [surface, setSurface] = useState<Surface>(() => {
@@ -124,7 +129,7 @@ async function probeCameraAccess(): Promise<boolean> {
 }
 
 /**
- * Attach (+) menu: Camera / Photos / File / Quick Message.
+ * Attach (+) menu: Camera / Photos / Video (optional) / File / Quick Message.
  * Mobile bottom sheet; desktop anchored popover. GIPHY stays outside this menu.
  * Hidden file inputs stay mounted so camera/photos/file clicks work after close.
  */
@@ -139,12 +144,14 @@ export function ComposerAttachMenu({
   onFileChosen,
   onQuickMessage,
   onCameraPermissionDenied,
+  showVideo = false,
   className,
 }: ComposerAttachMenuProps) {
   const surface = useSurface();
   const titleId = useId();
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const photosInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
@@ -226,7 +233,7 @@ export function ComposerAttachMenu({
   }
 
   function handleInputChange(
-    source: 'camera' | 'photos' | 'file',
+    source: 'camera' | 'photos' | 'file' | 'video',
     files: FileList | null,
   ) {
     const file = files?.[0];
@@ -248,6 +255,11 @@ export function ComposerAttachMenu({
     onCameraDeniedDismiss?.();
     close();
     window.setTimeout(() => photosInputRef.current?.click(), 0);
+  }
+
+  function onVideoClick() {
+    close();
+    window.setTimeout(() => videoInputRef.current?.click(), 0);
   }
 
   function onFileClick() {
@@ -284,6 +296,21 @@ export function ComposerAttachMenu({
           e.target.value = '';
         }}
       />
+      {showVideo ? (
+        <input
+          ref={videoInputRef}
+          type="file"
+          accept={VIDEO_ACCEPT}
+          hidden
+          aria-hidden="true"
+          tabIndex={-1}
+          aria-label={labels.video || 'Video'}
+          onChange={(e) => {
+            handleInputChange('video', e.target.files);
+            e.target.value = '';
+          }}
+        />
+      ) : null}
       <input
         ref={fileInputRef}
         type="file"
@@ -370,6 +397,19 @@ export function ComposerAttachMenu({
                 {labels.photos}
               </button>
             </li>
+            {showVideo ? (
+              <li role="none">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="composer-attach-menu__item"
+                  disabled={disabled}
+                  onClick={onVideoClick}
+                >
+                  {labels.video || 'Video'}
+                </button>
+              </li>
+            ) : null}
             <li role="none">
               <button
                 type="button"

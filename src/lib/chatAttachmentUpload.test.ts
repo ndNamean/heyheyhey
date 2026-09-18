@@ -239,6 +239,34 @@ describe('uploadChatAttachment', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it('rejects store/group video before fetch and allows community video policy', async () => {
+    const fetchImpl = vi.fn();
+    const clip = new Blob([new Uint8Array(32)], { type: 'video/mp4' });
+    await expect(
+      uploadChatAttachment({
+        blob: clip,
+        mimeType: 'video/mp4',
+        fileName: 'clip.mp4',
+        scope: 'store',
+        storeId: 's1',
+        enabled: true,
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_type' });
+    await expect(
+      uploadChatAttachment({
+        blob: clip,
+        mimeType: 'video/mp4',
+        fileName: 'clip.mp4',
+        scope: 'group',
+        roomId: 'r1',
+        enabled: true,
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_type' });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it('maps HTTP 413 to size copy instead of Request failed (413)', async () => {
     const fetchImpl = vi.fn(
       async () =>

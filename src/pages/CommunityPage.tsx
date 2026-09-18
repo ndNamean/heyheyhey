@@ -9,6 +9,7 @@ import CommunityPostDetail from '../components/community/CommunityPostDetail';
 import FamousPost from '../components/community/FamousPost';
 import CommunityDepthGallery from '../components/community/depth-gallery/CommunityDepthGallery';
 import { isCommunityImagePost } from '../components/community/depth-gallery/gallerySet';
+import { CommunityVideoPlaybackProvider } from '../components/community/CommunityVideoPlayback';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import {
@@ -29,6 +30,7 @@ import {
   uniqueReactionUserIds,
 } from '../lib/communityReactionPeople';
 import type { CommunityComment, CommunityFamousVote, CommunityPost, CommunityReaction, Profile } from '../types';
+import type { GalleryPlaybackState } from '../lib/communityVideoPlayback';
 
 export const COMMUNITY_FEED_PAGE_SIZE = 15;
 
@@ -67,6 +69,7 @@ export default function CommunityPage({ profile }: Props) {
   const [composerOpen, setComposerOpen] = useState(false);
   const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const [galleryPostId, setGalleryPostId] = useState<string | null>(null);
+  const [galleryPlayback, setGalleryPlayback] = useState<GalleryPlaybackState | null>(null);
   const [skipIds, setSkipIds] = useState<Set<string>>(() => new Set());
   const [famousBusy, setFamousBusy] = useState<Set<string>>(() => new Set());
   const [undoToast, setUndoToast] = useState<{ postId: string; voteId: string } | null>(null);
@@ -353,6 +356,7 @@ export default function CommunityPage({ profile }: Props) {
 
   function closeGallery(postId: string) {
     setGalleryPostId(null);
+    setGalleryPlayback(null);
     setGalleryCommentPostIds([]);
     setSelectedPostId(postId);
     document.querySelector(`[data-post-id="${CSS.escape(postId)}"]`)?.scrollIntoView({ block: 'center' });
@@ -449,6 +453,20 @@ export default function CommunityPage({ profile }: Props) {
   })();
 
   return (
+    <CommunityVideoPlaybackProvider
+      overlayOpen={overlayOpen}
+      selectedPostId={selectedPostId}
+      composerOpen={composerOpen}
+      gallery={
+        overlayOpen
+          ? galleryPlayback ?? {
+              currentPostId: galleryPostId || '',
+              nextPostId: null,
+              settled: false,
+            }
+          : null
+      }
+    >
     <div className="community-page">
       <header className="community-page-header card">
         <h1>{t.pages.community}</h1>
@@ -486,6 +504,7 @@ export default function CommunityPage({ profile }: Props) {
           isLoadingMore={isLoadingMore}
           loadMoreError={loadMoreError}
           onMountedPostIdsChange={handleMountedGalleryIds}
+          onGalleryPlaybackChange={setGalleryPlayback}
           onClose={closeGallery}
         />
       ) : null}
@@ -498,5 +517,6 @@ export default function CommunityPage({ profile }: Props) {
         </div>
       ) : null}
     </div>
+    </CommunityVideoPlaybackProvider>
   );
 }

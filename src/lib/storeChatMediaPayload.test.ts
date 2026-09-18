@@ -150,6 +150,19 @@ describe('storeChatMediaPayload', () => {
     });
     expect(withCaption.messageType).toBe('text_attachment');
     expect(withCaption.attachmentKind).toBe('file');
+
+    const video = buildStoreChatMediaPayload({
+      body: '',
+      attachment: {
+        ...sampleAttachment,
+        kind: 'video',
+        mimeType: 'video/mp4',
+        fileName: 'clip.mp4',
+        path: 'stores/community/p1/clip.mp4',
+      },
+    });
+    expect(video.attachmentKind).toBe('video');
+    expect(video.messageType).toBe('attachment');
   });
 
   it('normalizes message types and send gate', () => {
@@ -182,6 +195,7 @@ describe('storeChatMediaPayload', () => {
     expect(storeChatMediaLabel('text')).toBe('Message');
     expect(storeChatMediaLabel('attachment', '', 'image')).toBe('Photo');
     expect(storeChatMediaLabel('text_attachment', '', 'file')).toBe('File');
+    expect(storeChatMediaLabel('attachment', '', 'video')).toBe('Video');
   });
 });
 

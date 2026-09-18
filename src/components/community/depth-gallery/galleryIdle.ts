@@ -109,16 +109,43 @@ export function coverScaleForStack(
 }
 
 export function resolveIdleImageSize(
-  img: Pick<HTMLImageElement, 'naturalWidth' | 'naturalHeight'> | null | undefined,
+  media:
+    | Pick<HTMLImageElement, 'naturalWidth' | 'naturalHeight'>
+    | Pick<HTMLVideoElement, 'videoWidth' | 'videoHeight'>
+    | null
+    | undefined,
   fallbackWidth?: number,
   fallbackHeight?: number,
 ): { width: number; height: number } {
-  const naturalW = img?.naturalWidth ?? 0;
-  const naturalH = img?.naturalHeight ?? 0;
+  const anyMedia = media as
+    | { naturalWidth?: number; naturalHeight?: number; videoWidth?: number; videoHeight?: number }
+    | null
+    | undefined;
+  const naturalW = anyMedia?.naturalWidth || anyMedia?.videoWidth || 0;
+  const naturalH = anyMedia?.naturalHeight || anyMedia?.videoHeight || 0;
   if (naturalW > 0 && naturalH > 0) return { width: naturalW, height: naturalH };
   const width = Number.isFinite(fallbackWidth) && (fallbackWidth ?? 0) > 0 ? (fallbackWidth as number) : 0;
   const height = Number.isFinite(fallbackHeight) && (fallbackHeight ?? 0) > 0 ? (fallbackHeight as number) : 0;
   return { width, height };
+}
+
+export function stepGalleryPlaybackDwell(input: {
+  now: number;
+  lastNow: number;
+  stillMs: number;
+  still: boolean;
+}): { lastNow: number; stillMs: number; settled: boolean } {
+  const now = Number.isFinite(input.now) ? input.now : 0;
+  const lastNow = Number.isFinite(input.lastNow) ? input.lastNow : 0;
+  const dt = lastNow > 0 ? Math.max(0, now - lastNow) : 0;
+  const stillMs = input.still
+    ? (Number.isFinite(input.stillMs) ? Math.max(0, input.stillMs) : 0) + dt
+    : 0;
+  return {
+    lastNow: now,
+    stillMs,
+    settled: stillMs >= IDLE_DWELL_MS,
+  };
 }
 
 /**

@@ -56,6 +56,18 @@ describe('chatAttachmentDisplay', () => {
         attachmentUnprocessable: 'cannot decode',
       }),
     ).toBe('cannot decode');
+    expect(
+      chatAttachmentPolicyErrorCopy('unprocessable_video', {
+        ...sc,
+        attachmentUnprocessableVideo: 'cannot process video',
+      }),
+    ).toBe('cannot process video');
+    expect(
+      chatAttachmentPolicyErrorCopy('video_too_long', {
+        ...sc,
+        attachmentVideoTooLong: 'too long',
+      }),
+    ).toBe('too long');
     expect(chatAttachmentPolicyErrorCopy('unknown', sc)).toBe('failed');
   });
 });

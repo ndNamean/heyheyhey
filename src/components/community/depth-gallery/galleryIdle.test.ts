@@ -17,6 +17,7 @@ import {
   isGalleryScrollStill,
   resolveIdleImageSize,
   stepGalleryIdle,
+  stepGalleryPlaybackDwell,
   type GalleryIdleState,
 } from './galleryIdle';
 import {
@@ -237,6 +238,49 @@ describe('coverScaleForStack', () => {
       height: 300,
     });
     expect(resolveIdleImageSize(null)).toEqual({ width: 0, height: 0 });
+    expect(resolveIdleImageSize({ videoWidth: 1080, videoHeight: 1920 }, 10, 10)).toEqual({
+      width: 1080,
+      height: 1920,
+    });
+  });
+
+  it('tracks playback dwell independently of reduced-motion idle', () => {
+    const moving = stepGalleryPlaybackDwell({ now: 16, lastNow: 0, stillMs: 0, still: true });
+    const settled = stepGalleryPlaybackDwell({
+      now: moving.lastNow + IDLE_DWELL_MS,
+      lastNow: moving.lastNow,
+      stillMs: moving.stillMs,
+      still: true,
+    });
+    expect(settled.settled).toBe(true);
+    const unstill = stepGalleryPlaybackDwell({
+      now: settled.lastNow + 16,
+      lastNow: settled.lastNow,
+      stillMs: settled.stillMs,
+      still: false,
+    });
+    expect(unstill.settled).toBe(false);
+    expect(unstill.stillMs).toBe(0);
+    const reducedIdle = stepGalleryIdle({
+      now: 1000,
+      lastNow: 780,
+      stillMs: 400,
+      idleAmount: 1,
+      vanishAmount: 1,
+      velocity: 0,
+      scrollTarget: 10,
+      scrollCurrent: 10,
+      reducedMotion: true,
+    });
+    expect(reducedIdle.stillMs).toBe(0);
+    expect(
+      stepGalleryPlaybackDwell({
+        now: 1000,
+        lastNow: 780,
+        stillMs: 400,
+        still: true,
+      }).settled,
+    ).toBe(true);
   });
 
   it('composes garnish scale with contain-to-cover idle', () => {

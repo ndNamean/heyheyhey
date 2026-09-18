@@ -2,11 +2,15 @@
  * Chat attachment MIME / size / extension policy.
  * Images (Phase 2): jpeg/png/webp max 5MB.
  * Files (Phase 3): pdf / text / common Office max 10MB.
+ * Video: mp4/quicktime/webm max 25MB, Community scope only.
  * Keep in sync with api/_lib/chat-attachment/policy.js.
  */
 
 export const CHAT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 export const CHAT_FILE_MAX_BYTES = 10 * 1024 * 1024;
+export const CHAT_VIDEO_MAX_BYTES = 25 * 1024 * 1024;
+/** Client staging only — grant/Instant cannot see duration. */
+export const CHAT_VIDEO_MAX_DURATION_SECONDS = 30;
 
 export const CHAT_IMAGE_MIME_TYPES = [
   'image/jpeg',
@@ -25,7 +29,14 @@ export const CHAT_FILE_MIME_TYPES = [
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
 ] as const;
 
-export type ChatAttachmentKind = 'image' | 'file';
+export const CHAT_VIDEO_MIME_TYPES = [
+  'video/mp4',
+  'video/quicktime',
+  'video/webm',
+] as const;
+
+export type ChatAttachmentKind = 'image' | 'file' | 'video';
+export type ChatAttachmentScope = 'store' | 'group' | 'community';
 
 /** Extensions never allowed (executables, archives, HTML, scripts). */
 export const CHAT_BLOCKED_EXTENSIONS = [
@@ -69,6 +80,7 @@ export const CHAT_BLOCKED_EXTENSIONS = [
 
 const IMAGE_MIME_SET = new Set<string>(CHAT_IMAGE_MIME_TYPES);
 const FILE_MIME_SET = new Set<string>(CHAT_FILE_MIME_TYPES);
+const VIDEO_MIME_SET = new Set<string>(CHAT_VIDEO_MIME_TYPES);
 const BLOCKED_EXT_SET = new Set<string>(CHAT_BLOCKED_EXTENSIONS);
 
 const MIME_TO_EXT: Record<string, string> = {
@@ -84,6 +96,9 @@ const MIME_TO_EXT: Record<string, string> = {
   'application/vnd.ms-powerpoint': 'ppt',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation':
     'pptx',
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'video/webm': 'webm',
 };
 
 export function normalizeChatAttachmentMime(mimeType: string): string {
@@ -99,11 +114,14 @@ export function chatAttachmentKindForMime(
   const mime = normalizeChatAttachmentMime(mimeType);
   if (IMAGE_MIME_SET.has(mime)) return 'image';
   if (FILE_MIME_SET.has(mime)) return 'file';
+  if (VIDEO_MIME_SET.has(mime)) return 'video';
   return null;
 }
 
 export function maxBytesForChatAttachmentKind(kind: ChatAttachmentKind): number {
-  return kind === 'image' ? CHAT_IMAGE_MAX_BYTES : CHAT_FILE_MAX_BYTES;
+  if (kind === 'image') return CHAT_IMAGE_MAX_BYTES;
+  if (kind === 'video') return CHAT_VIDEO_MAX_BYTES;
+  return CHAT_FILE_MAX_BYTES;
 }
 
 export function extensionForChatAttachmentMime(mimeType: string): string | null {
@@ -158,10 +176,118 @@ export interface ChatAttachmentPolicyResult {
   errorMessage?: string;
 }
 
+function asBytes(buffer: Uint8Array | ArrayBuffer | { length: number; [i: number]: number }): Uint8Array {
+  if (buffer instanceof Uint8Array) return buffer;
+  if (typeof ArrayBuffer !== 'undefined' && buffer instanceof ArrayBuffer) {
+    return new Uint8Array(buffer);
+  }
+  const len = Number(buffer.length) || 0;
+  const out = new Uint8Array(len);
+  for (let i = 0; i < len; i++) out[i] = buffer[i] ?? 0;
+  return out;
+}
+
+function asciiAt(bytes: Uint8Array, start: number, length: number): string {
+  let out = '';
+  const end = Math.min(bytes.length, start + length);
+  for (let i = start; i < end; i++) out += String.fromCharCode(bytes[i]!);
+  return out;
+}
+
+function isIsoBmffFtyp(bytes: Uint8Array): boolean {
+  return bytes.length >= 8 && asciiAt(bytes, 4, 4) === 'ftyp';
+}
+
+function isWebmEbml(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 4 &&
+    bytes[0] === 0x1a &&
+    bytes[1] === 0x45 &&
+    bytes[2] === 0xdf &&
+    bytes[3] === 0xa3
+  );
+}
+
+/**
+ * Lightweight magic-byte check. Returns true when bytes match declared MIME,
+ * or when the format cannot be sniffed reliably (plain text / some Office).
+ */
+export function bufferMatchesDeclaredMime(
+  buffer: Uint8Array | ArrayBuffer | { length: number; [i: number]: number },
+  mimeType: string,
+): boolean {
+  const mime = normalizeChatAttachmentMime(mimeType);
+  const bytes = asBytes(buffer);
+  if (!bytes.length || bytes.length < 4) return false;
+
+  if (mime === 'image/jpeg') {
+    return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  }
+  if (mime === 'image/png') {
+    return (
+      bytes[0] === 0x89 &&
+      bytes[1] === 0x50 &&
+      bytes[2] === 0x4e &&
+      bytes[3] === 0x47
+    );
+  }
+  if (mime === 'image/webp') {
+    return (
+      bytes.length >= 12 &&
+      asciiAt(bytes, 0, 4) === 'RIFF' &&
+      asciiAt(bytes, 8, 4) === 'WEBP'
+    );
+  }
+  if (mime === 'application/pdf') {
+    return asciiAt(bytes, 0, 4) === '%PDF';
+  }
+  if (mime === 'text/plain') {
+    const sampleLen = Math.min(bytes.length, 512);
+    for (let i = 0; i < sampleLen; i++) {
+      if (bytes[i] === 0) return false;
+    }
+    let sample = '';
+    for (let i = 0; i < sampleLen; i++) sample += String.fromCharCode(bytes[i]!);
+    if (/^\s*<(!DOCTYPE|html|script)/i.test(sample)) return false;
+    return true;
+  }
+  if (
+    mime === 'application/msword' ||
+    mime === 'application/vnd.ms-excel' ||
+    mime === 'application/vnd.ms-powerpoint'
+  ) {
+    return (
+      bytes[0] === 0xd0 &&
+      bytes[1] === 0xcf &&
+      bytes[2] === 0x11 &&
+      bytes[3] === 0xe0
+    );
+  }
+  if (
+    mime ===
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    mime ===
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+    mime ===
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+  ) {
+    return bytes[0] === 0x50 && bytes[1] === 0x4b;
+  }
+  if (mime === 'video/mp4' || mime === 'video/quicktime') {
+    return isIsoBmffFtyp(bytes);
+  }
+  if (mime === 'video/webm') {
+    return isWebmEbml(bytes);
+  }
+  return false;
+}
+
 export function validateChatAttachmentPolicy(input: {
   mimeType: string;
   bytes: number;
   fileName?: string;
+  /** Video is accepted only when this is `'community'`. Missing scope rejects video. */
+  scope?: ChatAttachmentScope | string;
 }): ChatAttachmentPolicyResult {
   const mimeType = normalizeChatAttachmentMime(input.mimeType);
   const bytes = Number(input.bytes);
@@ -175,6 +301,15 @@ export function validateChatAttachmentPolicy(input: {
 
   const kind = chatAttachmentKindForMime(mimeType);
   if (!kind) {
+    return {
+      ok: false,
+      errorCode: 'invalid_type',
+      errorMessage:
+        'Unsupported file type. Use JPEG, PNG, WebP, PDF, text, or Office documents.',
+    };
+  }
+
+  if (kind === 'video' && input.scope !== 'community') {
     return {
       ok: false,
       errorCode: 'invalid_type',

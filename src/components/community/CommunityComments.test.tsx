@@ -562,4 +562,16 @@ describe('CommunityComments GIF content', () => {
       }),
     );
   });
+
+  it('rejects a video file in the comment photo picker', async () => {
+    render(<CommunityComments post={post()} comments={[]} profile={profile()} />);
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['abc'], 'clip.mp4', { type: 'video/mp4' });
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => {
+      fireEvent.change(input);
+    });
+    expect(screen.getByText(/unsupported file type/i)).toBeTruthy();
+    expect(screen.queryByText('clip.mp4')).toBeNull();
+  });
 });

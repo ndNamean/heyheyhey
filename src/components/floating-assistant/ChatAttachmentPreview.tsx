@@ -41,7 +41,11 @@ export function ChatAttachmentPreview({
 }: ChatAttachmentPreviewProps) {
   const rootClass = ['chat-attachment-preview', className].filter(Boolean).join(' ');
   const title =
-    item.kind === 'image' ? item.fileName || 'Photo' : item.fileName || 'File';
+    item.kind === 'image'
+      ? item.fileName || 'Photo'
+      : item.kind === 'video'
+        ? item.fileName || 'Video'
+        : item.fileName || 'File';
   const metaBits = [item.mimeType, formatBytes(item.bytes)].filter(Boolean);
   const busy = phase === 'preparing' || phase === 'uploading' || phase === 'sending';
   const failed = phase === 'failed';
@@ -72,6 +76,16 @@ export function ChatAttachmentPreview({
             alt={title}
             width={item.width || undefined}
             height={item.height || undefined}
+          />
+        ) : item.kind === 'video' ? (
+          <video
+            src={item.objectUrl}
+            muted
+            playsInline
+            preload="metadata"
+            width={item.width || undefined}
+            height={item.height || undefined}
+            aria-hidden="true"
           />
         ) : (
           <div className="chat-attachment-preview__file-icon" aria-hidden="true">

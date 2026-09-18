@@ -67,4 +67,30 @@ describe('sanitizePathSegment + policy', () => {
       }).ok,
     ).toBe(false);
   });
+
+  it('accepts community video and rejects video without community scope', () => {
+    expect(
+      validateChatAttachmentPolicy({
+        mimeType: 'video/mp4',
+        bytes: 2048,
+        fileName: 'clip.mp4',
+        scope: 'community',
+      }),
+    ).toMatchObject({ ok: true, kind: 'video' });
+    expect(
+      validateChatAttachmentPolicy({
+        mimeType: 'video/mp4',
+        bytes: 2048,
+        fileName: 'clip.mp4',
+      }).ok,
+    ).toBe(false);
+    expect(
+      validateChatAttachmentPolicy({
+        mimeType: 'video/webm',
+        bytes: 2048,
+        fileName: 'clip.webm',
+        scope: 'store',
+      }).errorCode,
+    ).toBe('invalid_type');
+  });
 });

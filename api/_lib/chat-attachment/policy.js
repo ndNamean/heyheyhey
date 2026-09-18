@@ -4,6 +4,8 @@
 
 export const CHAT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 export const CHAT_FILE_MAX_BYTES = 10 * 1024 * 1024;
+export const CHAT_VIDEO_MAX_BYTES = 25 * 1024 * 1024;
+export const CHAT_VIDEO_MAX_DURATION_SECONDS = 30;
 
 export const CHAT_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
@@ -17,6 +19,8 @@ export const CHAT_FILE_MIME_TYPES = [
   'application/vnd.ms-powerpoint',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
 ];
+
+export const CHAT_VIDEO_MIME_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 
 export const CHAT_BLOCKED_EXTENSIONS = [
   'exe',
@@ -59,6 +63,7 @@ export const CHAT_BLOCKED_EXTENSIONS = [
 
 const IMAGE_MIME_SET = new Set(CHAT_IMAGE_MIME_TYPES);
 const FILE_MIME_SET = new Set(CHAT_FILE_MIME_TYPES);
+const VIDEO_MIME_SET = new Set(CHAT_VIDEO_MIME_TYPES);
 const BLOCKED_EXT_SET = new Set(CHAT_BLOCKED_EXTENSIONS);
 
 const MIME_TO_EXT = {
@@ -74,6 +79,9 @@ const MIME_TO_EXT = {
   'application/vnd.ms-powerpoint': 'ppt',
   'application/vnd.openxmlformats-officedocument.presentationml.presentation':
     'pptx',
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'video/webm': 'webm',
 };
 
 export function normalizeChatAttachmentMime(mimeType) {
@@ -87,11 +95,14 @@ export function chatAttachmentKindForMime(mimeType) {
   const mime = normalizeChatAttachmentMime(mimeType);
   if (IMAGE_MIME_SET.has(mime)) return 'image';
   if (FILE_MIME_SET.has(mime)) return 'file';
+  if (VIDEO_MIME_SET.has(mime)) return 'video';
   return null;
 }
 
 export function maxBytesForChatAttachmentKind(kind) {
-  return kind === 'image' ? CHAT_IMAGE_MAX_BYTES : CHAT_FILE_MAX_BYTES;
+  if (kind === 'image') return CHAT_IMAGE_MAX_BYTES;
+  if (kind === 'video') return CHAT_VIDEO_MAX_BYTES;
+  return CHAT_FILE_MAX_BYTES;
 }
 
 export function extensionForChatAttachmentMime(mimeType) {
@@ -127,7 +138,7 @@ export function sanitizeChatAttachmentFileName(fileName, mimeType) {
   return cleaned;
 }
 
-export function validateChatAttachmentPolicy({ mimeType, bytes, fileName }) {
+export function validateChatAttachmentPolicy({ mimeType, bytes, fileName, scope }) {
   const mime = normalizeChatAttachmentMime(mimeType);
   const size = Number(bytes);
   if (!Number.isFinite(size) || size <= 0) {
@@ -136,6 +147,15 @@ export function validateChatAttachmentPolicy({ mimeType, bytes, fileName }) {
 
   const kind = chatAttachmentKindForMime(mime);
   if (!kind) {
+    return {
+      ok: false,
+      errorCode: 'invalid_type',
+      errorMessage:
+        'Unsupported file type. Use JPEG, PNG, WebP, PDF, text, or Office documents.',
+    };
+  }
+
+  if (kind === 'video' && scope !== 'community') {
     return {
       ok: false,
       errorCode: 'invalid_type',
@@ -228,6 +248,23 @@ export function bufferMatchesDeclaredMime(buffer, mimeType) {
       'application/vnd.openxmlformats-officedocument.presentationml.presentation'
   ) {
     return buffer[0] === 0x50 && buffer[1] === 0x4b;
+  }
+  if (mime === 'video/mp4' || mime === 'video/quicktime') {
+    return (
+      buffer.length >= 8 &&
+      buffer[4] === 0x66 &&
+      buffer[5] === 0x74 &&
+      buffer[6] === 0x79 &&
+      buffer[7] === 0x70
+    );
+  }
+  if (mime === 'video/webm') {
+    return (
+      buffer[0] === 0x1a &&
+      buffer[1] === 0x45 &&
+      buffer[2] === 0xdf &&
+      buffer[3] === 0xa3
+    );
   }
   return false;
 }

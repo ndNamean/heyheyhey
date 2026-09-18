@@ -8,12 +8,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   type ChatAttachmentKind,
+  type ChatAttachmentScope,
   validateChatAttachmentPolicy,
   type ChatAttachmentPolicyErrorCode,
 } from '../../lib/chatAttachmentPolicy';
 import type { UploadChatAttachmentResult } from '../../lib/chatAttachmentUpload';
 import { decodeImageDimensions } from '../../lib/imageDecode';
 import type { ChatAttachmentPayloadInput } from '../../lib/storeChatMediaPayload';
+import { decodeVideoMetadata } from '../../lib/videoDecode';
 
 export type ChatAttachmentStagePhase =
   | 'idle'
@@ -39,6 +41,8 @@ export type ChatAttachmentStagingError = {
   code:
     | ChatAttachmentPolicyErrorCode
     | 'unprocessable_image'
+    | 'unprocessable_video'
+    | 'video_too_long'
     | 'upload_failed'
     | 'camera_denied'
     | 'unknown';
@@ -61,6 +65,8 @@ function revokeUrl(url: string | null | undefined) {
 
 const UNPROCESSABLE_IMAGE_MESSAGE =
   'This image could not be processed. Try another photo.';
+const UNPROCESSABLE_VIDEO_MESSAGE = 'This video couldn’t be processed';
+const VIDEO_TOO_LONG_MESSAGE = 'This video is longer than 30 seconds.';
 
 export function useChatAttachmentStaging(options?: {
   /** Called when a new attachment is staged (clear GIPHY). */
@@ -112,6 +118,7 @@ export function useChatAttachmentStaging(options?: {
     async (
       file: File | Blob,
       fileNameHint?: string,
+      scope?: ChatAttachmentScope,
     ): Promise<{ ok: true } | { ok: false; error: ChatAttachmentStagingError }> => {
       const mimeType = String(file.type || '')
         .split(';')[0]
@@ -120,7 +127,7 @@ export function useChatAttachmentStaging(options?: {
       const fileName =
         (file instanceof File && file.name) || fileNameHint || 'attachment';
       const bytes = file.size;
-      const policy = validateChatAttachmentPolicy({ mimeType, bytes, fileName });
+      const policy = validateChatAttachmentPolicy({ mimeType, bytes, fileName, scope });
       if (!policy.ok || !policy.kind) {
         const error: ChatAttachmentStagingError = {
           code: policy.errorCode || 'unknown',
@@ -138,6 +145,30 @@ export function useChatAttachmentStaging(options?: {
           const error: ChatAttachmentStagingError = {
             code: 'unprocessable_image',
             message: UNPROCESSABLE_IMAGE_MESSAGE,
+          };
+          setError(error);
+          setPhase('idle');
+          return { ok: false, error };
+        }
+        if (decoded.status === 'ok') {
+          width = decoded.width;
+          height = decoded.height;
+        }
+      } else if (policy.kind === 'video') {
+        const decoded = await decodeVideoMetadata(file);
+        if (decoded.status === 'unprocessable') {
+          const error: ChatAttachmentStagingError = {
+            code: 'unprocessable_video',
+            message: UNPROCESSABLE_VIDEO_MESSAGE,
+          };
+          setError(error);
+          setPhase('idle');
+          return { ok: false, error };
+        }
+        if (decoded.status === 'too_long') {
+          const error: ChatAttachmentStagingError = {
+            code: 'video_too_long',
+            message: VIDEO_TOO_LONG_MESSAGE,
           };
           setError(error);
           setPhase('idle');

@@ -96,7 +96,7 @@ export default function CommunityComposer({ profile, onClose }: Props) {
 
   const stageIncomingFile = useCallback(
     (file: File) => {
-      void attachmentStaging.stageFile(file).then((result) => {
+      void attachmentStaging.stageFile(file, undefined, 'community').then((result) => {
         if (!result.ok) {
           setSendError(policyErrorMessage(result.error.code));
           return;
@@ -210,7 +210,8 @@ export default function CommunityComposer({ profile, onClose }: Props) {
       ? attachmentInputToFields(attachmentPayload)
       : emptyStoreChatAttachmentFields();
     const isImage = attachmentFields.attachmentKind === 'image';
-    const moodFields = isImage ? moodFieldsForImagePost(postId) : emptyMoodFields();
+    const isVideo = attachmentFields.attachmentKind === 'video';
+    const moodFields = isImage || isVideo ? moodFieldsForImagePost(postId) : emptyMoodFields();
     const createdAt = nowIso();
     const linkAttrs: Record<string, string> = { author: profile.id };
     if (attachmentPayload?.fileId) {
@@ -367,11 +368,13 @@ export default function CommunityComposer({ profile, onClose }: Props) {
           }}
           onFileChosen={(file) => stageIncomingFile(file)}
           onQuickMessage={(text) => insertQuickMessage(text)}
+          showVideo
           labels={{
             attach: sc.attach,
             attachMenuTitle: sc.attachMenuTitle,
             camera: sc.camera,
             photos: sc.photos,
+            video: sc.video,
             file: sc.file,
             quickMessage: sc.quickMessage,
             closeMenu: sc.closeAttachMenu,

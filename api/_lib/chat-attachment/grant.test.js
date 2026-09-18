@@ -10,6 +10,7 @@ import {
   grantPayloadHasFileBytes,
   jsonPayloadByteLength,
 } from './json-budget.js';
+import { CHAT_VIDEO_MAX_BYTES } from './policy.js';
 
 function jpegPrefixBase64() {
   return Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46]).toString(
@@ -19,6 +20,18 @@ function jpegPrefixBase64() {
 
 function pngPrefixBase64() {
   return Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).toString(
+    'base64',
+  );
+}
+
+function ftypPrefixBase64() {
+  return Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d]).toString(
+    'base64',
+  );
+}
+
+function webmPrefixBase64() {
+  return Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x01, 0x00, 0x00, 0x00]).toString(
     'base64',
   );
 }
@@ -173,6 +186,79 @@ describe('buildChatAttachmentGrant', () => {
         { fallbackMessageKey: 'x' },
       ),
     ).toThrow(/magicPrefix/i);
+  });
+
+  it('grants community video with ftyp or webm prefix', () => {
+    const mp4 = buildChatAttachmentGrant(
+      {
+        mimeType: 'video/mp4',
+        bytes: 2 * 1024 * 1024,
+        fileName: 'clip.mp4',
+        magicPrefix: ftypPrefixBase64(),
+      },
+      communityTarget,
+      { fallbackMessageKey: 'x' },
+    );
+    expect(mp4.kind).toBe('video');
+    expect(mp4.path).toBe('stores/community/post-1/clip.mp4');
+
+    const webm = buildChatAttachmentGrant(
+      {
+        mimeType: 'video/webm',
+        bytes: 1024,
+        fileName: 'clip.webm',
+        magicPrefix: webmPrefixBase64(),
+      },
+      communityTarget,
+      { fallbackMessageKey: 'x' },
+    );
+    expect(webm.kind).toBe('video');
+  });
+
+  it('rejects store or group video grants even with matching magic', () => {
+    expect(() =>
+      buildChatAttachmentGrant(
+        {
+          mimeType: 'video/mp4',
+          bytes: 1024,
+          fileName: 'clip.mp4',
+          magicPrefix: ftypPrefixBase64(),
+        },
+        { scope: 'store', storeId: 's1', roomId: '' },
+        { fallbackMessageKey: 'x' },
+      ),
+    ).toThrow(/unsupported file type/i);
+
+    try {
+      buildChatAttachmentGrant(
+        {
+          mimeType: 'video/mp4',
+          bytes: 1024,
+          fileName: 'clip.mp4',
+          magicPrefix: ftypPrefixBase64(),
+        },
+        { scope: 'group', storeId: '', roomId: 'room-1' },
+        { fallbackMessageKey: 'x' },
+      );
+      throw new Error('expected grant to fail');
+    } catch (err) {
+      expect(err).toMatchObject({ code: 'invalid_type', status: 400 });
+    }
+  });
+
+  it('rejects community video over 25 MiB', () => {
+    expect(() =>
+      buildChatAttachmentGrant(
+        {
+          mimeType: 'video/mp4',
+          bytes: CHAT_VIDEO_MAX_BYTES + 1,
+          fileName: 'clip.mp4',
+          magicPrefix: ftypPrefixBase64(),
+        },
+        communityTarget,
+        { fallbackMessageKey: 'x' },
+      ),
+    ).toThrow(/too large/i);
   });
 });
 

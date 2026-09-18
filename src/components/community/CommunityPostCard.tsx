@@ -9,6 +9,7 @@ import {
 } from '../../lib/chatAttachmentDisplay';
 import type { AvatarProfileFields } from '../../lib/avatarDisplay';
 import { isFamousVoteInFlight } from '../../lib/communityFamousVotes';
+import { isCommunityVideoPost } from '../../lib/communityVideo';
 import { isAreaManagerTier, isOwner } from '../../lib/roles';
 import { nowIso } from '../../lib/utils';
 import type { CommunityPost, CommunityReaction, Profile } from '../../types';
@@ -16,6 +17,7 @@ import { MessageBody } from '../floating-assistant/MessageBody';
 import IdentityWithAvatar from '../profileAvatar/IdentityWithAvatar';
 import { shouldEnableSwipeFamous, useSwipeFamous } from '../../hooks/useSwipeFamous';
 import CommunityReactions from './CommunityReactions';
+import CommunityVideoPlayer from './CommunityVideoPlayer';
 
 export type CommunityPostCardVariant = 'feed' | 'famous' | 'detail';
 
@@ -90,6 +92,7 @@ export default function CommunityPostCard({
   const attachmentUrl = resolveChatAttachmentUrl(post);
   const attachmentKind = String(post.attachmentKind || '').trim();
   const isImage = hasAttachment && attachmentKind === 'image';
+  const isVideo = isCommunityVideoPost(post);
   const isFile = hasAttachment && attachmentKind === 'file';
   const bodyTrimmed = post.body.trim();
   const commentCount = Math.max(0, Number(post.commentCount) || 0);
@@ -141,7 +144,7 @@ export default function CommunityPostCard({
 
   function handlePointerDown(event: ReactPointerEvent<HTMLElement>) {
     const target = event.target as HTMLElement | null;
-    if (target?.closest('button, a, textarea, input, .community-reactions, .community-card-more')) {
+    if (target?.closest('button, a, textarea, input, video, .community-reactions, .community-card-more, .community-card-video')) {
       return;
     }
     swipeHandlers.onPointerDown(event);
@@ -238,6 +241,16 @@ export default function CommunityPostCard({
             decoding="async"
           />
         </button>
+      ) : null}
+
+      {isVideo && attachmentUrl ? (
+        <CommunityVideoPlayer
+          postId={post.id}
+          surface={variant === 'famous' ? 'famous' : variant === 'detail' ? 'detail' : 'feed'}
+          src={attachmentUrl}
+          width={width}
+          height={height}
+        />
       ) : null}
 
       {isFile ? (

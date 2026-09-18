@@ -146,6 +146,7 @@ export async function uploadChatAttachment(
     mimeType,
     bytes,
     fileName: params.fileName,
+    scope: params.scope,
   });
   if (!policy.ok) {
     throw Object.assign(new Error(policy.errorMessage || 'Invalid attachment'), {

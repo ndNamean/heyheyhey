@@ -69,6 +69,16 @@ describe('community gallery set', () => {
     expect(sequence.some((post) => post.id === 'p21' && !isCommunityImagePost(post))).toBe(true);
     expect(isCommunityImagePost(imagePost('x'))).toBe(true);
     expect(isCommunityImagePost(textPost('text'))).toBe(false);
+    expect(
+      isCommunityImagePost(
+        imagePost('vid', {
+          attachmentKind: 'video',
+          attachmentMimeType: 'video/mp4',
+          attachmentFileName: 'clip.mp4',
+          attachmentUrl: 'https://example.com/clip.mp4',
+        }),
+      ),
+    ).toBe(false);
   });
 
   it('dedupes Famous + feed, keeps text posts, and starts at the tapped image', () => {

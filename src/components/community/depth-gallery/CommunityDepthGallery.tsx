@@ -1,11 +1,13 @@
 import { startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLang } from '../../../i18n';
 import { resolveChatAttachmentUrl } from '../../../lib/chatAttachmentDisplay';
+import { isCommunityVideoPost } from '../../../lib/communityVideo';
 import { BACK_PRIORITY, useNativeBack } from '../../../lib/nativeBack';
 import { usePointerCapabilities } from '../../media-interaction/pointerCapabilities';
 import type { AvatarProfileFields } from '../../../lib/avatarDisplay';
 import type { CommunityComment, CommunityPost, CommunityReaction } from '../../../types';
 import { MessageBody } from '../../floating-assistant/MessageBody';
+import CommunityVideoPlayer from '../CommunityVideoPlayer';
 import { AtmosphereCanvas } from './atmosphereCanvas';
 import CommunityDepthOrnaments from './CommunityDepthOrnaments';
 import CommunityDepthRipples from './CommunityDepthRipples';
@@ -18,6 +20,7 @@ import {
   isGalleryScrollStill,
   resolveIdleImageSize,
   stepGalleryIdle,
+  stepGalleryPlaybackDwell,
 } from './galleryIdle';
 import { ornamentOpacity, ornamentRevealForIndex } from './galleryOrnaments';
 import {
@@ -122,6 +125,11 @@ interface Props {
   isLoadingMore?: boolean;
   loadMoreError?: boolean;
   onMountedPostIdsChange?: (postIds: string[]) => void;
+  onGalleryPlaybackChange?: (state: {
+    currentPostId: string;
+    nextPostId: string | null;
+    settled: boolean;
+  }) => void;
 }
 
 export default function CommunityDepthGallery({
@@ -136,6 +144,7 @@ export default function CommunityDepthGallery({
   isLoadingMore = false,
   loadMoreError = false,
   onMountedPostIdsChange,
+  onGalleryPlaybackChange,
 }: Props) {
   const { t } = useLang();
   const copy = t.community;
@@ -165,6 +174,8 @@ export default function CommunityDepthGallery({
   );
   const [posts, setPosts] = useState(() => buildCommunityGalleryPosts(sourcePosts, startPostId).posts);
   const startIndex = startIndexRef.current;
+  const onGalleryPlaybackChangeRef = useRef(onGalleryPlaybackChange);
+  onGalleryPlaybackChangeRef.current = onGalleryPlaybackChange;
   const [planePair, setPlanePair] = useState(() => ({
     current: startIndex,
     next: Math.min(startIndex + 1, Math.max(0, buildCommunityGalleryPosts(sourcePosts, startPostId).posts.length - 1)),
@@ -252,11 +263,13 @@ export default function CommunityDepthGallery({
     let running = true;
     let chromeDark = relativeLuminance(moodForPost(effectPosts[effectStartIndex]).backgroundColor) < 0.5;
     let idle = { lastNow: 0, stillMs: 0, idleAmount: 0, vanishAmount: 0 };
+    let playbackDwell = { lastNow: 0, stillMs: 0, settled: false };
     const firedStartRipples = new Set<string>();
     const firedEndRipples = new Set<string>();
     const started = performance.now();
     let lastNotifiedCurrent = Number.NaN;
     let lastNotifiedNext = Number.NaN;
+    let lastNotifiedSettled: boolean | null = null;
 
     function sizeCanvas() {
       if (!overlayCanvas) return;
@@ -332,18 +345,39 @@ export default function CommunityDepthGallery({
       });
 
       const still = isGalleryScrollStill(state.velocity, state.scrollTarget, state.scrollCurrent);
+      playbackDwell = stepGalleryPlaybackDwell({
+        now,
+        lastNow: playbackDwell.lastNow,
+        stillMs: playbackDwell.stillMs,
+        still,
+      });
+      const gallerySettled = playbackDwell.settled;
       const rippleReset = ornamentRippleShouldReset({ still, reducedMotion: reduced });
       const currentIndex = blend.currentPlaneIndex;
       const nextIndex = blend.nextPlaneIndex;
-      if (currentIndex !== lastNotifiedCurrent || nextIndex !== lastNotifiedNext) {
+      const pairChanged =
+        currentIndex !== lastNotifiedCurrent || nextIndex !== lastNotifiedNext;
+      const settledChanged = gallerySettled !== lastNotifiedSettled;
+      if (pairChanged || settledChanged) {
         lastNotifiedCurrent = currentIndex;
         lastNotifiedNext = nextIndex;
+        lastNotifiedSettled = gallerySettled;
+        const framePostsNow = postsRef.current;
+        const currentPostId = framePostsNow[currentIndex]?.id || startPostId;
+        const nextPostId = framePostsNow[nextIndex]?.id || null;
         startTransition(() => {
-          setPlanePair((prev) =>
-            prev.current === currentIndex && prev.next === nextIndex
-              ? prev
-              : { current: currentIndex, next: nextIndex },
-          );
+          onGalleryPlaybackChangeRef.current?.({
+            currentPostId,
+            nextPostId,
+            settled: gallerySettled,
+          });
+          if (pairChanged) {
+            setPlanePair((prev) =>
+              prev.current === currentIndex && prev.next === nextIndex
+                ? prev
+                : { current: currentIndex, next: nextIndex },
+            );
+          }
         });
       }
       const stackWidth = stack?.clientWidth ?? 0;
@@ -374,11 +408,19 @@ export default function CommunityDepthGallery({
         const visual = visualRefs.current.get(post.id);
         const isPair = i === currentIndex || i === nextIndex;
         const isImage = isCommunityImagePost(post);
-        const fallbackW = isImage ? Number.parseInt(post.attachmentWidth || '', 10) || 0 : TEXT_CARD_FALLBACK.width;
-        const fallbackH = isImage ? Number.parseInt(post.attachmentHeight || '', 10) || 0 : TEXT_CARD_FALLBACK.height;
-        const size = isImage
-          ? resolveIdleImageSize(visual instanceof HTMLImageElement ? visual : null, fallbackW, fallbackH)
-          : { width: TEXT_CARD_FALLBACK.width, height: TEXT_CARD_FALLBACK.height };
+        const isVideo = isCommunityVideoPost(post);
+        const fallbackW =
+          isImage || isVideo ? Number.parseInt(post.attachmentWidth || '', 10) || 0 : TEXT_CARD_FALLBACK.width;
+        const fallbackH =
+          isImage || isVideo ? Number.parseInt(post.attachmentHeight || '', 10) || 0 : TEXT_CARD_FALLBACK.height;
+        const size =
+          isImage || isVideo
+            ? resolveIdleImageSize(
+                visual instanceof HTMLImageElement || visual instanceof HTMLVideoElement ? visual : null,
+                fallbackW,
+                fallbackH,
+              )
+            : { width: TEXT_CARD_FALLBACK.width, height: TEXT_CARD_FALLBACK.height };
         const rect = containRectForStack(stackWidth, stackHeight, size.width, size.height);
         if (layer) {
           const motion = layerMotionForGalleryIndex({
@@ -414,9 +456,8 @@ export default function CommunityDepthGallery({
           }
         }
         if (visual) {
-          const coverScale = isPair
-            ? coverScaleForStack(rect.width, rect.height, size.width, size.height)
-            : 1;
+          const coverScale =
+            isPair && isImage ? coverScaleForStack(rect.width, rect.height, size.width, size.height) : 1;
           const scale = composeIdleImageScale(
             garnishScale,
             coverScale,
@@ -574,6 +615,7 @@ export default function CommunityDepthGallery({
           const index = mountFrom + offset;
           const url = resolveChatAttachmentUrl(post);
           const isImage = isCommunityImagePost(post);
+          const isVideo = isCommunityVideoPost(post);
           const isFile = String(post.attachmentKind || '').trim() === 'file';
           const eager = index === planePair.current || index === planePair.next;
           const mood = moodForPost(post);
@@ -603,6 +645,18 @@ export default function CommunityDepthGallery({
                     decoding="async"
                     draggable={false}
                     style={{ opacity: index === startIndex ? 1 : 0 }}
+                  />
+                ) : isVideo ? (
+                  <CommunityVideoPlayer
+                    postId={post.id}
+                    surface="gallery"
+                    src={url}
+                    width={Number.parseInt(post.attachmentWidth || '', 10) || undefined}
+                    height={Number.parseInt(post.attachmentHeight || '', 10) || undefined}
+                    visualRef={(el) => {
+                      if (el) visualRefs.current.set(post.id, el);
+                      else visualRefs.current.delete(post.id);
+                    }}
                   />
                 ) : (
                   <div

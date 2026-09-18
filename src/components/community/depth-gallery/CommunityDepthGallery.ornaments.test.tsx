@@ -655,6 +655,50 @@ describe('CommunityDepthGallery ornaments', () => {
     expect(layers[2].querySelector('.community-depth-text-card')?.textContent).toContain('File caption');
   });
 
+  it('renders a video plane instead of a text card', () => {
+    const posts = [
+      imagePost('p0'),
+      imagePost('vid', {
+        attachmentKind: 'video',
+        attachmentMimeType: 'video/mp4',
+        attachmentFileName: 'clip.mp4',
+        attachmentUrl: 'https://example.com/clip.mp4',
+        attachmentPath: 'stores/community/vid/clip.mp4',
+        attachmentWidth: '1080',
+        attachmentHeight: '1920',
+        body: '',
+      }),
+    ];
+    const { container } = render(
+      <CommunityDepthGallery sourcePosts={posts} startPostId="p0" onClose={() => {}} />,
+    );
+    const layers = container.querySelectorAll('.community-depth-layer');
+    expect(layers[1].querySelector('.community-depth-video')).toBeTruthy();
+    expect(layers[1].querySelector('.community-depth-text-card')).toBeNull();
+    expect(layers[1].querySelector('.community-depth-image')).toBeNull();
+    expect(layers[1].querySelector(':scope > .community-depth-ornaments')).toBeTruthy();
+  });
+
+  it('publishes gallerySettled from the existing rAF dwell', () => {
+    const onGalleryPlaybackChange = vi.fn();
+    render(
+      <CommunityDepthGallery
+        sourcePosts={[imagePost('p0'), imagePost('p1')]}
+        startPostId="p0"
+        onClose={() => {}}
+        onGalleryPlaybackChange={onGalleryPlaybackChange}
+      />,
+    );
+    flushFrames(20);
+    const last = onGalleryPlaybackChange.mock.calls.at(-1)?.[0] as {
+      currentPostId: string;
+      nextPostId: string | null;
+      settled: boolean;
+    };
+    expect(last.currentPostId).toBe('p0');
+    expect(last.settled).toBe(true);
+  });
+
   it('mounts only a small window of planes for a long sequence', () => {
     const posts = Array.from({ length: 12 }, (_, i) => imagePost(`p${i}`));
     const { container } = render(

@@ -897,7 +897,7 @@ export type StoreChatMessageStatus = 'active' | 'deleted';
 /** Phase 4 GIPHY kinds; '' when message has no media. */
 export type StoreChatGiphyKind = 'gif' | 'sticker' | 'meme' | 'emoji' | '';
 /** Chat attachment kinds; '' when none. */
-export type StoreChatAttachmentKind = 'image' | 'file' | '';
+export type StoreChatAttachmentKind = 'image' | 'file' | 'video' | '';
 
 /**
  * InstantDB storeChatMessages — room key is storeId.

@@ -14,7 +14,13 @@ import {
 } from './useChatAttachmentStaging';
 import { createRef } from 'react';
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  Object.defineProperty(navigator, 'userAgent', {
+    configurable: true,
+    value: 'Mozilla/5.0 (jsdom)',
+  });
+});
 
 beforeAll(() => {
   if (typeof URL.createObjectURL !== 'function') {
@@ -116,6 +122,24 @@ describe('ChatAttachmentPreview', () => {
     expect(onClear).toHaveBeenCalled();
   });
 
+  it('renders a muted video preview without autoplay', () => {
+    render(
+      <ChatAttachmentPreview
+        item={{
+          ...baseItem,
+          kind: 'video',
+          mimeType: 'video/mp4',
+          fileName: 'clip.mp4',
+        }}
+      />,
+    );
+    const video = document.querySelector('video') as HTMLVideoElement;
+    expect(video).toBeTruthy();
+    expect(video.muted).toBe(true);
+    expect(video.getAttribute('src')).toBe('blob:preview');
+    expect(video.autoplay).toBe(false);
+  });
+
   it('shows retry when failed and announces status', () => {
     const onRetry = vi.fn();
     render(
@@ -170,6 +194,7 @@ describe('ComposerAttachMenu', () => {
       expect(screen.getByRole('dialog', { name: 'Attach' })).toBeTruthy();
     });
     expect(screen.getByRole('menuitem', { name: 'Camera' })).toBeTruthy();
+    expect(screen.queryByRole('menuitem', { name: 'Video' })).toBeNull();
 
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -191,6 +216,37 @@ describe('ComposerAttachMenu', () => {
     );
     expect(screen.getByRole('status').textContent).toMatch(/camera permission denied/i);
     expect(screen.getByRole('button', { name: 'Choose from Photos' })).toBeTruthy();
+  });
+
+  it('inserts Video between Photos and File only when showVideo is set', () => {
+    const anchorRef = createRef<HTMLButtonElement>();
+    const { rerender } = render(
+      <ComposerAttachMenu
+        open
+        onOpenChange={vi.fn()}
+        anchorRef={anchorRef}
+        labels={{ ...menuLabels, video: 'Video' }}
+        onFileChosen={vi.fn()}
+        onQuickMessage={vi.fn()}
+      />,
+    );
+    const withoutVideo = screen.getAllByRole('menuitem').map((el) => el.textContent);
+    expect(withoutVideo).toEqual(['Camera', 'Photos', 'File', 'Quick Message']);
+
+    rerender(
+      <ComposerAttachMenu
+        open
+        onOpenChange={vi.fn()}
+        anchorRef={anchorRef}
+        labels={{ ...menuLabels, video: 'Video' }}
+        onFileChosen={vi.fn()}
+        onQuickMessage={vi.fn()}
+        showVideo
+      />,
+    );
+    const withVideo = screen.getAllByRole('menuitem').map((el) => el.textContent);
+    expect(withVideo).toEqual(['Camera', 'Photos', 'Video', 'File', 'Quick Message']);
+    expect(document.querySelector('input[accept="video/mp4,video/quicktime,video/webm"]')).toBeTruthy();
   });
 });
 
@@ -297,5 +353,32 @@ describe('useChatAttachmentStaging', () => {
     expect(result.current.phase).toBe('idle');
     expect(onStageAttachment).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
+  });
+
+  it('rejects video without community scope and stages with community scope', async () => {
+    Object.defineProperty(navigator, 'userAgent', {
+      configurable: true,
+      value: 'Mozilla/5.0 (jsdom)',
+    });
+    const { result } = renderHook(() => useChatAttachmentStaging());
+    let denied: Awaited<ReturnType<typeof result.current.stageFile>> | undefined;
+    await act(async () => {
+      denied = await result.current.stageFile(
+        new File([new Uint8Array([1, 2, 3])], 'clip.mp4', { type: 'video/mp4' }),
+      );
+    });
+    expect(denied?.ok).toBe(false);
+    if (denied && !denied.ok) expect(denied.error.code).toBe('invalid_type');
+    expect(result.current.staged).toBeNull();
+
+    await act(async () => {
+      await result.current.stageFile(
+        new File([new Uint8Array([1, 2, 3])], 'clip.mp4', { type: 'video/mp4' }),
+        undefined,
+        'community',
+      );
+    });
+    expect(result.current.phase).toBe('selected');
+    expect(result.current.staged?.kind).toBe('video');
   });
 });

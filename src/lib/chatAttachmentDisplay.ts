@@ -43,6 +43,8 @@ export function chatAttachmentPolicyErrorCopy(
     attachmentEmpty: string;
     uploadFailed: string;
     attachmentUnprocessable?: string;
+    attachmentUnprocessableVideo?: string;
+    attachmentVideoTooLong?: string;
   },
 ): string {
   switch (code) {
@@ -56,6 +58,10 @@ export function chatAttachmentPolicyErrorCopy(
       return sc.attachmentEmpty;
     case 'unprocessable_image':
       return sc.attachmentUnprocessable || sc.attachmentInvalidType;
+    case 'unprocessable_video':
+      return sc.attachmentUnprocessableVideo || sc.attachmentInvalidType;
+    case 'video_too_long':
+      return sc.attachmentVideoTooLong || sc.attachmentTooLarge;
     default:
       return sc.uploadFailed;
   }

@@ -43,7 +43,7 @@ export interface StoreChatAttachmentFields {
   attachmentHeight: string;
 }
 
-export type ChatAttachmentKindValue = 'image' | 'file';
+export type ChatAttachmentKindValue = 'image' | 'file' | 'video';
 
 /** Uploaded attachment ready to persist on a chat message. */
 export interface ChatAttachmentPayloadInput {
@@ -190,7 +190,8 @@ export function attachmentInputToFields(
     item.height != null ? Math.max(0, Math.round(Number(item.height))) : 0;
   const bytes = Math.max(0, Math.round(Number(item.bytes) || 0));
   return {
-    attachmentKind: item.kind === 'file' ? 'file' : 'image',
+    attachmentKind:
+      item.kind === 'video' ? 'video' : item.kind === 'file' ? 'file' : 'image',
     attachmentPath: String(item.path || '').trim(),
     attachmentFileId: String(item.fileId || '').trim(),
     attachmentUrl: String(item.url || '').trim(),
@@ -296,7 +297,10 @@ export function storeChatMediaLabel(
 ): string {
   const type = String(messageType || 'text');
   if (type === 'attachment' || type === 'text_attachment') {
-    return String(attachmentKind || '').trim() === 'file' ? 'File' : 'Photo';
+    const kind = String(attachmentKind || '').trim();
+    if (kind === 'file') return 'File';
+    if (kind === 'video') return 'Video';
+    return 'Photo';
   }
   if (type === 'text') return 'Message';
   const kind = (giphyKind || '').trim();
