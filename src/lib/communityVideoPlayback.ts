@@ -1,4 +1,3 @@
-export const FEED_VIDEO_SETTLE_MS = 120;
 export const FEED_VIDEO_MIN_INTERSECTION = 0.6;
 /** Gallery playback settle only — do not use for ornament/idle zoom. */
 export const GALLERY_PLAYBACK_DWELL_MS = 100;
@@ -20,6 +19,7 @@ export type FeedVideoCandidate = {
 export type GalleryPlaybackState = {
   currentPostId: string;
   nextPostId: string | null;
+  /** Published from gallery dwell; playback follows currentPostId even while scrolling. */
   settled: boolean;
 };
 
@@ -55,15 +55,6 @@ export function pickDominantFeedVideo(
   return best;
 }
 
-export function isWindowScrollSettled(
-  lastScrollAt: number,
-  now: number,
-  dwellMs = FEED_VIDEO_SETTLE_MS,
-): boolean {
-  if (!Number.isFinite(lastScrollAt) || lastScrollAt <= 0) return true;
-  return now - lastScrollAt >= dwellMs;
-}
-
 export function canAttachVideoSource(args: {
   postId: string;
   surface: CommunityVideoSurface;
@@ -91,12 +82,11 @@ export function canAttachVideoSource(args: {
 export function resolvePlaybackToken(args: {
   gallery: GalleryPlaybackState | null;
   selectedPostId: string | null;
-  feedSettled: boolean;
   feedDominant: FeedVideoCandidate | null;
   claim?: CommunityVideoPlaybackToken | null;
 }): CommunityVideoPlaybackToken | null {
   if (args.gallery) {
-    if (args.gallery.settled && args.gallery.currentPostId) {
+    if (args.gallery.currentPostId) {
       return { postId: args.gallery.currentPostId, surface: 'gallery' };
     }
     return null;
@@ -105,20 +95,10 @@ export function resolvePlaybackToken(args: {
   if (claim?.surface === 'detail' && args.selectedPostId === claim.postId) {
     return claim;
   }
-  if (
-    claim &&
-    (claim.surface === 'feed' || claim.surface === 'famous') &&
-    !args.selectedPostId &&
-    args.feedSettled &&
-    args.feedDominant?.postId === claim.postId &&
-    args.feedDominant.surface === claim.surface
-  ) {
-    return claim;
-  }
   if (args.selectedPostId) {
     return { postId: args.selectedPostId, surface: 'detail' };
   }
-  if (args.feedSettled && args.feedDominant) {
+  if (args.feedDominant) {
     return { postId: args.feedDominant.postId, surface: args.feedDominant.surface };
   }
   return null;

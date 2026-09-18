@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  FEED_VIDEO_SETTLE_MS,
   GALLERY_PLAYBACK_DWELL_MS,
   canAttachVideoSource,
   firstAutoplaySoundAttempt,
   isLowMovementFrameTap,
   isPlaybackOutputMuted,
-  isWindowScrollSettled,
   pickDominantFeedVideo,
   resolvePlaybackToken,
   shouldAbandonPlayAttempt,
@@ -47,13 +45,6 @@ describe('communityVideoPlayback', () => {
       ]),
     ).toEqual({ postId: 'b', surface: 'feed', ratio: 0.7 });
     expect(pickDominantFeedVideo([{ postId: 'a', surface: 'feed', ratio: 0.59 }])).toBeNull();
-  });
-
-  it('uses 120ms window-scroll settle', () => {
-    expect(FEED_VIDEO_SETTLE_MS).toBe(120);
-    expect(isWindowScrollSettled(0, 1000)).toBe(true);
-    expect(isWindowScrollSettled(1000, 1119)).toBe(false);
-    expect(isWindowScrollSettled(1000, 1120)).toBe(true);
   });
 
   it('keeps gallery playback dwell shorter than ornament idle', () => {
@@ -168,12 +159,11 @@ describe('communityVideoPlayback', () => {
     expect(isLowMovementFrameTap(0, 0, 40, 0)).toBe(false);
   });
 
-  it('lets gallery settled current win over detail and feed', () => {
+  it('lets gallery current win over detail and feed even while scrolling', () => {
     expect(
       resolvePlaybackToken({
         gallery: { currentPostId: 'g', nextPostId: 'n', settled: true },
         selectedPostId: 'd',
-        feedSettled: true,
         feedDominant: { postId: 'f', surface: 'feed', ratio: 0.9 },
       }),
     ).toEqual({ postId: 'g', surface: 'gallery' });
@@ -181,18 +171,26 @@ describe('communityVideoPlayback', () => {
       resolvePlaybackToken({
         gallery: { currentPostId: 'g', nextPostId: 'n', settled: false },
         selectedPostId: 'd',
-        feedSettled: true,
         feedDominant: { postId: 'f', surface: 'feed', ratio: 0.9 },
       }),
-    ).toBeNull();
+    ).toEqual({ postId: 'g', surface: 'gallery' });
     expect(
       resolvePlaybackToken({
         gallery: null,
         selectedPostId: 'd',
-        feedSettled: true,
         feedDominant: { postId: 'f', surface: 'feed', ratio: 0.9 },
       }),
     ).toEqual({ postId: 'd', surface: 'detail' });
+  });
+
+  it('keeps the feed token while scrolling if the same clip stays dominant', () => {
+    expect(
+      resolvePlaybackToken({
+        gallery: null,
+        selectedPostId: null,
+        feedDominant: { postId: 'f', surface: 'feed', ratio: 0.8 },
+      }),
+    ).toEqual({ postId: 'f', surface: 'feed' });
   });
 
   it('attaches gallery current+next and feed dominant only', () => {
@@ -278,7 +276,6 @@ describe('communityVideoPlayback', () => {
       resolvePlaybackToken({
         gallery: null,
         selectedPostId: null,
-        feedSettled: true,
         feedDominant: { postId: 'b', surface: 'feed', ratio: 0.9 },
         claim: { postId: 'a', surface: 'feed' },
       }),

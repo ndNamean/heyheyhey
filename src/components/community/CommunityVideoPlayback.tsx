@@ -1,7 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { usePointerCapabilities } from '../media-interaction/pointerCapabilities';
 import {
-  FEED_VIDEO_SETTLE_MS,
   canAttachVideoSource,
   pickDominantFeedVideo,
   resolvePlaybackToken,
@@ -65,14 +64,11 @@ export function CommunityVideoPlaybackProvider({
     () => typeof document !== 'undefined' && document.hidden,
   );
   const [saveData, setSaveData] = useState(readSaveData);
-  const [feedSettled, setFeedSettled] = useState(true);
   const [feedDominant, setFeedDominant] = useState<FeedVideoCandidate | null>(null);
   const [userPausedKeys, setUserPausedKeys] = useState<Set<string>>(() => new Set());
   const [claim, setClaim] = useState<CommunityVideoPlaybackToken | null>(null);
   const [userMuted, setUserMutedState] = useState(false);
   const [autoplayMutedFallback, setAutoplayMutedFallback] = useState(false);
-  const lastScrollAtRef = useRef(0);
-  const settleTimerRef = useRef<number | null>(null);
   const feedEntriesRef = useRef(new Map<string, FeedEntry>());
   const ratiosRef = useRef(new Map<string, number>());
   const observerRef = useRef<IntersectionObserver | null>(null);
@@ -120,23 +116,6 @@ export function CommunityVideoPlaybackProvider({
   }, [syncDominant]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const onScroll = () => {
-      lastScrollAtRef.current = performance.now();
-      setFeedSettled(false);
-      if (settleTimerRef.current != null) window.clearTimeout(settleTimerRef.current);
-      settleTimerRef.current = window.setTimeout(() => {
-        setFeedSettled(true);
-      }, FEED_VIDEO_SETTLE_MS);
-    };
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      if (settleTimerRef.current != null) window.clearTimeout(settleTimerRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
     const onVisibility = () => setDocumentHidden(document.hidden);
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
@@ -157,11 +136,10 @@ export function CommunityVideoPlaybackProvider({
       resolvePlaybackToken({
         gallery: galleryState,
         selectedPostId,
-        feedSettled,
         feedDominant,
         claim,
       }),
-    [claim, feedDominant, feedSettled, galleryState, selectedPostId],
+    [claim, feedDominant, galleryState, selectedPostId],
   );
 
   useEffect(() => {
