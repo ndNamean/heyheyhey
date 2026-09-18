@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   GALLERY_PLAYBACK_DWELL_MS,
   canAttachVideoSource,
+  galleryPlayPostId,
   firstAutoplaySoundAttempt,
   isLowMovementFrameTap,
   isPlaybackOutputMuted,
@@ -181,6 +182,20 @@ describe('communityVideoPlayback', () => {
         feedDominant: { postId: 'f', surface: 'feed', ratio: 0.9 },
       }),
     ).toEqual({ postId: 'd', surface: 'detail' });
+  });
+
+  it('starts gallery play on the next plane as soon as it begins fading in', () => {
+    expect(galleryPlayPostId({ currentPostId: 'g', nextPostId: 'n' })).toBe('g');
+    expect(galleryPlayPostId({ currentPostId: 'g', nextPostId: 'n', depthBlend: 0 })).toBe('g');
+    expect(galleryPlayPostId({ currentPostId: 'g', nextPostId: 'n', depthBlend: 0.01 })).toBe('n');
+    expect(galleryPlayPostId({ currentPostId: 'g', nextPostId: 'g', depthBlend: 0.4 })).toBe('g');
+    expect(
+      resolvePlaybackToken({
+        gallery: { currentPostId: 'g', nextPostId: 'n', settled: false, depthBlend: 0.01 },
+        selectedPostId: 'd',
+        feedDominant: { postId: 'f', surface: 'feed', ratio: 0.9 },
+      }),
+    ).toEqual({ postId: 'n', surface: 'gallery' });
   });
 
   it('keeps the feed token while scrolling if the same clip stays dominant', () => {

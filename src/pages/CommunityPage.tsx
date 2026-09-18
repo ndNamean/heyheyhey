@@ -463,6 +463,7 @@ export default function CommunityPage({ profile }: Props) {
               currentPostId: galleryPostId || '',
               nextPostId: null,
               settled: false,
+              depthBlend: 0,
             }
           : null
       }

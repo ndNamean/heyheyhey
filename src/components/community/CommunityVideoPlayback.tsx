@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { usePointerCapabilities } from '../media-interaction/pointerCapabilities';
 import {
   canAttachVideoSource,
+  galleryPlayPostId,
   pickDominantFeedVideo,
   resolvePlaybackToken,
   shouldWantPlay,
@@ -145,7 +146,7 @@ export function CommunityVideoPlaybackProvider({
   useEffect(() => {
     if (!claim) return;
     if (galleryState) {
-      if (claim.surface !== 'gallery' || claim.postId !== galleryState.currentPostId) {
+      if (claim.surface !== 'gallery' || claim.postId !== galleryPlayPostId(galleryState)) {
         setClaim(null);
       }
       return;

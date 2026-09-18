@@ -2,6 +2,7 @@ import { startTransition, useEffect, useLayoutEffect, useMemo, useRef, useState 
 import { useLang } from '../../../i18n';
 import { resolveChatAttachmentUrl } from '../../../lib/chatAttachmentDisplay';
 import { isCommunityVideoPost } from '../../../lib/communityVideo';
+import { galleryPlayPostId, type GalleryPlaybackState } from '../../../lib/communityVideoPlayback';
 import { BACK_PRIORITY, useNativeBack } from '../../../lib/nativeBack';
 import { usePointerCapabilities } from '../../media-interaction/pointerCapabilities';
 import type { AvatarProfileFields } from '../../../lib/avatarDisplay';
@@ -125,11 +126,7 @@ interface Props {
   isLoadingMore?: boolean;
   loadMoreError?: boolean;
   onMountedPostIdsChange?: (postIds: string[]) => void;
-  onGalleryPlaybackChange?: (state: {
-    currentPostId: string;
-    nextPostId: string | null;
-    settled: boolean;
-  }) => void;
+  onGalleryPlaybackChange?: (state: GalleryPlaybackState) => void;
 }
 
 export default function CommunityDepthGallery({
@@ -270,6 +267,7 @@ export default function CommunityDepthGallery({
     let lastNotifiedCurrent = Number.NaN;
     let lastNotifiedNext = Number.NaN;
     let lastNotifiedSettled: boolean | null = null;
+    let lastNotifiedPlay = '';
 
     function sizeCanvas() {
       if (!overlayCanvas) return;
@@ -355,21 +353,29 @@ export default function CommunityDepthGallery({
       const rippleReset = ornamentRippleShouldReset({ still, reducedMotion: reduced });
       const currentIndex = blend.currentPlaneIndex;
       const nextIndex = blend.nextPlaneIndex;
+      const framePostsNow = postsRef.current;
+      const currentPostId = framePostsNow[currentIndex]?.id || startPostId;
+      const nextPostId = framePostsNow[nextIndex]?.id || null;
+      const playPostId = galleryPlayPostId({
+        currentPostId,
+        nextPostId,
+        depthBlend: blend.depthBlend,
+      });
       const pairChanged =
         currentIndex !== lastNotifiedCurrent || nextIndex !== lastNotifiedNext;
       const settledChanged = gallerySettled !== lastNotifiedSettled;
-      if (pairChanged || settledChanged) {
+      const playChanged = playPostId !== lastNotifiedPlay;
+      if (pairChanged || settledChanged || playChanged) {
         lastNotifiedCurrent = currentIndex;
         lastNotifiedNext = nextIndex;
         lastNotifiedSettled = gallerySettled;
-        const framePostsNow = postsRef.current;
-        const currentPostId = framePostsNow[currentIndex]?.id || startPostId;
-        const nextPostId = framePostsNow[nextIndex]?.id || null;
+        lastNotifiedPlay = playPostId;
         startTransition(() => {
           onGalleryPlaybackChangeRef.current?.({
             currentPostId,
             nextPostId,
             settled: gallerySettled,
+            depthBlend: blend.depthBlend,
           });
           if (pairChanged) {
             setPlanePair((prev) =>

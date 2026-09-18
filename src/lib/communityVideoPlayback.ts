@@ -19,9 +19,21 @@ export type FeedVideoCandidate = {
 export type GalleryPlaybackState = {
   currentPostId: string;
   nextPostId: string | null;
-  /** Published from gallery dwell; playback follows currentPostId even while scrolling. */
+  /** Published from gallery dwell; not used as a play gate. */
   settled: boolean;
+  /** 0 = fully on current; > 0 means the next plane is fading in and owns play. */
+  depthBlend?: number;
 };
+
+export function galleryPlayPostId(
+  gallery: Pick<GalleryPlaybackState, 'currentPostId' | 'nextPostId' | 'depthBlend'>,
+): string {
+  const nextId = gallery.nextPostId;
+  if (nextId && nextId !== gallery.currentPostId && (gallery.depthBlend ?? 0) > 0) {
+    return nextId;
+  }
+  return gallery.currentPostId;
+}
 
 export function surfacePriority(surface: CommunityVideoSurface): number {
   if (surface === 'gallery') return 3;
@@ -86,8 +98,9 @@ export function resolvePlaybackToken(args: {
   claim?: CommunityVideoPlaybackToken | null;
 }): CommunityVideoPlaybackToken | null {
   if (args.gallery) {
-    if (args.gallery.currentPostId) {
-      return { postId: args.gallery.currentPostId, surface: 'gallery' };
+    const postId = galleryPlayPostId(args.gallery);
+    if (postId) {
+      return { postId, surface: 'gallery' };
     }
     return null;
   }
