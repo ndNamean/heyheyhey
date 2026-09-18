@@ -42,6 +42,7 @@ export function chatAttachmentPolicyErrorCopy(
     attachmentBlocked: string;
     attachmentEmpty: string;
     uploadFailed: string;
+    attachmentUnprocessable?: string;
   },
 ): string {
   switch (code) {
@@ -53,6 +54,8 @@ export function chatAttachmentPolicyErrorCopy(
       return sc.attachmentBlocked;
     case 'empty':
       return sc.attachmentEmpty;
+    case 'unprocessable_image':
+      return sc.attachmentUnprocessable || sc.attachmentInvalidType;
     default:
       return sc.uploadFailed;
   }

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CommunityComment, CommunityPost, Profile } from '../../types';
 import { buildExtendedPack, extraCommonEn } from '../../i18n/extra';
 
@@ -92,12 +92,21 @@ vi.mock('../floating-assistant/ChatAttachmentPreview', () => ({
   ChatAttachmentPreview: ({
     item,
     onClear,
+    onRetry,
+    phase,
   }: {
     item: { fileName: string };
     onClear?: () => void;
+    onRetry?: () => void;
+    phase?: string;
   }) => (
-    <div>
+    <div data-phase={phase || 'selected'}>
       <span>{item.fileName}</span>
+      {phase === 'failed' && onRetry ? (
+        <button type="button" onClick={onRetry}>
+          Retry
+        </button>
+      ) : null}
       <button type="button" onClick={onClear}>
         Remove photo
       </button>
@@ -161,6 +170,23 @@ import CommunityComments from './CommunityComments';
 import { uploadChatAttachment } from '../../lib/chatAttachmentUpload';
 
 const uploadMock = vi.mocked(uploadChatAttachment);
+
+beforeAll(() => {
+  if (typeof URL.createObjectURL !== 'function') {
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      writable: true,
+      value: () => 'blob:mock-url',
+    });
+  }
+  if (typeof URL.revokeObjectURL !== 'function') {
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      writable: true,
+      value: () => undefined,
+    });
+  }
+});
 
 function profile(extra: Partial<Profile> = {}): Profile {
   return {
@@ -261,6 +287,7 @@ describe('CommunityComments GIF content', () => {
         attachmentUrl: '',
       }),
     );
+    expect(uploadMock).not.toHaveBeenCalled();
   });
 
   it('sends a GIF-only comment with empty body and stored GIPHY fields', async () => {
@@ -504,6 +531,34 @@ describe('CommunityComments GIF content', () => {
         attachmentUrl: 'https://example.com/c.jpg',
         attachmentPath: 'stores/community/post-a/c.jpg',
         attachmentFileId: 'file-1',
+      }),
+    );
+  });
+
+  it('retries after Instant failure without uploading again', async () => {
+    transactMock.mockRejectedValueOnce(new Error('instant down'));
+    render(<CommunityComments post={post()} comments={[]} profile={profile()} />);
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['abc'], 'fish.jpg', { type: 'image/jpeg' });
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => {
+      fireEvent.change(input);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    });
+    expect(uploadMock).toHaveBeenCalledTimes(1);
+    expect(transactMock).toHaveBeenCalledTimes(1);
+    transactMock.mockResolvedValueOnce(undefined);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    });
+    expect(uploadMock).toHaveBeenCalledTimes(1);
+    expect(transactMock).toHaveBeenCalledTimes(2);
+    expect(commentUpdateMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        attachmentFileId: 'file-1',
+        clientMutationId: 'comment-new',
       }),
     );
   });

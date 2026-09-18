@@ -265,4 +265,37 @@ describe('useChatAttachmentStaging', () => {
     expect(result.current.hasStaged).toBe(true);
     expect(result.current.staged?.kind).toBe('file');
   });
+
+  it('fails at pick when image decode errors instead of staging', async () => {
+    Object.defineProperty(navigator, 'userAgent', {
+      configurable: true,
+      value: 'Mozilla/5.0',
+    });
+    class BoomImage {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(_value: string) {
+        queueMicrotask(() => this.onerror?.());
+      }
+    }
+    vi.stubGlobal('Image', BoomImage);
+    const onStageAttachment = vi.fn();
+    const { result } = renderHook(() =>
+      useChatAttachmentStaging({ onStageAttachment }),
+    );
+    let outcome: Awaited<ReturnType<typeof result.current.stageFile>> | undefined;
+    await act(async () => {
+      outcome = await result.current.stageFile(
+        new File([new Uint8Array([1, 2, 3])], 'bad.jpg', { type: 'image/jpeg' }),
+      );
+    });
+    expect(outcome?.ok).toBe(false);
+    if (outcome && !outcome.ok) {
+      expect(outcome.error.code).toBe('unprocessable_image');
+    }
+    expect(result.current.staged).toBeNull();
+    expect(result.current.phase).toBe('idle');
+    expect(onStageAttachment).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
 });

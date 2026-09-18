@@ -49,6 +49,13 @@ describe('chatAttachmentDisplay', () => {
     };
     expect(chatAttachmentPolicyErrorCopy('too_large', sc)).toBe('too big');
     expect(chatAttachmentPolicyErrorCopy('blocked_extension', sc)).toBe('blocked');
+    expect(chatAttachmentPolicyErrorCopy('unprocessable_image', sc)).toBe('bad type');
+    expect(
+      chatAttachmentPolicyErrorCopy('unprocessable_image', {
+        ...sc,
+        attachmentUnprocessable: 'cannot decode',
+      }),
+    ).toBe('cannot decode');
     expect(chatAttachmentPolicyErrorCopy('unknown', sc)).toBe('failed');
   });
 });

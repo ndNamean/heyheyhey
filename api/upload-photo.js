@@ -5,7 +5,10 @@
 
 import { init, id } from '@instantdb/admin';
 import { verifyRequestUser, loadProfileContext } from './_lib/export/auth.js';
-import { userHasStoreAccess } from './_lib/wifi-notify/access.js';
+import {
+  assertCanUploadChatAttachment,
+  buildChatAttachmentGrant,
+} from './_lib/chat-attachment/grant.js';
 import {
   bufferMatchesDeclaredMime,
   buildChatAttachmentStoragePath,
@@ -84,67 +87,6 @@ function isChatAttachmentRequest(req, body) {
   );
 }
 
-async function assertCanUploadChatAttachment(ctx, body, adminDb) {
-  const scope = String(body.scope || '').trim().toLowerCase();
-  if (scope !== 'store' && scope !== 'group' && scope !== 'community') {
-    const err = new Error('Invalid scope. Use store, group, or community.');
-    err.status = 400;
-    throw err;
-  }
-
-  if (scope === 'community') {
-    const postId = sanitizePathSegment(body.postId || body.messageId, '');
-    if (!postId) {
-      const err = new Error('Missing or invalid postId');
-      err.status = 400;
-      throw err;
-    }
-    // Any approved profile may upload Community media (including viewer).
-    return { scope, storeId: '', roomId: '', postId };
-  }
-
-  if (ctx.role === 'viewer') {
-    const err = new Error('Viewers cannot upload chat attachments');
-    err.status = 403;
-    throw err;
-  }
-
-  if (scope === 'store') {
-    const storeId = sanitizePathSegment(body.storeId, '');
-    if (!storeId) {
-      const err = new Error('Missing or invalid storeId');
-      err.status = 400;
-      throw err;
-    }
-    if (!userHasStoreAccess(ctx, storeId)) {
-      const err = new Error('Forbidden: no Store Chat access for this store');
-      err.status = 403;
-      throw err;
-    }
-    return { scope, storeId, roomId: '' };
-  }
-
-  const roomId = sanitizePathSegment(body.roomId, '');
-  if (!roomId) {
-    const err = new Error('Missing or invalid roomId');
-    err.status = 400;
-    throw err;
-  }
-
-  const membership = await adminDb.query({
-    groupChatMembers: {
-      $: { where: { roomId, userId: ctx.userId } },
-    },
-  });
-  if (!membership.groupChatMembers?.[0]) {
-    const err = new Error('Forbidden: not a member of this group chat');
-    err.status = 403;
-    throw err;
-  }
-
-  return { scope, storeId: '', roomId };
-}
-
 async function handleChatAttachmentUpload(req, res, body, adminDb) {
   let userId;
   try {
@@ -166,10 +108,6 @@ async function handleChatAttachmentUpload(req, res, body, adminDb) {
       .json({ error: e instanceof Error ? e.message : 'Forbidden' });
   }
 
-  if (!body?.fileBase64 || !body?.mimeType) {
-    return res.status(400).json({ error: 'Missing fileBase64 or mimeType' });
-  }
-
   let target;
   try {
     target = await assertCanUploadChatAttachment(ctx, body, adminDb);
@@ -178,6 +116,24 @@ async function handleChatAttachmentUpload(req, res, body, adminDb) {
     return res
       .status(status)
       .json({ error: e instanceof Error ? e.message : 'Forbidden' });
+  }
+
+  if (!body?.fileBase64) {
+    try {
+      const grant = buildChatAttachmentGrant(body, target, {
+        fallbackMessageKey: id(),
+      });
+      return res.status(200).json(grant);
+    } catch (e) {
+      const status = e?.status || 400;
+      const payload = { error: e instanceof Error ? e.message : 'Invalid grant' };
+      if (e?.code) payload.code = e.code;
+      return res.status(status).json(payload);
+    }
+  }
+
+  if (!body?.mimeType) {
+    return res.status(400).json({ error: 'Missing fileBase64 or mimeType' });
   }
 
   let buffer;

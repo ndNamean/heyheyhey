@@ -14,11 +14,9 @@ import {
   commentHasPhotoContent,
   commentPhotoPayloadFromUpload,
   emptyCommunityCommentPhotoFields,
-  revokeCommunityCommentPhoto,
-  stageCommunityCommentPhoto,
-  type StagedCommunityCommentPhoto,
 } from '../../lib/communityCommentPhoto';
 import { chatAttachmentPolicyErrorCopy } from '../../lib/chatAttachmentDisplay';
+import { validateChatAttachmentPolicy } from '../../lib/chatAttachmentPolicy';
 import { uploadChatAttachment } from '../../lib/chatAttachmentUpload';
 import { isGiphyConfigured, type GiphyMediaItem } from '../../lib/giphyClient';
 import { isAreaManagerTier, isOwner } from '../../lib/roles';
@@ -26,6 +24,7 @@ import { nowIso } from '../../lib/utils';
 import type { CommunityComment, CommunityPost, CommunityReaction, Profile } from '../../types';
 import { MessageBody } from '../floating-assistant/MessageBody';
 import { ChatAttachmentPreview } from '../floating-assistant/ChatAttachmentPreview';
+import { useChatAttachmentStaging } from '../floating-assistant/useChatAttachmentStaging';
 import { GiphyMediaPreview } from '../floating-assistant/GiphyMediaPreview';
 import IdentityWithAvatar from '../profileAvatar/IdentityWithAvatar';
 import type { AvatarProfileFields } from '../../lib/avatarDisplay';
@@ -79,9 +78,9 @@ export default function CommunityComments({
 }: Props) {
   const { t } = useLang();
   const copy = t.community;
+  const sc = t.storeChat;
   const [draft, setDraft] = useState('');
   const [stagedGiphy, setStagedGiphy] = useState<GiphyMediaItem | null>(null);
-  const [stagedPhoto, setStagedPhoto] = useState<StagedCommunityCommentPhoto | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [replyToId, setReplyToId] = useState('');
   const [sending, setSending] = useState(false);
@@ -89,7 +88,14 @@ export default function CommunityComments({
   const [busyId, setBusyId] = useState('');
   const giphyBtnRef = useRef<HTMLButtonElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const sendingLock = useRef(false);
   const giphyConfigured = isGiphyConfigured();
+  const attachmentStaging = useChatAttachmentStaging({
+    onStageAttachment: () => {
+      setStagedGiphy(null);
+      setPickerOpen(false);
+    },
+  });
 
   const canModerate = isOwner(profile.role) || isAreaManagerTier(profile.role);
   const byId = useMemo(() => {
@@ -121,68 +127,117 @@ export default function CommunityComments({
   const activeComments = comments.filter((row) => isActive(row.status));
   const replyTarget = replyToId ? byId.get(replyToId) : undefined;
   const placeholder = replyTarget ? copy.replyPlaceholder : copy.commentPlaceholder;
-  const canSend = canSendCommunityComment(draft, stagedGiphy, stagedPhoto);
+  const canSend = canSendCommunityComment(draft, stagedGiphy, attachmentStaging.staged);
 
   function clearStagedPhoto() {
-    revokeCommunityCommentPhoto(stagedPhoto);
-    setStagedPhoto(null);
+    attachmentStaging.clear();
     if (photoInputRef.current) photoInputRef.current.value = '';
   }
 
   async function onPickPhoto(file: File | undefined) {
-    if (!file || sending) return;
-    const result = await stageCommunityCommentPhoto(file);
-    if (!result.ok) {
-      setError(chatAttachmentPolicyErrorCopy(result.code, t.storeChat));
+    if (!file || sendingLock.current) return;
+    const mimeType = String(file.type || '')
+      .split(';')[0]
+      .trim()
+      .toLowerCase();
+    const policy = validateChatAttachmentPolicy({
+      mimeType,
+      bytes: file.size,
+      fileName: file.name,
+    });
+    if (!policy.ok || policy.kind !== 'image') {
+      setError(chatAttachmentPolicyErrorCopy(policy.errorCode || 'invalid_type', sc));
       if (photoInputRef.current) photoInputRef.current.value = '';
       return;
     }
-    revokeCommunityCommentPhoto(stagedPhoto);
-    setStagedPhoto(result.photo);
-    setStagedGiphy(null);
-    setPickerOpen(false);
+    const result = await attachmentStaging.stageFile(file);
+    if (!result.ok) {
+      setError(chatAttachmentPolicyErrorCopy(result.error.code, sc));
+      if (photoInputRef.current) photoInputRef.current.value = '';
+      return;
+    }
     setError(null);
+    if (photoInputRef.current) photoInputRef.current.value = '';
   }
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
+  async function sendComment() {
     const body = draft.trim().slice(0, COMMENT_MAX_BODY);
-    if (!canSendCommunityComment(body, stagedGiphy, stagedPhoto) || sending) return;
+    if (!canSendCommunityComment(body, stagedGiphy, attachmentStaging.staged)) return;
+    if (sendingLock.current) return;
     if (!isActive(post.status)) return;
+    sendingLock.current = true;
     setSending(true);
     setError(null);
     const parentId = replyTarget
       ? threadParentId(replyTarget, byId) || replyTarget.id
       : '';
-    const commentId = id();
+    let commentId = id();
+    let clientMutationId = commentId;
     const createdAt = nowIso();
     const uniqueDelta = uniqueCommenterDelta(
       activeComments.map((row) => ({ userId: row.authorUserId })),
       profile.userId,
       'add',
     );
-    const giphyFields = stagedPhoto
+    const staged = attachmentStaging.staged;
+    const giphyFields = staged
       ? buildCommunityCommentGiphyPayload(null)
       : buildCommunityCommentGiphyPayload(stagedGiphy);
     let photoFields = emptyCommunityCommentPhotoFields();
     let attachmentFileId = '';
     try {
-      if (stagedPhoto) {
-        const uploaded = await uploadChatAttachment({
-          blob: stagedPhoto.blob,
-          mimeType: stagedPhoto.mimeType,
-          fileName: `${commentId}-${stagedPhoto.fileName}`,
-          scope: 'community',
-          postId: post.id,
-          messageId: commentId,
-          clientMutationId: commentId,
-          enabled: true,
-        });
+      if (staged) {
+        const ids = attachmentStaging.ensureSendIds(() => id());
+        commentId = ids.messageId;
+        clientMutationId = ids.clientMutationId;
+        const cached = attachmentStaging.getCachedUpload();
+        let uploaded = cached;
+        if (cached) {
+          attachmentStaging.markSending();
+        } else {
+          let progressTimer: number | null = null;
+          try {
+            attachmentStaging.markUploading(18);
+            let fakeProgress = 18;
+            progressTimer = window.setInterval(() => {
+              fakeProgress = Math.min(88, fakeProgress + 10);
+              attachmentStaging.bumpUploadProgress(fakeProgress);
+            }, 280);
+            uploaded = await uploadChatAttachment({
+              blob: staged.blob,
+              mimeType: staged.mimeType,
+              fileName: staged.fileName,
+              scope: 'community',
+              postId: post.id,
+              messageId: commentId,
+              clientMutationId,
+              enabled: true,
+            });
+            attachmentStaging.cacheUpload(uploaded);
+            attachmentStaging.markSending();
+          } catch (err) {
+            const message = err instanceof Error ? err.message : copy.commentFailed;
+            attachmentStaging.markFailed(message);
+            setError(message);
+            sendingLock.current = false;
+            setSending(false);
+            return;
+          } finally {
+            if (progressTimer !== null) window.clearInterval(progressTimer);
+          }
+        }
+        if (!uploaded) {
+          attachmentStaging.markFailed(sc.uploadFailed);
+          setError(sc.uploadFailed);
+          sendingLock.current = false;
+          setSending(false);
+          return;
+        }
         attachmentFileId = uploaded.fileId;
         photoFields = buildCommunityCommentPhotoPayload(
           commentPhotoPayloadFromUpload(uploaded, {
-            width: stagedPhoto.width,
-            height: stagedPhoto.height,
+            width: staged.width ?? undefined,
+            height: staged.height ?? undefined,
           }),
         );
       }
@@ -203,7 +258,7 @@ export default function CommunityComments({
             createdAt,
             status: 'active',
             deletedAt: '',
-            clientMutationId: commentId,
+            clientMutationId,
           })
           .link(linkAttrs),
         db.tx.communityPosts[post.id].update({
@@ -218,10 +273,18 @@ export default function CommunityComments({
       setPickerOpen(false);
       setReplyToId('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : copy.commentFailed);
+      const message = err instanceof Error ? err.message : copy.commentFailed;
+      setError(message);
+      if (staged) attachmentStaging.markFailed(message);
     } finally {
+      sendingLock.current = false;
       setSending(false);
     }
+  }
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    await sendComment();
   }
 
   async function moderateComment(comment: CommunityComment, nextStatus: 'hidden' | 'deleted') {
@@ -383,23 +446,31 @@ export default function CommunityComments({
               previewAriaLabel={copy.commentGifPreview}
             />
           ) : null}
-          {stagedPhoto ? (
+          {attachmentStaging.staged ? (
             <ChatAttachmentPreview
-              item={{
-                localId: 'comment-photo',
-                blob: stagedPhoto.blob,
-                objectUrl: stagedPhoto.objectUrl,
-                mimeType: stagedPhoto.mimeType,
-                fileName: stagedPhoto.fileName,
-                bytes: stagedPhoto.bytes,
-                kind: 'image',
-                width: stagedPhoto.width || null,
-                height: stagedPhoto.height || null,
-              }}
-              onClear={clearStagedPhoto}
+              item={attachmentStaging.staged}
+              phase={attachmentStaging.phase}
+              uploadProgress={attachmentStaging.uploadProgress}
               className="community-comment-giphy-preview"
               hint={copy.commentPhotoReady}
+              statusLabel={
+                attachmentStaging.phase === 'preparing'
+                  ? sc.preparingAttachment
+                  : attachmentStaging.phase === 'uploading'
+                    ? sc.uploadingAttachment.replace(
+                        '{percent}',
+                        String(Math.round(attachmentStaging.uploadProgress)),
+                      )
+                    : attachmentStaging.phase === 'sending'
+                      ? sc.sendingAttachment
+                      : attachmentStaging.phase === 'failed'
+                        ? sc.uploadFailed
+                        : undefined
+              }
+              onClear={clearStagedPhoto}
+              onRetry={() => void sendComment()}
               removeLabel={copy.removeCommentPhoto}
+              retryLabel={t.common.retry}
               previewAriaLabel={copy.commentPhotoPreview}
             />
           ) : null}
