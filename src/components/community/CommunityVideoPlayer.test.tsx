@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { CommunityVideoPlaybackProvider } from './CommunityVideoPlayback';
@@ -9,6 +9,7 @@ import { CommunityVideoPlayer } from './CommunityVideoPlayer';
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.mocked(HTMLMediaElement.prototype.play).mockReset();
   vi.mocked(HTMLMediaElement.prototype.play).mockImplementation(() => Promise.resolve());
   vi.mocked(HTMLMediaElement.prototype.pause).mockClear();
@@ -33,6 +34,15 @@ beforeAll(() => {
 });
 
 const src = 'https://example.com/clip.mp4';
+
+function chromeControls() {
+  return document.querySelector('.community-video-controls') as HTMLElement;
+}
+
+function tapFrame(frame: HTMLElement, x = 10, y = 10) {
+  fireEvent.pointerDown(frame, { button: 0, pointerId: 1, clientX: x, clientY: y });
+  fireEvent.pointerUp(frame, { pointerId: 1, clientX: x + 2, clientY: y + 1 });
+}
 
 function renderPlayer(
   props: Partial<ComponentProps<typeof CommunityVideoPlayer>> = {},
@@ -119,8 +129,8 @@ describe('CommunityVideoPlayer', () => {
     const video = document.querySelector('video') as HTMLVideoElement;
     const frame = document.querySelector('.community-card-video-frame') as HTMLElement;
     fireEvent.play(video);
-    fireEvent.pointerDown(frame, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
-    fireEvent.pointerUp(frame, { pointerId: 1, clientX: 12, clientY: 11 });
+    fireEvent.pointerMove(frame, { pointerType: 'mouse', pointerId: 1, clientX: 10, clientY: 10 });
+    tapFrame(frame);
     expect(await screen.findByRole('button', { name: /^play$/i })).toBeTruthy();
   });
 
@@ -197,5 +207,66 @@ describe('CommunityVideoPlayer', () => {
     );
     fireEvent.pointerDown(document.querySelector('.community-video-controls') as HTMLElement);
     expect(onBubble).not.toHaveBeenCalled();
+  });
+
+  it('starts chrome hiding on play without a Play overlay', () => {
+    renderPlayer({ canAttachSource: true, wantPlay: true });
+    const video = document.querySelector('video') as HTMLVideoElement;
+    fireEvent.play(video);
+    expect(chromeControls().getAttribute('data-chrome')).toBe('hiding');
+    expect(screen.queryByRole('button', { name: /^play$/i })).toBeNull();
+  });
+
+  it('sets chrome hidden after the 1s fade timeout', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    renderPlayer({ canAttachSource: true, wantPlay: true });
+    const video = document.querySelector('video') as HTMLVideoElement;
+    fireEvent.play(video);
+    expect(chromeControls().getAttribute('data-chrome')).toBe('hiding');
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(chromeControls().getAttribute('data-chrome')).toBe('hidden');
+  });
+
+  it('reveals chrome on a hidden-frame tap without pausing', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    renderPlayer({ canAttachSource: true, wantPlay: true }, true);
+    const video = document.querySelector('video') as HTMLVideoElement;
+    const frame = document.querySelector('.community-card-video-frame') as HTMLElement;
+    fireEvent.play(video);
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(chromeControls().getAttribute('data-chrome')).toBe('hidden');
+    tapFrame(frame);
+    expect(chromeControls().getAttribute('data-chrome')).toBe('visible');
+    expect(screen.queryByRole('button', { name: /^play$/i })).toBeNull();
+  });
+
+  it('pauses on tap while chrome is visible', async () => {
+    renderPlayer({ canAttachSource: true, wantPlay: true }, true);
+    const video = document.querySelector('video') as HTMLVideoElement;
+    const frame = document.querySelector('.community-card-video-frame') as HTMLElement;
+    fireEvent.play(video);
+    fireEvent.pointerMove(frame, { pointerType: 'mouse', pointerId: 1, clientX: 10, clientY: 10 });
+    expect(chromeControls().getAttribute('data-chrome')).toBe('visible');
+    tapFrame(frame);
+    expect(await screen.findByRole('button', { name: /^play$/i })).toBeTruthy();
+  });
+
+  it('keeps chrome visible on pause and error', () => {
+    renderPlayer({ canAttachSource: true, wantPlay: true });
+    const video = document.querySelector('video') as HTMLVideoElement;
+    fireEvent.play(video);
+    expect(chromeControls().getAttribute('data-chrome')).toBe('hiding');
+    fireEvent.pause(video);
+    expect(chromeControls().getAttribute('data-chrome')).toBe('visible');
+
+    fireEvent.play(video);
+    expect(chromeControls().getAttribute('data-chrome')).toBe('hiding');
+    fireEvent.error(video);
+    expect(chromeControls().getAttribute('data-chrome')).toBe('visible');
+    expect(screen.getByRole('button', { name: /^play$/i })).toBeTruthy();
   });
 });

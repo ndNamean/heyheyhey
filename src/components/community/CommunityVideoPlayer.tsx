@@ -5,8 +5,10 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type FocusEvent as ReactFocusEvent,
   type PointerEvent as ReactPointerEvent,
   type SyntheticEvent,
+  type TransitionEvent as ReactTransitionEvent,
 } from 'react';
 import { useLang } from '../../i18n';
 import { communityVideoAspectRatio } from '../../lib/communityVideo';
@@ -34,8 +36,21 @@ export type CommunityVideoPlayerProps = {
   visualRef?: (el: HTMLVideoElement | null) => void;
 };
 
+type ChromeState = 'visible' | 'hiding' | 'hidden';
+
+const CHROME_HIDE_MS = 1000;
+
 function stopNav(event: SyntheticEvent) {
   event.stopPropagation();
+}
+
+function chromeHideDelayMs() {
+  try {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return 0;
+  } catch {
+    /* ignore */
+  }
+  return CHROME_HIDE_MS;
 }
 
 export function CommunityVideoPlayer({
@@ -82,7 +97,30 @@ export function CommunityVideoPlayer({
   const [playRejected, setPlayRejected] = useState(false);
   const [error, setError] = useState(false);
   const [elementPlaying, setElementPlaying] = useState(false);
+  const [chrome, setChromeState] = useState<ChromeState>('visible');
   const labelId = useId();
+  const showPlay = shouldShowTransportPlay({
+    playRejected,
+    error,
+    userPaused,
+    autoplayRestricted,
+    holdsToken,
+    wantPlay,
+  });
+
+  const chromeRef = useRef<ChromeState>('visible');
+  const hideTimerRef = useRef(0);
+  const hideGenRef = useRef(0);
+  const mouseHoverRef = useRef(false);
+  const focusPinRef = useRef(false);
+  const controlPinRef = useRef(false);
+  const elementPlayingRef = useRef(elementPlaying);
+  const showPlayRef = useRef(showPlay);
+  const errorRef = useRef(error);
+  chromeRef.current = chrome;
+  elementPlayingRef.current = elementPlaying;
+  showPlayRef.current = showPlay;
+  errorRef.current = error;
 
   const setVideoNode = useCallback(
     (el: HTMLVideoElement | null) => {
@@ -91,6 +129,57 @@ export function CommunityVideoPlayer({
     },
     [visualRef],
   );
+
+  const revealChrome = useCallback(() => {
+    hideGenRef.current += 1;
+    if (hideTimerRef.current) {
+      window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = 0;
+    }
+    chromeRef.current = 'visible';
+    setChromeState('visible');
+  }, []);
+
+  const chromePinned = useCallback(
+    () =>
+      !elementPlayingRef.current ||
+      showPlayRef.current ||
+      errorRef.current ||
+      mouseHoverRef.current ||
+      focusPinRef.current ||
+      controlPinRef.current,
+    [],
+  );
+
+  const startHiding = useCallback(() => {
+    if (chromePinned()) {
+      revealChrome();
+      return;
+    }
+    if (chromeRef.current === 'hiding' || chromeRef.current === 'hidden') return;
+    const gen = ++hideGenRef.current;
+    chromeRef.current = 'hiding';
+    setChromeState('hiding');
+    hideTimerRef.current = window.setTimeout(() => {
+      hideTimerRef.current = 0;
+      if (hideGenRef.current !== gen) return;
+      if (chromePinned()) {
+        chromeRef.current = 'visible';
+        setChromeState('visible');
+        return;
+      }
+      chromeRef.current = 'hidden';
+      setChromeState('hidden');
+    }, chromeHideDelayMs());
+  }, [chromePinned, revealChrome]);
+
+  useEffect(() => {
+    if (!elementPlaying || showPlay || error) {
+      revealChrome();
+      return;
+    }
+    startHiding();
+  }, [elementPlaying, error, revealChrome, showPlay, startHiding]);
 
   useEffect(() => {
     if (surface !== 'feed' && surface !== 'famous') return;
@@ -236,6 +325,8 @@ export function CommunityVideoPlayer({
     () => () => {
       playGenRef.current += 1;
       grantPlayStartedRef.current = false;
+      hideGenRef.current += 1;
+      if (hideTimerRef.current) window.clearTimeout(hideTimerRef.current);
       if (progressRafRef.current) cancelAnimationFrame(progressRafRef.current);
       const el = videoRef.current;
       if (!el) return;
@@ -358,6 +449,33 @@ export function CommunityVideoPlayer({
     tapPointerRef.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
   }
 
+  function handleFramePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerType !== 'mouse') return;
+    mouseHoverRef.current = true;
+    if (chromeRef.current !== 'visible') revealChrome();
+    else if (hideTimerRef.current) revealChrome();
+  }
+
+  function handleFramePointerEnter(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerType !== 'mouse') return;
+    mouseHoverRef.current = true;
+    if (chromeRef.current !== 'visible') revealChrome();
+  }
+
+  function handleFramePointerLeave(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerType !== 'mouse') return;
+    mouseHoverRef.current = false;
+    if (
+      elementPlayingRef.current &&
+      !showPlayRef.current &&
+      !errorRef.current &&
+      !focusPinRef.current &&
+      !controlPinRef.current
+    ) {
+      startHiding();
+    }
+  }
+
   function handleFramePointerUp(event: ReactPointerEvent<HTMLDivElement>) {
     const start = tapPointerRef.current;
     tapPointerRef.current = null;
@@ -368,6 +486,10 @@ export function CommunityVideoPlayer({
     const el = videoRef.current;
     const playingNow = elementPlaying || Boolean(el && !el.paused);
     if (playingNow) {
+      if (chromeRef.current !== 'visible') {
+        revealChrome();
+        return;
+      }
       handlePauseClick();
       return;
     }
@@ -387,6 +509,69 @@ export function CommunityVideoPlayer({
 
   function handleFramePointerCancel() {
     tapPointerRef.current = null;
+  }
+
+  function stopNavIfChromeInteractive(event: SyntheticEvent) {
+    if (chromeRef.current !== 'visible') return;
+    stopNav(event);
+  }
+
+  function handleControlsPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    stopNavIfChromeInteractive(event);
+    controlPinRef.current = true;
+    revealChrome();
+  }
+
+  function handleControlsPointerUp(event: SyntheticEvent) {
+    stopNavIfChromeInteractive(event);
+    controlPinRef.current = false;
+    if (
+      elementPlayingRef.current &&
+      !showPlayRef.current &&
+      !errorRef.current &&
+      !mouseHoverRef.current &&
+      !focusPinRef.current
+    ) {
+      startHiding();
+    }
+  }
+
+  function handleControlsFocus() {
+    focusPinRef.current = true;
+    revealChrome();
+  }
+
+  function handleControlsBlur(event: ReactFocusEvent<HTMLDivElement>) {
+    const next = event.relatedTarget as Node | null;
+    if (next && event.currentTarget.contains(next)) return;
+    focusPinRef.current = false;
+    if (
+      elementPlayingRef.current &&
+      !showPlayRef.current &&
+      !errorRef.current &&
+      !mouseHoverRef.current &&
+      !controlPinRef.current
+    ) {
+      startHiding();
+    }
+  }
+
+  function handleChromeTransitionEnd(event: ReactTransitionEvent<HTMLDivElement>) {
+    if (event.target !== event.currentTarget) return;
+    if (event.propertyName !== 'opacity') return;
+    if (chromeRef.current !== 'hiding') return;
+    hideGenRef.current += 1;
+    if (hideTimerRef.current) {
+      window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = 0;
+    }
+    if (chromePinned()) {
+      chromeRef.current = 'visible';
+      setChromeState('visible');
+      return;
+    }
+    chromeRef.current = 'hidden';
+    setChromeState('hidden');
   }
 
   function handleSeek(value: string) {
@@ -438,14 +623,6 @@ export function CommunityVideoPlayer({
   }
 
   const aspect = communityVideoAspectRatio(width, height);
-  const showPlay = shouldShowTransportPlay({
-    playRejected,
-    error,
-    userPaused,
-    autoplayRestricted,
-    holdsToken,
-    wantPlay,
-  });
   const showPause = elementPlaying && !showPlay;
   const rootClass = [
     surface === 'gallery' ? 'community-depth-video-slot' : 'community-card-video',
@@ -476,6 +653,9 @@ export function CommunityVideoPlayer({
         className={frameClass}
         style={{ aspectRatio: aspect }}
         onPointerDown={handleFramePointerDown}
+        onPointerMove={handleFramePointerMove}
+        onPointerEnter={handleFramePointerEnter}
+        onPointerLeave={handleFramePointerLeave}
         onPointerUp={handleFramePointerUp}
         onPointerCancel={handleFramePointerCancel}
       >
@@ -502,14 +682,19 @@ export function CommunityVideoPlayer({
         ) : null}
         <div
           className="community-video-controls"
+          data-chrome={chrome}
           data-show-transport={showPlay ? 'true' : undefined}
-          onPointerDown={stopNav}
-          onPointerMove={stopNav}
-          onPointerUp={stopNav}
-          onTouchStart={stopNav}
-          onTouchMove={stopNav}
-          onWheel={stopNav}
-          onClick={stopNav}
+          onPointerDown={handleControlsPointerDown}
+          onPointerMove={stopNavIfChromeInteractive}
+          onPointerUp={handleControlsPointerUp}
+          onPointerCancel={handleControlsPointerUp}
+          onTouchStart={stopNavIfChromeInteractive}
+          onTouchMove={stopNavIfChromeInteractive}
+          onWheel={stopNavIfChromeInteractive}
+          onClick={stopNavIfChromeInteractive}
+          onFocusCapture={handleControlsFocus}
+          onBlurCapture={handleControlsBlur}
+          onTransitionEnd={handleChromeTransitionEnd}
         >
           {showPlay ? (
             <button

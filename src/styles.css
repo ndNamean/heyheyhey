@@ -626,16 +626,42 @@ textarea { min-height: 88px; resize: vertical; }
   z-index: 2;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 6px;
+  padding: 4px 8px 6px;
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.55));
   pointer-events: auto;
+  opacity: 1;
+}
+
+.community-video-controls[data-chrome='visible'] {
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 150ms ease;
+}
+
+.community-video-controls[data-chrome='hiding'] {
+  opacity: 0;
+  pointer-events: auto;
+  transition: opacity 1s linear;
+}
+
+.community-video-controls[data-chrome='hidden'] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .community-video-controls[data-chrome='visible'],
+  .community-video-controls[data-chrome='hiding'],
+  .community-video-controls[data-chrome='hidden'] {
+    transition: none;
+  }
 }
 
 .community-video-control-btn {
   flex: 0 0 auto;
-  min-height: 36px;
-  padding: 0 10px;
+  min-height: 28px;
+  padding: 0 8px;
   border: 0;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.16);
@@ -648,6 +674,7 @@ textarea { min-height: 88px; resize: vertical; }
 
 .community-video-transport {
   display: none;
+  min-height: 36px;
 }
 
 .community-video-controls[data-show-transport='true'] .community-video-transport,
@@ -658,7 +685,46 @@ textarea { min-height: 88px; resize: vertical; }
 .community-video-progress {
   flex: 1 1 auto;
   min-width: 0;
+  height: 12px;
+  margin: 0;
+  background: transparent;
   accent-color: #fff;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.community-video-progress::-webkit-slider-runnable-track {
+  height: 2px;
+  border: 0;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.community-video-progress::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  margin-top: -4px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.community-video-progress::-moz-range-track {
+  height: 2px;
+  border: 0;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.community-video-progress::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
 }
 
 .community-video-error {
