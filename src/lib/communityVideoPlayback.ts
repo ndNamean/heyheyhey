@@ -35,7 +35,7 @@ export function galleryPlayPostId(
   return gallery.currentPostId;
 }
 
-/** Forward: current keeps playing until it leaves the pair (opacity target 0); next starts as it fades in. */
+/** Current plays until it leaves the pair (opacity 0). Next plays while fading in or out (depthBlend > 0). */
 export function galleryWantPlay(
   postId: string,
   gallery: Pick<GalleryPlaybackState, 'currentPostId' | 'nextPostId' | 'depthBlend'>,

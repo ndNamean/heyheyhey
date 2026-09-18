@@ -269,4 +269,23 @@ describe('CommunityVideoPlayer', () => {
     expect(chromeControls().getAttribute('data-chrome')).toBe('visible');
     expect(screen.getByRole('button', { name: /^play$/i })).toBeTruthy();
   });
+
+  it('does not treat src detach as unplayable and resumes when reattached', async () => {
+    const { rerender } = render(
+      <CommunityVideoPlayer postId="p1" surface="gallery" src={src} canAttachSource wantPlay />,
+    );
+    expect((document.querySelector('video') as HTMLVideoElement).getAttribute('src')).toBe(src);
+
+    rerender(<CommunityVideoPlayer postId="p1" surface="gallery" src={src} wantPlay />);
+    fireEvent.error(document.querySelector('video') as HTMLVideoElement);
+    expect(screen.queryByRole('status')).toBeNull();
+
+    vi.mocked(HTMLMediaElement.prototype.play).mockClear();
+    rerender(
+      <CommunityVideoPlayer postId="p1" surface="gallery" src={src} canAttachSource wantPlay />,
+    );
+    expect((document.querySelector('video') as HTMLVideoElement).getAttribute('src')).toBe(src);
+    expect(screen.queryByRole('status')).toBeNull();
+    await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalled());
+  });
 });

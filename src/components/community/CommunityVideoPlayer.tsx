@@ -87,6 +87,9 @@ export function CommunityVideoPlayer({
   const progressRafRef = useRef(0);
   const userPlayRef = useRef(false);
   const grantPlayStartedRef = useRef(false);
+  const ignoreDetachErrorRef = useRef(false);
+  const canAttachRef = useRef(canAttach);
+  canAttachRef.current = canAttach;
   const tapPointerRef = useRef<{ id: number; x: number; y: number } | null>(null);
   const playbackRef = useRef(playback);
   const userMutedRef = useRef(userMuted);
@@ -200,12 +203,17 @@ export function CommunityVideoPlayer({
     const el = videoRef.current;
     if (!el) return;
     if (canAttach && src) {
+      ignoreDetachErrorRef.current = false;
       if (el.getAttribute('src') !== src) {
+        retryOnceRef.current = false;
+        setError(false);
         el.src = src;
         el.preload = 'metadata';
       }
       return;
     }
+    ignoreDetachErrorRef.current = true;
+    setError(false);
     if (el.getAttribute('src') || el.src) {
       playGenRef.current += 1;
       grantPlayStartedRef.current = false;
@@ -389,6 +397,7 @@ export function CommunityVideoPlayer({
   }, [syncProgress, canAttach, src]);
 
   function handleError() {
+    if (ignoreDetachErrorRef.current || !canAttachRef.current) return;
     setError(true);
     setPlayRejected(false);
   }

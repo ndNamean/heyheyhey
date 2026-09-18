@@ -206,6 +206,9 @@ describe('communityVideoPlayback', () => {
     expect(galleryWantPlay('g', { currentPostId: 'g', nextPostId: 'n', depthBlend: 0 })).toBe(true);
     expect(galleryWantPlay('n', { currentPostId: 'g', nextPostId: 'n', depthBlend: 0 })).toBe(false);
     expect(galleryWantPlay('g', { currentPostId: 'n', nextPostId: 'o', depthBlend: 0 })).toBe(false);
+    const reverse = { currentPostId: 'g', nextPostId: 'n', depthBlend: 0.8 };
+    expect(galleryWantPlay('g', reverse)).toBe(true);
+    expect(galleryWantPlay('n', reverse)).toBe(true);
   });
 
   it('keeps the feed token while scrolling if the same clip stays dominant', () => {
