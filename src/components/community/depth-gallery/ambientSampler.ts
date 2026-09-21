@@ -3,12 +3,14 @@
 export const AMBIENT_BUFFER_MAX = 64;
 export const AMBIENT_BUFFER_MIN = 32;
 export const AMBIENT_VIDEO_HZ = 5;
-export const AMBIENT_SPREAD = 0.32;
-export const AMBIENT_SPREAD_MIN_PX = 24;
-export const AMBIENT_SPREAD_MAX_PX = 96;
-export const AMBIENT_BLUR_FRACTION = 0.16;
-export const AMBIENT_BLUR_MIN_PX = 12;
-export const AMBIENT_BLUR_MAX_PX = 40;
+export const AMBIENT_SPREAD = 0.12;
+export const AMBIENT_SPREAD_MIN_PX = 16;
+export const AMBIENT_SPREAD_MAX_PX = 36;
+export const AMBIENT_BLUR_FRACTION = 0.06;
+export const AMBIENT_BLUR_MIN_PX = 8;
+export const AMBIENT_BLUR_MAX_PX = 18;
+/** Canvas-only CSS intensity. Wrapper opacity stays opacities[i]. */
+export const AMBIENT_VISUAL_OPACITY = 0.65;
 /** Matches IDLE_DWELL_MS. Do not reuse CHROME_HIDE_MS. */
 export const AMBIENT_REVEAL_MS = 220;
 

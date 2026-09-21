@@ -1210,12 +1210,12 @@ textarea { min-height: 88px; resize: vertical; }
   transform-origin: center center;
   opacity: 0;
   transition: opacity 220ms ease;
-  transform: scale(var(--ambient-spread, 1.32));
-  filter: blur(var(--ambient-blur, 24px)) saturate(1.06);
+  transform: scale(var(--ambient-spread, 1.12));
+  filter: blur(var(--ambient-blur, 12px)) saturate(1.02);
 }
 
 .community-depth-ambient[data-ready] .community-depth-ambient-canvas {
-  opacity: 1;
+  opacity: var(--ambient-intensity, 0.65);
 }
 
 @media (prefers-reduced-motion: reduce) {

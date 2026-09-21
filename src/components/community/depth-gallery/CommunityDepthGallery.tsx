@@ -10,6 +10,7 @@ import type { CommunityComment, CommunityPost, CommunityReaction } from '../../.
 import { MessageBody } from '../../floating-assistant/MessageBody';
 import CommunityVideoPlayer from '../CommunityVideoPlayer';
 import {
+  AMBIENT_VISUAL_OPACITY,
   ambientBlurPx,
   ambientSpreadScale,
   freezeAllAmbientSamplers,
@@ -483,6 +484,7 @@ export default function CommunityDepthGallery({
               ambient.style.setProperty('--ambient-edge', `${edge}px`);
               ambient.style.setProperty('--ambient-spread', String(ambientSpreadScale(edge)));
               ambient.style.setProperty('--ambient-blur', `${ambientBlurPx(edge)}px`);
+              ambient.style.setProperty('--ambient-intensity', String(AMBIENT_VISUAL_OPACITY));
             }
           }
         }

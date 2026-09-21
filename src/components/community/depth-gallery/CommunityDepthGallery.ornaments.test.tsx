@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CommunityComment, CommunityPost, CommunityReaction } from '../../../types';
 import CommunityDepthGallery from './CommunityDepthGallery';
 import { containRectForStack } from './galleryIdle';
-import { setAmbientReducedMotion } from './ambientSampler';
+import { AMBIENT_VISUAL_OPACITY, ambientBlurPx, ambientSpreadScale, setAmbientReducedMotion } from './ambientSampler';
 import { AUTHOR_IDLE_TOP_PCT, buildGalleryOrnamentLayout } from './galleryOrnaments';
 import {
   ornamentRippleAuthorKey,
@@ -895,7 +895,13 @@ describe('CommunityDepthGallery ornaments', () => {
       expect(ambient.style.height).toBe(clip.style.height);
       expect(ambient.style.transform).toBe(clip.style.transform);
       expect(ambient.style.opacity).toBe(image.style.opacity);
+      expect(ambient.style.opacity).not.toBe(String(AMBIENT_VISUAL_OPACITY));
       expect(ambient.style.getPropertyValue('--ambient-edge')).toMatch(/px$/);
+      const edge = Math.min(parseFloat(clip.style.width), parseFloat(clip.style.height));
+      expect(ambient.style.getPropertyValue('--ambient-spread')).toBe(String(ambientSpreadScale(edge)));
+      expect(ambient.style.getPropertyValue('--ambient-blur')).toBe(`${ambientBlurPx(edge)}px`);
+      expect(ambient.style.getPropertyValue('--ambient-intensity')).toBe(String(AMBIENT_VISUAL_OPACITY));
+      expect(ambient.style.getPropertyValue('--ambient-intensity')).not.toBe('1');
     } finally {
       restore();
     }

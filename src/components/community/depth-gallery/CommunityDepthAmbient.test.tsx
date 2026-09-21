@@ -101,6 +101,8 @@ describe('CommunityDepthAmbient', () => {
     await microtasks();
     expect(ctx.drawImage).toHaveBeenCalled();
     expect(container.querySelector('.community-depth-ambient')?.getAttribute('data-ready')).toBe('');
+    const canvas = container.querySelector('.community-depth-ambient canvas') as HTMLCanvasElement;
+    expect(canvas.style.opacity).toBe('');
     rerender(<ImageHarness active={false} />);
     expect(container.querySelector('.community-depth-ambient canvas')).toBeNull();
     expect(container.querySelector('.community-depth-ambient')?.getAttribute('data-ready')).toBeNull();

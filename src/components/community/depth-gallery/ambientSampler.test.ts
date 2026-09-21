@@ -3,11 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AMBIENT_BUFFER_MAX,
   AMBIENT_BUFFER_MIN,
+  AMBIENT_BLUR_FRACTION,
+  AMBIENT_BLUR_MAX_PX,
+  AMBIENT_BLUR_MIN_PX,
   AMBIENT_REVEAL_MS,
   AMBIENT_SPREAD,
   AMBIENT_SPREAD_MAX_PX,
   AMBIENT_SPREAD_MIN_PX,
   AMBIENT_VIDEO_HZ,
+  AMBIENT_VISUAL_OPACITY,
   ambientBlurPx,
   ambientBufferSize,
   ambientLiveIntervalCount,
@@ -111,12 +115,32 @@ describe('ambientSampler', () => {
   });
 
   it('clamps spread and blur from the shortest edge', () => {
-    expect(AMBIENT_SPREAD).toBe(0.32);
+    expect(AMBIENT_SPREAD).toBe(0.12);
+    expect(AMBIENT_SPREAD_MIN_PX).toBe(16);
+    expect(AMBIENT_SPREAD_MAX_PX).toBe(36);
+    expect(AMBIENT_BLUR_FRACTION).toBe(0.06);
+    expect(AMBIENT_BLUR_MIN_PX).toBe(8);
+    expect(AMBIENT_BLUR_MAX_PX).toBe(18);
+    expect(AMBIENT_VISUAL_OPACITY).toBe(0.65);
     expect(ambientSpreadScale(50)).toBeCloseTo(1 + AMBIENT_SPREAD_MIN_PX / 50, 5);
-    expect(ambientSpreadScale(400)).toBeCloseTo(1 + AMBIENT_SPREAD_MAX_PX / 400, 5);
-    expect(ambientSpreadScale(300)).toBeCloseTo(1 + 0.32, 5);
-    expect(ambientBlurPx(50)).toBe(12);
-    expect(ambientBlurPx(400)).toBe(40);
+    expect(ambientSpreadScale(300)).toBe(1.12);
+    expect(ambientSpreadScale(400)).toBeCloseTo(1 + 36 / 400, 5);
+    expect(ambientBlurPx(50)).toBe(8);
+    expect(ambientBlurPx(400)).toBe(18);
+  });
+
+  it('keeps luxury relative reach on desktop and small 16:9 frames', () => {
+    const landscapeEdge = 405;
+    const squareEdge = 720;
+    const mobileEdge = 188;
+    expect(ambientSpreadScale(landscapeEdge)).toBeCloseTo(1 + 36 / landscapeEdge, 5);
+    expect((ambientSpreadScale(landscapeEdge) - 1) * landscapeEdge).toBeCloseTo(36, 5);
+    expect((ambientSpreadScale(landscapeEdge) - 1) * 720 / 2).toBeCloseTo(32, 1);
+    expect(ambientSpreadScale(squareEdge)).toBeCloseTo(1 + 36 / squareEdge, 5);
+    expect(ambientSpreadScale(mobileEdge)).toBeCloseTo(1.12, 5);
+    expect(((ambientSpreadScale(mobileEdge) - 1) * mobileEdge) / 2 / mobileEdge).toBeCloseTo(0.06, 5);
+    expect(ambientBlurPx(landscapeEdge)).toBe(18);
+    expect(ambientBlurPx(mobileEdge)).toBeCloseTo(0.06 * mobileEdge, 5);
   });
 
   it('finds img/video in the clip sibling and ignores other nodes', () => {
