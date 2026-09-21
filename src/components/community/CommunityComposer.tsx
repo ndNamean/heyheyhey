@@ -90,7 +90,7 @@ export default function CommunityComposer({ profile, onClose }: Props) {
   }, []);
 
   const policyErrorMessage = useCallback(
-    (code?: string) => chatAttachmentPolicyErrorCopy(code, sc),
+    (code?: string, kind?: string) => chatAttachmentPolicyErrorCopy(code, sc, kind),
     [sc],
   );
 
@@ -98,7 +98,7 @@ export default function CommunityComposer({ profile, onClose }: Props) {
     (file: File) => {
       void attachmentStaging.stageFile(file, undefined, 'community').then((result) => {
         if (!result.ok) {
-          setSendError(policyErrorMessage(result.error.code));
+          setSendError(policyErrorMessage(result.error.code, result.error.kind));
           return;
         }
         setSendError(null);

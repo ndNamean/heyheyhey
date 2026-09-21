@@ -2,7 +2,7 @@
  * Shared display helpers for chat attachment bubbles / errors.
  */
 
-import type { ChatAttachmentPolicyErrorCode } from './chatAttachmentPolicy';
+import type { ChatAttachmentKind, ChatAttachmentPolicyErrorCode } from './chatAttachmentPolicy';
 import { hasChatAttachment } from './storeChatMediaPayload';
 
 export function formatChatAttachmentBytes(bytes: number | string | null | undefined): string {
@@ -45,10 +45,13 @@ export function chatAttachmentPolicyErrorCopy(
     attachmentUnprocessable?: string;
     attachmentUnprocessableVideo?: string;
     attachmentVideoTooLong?: string;
+    attachmentVideoTooLarge?: string;
   },
+  kind?: ChatAttachmentKind | string,
 ): string {
   switch (code) {
     case 'too_large':
+      if (kind === 'video') return sc.attachmentVideoTooLarge || sc.attachmentTooLarge;
       return sc.attachmentTooLarge;
     case 'invalid_type':
       return sc.attachmentInvalidType;

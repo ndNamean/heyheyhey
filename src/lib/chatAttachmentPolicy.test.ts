@@ -49,7 +49,7 @@ describe('chatAttachmentPolicy', () => {
     });
   });
 
-  it('accepts community video MIME within 25MB and rejects other scopes', () => {
+  it('accepts community video MIME within 50MB and rejects other scopes', () => {
     expect(chatAttachmentKindForMime('video/mp4')).toBe('video');
     expect(chatAttachmentKindForMime('video/quicktime')).toBe('video');
     expect(chatAttachmentKindForMime('video/webm')).toBe('video');
@@ -65,6 +65,17 @@ describe('chatAttachmentPolicy', () => {
       kind: 'video',
       maxBytes: CHAT_VIDEO_MAX_BYTES,
     });
+    const mib = 1024 * 1024;
+    for (const bytes of [24 * mib, 25 * mib, 49 * mib, 50 * mib]) {
+      expect(
+        validateChatAttachmentPolicy({
+          mimeType: 'video/mp4',
+          bytes,
+          fileName: 'clip.mp4',
+          scope: 'community',
+        }).ok,
+      ).toBe(true);
+    }
     expect(
       validateChatAttachmentPolicy({
         mimeType: 'video/mp4',
@@ -96,6 +107,16 @@ describe('chatAttachmentPolicy', () => {
         scope: 'community',
       }).errorCode,
     ).toBe('too_large');
+    for (const bytes of [50 * mib + 1, 51 * mib]) {
+      expect(
+        validateChatAttachmentPolicy({
+          mimeType: 'video/mp4',
+          bytes,
+          fileName: 'clip.mp4',
+          scope: 'community',
+        }).errorCode,
+      ).toBe('too_large');
+    }
   });
 
   it('sniffs ISO-BMFF ftyp and WebM EBML for video MIME', () => {

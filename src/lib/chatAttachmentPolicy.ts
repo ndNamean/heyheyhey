@@ -2,13 +2,13 @@
  * Chat attachment MIME / size / extension policy.
  * Images (Phase 2): jpeg/png/webp max 5MB.
  * Files (Phase 3): pdf / text / common Office max 10MB.
- * Video: mp4/quicktime/webm max 25MB, Community scope only.
+ * Video: mp4/quicktime/webm max 50MB, Community scope only.
  * Keep in sync with api/_lib/chat-attachment/policy.js.
  */
 
 export const CHAT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 export const CHAT_FILE_MAX_BYTES = 10 * 1024 * 1024;
-export const CHAT_VIDEO_MAX_BYTES = 25 * 1024 * 1024;
+export const CHAT_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
 /** Client staging only — grant/Instant cannot see duration. */
 export const CHAT_VIDEO_MAX_DURATION_SECONDS = 30;
 

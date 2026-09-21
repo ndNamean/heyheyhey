@@ -215,6 +215,20 @@ describe('buildChatAttachmentGrant', () => {
     expect(webm.kind).toBe('video');
   });
 
+  it('grants community video at the 50 MiB limit', () => {
+    const grant = buildChatAttachmentGrant(
+      {
+        mimeType: 'video/mp4',
+        bytes: CHAT_VIDEO_MAX_BYTES,
+        fileName: 'clip.mp4',
+        magicPrefix: ftypPrefixBase64(),
+      },
+      communityTarget,
+      { fallbackMessageKey: 'x' },
+    );
+    expect(grant.kind).toBe('video');
+  });
+
   it('rejects store or group video grants even with matching magic', () => {
     expect(() =>
       buildChatAttachmentGrant(
@@ -246,7 +260,7 @@ describe('buildChatAttachmentGrant', () => {
     }
   });
 
-  it('rejects community video over 25 MiB', () => {
+  it('rejects community video over 50 MiB', () => {
     expect(() =>
       buildChatAttachmentGrant(
         {

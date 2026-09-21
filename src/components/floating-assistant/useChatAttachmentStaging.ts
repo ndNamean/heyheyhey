@@ -47,6 +47,7 @@ export type ChatAttachmentStagingError = {
     | 'camera_denied'
     | 'unknown';
   message: string;
+  kind?: ChatAttachmentKind;
 };
 
 export type ChatAttachmentSendIds = {
@@ -132,6 +133,7 @@ export function useChatAttachmentStaging(options?: {
         const error: ChatAttachmentStagingError = {
           code: policy.errorCode || 'unknown',
           message: policy.errorMessage || 'Invalid attachment',
+          ...(policy.kind ? { kind: policy.kind } : {}),
         };
         setError(error);
         return { ok: false, error };

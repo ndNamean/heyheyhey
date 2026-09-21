@@ -48,6 +48,13 @@ describe('chatAttachmentDisplay', () => {
       uploadFailed: 'failed',
     };
     expect(chatAttachmentPolicyErrorCopy('too_large', sc)).toBe('too big');
+    expect(
+      chatAttachmentPolicyErrorCopy(
+        'too_large',
+        { ...sc, attachmentVideoTooLarge: 'video too big' },
+        'video',
+      ),
+    ).toBe('video too big');
     expect(chatAttachmentPolicyErrorCopy('blocked_extension', sc)).toBe('blocked');
     expect(chatAttachmentPolicyErrorCopy('unprocessable_image', sc)).toBe('bad type');
     expect(
