@@ -5,6 +5,7 @@ import {
   COMMUNITY_GALLERY_RENDER_RADIUS,
   appendGallerySession,
   buildCommunityGalleryPosts,
+  canOpenCommunityGallery,
   galleryRenderWindow,
   galleryWindowPostIds,
   isCommunityImagePost,
@@ -69,6 +70,28 @@ describe('community gallery set', () => {
     expect(sequence.some((post) => post.id === 'p21' && !isCommunityImagePost(post))).toBe(true);
     expect(isCommunityImagePost(imagePost('x'))).toBe(true);
     expect(isCommunityImagePost(textPost('text'))).toBe(false);
+    expect(canOpenCommunityGallery(imagePost('x'))).toBe(true);
+    expect(
+      canOpenCommunityGallery(
+        imagePost('vid', {
+          attachmentKind: 'video',
+          attachmentMimeType: 'video/mp4',
+          attachmentFileName: 'clip.mp4',
+          attachmentUrl: 'https://example.com/clip.mp4',
+        }),
+      ),
+    ).toBe(true);
+    expect(canOpenCommunityGallery(textPost('text'))).toBe(false);
+    expect(
+      canOpenCommunityGallery(
+        imagePost('file', {
+          attachmentKind: 'file',
+          attachmentMimeType: 'application/pdf',
+          attachmentFileName: 'a.pdf',
+          attachmentUrl: 'https://example.com/a.pdf',
+        }),
+      ),
+    ).toBe(false);
     expect(
       isCommunityImagePost(
         imagePost('vid', {

@@ -34,6 +34,7 @@ export type CommunityVideoPlayerProps = {
   canAttachSource?: boolean;
   wantPlay?: boolean;
   visualRef?: (el: HTMLElement | null) => void;
+  onOpenGallery?: () => void;
 };
 
 type ChromeState = 'visible' | 'hiding' | 'hidden';
@@ -64,6 +65,7 @@ export function CommunityVideoPlayer({
   canAttachSource: canAttachOverride,
   wantPlay: wantPlayOverride,
   visualRef,
+  onOpenGallery,
 }: CommunityVideoPlayerProps) {
   const { t } = useLang();
   const copy = t.community;
@@ -499,6 +501,10 @@ export function CommunityVideoPlayer({
     const target = event.target as HTMLElement | null;
     if (target?.closest('.community-video-controls')) return;
     if (!isLowMovementFrameTap(start.x, start.y, event.clientX, event.clientY)) return;
+    if (onOpenGallery && surface !== 'gallery') {
+      onOpenGallery();
+      return;
+    }
     const el = videoRef.current;
     const playingNow = elementPlaying || Boolean(el && !el.paused);
     if (playingNow) {

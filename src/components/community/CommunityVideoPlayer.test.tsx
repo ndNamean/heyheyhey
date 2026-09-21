@@ -255,6 +255,63 @@ describe('CommunityVideoPlayer', () => {
     expect(await screen.findByRole('button', { name: /^play$/i })).toBeTruthy();
   });
 
+  it('opens gallery from a feed frame tap instead of pausing', () => {
+    const onOpenGallery = vi.fn();
+    renderPlayer({ canAttachSource: true, wantPlay: true, onOpenGallery }, true);
+    const video = document.querySelector('video') as HTMLVideoElement;
+    const frame = document.querySelector('.community-card-video-frame') as HTMLElement;
+    fireEvent.play(video);
+    fireEvent.pointerMove(frame, { pointerType: 'mouse', pointerId: 1, clientX: 10, clientY: 10 });
+    tapFrame(frame);
+    expect(onOpenGallery).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: /^play$/i })).toBeNull();
+  });
+
+  it('does not open gallery from a gallery frame tap', async () => {
+    const onOpenGallery = vi.fn();
+    render(
+      <CommunityVideoPlaybackProvider
+        overlayOpen={false}
+        selectedPostId={null}
+        composerOpen={false}
+        gallery={null}
+      >
+        <CommunityVideoPlayer
+          postId="p1"
+          surface="gallery"
+          src={src}
+          canAttachSource
+          wantPlay
+          onOpenGallery={onOpenGallery}
+        />
+      </CommunityVideoPlaybackProvider>,
+    );
+    const video = document.querySelector('video') as HTMLVideoElement;
+    const frame = document.querySelector('.community-depth-video-frame') as HTMLElement;
+    fireEvent.play(video);
+    fireEvent.pointerMove(frame, { pointerType: 'mouse', pointerId: 1, clientX: 10, clientY: 10 });
+    tapFrame(frame);
+    expect(onOpenGallery).not.toHaveBeenCalled();
+    expect(await screen.findByRole('button', { name: /^play$/i })).toBeTruthy();
+  });
+
+  it('does not open gallery when tapping feed chrome controls', () => {
+    const onOpenGallery = vi.fn();
+    renderPlayer({ canAttachSource: true, wantPlay: true, onOpenGallery }, true);
+    fireEvent.pointerDown(document.querySelector('.community-video-controls') as HTMLElement, {
+      button: 0,
+      pointerId: 1,
+      clientX: 10,
+      clientY: 10,
+    });
+    fireEvent.pointerUp(document.querySelector('.community-video-controls') as HTMLElement, {
+      pointerId: 1,
+      clientX: 12,
+      clientY: 11,
+    });
+    expect(onOpenGallery).not.toHaveBeenCalled();
+  });
+
   it('keeps chrome visible on pause and error', () => {
     renderPlayer({ canAttachSource: true, wantPlay: true });
     const video = document.querySelector('video') as HTMLVideoElement;

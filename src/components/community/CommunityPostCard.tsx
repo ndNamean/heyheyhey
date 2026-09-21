@@ -250,6 +250,7 @@ export default function CommunityPostCard({
           src={attachmentUrl}
           width={width}
           height={height}
+          onOpenGallery={onImageTap ? () => onImageTap(post) : undefined}
         />
       ) : null}
 

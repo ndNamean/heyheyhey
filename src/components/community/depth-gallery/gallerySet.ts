@@ -2,6 +2,7 @@ import {
   messageHasChatAttachment,
   resolveChatAttachmentUrl,
 } from '../../../lib/chatAttachmentDisplay';
+import { isCommunityVideoPost } from '../../../lib/communityVideo';
 import type { CommunityPost } from '../../../types';
 
 /** Mounted DOM planes around the live pair. Navigation is uncapped. */
@@ -14,6 +15,10 @@ export function isCommunityImagePost(post: CommunityPost): boolean {
     String(post.attachmentKind || '').trim() === 'image' &&
     Boolean(resolveChatAttachmentUrl(post))
   );
+}
+
+export function canOpenCommunityGallery(post: CommunityPost): boolean {
+  return isCommunityImagePost(post) || isCommunityVideoPost(post);
 }
 
 function dedupeCommunityPosts(source: CommunityPost[]): CommunityPost[] {

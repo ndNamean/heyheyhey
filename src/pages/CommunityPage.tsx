@@ -8,7 +8,7 @@ import CommunityPostCard from '../components/community/CommunityPostCard';
 import CommunityPostDetail from '../components/community/CommunityPostDetail';
 import FamousPost from '../components/community/FamousPost';
 import CommunityDepthGallery from '../components/community/depth-gallery/CommunityDepthGallery';
-import { isCommunityImagePost } from '../components/community/depth-gallery/gallerySet';
+import { canOpenCommunityGallery } from '../components/community/depth-gallery/gallerySet';
 import { CommunityVideoPlaybackProvider } from '../components/community/CommunityVideoPlayback';
 import { db } from '../db';
 import { useLang } from '../i18n';
@@ -210,7 +210,7 @@ export default function CommunityPage({ profile }: Props) {
 
   const gallerySource = useMemo(() => {
     const list: CommunityPost[] = [];
-    if (famousPost && isCommunityImagePost(famousPost)) list.push(famousPost);
+    if (famousPost && canOpenCommunityGallery(famousPost)) list.push(famousPost);
     for (const post of feedPosts) list.push(post);
     return list;
   }, [famousPost, feedPosts]);
@@ -349,7 +349,7 @@ export default function CommunityPage({ profile }: Props) {
   }, []);
 
   function openGallery(post: CommunityPost) {
-    if (!isCommunityImagePost(post)) return;
+    if (!canOpenCommunityGallery(post)) return;
     setGalleryCommentPostIds([post.id]);
     setGalleryPostId(post.id);
   }
