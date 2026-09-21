@@ -9,7 +9,15 @@ import type { AvatarProfileFields } from '../../../lib/avatarDisplay';
 import type { CommunityComment, CommunityPost, CommunityReaction } from '../../../types';
 import { MessageBody } from '../../floating-assistant/MessageBody';
 import CommunityVideoPlayer from '../CommunityVideoPlayer';
+import {
+  ambientBlurPx,
+  ambientSpreadScale,
+  freezeAllAmbientSamplers,
+  resumeAllAmbientSamplers,
+  setAmbientReducedMotion,
+} from './ambientSampler';
 import { AtmosphereCanvas } from './atmosphereCanvas';
+import CommunityDepthAmbient from './CommunityDepthAmbient';
 import CommunityDepthOrnaments from './CommunityDepthOrnaments';
 import CommunityDepthRipples from './CommunityDepthRipples';
 import {
@@ -153,6 +161,7 @@ export default function CommunityDepthGallery({
   const closeRef = useRef<HTMLButtonElement>(null);
   const layerRefs = useRef(new Map<string, HTMLDivElement>());
   const visualRefs = useRef(new Map<string, HTMLElement>());
+  const ambientRefs = useRef(new Map<string, HTMLDivElement>());
   const ornamentRefs = useRef(new Map<string, HTMLDivElement>());
   const rippleRefs = useRef(new Map<string, HTMLDivElement>());
   const reducedRef = useRef(reducedMotion);
@@ -301,6 +310,7 @@ export default function CommunityDepthGallery({
       const nextMood = moodForPost(framePosts[blend.nextPlaneIndex] ?? framePosts[blend.currentPlaneIndex]);
       const mood = lerpMood(currentMood, nextMood, blend.depthBlend);
       const reduced = reducedRef.current;
+      setAmbientReducedMotion(reduced);
       const depthProgress = getDepthProgress(state.cameraZ, planeCount);
       const velocityIntensity = Math.min(1, Math.abs(state.velocity) / VELOCITY_MAX);
       const painted = atmosphere.draw({
@@ -459,6 +469,21 @@ export default function CommunityDepthGallery({
             );
             const clipScale = isPair ? composeIdleFrameScale(frameExpand, idle.idleAmount) : 1;
             clip.style.transform = `scale(${clipScale})`;
+            const ambient = ambientRefs.current.get(post.id);
+            if (ambient) {
+              ambient.style.left = clip.style.left;
+              ambient.style.top = clip.style.top;
+              ambient.style.width = clip.style.width;
+              ambient.style.height = clip.style.height;
+              ambient.style.right = 'auto';
+              ambient.style.bottom = 'auto';
+              ambient.style.transform = clip.style.transform;
+              ambient.style.opacity = String(opacities[i] ?? 0);
+              const edge = Math.min(rect.width, rect.height);
+              ambient.style.setProperty('--ambient-edge', `${edge}px`);
+              ambient.style.setProperty('--ambient-spread', String(ambientSpreadScale(edge)));
+              ambient.style.setProperty('--ambient-blur', `${ambientBlurPx(edge)}px`);
+            }
           }
         }
         if (visual) {
@@ -562,9 +587,11 @@ export default function CommunityDepthGallery({
     function onVisibility() {
       if (document.hidden) {
         cancelAnimationFrame(raf);
+        freezeAllAmbientSamplers();
         return;
       }
       if (running) {
+        resumeAllAmbientSamplers();
         cancelAnimationFrame(raf);
         raf = requestAnimationFrame(frame);
       }
@@ -578,6 +605,7 @@ export default function CommunityDepthGallery({
     return () => {
       running = false;
       cancelAnimationFrame(raf);
+      freezeAllAmbientSamplers();
       root.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('visibilitychange', onVisibility);
       scroll.dispose();
@@ -635,6 +663,17 @@ export default function CommunityDepthGallery({
                 else layerRefs.current.delete(post.id);
               }}
             >
+              {isImage || isVideo ? (
+                <CommunityDepthAmbient
+                  active={eager}
+                  kind={isVideo ? 'video' : 'image'}
+                  reducedMotion={reducedMotion}
+                  wrapperRef={(el) => {
+                    if (el) ambientRefs.current.set(post.id, el);
+                    else ambientRefs.current.delete(post.id);
+                  }}
+                />
+              ) : null}
               <div className="community-depth-image-clip">
                 {isImage ? (
                   <img

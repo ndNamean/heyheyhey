@@ -1186,9 +1186,48 @@ textarea { min-height: 88px; resize: vertical; }
   will-change: transform;
 }
 
+.community-depth-ambient {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  overflow: visible;
+  transform-origin: center;
+  opacity: 0;
+  will-change: opacity, transform;
+}
+
+.community-depth-ambient,
+.community-depth-ambient * {
+  pointer-events: none;
+}
+
+.community-depth-ambient-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  transform-origin: center center;
+  opacity: 0;
+  transition: opacity 220ms ease;
+  transform: scale(var(--ambient-spread, 1.32));
+  filter: blur(var(--ambient-blur, 24px)) saturate(1.06);
+}
+
+.community-depth-ambient[data-ready] .community-depth-ambient-canvas {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .community-depth-ambient-canvas {
+    transition: none;
+  }
+}
+
 .community-depth-image-clip {
   position: absolute;
   inset: 0;
+  z-index: 1;
   overflow: hidden;
   transform-origin: center;
 }

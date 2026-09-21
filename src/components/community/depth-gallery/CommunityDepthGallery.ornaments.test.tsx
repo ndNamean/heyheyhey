@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CommunityComment, CommunityPost, CommunityReaction } from '../../../types';
 import CommunityDepthGallery from './CommunityDepthGallery';
 import { containRectForStack } from './galleryIdle';
+import { setAmbientReducedMotion } from './ambientSampler';
 import { AUTHOR_IDLE_TOP_PCT, buildGalleryOrnamentLayout } from './galleryOrnaments';
 import {
   ornamentRippleAuthorKey,
@@ -158,6 +159,7 @@ describe('CommunityDepthGallery ornaments', () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
+    setAmbientReducedMotion(false);
   });
 
   it('nests ornaments inside each depth layer and fades non-centered planes in the existing frame loop', () => {
@@ -811,5 +813,150 @@ describe('CommunityDepthGallery ornaments', () => {
     const imagesAfter = [...container.querySelectorAll('.community-depth-image')] as HTMLElement[];
     expect(Number(imagesAfter[0].style.opacity)).toBeLessThan(0.2);
     expect(Number(imagesAfter[2].style.opacity)).toBeGreaterThan(0.4);
+  });
+
+  it('inserts ambient as a clip sibling on image/video planes only', () => {
+    const posts = [
+      imagePost('p0'),
+      imagePost('text', {
+        attachmentKind: '',
+        attachmentPath: '',
+        attachmentUrl: '',
+        attachmentFileId: '',
+        body: 'Readable text body',
+      }),
+      imagePost('file', {
+        attachmentKind: 'file',
+        attachmentPath: 'stores/community/file/a.pdf',
+        attachmentUrl: 'https://example.com/a.pdf',
+        attachmentFileId: 'f2',
+        attachmentFileName: 'notes.pdf',
+        attachmentMimeType: 'application/pdf',
+        body: 'File caption',
+      }),
+      imagePost('vid', {
+        attachmentKind: 'video',
+        attachmentMimeType: 'video/mp4',
+        attachmentFileName: 'clip.mp4',
+        attachmentUrl: 'https://example.com/clip.mp4',
+        attachmentPath: 'stores/community/vid/clip.mp4',
+        attachmentWidth: '1080',
+        attachmentHeight: '1920',
+        body: '',
+      }),
+    ];
+    const { container } = render(
+      <CommunityDepthGallery sourcePosts={posts} startPostId="p0" onClose={() => {}} />,
+    );
+    const layers = [...container.querySelectorAll('.community-depth-layer')];
+    const imageLayer = layers.find((layer) => layer.querySelector('.community-depth-image')) as HTMLElement;
+    const textLayer = layers.find((layer) => layer.querySelector('.community-depth-text-body')) as HTMLElement;
+    const fileLayer = layers.find((layer) => layer.querySelector('.community-depth-text-file')) as HTMLElement;
+    const videoLayer = layers.find((layer) => layer.querySelector('.community-depth-video')) as HTMLElement;
+
+    const imageKids = [...imageLayer.children] as HTMLElement[];
+    expect(imageKids[0].classList.contains('community-depth-ambient')).toBe(true);
+    expect(imageKids[1].classList.contains('community-depth-image-clip')).toBe(true);
+    expect(imageKids[2].classList.contains('community-depth-ornaments')).toBe(true);
+    expect(imageKids[3].classList.contains('community-depth-ripples')).toBe(true);
+    expect(imageKids[0].getAttribute('aria-hidden')).toBe('true');
+    expect(imageKids[0].style.pointerEvents).toBe('none');
+    expect(imageKids[1].style.overflow).toBe('');
+    expect(imageKids[0].querySelector('canvas')).toBeTruthy();
+
+    const videoKids = [...videoLayer.children] as HTMLElement[];
+    expect(videoKids[0].classList.contains('community-depth-ambient')).toBe(true);
+    expect(videoKids[1].classList.contains('community-depth-image-clip')).toBe(true);
+    expect(textLayer.querySelector('.community-depth-ambient')).toBeNull();
+    expect(fileLayer.querySelector('.community-depth-ambient')).toBeNull();
+  });
+
+  it('copies clip geometry and media opacity onto the ambient wrapper', () => {
+    const restore = mockGalleryBox(900, 600, 300);
+    try {
+      const { container } = render(
+        <CommunityDepthGallery
+          sourcePosts={[
+            imagePost('p0', { attachmentWidth: '1600', attachmentHeight: '900' }),
+            imagePost('p1', { attachmentWidth: '1600', attachmentHeight: '900' }),
+          ]}
+          startPostId="p0"
+          onClose={() => {}}
+        />,
+      );
+      flushFrames(12);
+      const clip = container.querySelector('.community-depth-image-clip') as HTMLElement;
+      const ambient = container.querySelector('.community-depth-ambient') as HTMLElement;
+      const image = container.querySelector('.community-depth-image') as HTMLElement;
+      expectNativeClipBox(clip, 300, 300, 1600, 900);
+      expect(ambient.style.left).toBe(clip.style.left);
+      expect(ambient.style.top).toBe(clip.style.top);
+      expect(ambient.style.width).toBe(clip.style.width);
+      expect(ambient.style.height).toBe(clip.style.height);
+      expect(ambient.style.transform).toBe(clip.style.transform);
+      expect(ambient.style.opacity).toBe(image.style.opacity);
+      expect(ambient.style.getPropertyValue('--ambient-edge')).toMatch(/px$/);
+    } finally {
+      restore();
+    }
+  });
+
+  it('keeps ambient scale locked to clip idle expand', () => {
+    const restore = mockGalleryBox(900, 600, 300);
+    try {
+      const { container } = render(
+        <CommunityDepthGallery
+          sourcePosts={[imagePost('p0', { attachmentWidth: '1600', attachmentHeight: '900' })]}
+          startPostId="p0"
+          onClose={() => {}}
+        />,
+      );
+      flushFrames(32);
+      const clip = container.querySelector('.community-depth-image-clip') as HTMLElement;
+      const ambient = container.querySelector('.community-depth-ambient') as HTMLElement;
+      expect(parseScale(clip.style.transform)).toBeGreaterThan(1);
+      expect(ambient.style.transform).toBe(clip.style.transform);
+    } finally {
+      restore();
+    }
+  });
+
+  it('creates at most two live ambient samplers for the current/next pair', () => {
+    const posts = Array.from({ length: 5 }, (_, i) => imagePost(`p${i}`));
+    const { container } = render(
+      <CommunityDepthGallery sourcePosts={posts} startPostId="p0" onClose={() => {}} />,
+    );
+    const ambients = [...container.querySelectorAll('.community-depth-ambient')];
+    const canvases = [...container.querySelectorAll('.community-depth-ambient canvas')];
+    expect(ambients.length).toBeGreaterThan(2);
+    expect(canvases.length).toBe(2);
+    expect(canvases.length).toBeLessThanOrEqual(2);
+  });
+
+  it('does not steal video playback when mounting gallery ambient', () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play');
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause');
+    render(
+      <CommunityDepthGallery
+        sourcePosts={[
+          imagePost('vid', {
+            attachmentKind: 'video',
+            attachmentMimeType: 'video/mp4',
+            attachmentFileName: 'clip.mp4',
+            attachmentUrl: 'https://example.com/clip.mp4',
+            attachmentPath: 'stores/community/vid/clip.mp4',
+            attachmentWidth: '1080',
+            attachmentHeight: '1920',
+            body: '',
+          }),
+        ]}
+        startPostId="vid"
+        onClose={() => {}}
+      />,
+    );
+    expect(play).not.toHaveBeenCalled();
+    expect(pause).not.toHaveBeenCalled();
+    play.mockRestore();
+    pause.mockRestore();
   });
 });
