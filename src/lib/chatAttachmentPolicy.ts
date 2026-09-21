@@ -10,7 +10,7 @@ export const CHAT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 export const CHAT_FILE_MAX_BYTES = 10 * 1024 * 1024;
 export const CHAT_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
 /** Client staging only — grant/Instant cannot see duration. */
-export const CHAT_VIDEO_MAX_DURATION_SECONDS = 30;
+export const CHAT_VIDEO_MAX_DURATION_SECONDS = 90;
 
 export const CHAT_IMAGE_MIME_TYPES = [
   'image/jpeg',

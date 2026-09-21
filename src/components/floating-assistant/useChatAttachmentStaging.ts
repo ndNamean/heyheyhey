@@ -67,7 +67,7 @@ function revokeUrl(url: string | null | undefined) {
 const UNPROCESSABLE_IMAGE_MESSAGE =
   'This image could not be processed. Try another photo.';
 const UNPROCESSABLE_VIDEO_MESSAGE = 'This video couldn’t be processed';
-const VIDEO_TOO_LONG_MESSAGE = 'This video is longer than 30 seconds.';
+const VIDEO_TOO_LONG_MESSAGE = 'This video is longer than 1.5 minutes.';
 
 export function useChatAttachmentStaging(options?: {
   /** Called when a new attachment is staged (clear GIPHY). */

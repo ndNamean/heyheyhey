@@ -47,7 +47,7 @@ describe('videoDecode', () => {
     expect(result.status).toBe('unprocessable');
   });
 
-  it('returns too_long when duration exceeds 30s', async () => {
+  it('returns too_long when duration exceeds 90s', async () => {
     Object.defineProperty(navigator, 'userAgent', {
       configurable: true,
       value: 'Mozilla/5.0',
@@ -58,7 +58,7 @@ describe('videoDecode', () => {
       playsInline = false;
       videoWidth = 640;
       videoHeight = 360;
-      duration = 31;
+      duration = 91;
       onloadedmetadata: (() => void) | null = null;
       onerror: (() => void) | null = null;
       pause() {}
@@ -119,6 +119,46 @@ describe('videoDecode', () => {
       width: 1920,
       height: 1080,
       duration: 12.4,
+    });
+  });
+
+  it('returns ok metadata for a 90s clip', async () => {
+    Object.defineProperty(navigator, 'userAgent', {
+      configurable: true,
+      value: 'Mozilla/5.0',
+    });
+    class OkVideo {
+      preload = '';
+      muted = false;
+      playsInline = false;
+      videoWidth = 1920;
+      videoHeight = 1080;
+      duration = 90;
+      onloadedmetadata: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      pause() {}
+      load() {}
+      removeAttribute() {}
+      set src(_value: string) {
+        queueMicrotask(() => this.onloadedmetadata?.());
+      }
+    }
+    vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      if (tag === 'video') return new OkVideo() as unknown as HTMLVideoElement;
+      return document.createElementNS('http://www.w3.org/1999/xhtml', tag);
+    });
+    if (typeof URL.createObjectURL !== 'function') {
+      vi.stubGlobal('URL', {
+        createObjectURL: () => 'blob:x',
+        revokeObjectURL: () => undefined,
+      });
+    }
+    const result = await decodeVideoMetadata(new Blob(['clip'], { type: 'video/mp4' }));
+    expect(result).toEqual({
+      status: 'ok',
+      width: 1920,
+      height: 1080,
+      duration: 90,
     });
   });
 });
