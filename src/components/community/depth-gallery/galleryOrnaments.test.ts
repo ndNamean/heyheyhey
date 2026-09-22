@@ -10,12 +10,14 @@ import {
   GALLERY_COMMENT_REACTION_BADGE_CAP,
   GALLERY_ORNAMENT_COMMENT_CAP,
   GALLERY_ORNAMENT_REACTION_CAP,
+  GALLERY_ORNAMENT_REPLY_CAP,
   INNER_RADIUS_MAX,
   INNER_RADIUS_MIN,
   REACTION_ANGLE_MAX,
   REACTION_ANGLE_MIN,
   REACTION_RADIUS_MAX,
   REACTION_RADIUS_MIN,
+  REPLY_RADIUS_STEP,
   buildGalleryOrnamentLayout,
   hashOrnamentUnit,
   ornamentOpacity,
@@ -211,6 +213,72 @@ describe('caps and filters', () => {
     expect(selected.map((row) => row.id)).toEqual(['c7', 'c6', 'c5', 'c4', 'c3', 'c2']);
   });
 
+  it('places the newest 2 replies on the parent angle further out and drops the rest', () => {
+    const comments = [
+      comment({ id: 'c-parent', createdAt: '2026-09-08T00:00:00.000Z' }),
+      comment({
+        id: 'r-old',
+        parentId: 'c-parent',
+        createdAt: '2026-09-09T00:00:00.000Z',
+      }),
+      comment({
+        id: 'r-mid',
+        parentId: 'c-parent',
+        createdAt: '2026-09-10T00:00:00.000Z',
+      }),
+      comment({
+        id: 'r-new',
+        parentId: 'c-parent',
+        createdAt: '2026-09-11T00:00:00.000Z',
+      }),
+      comment({
+        id: 'r-hidden',
+        parentId: 'c-parent',
+        status: 'hidden',
+        createdAt: '2026-09-12T00:00:00.000Z',
+      }),
+      comment({
+        id: 'r-deleted',
+        parentId: 'c-parent',
+        status: 'deleted',
+        createdAt: '2026-09-13T00:00:00.000Z',
+      }),
+      comment({
+        id: 'r-orphan',
+        parentId: 'not-on-screen',
+        createdAt: '2026-09-14T00:00:00.000Z',
+      }),
+    ];
+    const layout = buildGalleryOrnamentLayout({
+      post: post(),
+      reactions: [],
+      comments,
+      reactorProfiles: new Map(),
+    });
+    expect(layout.comments.map((row) => row.id)).toEqual(['c-parent']);
+    expect(layout.comments.some((row) => row.id.startsWith('r-'))).toBe(false);
+    expect(layout.replies).toHaveLength(GALLERY_ORNAMENT_REPLY_CAP);
+    expect(layout.replies.map((row) => row.id)).toEqual(['r-new', 'r-mid']);
+    expect(layout.replies.some((row) => row.id === 'r-old')).toBe(false);
+
+    const parent = layout.comments[0];
+    layout.replies.forEach((reply, index) => {
+      const step = (index + 1) * REPLY_RADIUS_STEP;
+      expect(reply.parentId).toBe('c-parent');
+      expect(reply.angleDeg).toBe(parent.angleDeg);
+      expect(reply.radiusPct).toBeCloseTo(parent.radiusPct + step, 8);
+      expect(reply.innerRadiusPct).toBeCloseTo(parent.innerRadiusPct + step, 8);
+      expect(reply.radiusPct).toBeGreaterThan(parent.radiusPct);
+      expect(reply.innerRadiusPct).toBeGreaterThan(parent.innerRadiusPct);
+      const rest = polarPercent(reply.angleDeg, reply.radiusPct);
+      const inner = polarPercent(reply.angleDeg, reply.innerRadiusPct);
+      expect(reply.leftPct).toBeCloseTo(rest.leftPct, 8);
+      expect(reply.topPct).toBeCloseTo(rest.topPct, 8);
+      expect(reply.innerLeftPct).toBeCloseTo(inner.leftPct, 8);
+      expect(reply.innerTopPct).toBeCloseTo(inner.topPct, 8);
+    });
+  });
+
   it('always includes the author even when reactions and comments are empty', () => {
     const layout = buildGalleryOrnamentLayout({
       post: post({ body: 'A title that should be kept' }),
@@ -220,6 +288,7 @@ describe('caps and filters', () => {
     });
     expect(layout.reactions).toEqual([]);
     expect(layout.comments).toEqual([]);
+    expect(layout.replies).toEqual([]);
     expect(layout.author.name).toBe('Giathy');
     expect(layout.author.body).toBe('A title that should be kept');
   });
@@ -364,6 +433,10 @@ describe('caps and filters', () => {
     expect(layout.comments).toHaveLength(1);
     expect(layout.comments[0].id).toBe('c-pill');
     expect(layout.comments[0].reactionBadges.map((row) => row.unicode)).toEqual(['❤️', '🔥', '🙏']);
+    expect(layout.replies).toHaveLength(1);
+    expect(layout.replies[0].id).toBe('c-reply');
+    expect(layout.replies[0].parentId).toBe('c-pill');
+    expect(layout.replies[0].angleDeg).toBe(layout.comments[0].angleDeg);
     expect(layout.reactions.map((row) => row.id)).toEqual(['post-arc']);
     expect(layout.reactions.some((row) => row.unicode === '❤️')).toBe(false);
   });

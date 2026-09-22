@@ -15,7 +15,10 @@ import { hashPostId } from './communityGalleryMoods';
 
 export const GALLERY_ORNAMENT_REACTION_CAP = 8;
 export const GALLERY_ORNAMENT_COMMENT_CAP = 6;
+export const GALLERY_ORNAMENT_REPLY_CAP = 2;
 export const GALLERY_COMMENT_REACTION_BADGE_CAP = 3;
+/** Extra polar radius so a reply sits outside its parent on the same ray. */
+export const REPLY_RADIUS_STEP = 18;
 
 /** Top hemisphere, clockwise from east (CSS y-down). */
 export const REACTION_ANGLE_MIN = 200;
@@ -82,6 +85,10 @@ export type GalleryCommentOrnament = PolarSlot & {
   profile: AvatarProfileFields;
 };
 
+export type GalleryReplyOrnament = GalleryCommentOrnament & {
+  parentId: string;
+};
+
 export type GalleryAuthorOrnament = {
   name: string;
   body: string;
@@ -92,6 +99,7 @@ export type GalleryOrnamentLayout = {
   reactions: GalleryReactionOrnament[];
   author: GalleryAuthorOrnament;
   comments: GalleryCommentOrnament[];
+  replies: GalleryReplyOrnament[];
 };
 
 /** Hermite smoothstep on a 0..1 unit. */
@@ -241,6 +249,50 @@ export function selectGalleryComments(
     .slice(0, GALLERY_ORNAMENT_COMMENT_CAP);
 }
 
+/** Newest 2 active replies per on-screen parent. Hidden, deleted, and off-screen parents are omitted. */
+export function selectGalleryReplies(
+  comments: CommunityComment[],
+  postId: string,
+  parentIds: ReadonlySet<string>,
+): CommunityComment[] {
+  const byParent = new Map<string, CommunityComment[]>();
+  for (const row of comments) {
+    if ((row.postId || '') !== postId) continue;
+    if ((row.status || '').trim() !== 'active') continue;
+    const parentId = (row.parentId || '').trim();
+    if (!parentId || !parentIds.has(parentId)) continue;
+    const bucket = byParent.get(parentId);
+    if (bucket) bucket.push(row);
+    else byParent.set(parentId, [row]);
+  }
+  const selected: CommunityComment[] = [];
+  for (const parentId of parentIds) {
+    const bucket = byParent.get(parentId);
+    if (!bucket) continue;
+    bucket.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
+    selected.push(...bucket.slice(0, GALLERY_ORNAMENT_REPLY_CAP));
+  }
+  return selected;
+}
+
+function replyPolar(parent: PolarSlot, index: number): PolarSlot {
+  const step = (index + 1) * REPLY_RADIUS_STEP;
+  const angleDeg = parent.angleDeg;
+  const radiusPct = parent.radiusPct + step;
+  const innerRadiusPct = parent.innerRadiusPct + step;
+  const rest = polarPercent(angleDeg, radiusPct);
+  const inner = polarPercent(angleDeg, innerRadiusPct);
+  return {
+    angleDeg,
+    radiusPct,
+    leftPct: rest.leftPct,
+    topPct: rest.topPct,
+    innerRadiusPct,
+    innerLeftPct: inner.leftPct,
+    innerTopPct: inner.topPct,
+  };
+}
+
 /** Top 1–3 reaction groups on a comment pill: count desc, then latest createdAt desc. */
 export function selectCommentReactionBadges(
   reactions: CommunityReaction[],
@@ -325,6 +377,25 @@ function commentOrnamentProfile(comment: CommunityComment): AvatarProfileFields 
   };
 }
 
+function commentOrnamentFromRow(
+  row: CommunityComment,
+  polar: PolarSlot,
+  reactions: CommunityReaction[],
+  postId: string,
+): GalleryCommentOrnament {
+  const profile = commentOrnamentProfile(row);
+  return {
+    ...polar,
+    id: row.id,
+    name: profile.displayName,
+    body: row.body || '',
+    contentGiphyUrl: commentGiphyDisplayUrl(row),
+    contentPhotoUrl: commentPhotoDisplayUrl(row),
+    reactionBadges: selectCommentReactionBadges(reactions, postId, row.id),
+    profile,
+  };
+}
+
 export function buildGalleryOrnamentLayout(input: {
   post: Pick<CommunityPost, 'id' | 'body' | 'authorUserId' | 'authorNameSnapshot' | 'author'>;
   reactions: CommunityReaction[];
@@ -363,27 +434,32 @@ export function buildGalleryOrnamentLayout(input: {
       COMMENT_RADIUS_MIN,
       COMMENT_RADIUS_MAX,
     );
-    const profile = commentOrnamentProfile(row);
-    const body = row.body || '';
-    return {
-      ...polar,
-      id: row.id,
-      name: profile.displayName,
-      body,
-      contentGiphyUrl: commentGiphyDisplayUrl(row),
-      contentPhotoUrl: commentPhotoDisplayUrl(row),
-      reactionBadges: selectCommentReactionBadges(input.reactions, post.id, row.id),
-      profile,
-    };
+    return commentOrnamentFromRow(row, polar, input.reactions, post.id);
   });
   const commentsById = [...commentSlots].sort((a, b) => a.id.localeCompare(b.id));
   const spacedComments = applySpacedAngles(commentsById, spaceCommentRestAngles(commentsById.length));
   const commentById = new Map(spacedComments.map((row) => [row.id, row]));
   const comments = commentSlots.map((row) => commentById.get(row.id) ?? row);
 
+  const parentIds = new Set(comments.map((row) => row.id));
+  const replyIndexByParent = new Map<string, number>();
+  const replies: GalleryReplyOrnament[] = [];
+  for (const row of selectGalleryReplies(input.comments, post.id, parentIds)) {
+    const parentId = (row.parentId || '').trim();
+    const parent = commentById.get(parentId);
+    if (!parent) continue;
+    const index = replyIndexByParent.get(parentId) ?? 0;
+    replyIndexByParent.set(parentId, index + 1);
+    replies.push({
+      ...commentOrnamentFromRow(row, replyPolar(parent, index), input.reactions, post.id),
+      parentId,
+    });
+  }
+
   return {
     reactions,
     author: authorOrnamentFields(post),
     comments,
+    replies,
   };
 }

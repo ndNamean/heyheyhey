@@ -118,7 +118,10 @@ describe('CommunityDepthOrnaments', () => {
     );
     expect(container.querySelector('.community-depth-comment-name')?.textContent).toBe('Minh');
     expect(container.querySelector('.community-depth-comment--giphy')).toBeNull();
-    expect(container.textContent).not.toContain('Hidden reply');
+    expect(container.querySelector('.community-depth-comment--reply')?.textContent).toContain(
+      'Hidden reply',
+    );
+    expect(container.querySelectorAll('.community-depth-comment--reply')).toHaveLength(1);
 
     const chip = container.querySelector('.community-depth-react') as HTMLElement;
     expect(chip.style.getPropertyValue('--rest-left')).not.toBe('');
@@ -319,6 +322,8 @@ describe('CommunityDepthOrnaments', () => {
     const css = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
     expect(css).toContain('scale(calc(2.5 + (1.12 - 2.5) * var(--idle, 0)))');
     expect(css).toContain('scale(calc(1.4 + (1.12 - 1.4) * var(--idle, 0)))');
+    expect(css).toContain('scale(calc(1.15 + (0.95 - 1.15) * var(--idle, 0)))');
+    expect(css).toContain('.community-depth-comment--reply');
     expect(css).toContain(
       'translate(-50%, calc(10px * (1 - var(--idle, 0)))) scale(calc(1.4 + (1 - 1.4) * var(--idle, 0)))',
     );

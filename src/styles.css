@@ -1442,6 +1442,10 @@ textarea { min-height: 88px; resize: vertical; }
   transform: translate(-50%, -50%) scale(calc(1.4 + (1.12 - 1.4) * var(--idle, 0)));
 }
 
+.community-depth-comment--reply {
+  transform: translate(-50%, -50%) scale(calc(1.15 + (0.95 - 1.15) * var(--idle, 0)));
+}
+
 .community-depth-comment--giphy,
 .community-depth-comment--photo {
   width: min(70%, 280px);

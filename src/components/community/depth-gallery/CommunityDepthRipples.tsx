@@ -61,7 +61,7 @@ export default function CommunityDepthRipples({
           </div>
         );
       })}
-      {layout.comments.map((row) => {
+      {[...layout.comments, ...layout.replies].map((row) => {
         const key = ornamentRippleCommentKey(post.id, row.id);
         return (
           <div
