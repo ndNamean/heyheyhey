@@ -1713,10 +1713,23 @@ textarea { min-height: 88px; resize: vertical; }
 }
 
 .bottom-nav .nav-tab-label {
+  display: block;
+  width: 100%;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: break-word;
+  line-height: 1.2;
+  overflow: visible;
+}
+
+.bottom-nav .nav-tab-label:has(.nav-badge) {
+  padding-right: 16px;
+  box-sizing: border-box;
+}
+
+.bottom-nav .nav-tab-avatar {
+  max-width: 100%;
 }
 
 .mobile-lang-row {
@@ -3622,8 +3635,9 @@ body.wizard-active .page {
 
 .nav-badge {
   position: absolute;
-  top: -6px;
-  right: -12px;
+  top: 0;
+  right: 0;
+  z-index: 1;
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
