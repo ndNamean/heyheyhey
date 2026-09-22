@@ -647,7 +647,11 @@ export function CommunityVideoPlayer({
   const aspect = communityVideoAspectRatio(width, height);
   const showPause = elementPlaying && !showPlay;
   const rootClass = [
-    surface === 'gallery' ? 'community-depth-video-slot' : 'community-card-video',
+    surface === 'gallery'
+      ? 'community-depth-video-slot'
+      : surface === 'comment'
+        ? 'community-comment-video'
+        : 'community-card-video',
     className,
   ]
     .filter(Boolean)

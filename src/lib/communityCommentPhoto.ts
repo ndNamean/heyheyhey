@@ -1,6 +1,6 @@
 /**
- * Community comment/reply photo content (not a GIF body, not a reaction).
- * Reuses chat image policy + Instant attachment field helpers.
+ * Community comment/reply photo or video content (not a GIF body, not a reaction).
+ * Reuses chat image/video policy + Instant attachment field helpers.
  */
 
 import {
@@ -44,11 +44,27 @@ export function commentHasPhotoContent(
     'attachmentKind' | 'attachmentPath' | 'attachmentFileId' | 'attachmentUrl' | 'attachmentFile'
   >,
 ): boolean {
-  if ((comment.attachmentKind || '').trim() === 'file') return false;
+  if ((comment.attachmentKind || '').trim() !== 'image') return false;
   return Boolean(commentPhotoDisplayUrl(comment));
 }
 
+export function commentHasVideoContent(
+  comment: Pick<
+    CommunityComment,
+    'attachmentKind' | 'attachmentPath' | 'attachmentFileId' | 'attachmentUrl' | 'attachmentFile'
+  >,
+): boolean {
+  if ((comment.attachmentKind || '').trim() !== 'video') return false;
+  return Boolean(commentVideoDisplayUrl(comment));
+}
+
 export function commentPhotoDisplayUrl(
+  comment: Pick<CommunityComment, 'attachmentUrl' | 'attachmentFile' | 'attachmentPath'>,
+): string {
+  return resolveChatAttachmentUrl(comment);
+}
+
+export function commentVideoDisplayUrl(
   comment: Pick<CommunityComment, 'attachmentUrl' | 'attachmentFile' | 'attachmentPath'>,
 ): string {
   return resolveChatAttachmentUrl(comment);
@@ -60,7 +76,6 @@ export function commentPhotoPayloadFromUpload(
 ): ChatAttachmentPayloadInput {
   return {
     ...uploaded,
-    kind: 'image',
     width: dims?.width ?? uploaded.width ?? null,
     height: dims?.height ?? uploaded.height ?? null,
   };

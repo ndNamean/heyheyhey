@@ -3,7 +3,7 @@ export const FEED_VIDEO_MIN_INTERSECTION = 0.25;
 export const GALLERY_PLAYBACK_DWELL_MS = 100;
 export const FRAME_TAP_MOVE_THRESHOLD_PX = 10;
 
-export type CommunityVideoSurface = 'gallery' | 'detail' | 'famous' | 'feed';
+export type CommunityVideoSurface = 'gallery' | 'detail' | 'famous' | 'feed' | 'comment';
 
 export type CommunityVideoPlaybackToken = {
   postId: string;
@@ -99,6 +99,10 @@ export function canAttachVideoSource(args: {
     if (args.gallery) return false;
     return args.selectedPostId === args.postId;
   }
+  if (args.surface === 'comment') {
+    if (args.gallery) return false;
+    return Boolean(args.selectedPostId);
+  }
   if (args.gallery || args.selectedPostId) return false;
   return (
     args.feedDominant?.postId === args.postId && args.feedDominant.surface === args.surface
@@ -119,6 +123,9 @@ export function resolvePlaybackToken(args: {
     return null;
   }
   const claim = args.claim;
+  if (claim?.surface === 'comment' && args.selectedPostId) {
+    return claim;
+  }
   if (claim?.surface === 'detail' && args.selectedPostId === claim.postId) {
     return claim;
   }
@@ -153,6 +160,16 @@ export function shouldWantPlay(args: {
 
 export function userPauseKey(postId: string, surface: CommunityVideoSurface): string {
   return `${surface}:${postId}`;
+}
+
+/** Comment players stay paused until this comment holds the claim. */
+export function commentSurfaceUserPaused(
+  postId: string,
+  claim: CommunityVideoPlaybackToken | null,
+  userPaused: boolean,
+): boolean {
+  if (claim?.surface === 'comment' && claim.postId === postId) return userPaused;
+  return true;
 }
 
 export type CommunityVideoSoundPolicy = {

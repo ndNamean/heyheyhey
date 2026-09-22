@@ -91,6 +91,8 @@ describe('communityCommentGiphy', () => {
     expect(perms).not.toMatch(/giphyKind in \[/);
     expect(perms).toContain("data.giphyId != '' && data.giphyUrl != ''");
     expect(perms).toContain("data.attachmentKind == 'image'");
+    expect(perms).toContain("data.attachmentKind == 'video'");
+    expect(perms).not.toMatch(/attachmentKind in \[/);
     expect(perms).toContain("data.giphyId == '' || data.attachmentPath == ''");
   });
 

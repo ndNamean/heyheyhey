@@ -23,7 +23,7 @@ export default function CommunityCommentPhoto({ comment, unavailableLabel }: Pro
   const src = commentPhotoDisplayUrl(comment);
   const title = (comment.attachmentFileName || '').trim();
   const [failed, setFailed] = useState(false);
-  if (!commentHasPhotoContent(comment) && !src) return null;
+  if (!commentHasPhotoContent(comment)) return null;
 
   const showImage = Boolean(src) && !failed;
   const alt = title || unavailableLabel;

@@ -28,16 +28,20 @@ function slotStyle(row: PolarSlot): CSSProperties {
 }
 
 function commentClassName(row: GalleryCommentOrnament, isReply: boolean): string {
-  const mediaUrl = row.contentGiphyUrl || row.contentPhotoUrl;
-  const isPhoto = Boolean(row.contentPhotoUrl) && !row.contentGiphyUrl;
+  const hasGif = Boolean(row.contentGiphyUrl);
+  const hasPhoto = Boolean(row.contentPhotoUrl) && !hasGif;
+  const hasVideo = Boolean(row.contentVideoUrl) && !hasGif && !hasPhoto;
   const classes = ['community-depth-comment'];
   if (isReply) classes.push('community-depth-comment--reply');
-  if (mediaUrl) classes.push(isPhoto ? 'community-depth-comment--photo' : 'community-depth-comment--giphy');
+  if (hasPhoto) classes.push('community-depth-comment--photo');
+  else if (hasVideo) classes.push('community-depth-comment--video');
+  else if (hasGif) classes.push('community-depth-comment--giphy');
   return classes.join(' ');
 }
 
 function CommentOrnament({ row, isReply }: { row: GalleryCommentOrnament; isReply?: boolean }) {
-  const mediaUrl = row.contentGiphyUrl || row.contentPhotoUrl;
+  const imageUrl = row.contentGiphyUrl || row.contentPhotoUrl;
+  const videoUrl = imageUrl ? '' : row.contentVideoUrl;
   return (
     <div className={commentClassName(row, Boolean(isReply))} style={slotStyle(row)}>
       <ProfileAvatar profile={row.profile} size={AVATAR_PX} />
@@ -45,10 +49,20 @@ function CommentOrnament({ row, isReply }: { row: GalleryCommentOrnament; isRepl
         <div className="community-depth-comment-copy">
           <div className="community-depth-comment-name">{row.name}</div>
           {row.body ? <div className="community-depth-comment-body">{row.body}</div> : null}
-          {mediaUrl ? (
+          {videoUrl ? (
+            <video
+              className="community-depth-comment-giphy"
+              src={videoUrl}
+              muted
+              loop
+              playsInline
+              autoPlay
+              draggable={false}
+            />
+          ) : imageUrl ? (
             <img
               className="community-depth-comment-giphy"
-              src={mediaUrl}
+              src={imageUrl}
               alt=""
               draggable={false}
             />

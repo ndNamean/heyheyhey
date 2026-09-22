@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   buildCommunityCommentPhotoPayload,
   commentHasPhotoContent,
+  commentHasVideoContent,
   commentPhotoDisplayUrl,
+  commentPhotoPayloadFromUpload,
+  commentVideoDisplayUrl,
   emptyCommunityCommentPhotoFields,
   stageCommunityCommentPhoto,
 } from './communityCommentPhoto';
@@ -63,5 +66,30 @@ describe('communityCommentPhoto', () => {
     const result = await stageCommunityCommentPhoto(pdf);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.code).toBe('invalid_type');
+  });
+
+  it('treats video as video content, not photo content', () => {
+    const video = {
+      attachmentKind: 'video',
+      attachmentPath: 'stores/community/post-a/c.mp4',
+      attachmentFileId: 'file-v',
+      attachmentUrl: 'https://example.com/c.mp4',
+      attachmentFile: { url: 'https://example.com/linked.mp4' },
+    };
+    expect(commentHasPhotoContent(video)).toBe(false);
+    expect(commentHasVideoContent(video)).toBe(true);
+    expect(commentVideoDisplayUrl(video)).toBe('https://example.com/linked.mp4');
+    expect(commentPhotoDisplayUrl(video)).toBe('https://example.com/linked.mp4');
+    expect(
+      commentPhotoPayloadFromUpload({
+        kind: 'video',
+        path: video.attachmentPath,
+        fileId: video.attachmentFileId,
+        url: video.attachmentUrl,
+        mimeType: 'video/mp4',
+        fileName: 'c.mp4',
+        bytes: 40,
+      }).kind,
+    ).toBe('video');
   });
 });

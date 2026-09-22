@@ -997,7 +997,7 @@ const rules = {
       giphyFieldsValid:
         "data.giphyId == '' || (data.giphyId != '' && data.giphyUrl != '')",
       attachmentFieldsValid:
-        "data.attachmentPath == '' || (data.attachmentUrl != '' && data.attachmentKind == 'image')",
+        "data.attachmentPath == '' || (data.attachmentUrl != '' && (data.attachmentKind == 'image' || data.attachmentKind == 'video'))",
       mediaXor: "data.giphyId == '' || data.attachmentPath == ''",
       onlyDeletedFields:
         "request.modifiedFields.all(f, f in ['deletedAt', 'status'])",

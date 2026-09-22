@@ -247,6 +247,11 @@ function comment(
 }
 
 describe('CommunityComments GIF content', () => {
+  it('uses photo-or-video comment copy in EN and VI', () => {
+    expect(pack.community.addCommentPhoto).toBe('Add photo or video');
+    expect(buildExtendedPack('vi').community.addCommentPhoto).toBe('Thêm ảnh hoặc video');
+  });
+
   beforeEach(() => {
     transactMock.mockClear();
     commentUpdateMock.mockClear();
@@ -563,15 +568,129 @@ describe('CommunityComments GIF content', () => {
     );
   });
 
-  it('rejects a video file in the comment photo picker', async () => {
+  it('stages and uploads a comment video with community scope', async () => {
+    uploadMock.mockResolvedValueOnce({
+      fileId: 'file-v',
+      url: 'https://example.com/c.mp4',
+      path: 'stores/community/post-a/c.mp4',
+      mimeType: 'video/mp4',
+      bytes: 12,
+      fileName: 'clip.mp4',
+      kind: 'video',
+    });
     render(<CommunityComments post={post()} comments={[]} profile={profile()} />);
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(input.accept).toContain('video/mp4');
     const file = new File(['abc'], 'clip.mp4', { type: 'video/mp4' });
     Object.defineProperty(input, 'files', { value: [file], configurable: true });
     await act(async () => {
       fireEvent.change(input);
     });
+    expect(screen.getByText('clip.mp4')).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    });
+    expect(uploadMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: 'community',
+        postId: 'post-a',
+        mimeType: 'video/mp4',
+        enabled: true,
+      }),
+    );
+    expect(commentUpdateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: '',
+        giphyId: '',
+        parentId: '',
+        attachmentKind: 'video',
+        attachmentUrl: 'https://example.com/c.mp4',
+        attachmentPath: 'stores/community/post-a/c.mp4',
+        attachmentFileId: 'file-v',
+      }),
+    );
+  });
+
+  it('sends a reply video under the parent comment', async () => {
+    uploadMock.mockResolvedValueOnce({
+      fileId: 'file-reply-v',
+      url: 'https://example.com/reply.mp4',
+      path: 'stores/community/post-a/reply.mp4',
+      mimeType: 'video/mp4',
+      bytes: 20,
+      fileName: 'reply.mp4',
+      kind: 'video',
+    });
+    render(
+      <CommunityComments
+        post={post()}
+        comments={[comment({ id: 'c-top', authorNameSnapshot: 'Minh', body: 'hi' })]}
+        profile={profile()}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Reply' }));
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['abc'], 'reply.mp4', { type: 'video/mp4' });
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => {
+      fireEvent.change(input);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    });
+    expect(uploadMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: 'community',
+        postId: 'post-a',
+        mimeType: 'video/mp4',
+      }),
+    );
+    expect(commentUpdateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parentId: 'c-top',
+        attachmentKind: 'video',
+        attachmentUrl: 'https://example.com/reply.mp4',
+        attachmentFileId: 'file-reply-v',
+      }),
+    );
+  });
+
+  it('renders comment video on the comment surface, not as a photo', () => {
+    render(
+      <CommunityComments
+        post={post()}
+        comments={[
+          comment({
+            id: 'c-vid',
+            authorNameSnapshot: 'Minh',
+            body: 'watch',
+            attachmentKind: 'video',
+            attachmentPath: 'stores/community/post-a/c.mp4',
+            attachmentUrl: 'https://example.com/c.mp4',
+            attachmentWidth: '640',
+            attachmentHeight: '360',
+          }),
+        ]}
+        profile={profile()}
+      />,
+    );
+    const player = document.querySelector('[data-surface="comment"]') as HTMLElement | null;
+    expect(player).toBeTruthy();
+    expect(player?.getAttribute('data-post-id')).toBe('c-vid');
+    expect(player?.className).toContain('community-comment-video');
+    expect(document.querySelector('.community-comment-photo')).toBeNull();
+    expect(screen.getByText('watch')).toBeTruthy();
+  });
+
+  it('rejects a PDF file in the comment media picker', async () => {
+    render(<CommunityComments post={post()} comments={[]} profile={profile()} />);
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File(['%PDF'], 'note.pdf', { type: 'application/pdf' });
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await act(async () => {
+      fireEvent.change(input);
+    });
     expect(screen.getByText(/unsupported file type/i)).toBeTruthy();
-    expect(screen.queryByText('clip.mp4')).toBeNull();
+    expect(screen.queryByText('note.pdf')).toBeNull();
   });
 });

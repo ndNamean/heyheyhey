@@ -826,7 +826,7 @@ const _schema = i.schema({
       authorProfileId: i.string().indexed(),
       authorNameSnapshot: i.string(),
       authorRoleSnapshot: i.string(),
-      body: i.string(), // may be '' when GIF-only or photo-only
+      body: i.string(), // may be '' when GIF-only, photo-only, or video-only
       // GIF as comment/reply content (not a reaction). '' on text-only rows.
       giphyId: i.string().clientRequired(),
       giphyKind: i.string().clientRequired(), // 'gif' | 'sticker' | 'meme' | 'emoji' | ''
@@ -835,8 +835,8 @@ const _schema = i.schema({
       giphyHeight: i.string().clientRequired(),
       giphyUrl: i.string().clientRequired(),
       giphyPreviewUrl: i.string().clientRequired(),
-      // Photo as comment/reply content (jpeg/png/webp). '' when unused. XOR with GIF.
-      attachmentKind: i.string().clientRequired(), // '' | 'image'
+      // Photo or video as comment/reply content. '' when unused. XOR with GIF.
+      attachmentKind: i.string().clientRequired(), // '' | 'image' | 'video'
       attachmentPath: i.string().clientRequired(),
       attachmentFileId: i.string().clientRequired(),
       attachmentUrl: i.string().clientRequired(),

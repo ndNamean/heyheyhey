@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { usePointerCapabilities } from '../media-interaction/pointerCapabilities';
 import {
   canAttachVideoSource,
+  commentSurfaceUserPaused,
   galleryPlayPostId,
   galleryWantPlay,
   pickDominantFeedVideo,
@@ -152,6 +153,10 @@ export function CommunityVideoPlaybackProvider({
       }
       return;
     }
+    if (claim.surface === 'comment') {
+      if (!selectedPostId) setClaim(null);
+      return;
+    }
     if (claim.surface === 'detail') {
       if (selectedPostId !== claim.postId) setClaim(null);
       return;
@@ -289,7 +294,11 @@ export function CommunityVideoPlaybackProvider({
         surface === 'gallery' && galleryState
           ? galleryWantPlay(postId, galleryState)
           : Boolean(token && token.postId === postId && token.surface === surface),
-      isUserPaused: (postId, surface) => userPausedKeys.has(userPauseKey(postId, surface)),
+      isUserPaused: (postId, surface) => {
+        const paused = userPausedKeys.has(userPauseKey(postId, surface));
+        if (surface === 'comment') return commentSurfaceUserPaused(postId, claim, paused);
+        return paused;
+      },
       setUserPaused,
       claimPlayback,
       registerFeedElement,

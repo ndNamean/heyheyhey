@@ -1083,9 +1083,15 @@ textarea { min-height: 88px; resize: vertical; }
   color: inherit;
 }
 
-.community-comment-giphy {
+.community-comment-giphy,
+.community-comment-video {
   margin: 6px 0 8px;
   max-width: min(100%, 280px);
+}
+
+.community-comment-video {
+  display: block;
+  pointer-events: auto;
 }
 
 .community-comment-giphy-img {
@@ -1447,7 +1453,8 @@ textarea { min-height: 88px; resize: vertical; }
 }
 
 .community-depth-comment--giphy,
-.community-depth-comment--photo {
+.community-depth-comment--photo,
+.community-depth-comment--video {
   width: min(70%, 280px);
   align-items: flex-start;
 }

@@ -10,6 +10,7 @@ import {
   isPlaybackOutputMuted,
   pickDominantFeedVideo,
   resolvePlaybackToken,
+  commentSurfaceUserPaused,
   shouldAbandonPlayAttempt,
   shouldAttemptMutedAutoplayFallback,
   shouldShowTransportPlay,
@@ -304,6 +305,76 @@ describe('communityVideoPlayback', () => {
         claimed: true,
       }),
     ).toBe(true);
+  });
+
+  it('attaches comment video when the post detail is open and gallery is closed', () => {
+    expect(
+      canAttachVideoSource({
+        postId: 'c1',
+        surface: 'comment',
+        gallery: null,
+        selectedPostId: 'd',
+        feedDominant: null,
+      }),
+    ).toBe(true);
+    expect(
+      canAttachVideoSource({
+        postId: 'c1',
+        surface: 'comment',
+        gallery: { currentPostId: 'g', nextPostId: 'n' },
+        selectedPostId: 'd',
+        feedDominant: null,
+      }),
+    ).toBe(false);
+    expect(
+      canAttachVideoSource({
+        postId: 'c1',
+        surface: 'comment',
+        gallery: null,
+        selectedPostId: null,
+        feedDominant: { postId: 'f', surface: 'feed', ratio: 0.9 },
+      }),
+    ).toBe(false);
+    expect(
+      canAttachVideoSource({
+        postId: 'd',
+        surface: 'detail',
+        gallery: null,
+        selectedPostId: 'd',
+        feedDominant: null,
+      }),
+    ).toBe(true);
+  });
+
+  it('lets a comment claim win over the detail post player, but not the gallery', () => {
+    expect(
+      resolvePlaybackToken({
+        gallery: null,
+        selectedPostId: 'd',
+        feedDominant: null,
+        claim: { postId: 'c1', surface: 'comment' },
+      }),
+    ).toEqual({ postId: 'c1', surface: 'comment' });
+    expect(
+      resolvePlaybackToken({
+        gallery: { currentPostId: 'g', nextPostId: 'n', settled: true },
+        selectedPostId: 'd',
+        feedDominant: null,
+        claim: { postId: 'c1', surface: 'comment' },
+      }),
+    ).toEqual({ postId: 'g', surface: 'gallery' });
+    expect(
+      resolvePlaybackToken({
+        gallery: null,
+        selectedPostId: 'd',
+        feedDominant: null,
+      }),
+    ).toEqual({ postId: 'd', surface: 'detail' });
+    expect(commentSurfaceUserPaused('c1', null, false)).toBe(true);
+    expect(commentSurfaceUserPaused('c1', { postId: 'c1', surface: 'comment' }, false)).toBe(
+      false,
+    );
+    expect(commentSurfaceUserPaused('c1', { postId: 'c2', surface: 'comment' }, false)).toBe(true);
   });
 
   it('does not keep a feed claim playing after another video is dominant', () => {

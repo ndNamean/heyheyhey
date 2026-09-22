@@ -220,6 +220,72 @@ describe('CommunityDepthOrnaments', () => {
     expect(container.querySelector('.community-depth-comment-body')?.textContent).toBe('catch');
   });
 
+  it('shows a muted looping video thumb on comment and reply ornaments, not an img of the mp4', () => {
+    const { container } = render(
+      <CommunityDepthOrnaments
+        post={post()}
+        reactions={[]}
+        comments={[
+          comment({
+            id: 'c-video',
+            authorNameSnapshot: 'Minh',
+            body: 'clip',
+            attachmentKind: 'video',
+            attachmentUrl: 'https://example.com/c.mp4',
+            attachmentPath: 'stores/community/post-a/c.mp4',
+          }),
+          comment({
+            id: 'c-parent',
+            authorNameSnapshot: 'Lan',
+            body: 'parent',
+            createdAt: '2026-09-07T00:00:00.000Z',
+          }),
+          comment({
+            id: 'c-reply-video',
+            parentId: 'c-parent',
+            authorNameSnapshot: 'Reply',
+            body: 'further',
+            createdAt: '2026-09-09T00:00:00.000Z',
+            attachmentKind: 'video',
+            attachmentUrl: 'https://example.com/r.mp4',
+            attachmentPath: 'stores/community/post-a/r.mp4',
+          }),
+        ]}
+        reactorProfiles={new Map()}
+      />,
+    );
+    const videos = container.querySelectorAll('video.community-depth-comment-giphy');
+    expect(videos).toHaveLength(2);
+    expect(container.querySelector('.community-depth-comment--video')).toBeTruthy();
+    expect(container.querySelector('.community-depth-comment--reply.community-depth-comment--video')).toBeTruthy();
+    expect(container.querySelector('img[src*=".mp4"]')).toBeNull();
+    const commentVideo = [...videos].find((el) => el.getAttribute('src')?.includes('c.mp4')) as
+      | HTMLVideoElement
+      | undefined;
+    const replyVideo = [...videos].find((el) => el.getAttribute('src')?.includes('r.mp4')) as
+      | HTMLVideoElement
+      | undefined;
+    expect(commentVideo?.muted).toBe(true);
+    expect(commentVideo?.loop).toBe(true);
+    expect(commentVideo?.getAttribute('playsinline')).not.toBeNull();
+    expect(replyVideo?.muted).toBe(true);
+    expect(replyVideo?.loop).toBe(true);
+    const parent = [...container.querySelectorAll('.community-depth-comment')].find(
+      (el) => el.textContent?.includes('Lan') && !el.classList.contains('community-depth-comment--reply'),
+    ) as HTMLElement | undefined;
+    const reply = container.querySelector('.community-depth-comment--reply') as HTMLElement | null;
+    expect(parent && reply).toBeTruthy();
+    const parentDist = Math.hypot(
+      Number(parent?.style.getPropertyValue('--rest-left')) - 50,
+      Number(parent?.style.getPropertyValue('--rest-top')) - 50,
+    );
+    const replyDist = Math.hypot(
+      Number(reply?.style.getPropertyValue('--rest-left')) - 50,
+      Number(reply?.style.getPropertyValue('--rest-top')) - 50,
+    );
+    expect(replyDist).toBeGreaterThan(parentDist);
+  });
+
   it('renders up to 3 reaction badges on the comment pill without a count or click target', () => {
     const css = readFileSync(resolve(process.cwd(), 'src/styles.css'), 'utf8');
     expect(css).toContain('.community-depth-gallery .community-depth-comment-badges');
@@ -329,6 +395,7 @@ describe('CommunityDepthOrnaments', () => {
     );
     expect(css).toContain('.community-depth-comment--giphy');
     expect(css).toContain('.community-depth-comment--photo');
+    expect(css).toContain('.community-depth-comment--video');
     expect(css).toContain('min(70%, 280px)');
     expect(css).toMatch(/\.community-depth-comment-giphy \{[\s\S]*?width: 120px;/);
     expect(css).not.toMatch(/\.community-depth-comment--giphy \{[\s\S]*?scale\(calc\(2\.5/);

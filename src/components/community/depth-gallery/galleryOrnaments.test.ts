@@ -368,6 +368,50 @@ describe('caps and filters', () => {
     });
     expect(layout.comments[0]?.contentPhotoUrl).toBe('https://example.com/c.jpg');
     expect(layout.comments[0]?.contentGiphyUrl).toBe('');
+    expect(layout.comments[0]?.contentVideoUrl).toBe('');
+  });
+
+  it('puts video on contentVideoUrl, never on the photo thumb field', () => {
+    const layout = buildGalleryOrnamentLayout({
+      post: post(),
+      reactions: [],
+      comments: [
+        comment({
+          id: 'video-only',
+          body: '',
+          createdAt: '2026-09-08T00:00:00.000Z',
+          attachmentKind: 'video',
+          attachmentPath: 'stores/community/post-a/c.mp4',
+          attachmentUrl: 'https://example.com/c.mp4',
+        }),
+        comment({
+          id: 'c-parent',
+          body: 'parent',
+          createdAt: '2026-09-07T00:00:00.000Z',
+        }),
+        comment({
+          id: 'video-reply',
+          parentId: 'c-parent',
+          body: 'reply clip',
+          createdAt: '2026-09-09T00:00:00.000Z',
+          attachmentKind: 'video',
+          attachmentPath: 'stores/community/post-a/r.mp4',
+          attachmentUrl: 'https://example.com/r.mp4',
+        }),
+      ],
+      reactorProfiles: new Map(),
+    });
+    const videoComment = layout.comments.find((row) => row.id === 'video-only');
+    const parent = layout.comments.find((row) => row.id === 'c-parent');
+    const reply = layout.replies.find((row) => row.id === 'video-reply');
+    expect(videoComment?.contentVideoUrl).toBe('https://example.com/c.mp4');
+    expect(videoComment?.contentPhotoUrl).toBe('');
+    expect(videoComment?.contentGiphyUrl).toBe('');
+    expect(reply?.contentVideoUrl).toBe('https://example.com/r.mp4');
+    expect(reply?.contentPhotoUrl).toBe('');
+    expect(parent).toBeTruthy();
+    expect(reply).toBeTruthy();
+    expect(reply!.radiusPct).toBeGreaterThan(parent!.radiusPct);
   });
 
   it('attaches 1–3 comment-scoped badges by count then recency, not post or reply reactions', () => {

@@ -5,7 +5,12 @@
 
 import type { AvatarProfileFields } from '../../../lib/avatarDisplay';
 import { commentGiphyDisplayUrl } from '../../../lib/communityCommentGiphy';
-import { commentPhotoDisplayUrl } from '../../../lib/communityCommentPhoto';
+import {
+  commentHasPhotoContent,
+  commentHasVideoContent,
+  commentPhotoDisplayUrl,
+  commentVideoDisplayUrl,
+} from '../../../lib/communityCommentPhoto';
 import { isPostReaction } from '../../../lib/communityReactionPeople';
 import { commentReactions } from '../../../lib/communityReactions';
 import { giphyReactionDisplayUrl } from '../../../lib/storeChatReactions';
@@ -79,8 +84,10 @@ export type GalleryCommentOrnament = PolarSlot & {
   body: string;
   /** GIF-as-content thumb. Not a reaction badge. */
   contentGiphyUrl: string;
-  /** Photo-as-content thumb. Not a reaction badge. XOR with GIF. */
+  /** Photo-as-content thumb. Not a reaction badge. XOR with GIF/video. */
   contentPhotoUrl: string;
+  /** Video-as-content thumb. Not a reaction badge. XOR with GIF/photo. */
+  contentVideoUrl: string;
   reactionBadges: GalleryCommentReactionBadge[];
   profile: AvatarProfileFields;
 };
@@ -384,13 +391,21 @@ function commentOrnamentFromRow(
   postId: string,
 ): GalleryCommentOrnament {
   const profile = commentOrnamentProfile(row);
+  const contentGiphyUrl = commentGiphyDisplayUrl(row);
+  const contentPhotoUrl =
+    contentGiphyUrl || !commentHasPhotoContent(row) ? '' : commentPhotoDisplayUrl(row);
+  const contentVideoUrl =
+    contentGiphyUrl || contentPhotoUrl || !commentHasVideoContent(row)
+      ? ''
+      : commentVideoDisplayUrl(row);
   return {
     ...polar,
     id: row.id,
     name: profile.displayName,
     body: row.body || '',
-    contentGiphyUrl: commentGiphyDisplayUrl(row),
-    contentPhotoUrl: commentPhotoDisplayUrl(row),
+    contentGiphyUrl,
+    contentPhotoUrl,
+    contentVideoUrl,
     reactionBadges: selectCommentReactionBadges(reactions, postId, row.id),
     profile,
   };

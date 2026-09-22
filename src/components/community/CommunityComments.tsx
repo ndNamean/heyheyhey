@@ -12,11 +12,17 @@ import {
 import {
   buildCommunityCommentPhotoPayload,
   commentHasPhotoContent,
+  commentHasVideoContent,
   commentPhotoPayloadFromUpload,
+  commentVideoDisplayUrl,
   emptyCommunityCommentPhotoFields,
 } from '../../lib/communityCommentPhoto';
 import { chatAttachmentPolicyErrorCopy } from '../../lib/chatAttachmentDisplay';
-import { validateChatAttachmentPolicy } from '../../lib/chatAttachmentPolicy';
+import {
+  CHAT_IMAGE_MIME_TYPES,
+  CHAT_VIDEO_MIME_TYPES,
+  validateChatAttachmentPolicy,
+} from '../../lib/chatAttachmentPolicy';
 import { uploadChatAttachment } from '../../lib/chatAttachmentUpload';
 import { isGiphyConfigured, type GiphyMediaItem } from '../../lib/giphyClient';
 import { isAreaManagerTier, isOwner } from '../../lib/roles';
@@ -31,6 +37,7 @@ import type { AvatarProfileFields } from '../../lib/avatarDisplay';
 import CommunityCommentGiphy from './CommunityCommentGiphy';
 import CommunityCommentPhoto from './CommunityCommentPhoto';
 import CommunityCommentReactions from './CommunityCommentReactions';
+import CommunityVideoPlayer from './CommunityVideoPlayer';
 
 const GiphyPicker = lazy(() =>
   import('../floating-assistant/GiphyPicker').then((m) => ({ default: m.GiphyPicker })),
@@ -144,15 +151,16 @@ export default function CommunityComments({
       mimeType,
       bytes: file.size,
       fileName: file.name,
+      scope: 'community',
     });
-    if (!policy.ok || policy.kind !== 'image') {
-      setError(chatAttachmentPolicyErrorCopy(policy.errorCode || 'invalid_type', sc));
+    if (!policy.ok || (policy.kind !== 'image' && policy.kind !== 'video')) {
+      setError(chatAttachmentPolicyErrorCopy(policy.errorCode || 'invalid_type', sc, policy.kind));
       if (photoInputRef.current) photoInputRef.current.value = '';
       return;
     }
-    const result = await attachmentStaging.stageFile(file);
+    const result = await attachmentStaging.stageFile(file, undefined, 'community');
     if (!result.ok) {
-      setError(chatAttachmentPolicyErrorCopy(result.error.code, sc));
+      setError(chatAttachmentPolicyErrorCopy(result.error.code, sc, result.error.kind));
       if (photoInputRef.current) photoInputRef.current.value = '';
       return;
     }
@@ -233,9 +241,17 @@ export default function CommunityComments({
           setSending(false);
           return;
         }
+        const payload = attachmentStaging.toPayloadInput(uploaded);
+        if (!payload) {
+          attachmentStaging.markFailed(sc.uploadFailed);
+          setError(sc.uploadFailed);
+          sendingLock.current = false;
+          setSending(false);
+          return;
+        }
         attachmentFileId = uploaded.fileId;
         photoFields = buildCommunityCommentPhotoPayload(
-          commentPhotoPayloadFromUpload(uploaded, {
+          commentPhotoPayloadFromUpload(payload, {
             width: staged.width ?? undefined,
             height: staged.height ?? undefined,
           }),
@@ -339,8 +355,19 @@ export default function CommunityComments({
             {commentHasGiphyContent(comment) ? (
               <CommunityCommentGiphy comment={comment} unavailableLabel={copy.commentGifUnavailable} />
             ) : null}
-            {commentHasPhotoContent(comment) ? (
+            {!commentHasGiphyContent(comment) && commentHasPhotoContent(comment) ? (
               <CommunityCommentPhoto comment={comment} unavailableLabel={copy.commentPhotoUnavailable} />
+            ) : null}
+            {!commentHasGiphyContent(comment) &&
+            !commentHasPhotoContent(comment) &&
+            commentHasVideoContent(comment) ? (
+              <CommunityVideoPlayer
+                postId={comment.id}
+                surface="comment"
+                src={commentVideoDisplayUrl(comment)}
+                width={Number.parseInt(comment.attachmentWidth || '', 10) || undefined}
+                height={Number.parseInt(comment.attachmentHeight || '', 10) || undefined}
+              />
             ) : null}
             {body ? (
               <MessageBody body={comment.body} candidates={[]} className="community-comment-body" />
@@ -452,7 +479,9 @@ export default function CommunityComments({
               phase={attachmentStaging.phase}
               uploadProgress={attachmentStaging.uploadProgress}
               className="community-comment-giphy-preview"
-              hint={copy.commentPhotoReady}
+              hint={
+                attachmentStaging.staged.kind === 'video' ? sc.readyToSend : copy.commentPhotoReady
+              }
               statusLabel={
                 attachmentStaging.phase === 'preparing'
                   ? sc.preparingAttachment
@@ -469,16 +498,22 @@ export default function CommunityComments({
               }
               onClear={clearStagedPhoto}
               onRetry={() => void sendComment()}
-              removeLabel={copy.removeCommentPhoto}
+              removeLabel={
+                attachmentStaging.staged.kind === 'video'
+                  ? sc.removeAttachment
+                  : copy.removeCommentPhoto
+              }
               retryLabel={t.common.retry}
-              previewAriaLabel={copy.commentPhotoPreview}
+              previewAriaLabel={
+                attachmentStaging.staged.kind === 'video' ? copy.video : copy.commentPhotoPreview
+              }
             />
           ) : null}
           <div className="community-comment-composer-actions">
             <input
               ref={photoInputRef}
               type="file"
-              accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+              accept={[...CHAT_IMAGE_MIME_TYPES, ...CHAT_VIDEO_MIME_TYPES].join(',')}
               hidden
               onChange={(e) => {
                 const file = e.target.files?.[0];
