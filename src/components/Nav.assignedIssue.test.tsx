@@ -50,6 +50,16 @@ vi.mock('../hooks/useNotificationUnreadCount', () => ({
   useUnreadNotificationCount: () => 0,
 }));
 
+vi.mock('./community/useCommunityNewActivityCount', () => ({
+  useCommunityNewActivityCount: () => ({
+    count: 0,
+    capped: false,
+    badgeLabel: '0',
+    showBadge: false,
+    enabled: true,
+  }),
+}));
+
 vi.mock('../lib/wifiNotifyLogout', () => ({
   signOutWithWifiDeactivate: vi.fn(),
 }));

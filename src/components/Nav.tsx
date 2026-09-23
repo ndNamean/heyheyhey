@@ -18,6 +18,7 @@ import LanguageSelector from './LanguageSelector';
 import ProfileAvatar from './profileAvatar/ProfileAvatar';
 import ProfileAvatarPreview from './profileAvatar/ProfileAvatarPreview';
 import { useUnreadNotificationCount } from '../hooks/useNotificationUnreadCount';
+import { useCommunityNewActivityCount } from './community/useCommunityNewActivityCount';
 import type { LogbookEntry, Profile } from '../types';
 
 export type Page =
@@ -122,6 +123,10 @@ export function MobileNav({ page, setPage, profile, assignedIssueExists, onOpenL
   const { t } = useLang();
   const { defs } = useRoleDefinitions();
   const unreadCount = useUnreadNotificationCount(profile.userId);
+  const {
+    showBadge: communityShowBadge,
+    badgeLabel: communityBadgeLabel,
+  } = useCommunityNewActivityCount(profile.userId);
   const showLogbook = canOpenLogbook(profile, defs, assignedIssueExists);
 
   const tabs: { id: Page; label: string }[] = [
@@ -161,6 +166,9 @@ export function MobileNav({ page, setPage, profile, assignedIssueExists, onOpenL
             )}
             {tab.id === 'home' && unreadCount > 0 && (
               <span className="nav-badge">{unreadCount > 9 ? '9+' : unreadCount}</span>
+            )}
+            {tab.id === 'community' && communityShowBadge && (
+              <span className="nav-badge">{communityBadgeLabel}</span>
             )}
           </span>
         </button>
