@@ -379,6 +379,18 @@ body.wizard-active .floating-assistant-root {
   box-shadow: var(--focus-ring);
 }
 
+.fa-panel-action--focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 14px var(--accent-soft);
+  /* do not set width/height — inherit 40×40 */
+}
+.fa-panel-action--focus:hover {
+  box-shadow: 0 0 18px var(--accent-soft), 0 0 6px var(--accent);
+}
+.fa-panel-action--focus:focus-visible {
+  box-shadow: var(--focus-ring), 0 0 14px var(--accent-soft);
+}
+
 .fa-panel-more-wrap {
   position: relative;
 }

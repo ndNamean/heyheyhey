@@ -247,7 +247,9 @@ describe('FloatingAssistantPanel layout', () => {
     );
 
     expect(screen.getByLabelText('Collapse panel')).toBeTruthy();
-    expect(screen.getByLabelText('Enter focus mode')).toBeTruthy();
+    const enterFocus = screen.getByLabelText('Enter focus mode');
+    expect(enterFocus).toBeTruthy();
+    expect(enterFocus.classList.contains('fa-panel-action--focus')).toBe(true);
 
     rerender(
       <FloatingAssistantPanel
@@ -288,7 +290,9 @@ describe('FloatingAssistantPanel layout', () => {
     const focusDialog = screen.getByRole('dialog');
     expect(focusDialog.getAttribute('aria-modal')).toBe('true');
     expect(focusDialog.getAttribute('aria-label')).toBe('Assistant, focus mode');
-    expect(screen.getByLabelText('Exit focus mode')).toBeTruthy();
+    const exitFocus = screen.getByLabelText('Exit focus mode');
+    expect(exitFocus).toBeTruthy();
+    expect(exitFocus.classList.contains('fa-panel-action--focus')).toBe(false);
   });
 
   it('shows resize grip on desktop fine pointer and Reset size in More', () => {

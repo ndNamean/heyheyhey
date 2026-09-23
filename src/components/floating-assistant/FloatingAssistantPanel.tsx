@@ -306,7 +306,7 @@ export default function FloatingAssistantPanel({
               </button>
               <button
                 type="button"
-                className="fa-panel-action"
+                className="fa-panel-action fa-panel-action--focus"
                 aria-label={fa.enterFocusMode}
                 title={fa.focus}
                 onClick={onEnterFocus}
