@@ -451,6 +451,39 @@ textarea { min-height: 88px; resize: vertical; }
   margin: 12px 0;
 }
 
+.community-new-activity-chip {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 10px;
+  padding: 6px 12px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: inherit;
+  cursor: pointer;
+  box-shadow: 0 0 10px var(--accent-soft);
+}
+
+.community-new-activity-chip:hover:not(:disabled) {
+  box-shadow: 0 0 14px var(--accent-soft);
+}
+
+.community-new-activity-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+}
+
+.community-new-activity-bar h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
 .community-feed-more {
   display: flex;
   flex-direction: column;

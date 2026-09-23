@@ -10,6 +10,10 @@ import FamousPost from '../components/community/FamousPost';
 import CommunityDepthGallery from '../components/community/depth-gallery/CommunityDepthGallery';
 import { canOpenCommunityGallery } from '../components/community/depth-gallery/gallerySet';
 import { CommunityVideoPlaybackProvider } from '../components/community/CommunityVideoPlayback';
+import {
+  useCommunityNewActivity,
+  type CommunityFeedView,
+} from '../components/community/useCommunityNewActivity';
 import { db } from '../db';
 import { useLang } from '../i18n';
 import {
@@ -77,6 +81,7 @@ export default function CommunityPage({ profile }: Props) {
   const [loadMoreError, setLoadMoreError] = useState(false);
   const [galleryCommentPostIds, setGalleryCommentPostIds] = useState<string[]>([]);
   const [famousCutoffIso] = useState(() => famousWindowCutoffIso());
+  const [feedView, setFeedView] = useState<CommunityFeedView>('default');
   const loadMoreInFlightRef = useRef(false);
 
   const infiniteQuery = useMemo(
@@ -101,6 +106,21 @@ export default function CommunityPage({ profile }: Props) {
     loadNextPage,
     error: listError,
   } = db.useInfiniteQuery(infiniteQuery);
+
+  const listReady = !listLoading && !listError;
+  const {
+    showChip,
+    chipCountLabel,
+    openNew,
+    clearSnapshot,
+    newPosts,
+    newViewLoading,
+    newViewError,
+  } = useCommunityNewActivity({
+    currentUserId: profile.userId,
+    feedView,
+    listReady,
+  });
 
   const famousQuery = useMemo(
     () => ({
@@ -136,8 +156,9 @@ export default function CommunityPage({ profile }: Props) {
     const map = new Map<string, CommunityPost>();
     if (famousPost) map.set(famousPost.id, famousPost);
     for (const post of feedPosts) map.set(post.id, post);
+    for (const post of newPosts) map.set(post.id, post);
     return map;
-  }, [famousPost, feedPosts]);
+  }, [famousPost, feedPosts, newPosts]);
 
   const visiblePostIds = useMemo(() => {
     const ids: string[] = [];
@@ -147,11 +168,15 @@ export default function CommunityPage({ profile }: Props) {
       seen.add(id);
       ids.push(id);
     };
-    add(famousPost?.id);
-    for (const post of feedPosts) add(post.id);
+    if (feedView === 'new') {
+      for (const post of newPosts) add(post.id);
+    } else {
+      add(famousPost?.id);
+      for (const post of feedPosts) add(post.id);
+    }
     add(selectedPostId);
     return ids;
-  }, [famousPost?.id, feedPosts, selectedPostId]);
+  }, [feedView, famousPost?.id, feedPosts, newPosts, selectedPostId]);
 
   const engagementQuery = useMemo(() => {
     if (!visiblePostIds.length) return null;
@@ -373,7 +398,50 @@ export default function CommunityPage({ profile }: Props) {
     onSkip: (postId: string) => setSkipIds((prev) => addToSet(prev, postId)),
   };
 
-  const listBody = (() => {
+  function handleOpenNewActivity() {
+    if (!openNew()) return;
+    setFeedView('new');
+  }
+
+  function handleBackToDefaultFeed() {
+    setFeedView('default');
+    clearSnapshot();
+  }
+
+  const newListBody = (() => {
+    if (newViewLoading && !newPosts.length) {
+      return <div className="community-feed-status">{copy.loading}</div>;
+    }
+    if (newViewError && !newPosts.length) {
+      return (
+        <div className="community-feed-status">
+          {copy.newActivityLoadError}{' '}
+          <button type="button" className="secondary" onClick={() => window.location.reload()}>
+            {copy.retry}
+          </button>
+        </div>
+      );
+    }
+    if (!newPosts.length) {
+      return <p className="small community-feed-empty">{copy.newActivityEmpty}</p>;
+    }
+    return (
+      <>
+        {newPosts.map((post) => (
+          <CommunityPostCard
+            key={post.id}
+            post={post}
+            reactions={reactionsByPostId.get(post.id) ?? []}
+            famousVoted={myVoteByPostId.has(post.id)}
+            famousInFlight={famousBusy.has(post.id)}
+            {...cardProps}
+          />
+        ))}
+      </>
+    );
+  })();
+
+  const defaultListBody = (() => {
     if (listLoading && !feedPosts.length) {
       return <div className="community-feed-status">{copy.loading}</div>;
     }
@@ -451,6 +519,32 @@ export default function CommunityPage({ profile }: Props) {
       </>
     );
   })();
+
+  const listBody =
+    feedView === 'new' ? (
+      <>
+        <div className="community-new-activity-bar">
+          <h2>{copy.newActivityTitle}</h2>
+          <button type="button" className="secondary" onClick={handleBackToDefaultFeed}>
+            {copy.newActivityBack}
+          </button>
+        </div>
+        {newListBody}
+      </>
+    ) : (
+      <>
+        {showChip ? (
+          <button
+            type="button"
+            className="community-new-activity-chip"
+            onClick={handleOpenNewActivity}
+          >
+            {copy.newActivityChip.replace('{count}', chipCountLabel)}
+          </button>
+        ) : null}
+        {defaultListBody}
+      </>
+    );
 
   return (
     <CommunityVideoPlaybackProvider

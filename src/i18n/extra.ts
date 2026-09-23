@@ -1690,6 +1690,11 @@ export const sectionsEn = {
     commentPhotoPreview: 'Photo preview',
     commentPhotoReady: 'Ready to send — tap Send when ready',
     commentPhotoUnavailable: 'Photo unavailable',
+    newActivityChip: 'New {count}',
+    newActivityTitle: 'New activity',
+    newActivityBack: 'Back to feed',
+    newActivityEmpty: 'No new activity',
+    newActivityLoadError: 'Could not load new activity',
   },
 };
 
@@ -3283,6 +3288,11 @@ export const sectionsVi = {
     commentPhotoPreview: 'Xem trước ảnh',
     commentPhotoReady: 'Sẵn sàng gửi — nhấn Gửi khi sẵn sàng',
     commentPhotoUnavailable: 'Ảnh không dùng được',
+    newActivityChip: 'Mới {count}',
+    newActivityTitle: 'Hoạt động mới',
+    newActivityBack: 'Về bảng tin',
+    newActivityEmpty: 'Không có hoạt động mới',
+    newActivityLoadError: 'Không tải được hoạt động mới',
   },
 };
 
