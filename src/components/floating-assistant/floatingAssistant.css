@@ -379,7 +379,7 @@ body.wizard-active .floating-assistant-root {
   box-shadow: var(--focus-ring);
 }
 
-/* Enter Focus only — one-shot center ripple + Remind-style glow pulse.
+/* Enter Focus only — center ripple (4×) + Remind-style glow pulse.
    Do not set width/height — inherit 40×40 from .fa-panel-action. */
 .fa-panel-action--focus {
   position: relative;
@@ -431,7 +431,7 @@ body.wizard-active .floating-assistant-root {
 
   .fa-panel-action--focus::before,
   .fa-panel-action--focus::after {
-    animation: fa-focus-center-ripple 600ms ease-out 1 forwards;
+    animation: fa-focus-center-ripple 600ms ease-out 4;
   }
 
   .fa-panel-action--focus::after {
