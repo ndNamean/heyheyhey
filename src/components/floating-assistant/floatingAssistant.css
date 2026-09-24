@@ -379,16 +379,87 @@ body.wizard-active .floating-assistant-root {
   box-shadow: var(--focus-ring);
 }
 
+/* Enter Focus only — one-shot center ripple + Remind-style glow pulse.
+   Do not set width/height — inherit 40×40 from .fa-panel-action. */
 .fa-panel-action--focus {
+  position: relative;
   border-color: var(--accent);
   box-shadow: 0 0 14px var(--accent-soft);
-  /* do not set width/height — inherit 40×40 */
 }
+
+.fa-panel-action--focus::before,
+.fa-panel-action--focus::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.fa-panel-action--focus::after {
+  border-color: var(--accent-soft);
+}
+
+@keyframes fa-focus-center-ripple {
+  0% {
+    transform: scale(0.45);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+@keyframes fa-focus-glow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 10px var(--accent-soft);
+  }
+  50% {
+    box-shadow: 0 0 22px var(--accent-soft), 0 0 8px var(--accent);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fa-panel-action--focus {
+    animation: fa-focus-glow-pulse 2s ease-in-out infinite;
+  }
+
+  .fa-panel-action--focus::before,
+  .fa-panel-action--focus::after {
+    animation: fa-focus-center-ripple 600ms ease-out 1 forwards;
+  }
+
+  .fa-panel-action--focus::after {
+    animation-delay: 90ms;
+  }
+}
+
 .fa-panel-action--focus:hover {
+  animation: none;
   box-shadow: 0 0 18px var(--accent-soft), 0 0 6px var(--accent);
 }
+
 .fa-panel-action--focus:focus-visible {
+  animation: none;
   box-shadow: var(--focus-ring), 0 0 14px var(--accent-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fa-panel-action--focus {
+    animation: none;
+    box-shadow: 0 0 14px var(--accent-soft);
+  }
+
+  .fa-panel-action--focus::before,
+  .fa-panel-action--focus::after {
+    content: none;
+    animation: none;
+  }
 }
 
 .fa-panel-more-wrap {

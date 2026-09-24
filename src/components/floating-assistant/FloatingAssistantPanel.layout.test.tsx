@@ -246,7 +246,9 @@ describe('FloatingAssistantPanel layout', () => {
       />,
     );
 
-    expect(screen.getByLabelText('Collapse panel')).toBeTruthy();
+    const collapse = screen.getByLabelText('Collapse panel');
+    expect(collapse).toBeTruthy();
+    expect(collapse.classList.contains('fa-panel-action--focus')).toBe(false);
     const enterFocus = screen.getByLabelText('Enter focus mode');
     expect(enterFocus).toBeTruthy();
     expect(enterFocus.classList.contains('fa-panel-action--focus')).toBe(true);
