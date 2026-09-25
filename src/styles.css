@@ -899,6 +899,114 @@ textarea { min-height: 88px; resize: vertical; }
   margin: 0 0 6px 2px;
 }
 
+/* Community Builders — recognition strip (isolated from Famous / Focus) */
+.community-builders-wrap {
+  margin-bottom: 12px;
+}
+
+.community-builders-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 6px 2px;
+}
+
+.community-builders-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.community-builders-item {
+  margin: 0;
+  padding: 0;
+}
+
+.community-builder-avatar {
+  position: relative;
+  display: inline-flex;
+  border-radius: 50%;
+}
+
+.community-builder-avatar--recognized {
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 0 10px var(--accent-soft);
+}
+
+.community-builder-avatar--recognized::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.community-builder-avatar-trigger {
+  position: relative;
+  z-index: 1;
+  border-radius: 50%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .community-builder-avatar--recognized::before {
+    animation: community-builder-ripple 0.6s ease-out 1 both;
+  }
+
+  .community-builders-item:nth-child(1) .community-builder-avatar--recognized::before {
+    animation-delay: 0ms;
+  }
+  .community-builders-item:nth-child(2) .community-builder-avatar--recognized::before {
+    animation-delay: 60ms;
+  }
+  .community-builders-item:nth-child(3) .community-builder-avatar--recognized::before {
+    animation-delay: 120ms;
+  }
+  .community-builders-item:nth-child(4) .community-builder-avatar--recognized::before {
+    animation-delay: 180ms;
+  }
+  .community-builders-item:nth-child(5) .community-builder-avatar--recognized::before {
+    animation-delay: 240ms;
+  }
+}
+
+@keyframes community-builder-ripple {
+  0% {
+    border-color: var(--accent);
+    transform: scale(0.92);
+    opacity: 0.85;
+    box-shadow: 0 0 0 0 var(--accent-soft);
+  }
+  70% {
+    border-color: var(--accent);
+    transform: scale(1.18);
+    opacity: 0.35;
+    box-shadow: 0 0 0 6px transparent;
+  }
+  100% {
+    border-color: transparent;
+    transform: scale(1.28);
+    opacity: 0;
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .community-builder-avatar--recognized::before {
+    animation: none;
+    content: none;
+  }
+}
+
 .community-card-comments-btn,
 .community-react-btn,
 .community-famous-btn {

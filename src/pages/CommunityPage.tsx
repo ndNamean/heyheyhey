@@ -6,6 +6,7 @@ import CommunityFeedSentinel, {
 } from '../components/community/CommunityFeedSentinel';
 import CommunityPostCard from '../components/community/CommunityPostCard';
 import CommunityPostDetail from '../components/community/CommunityPostDetail';
+import CommunityBuilders from '../components/community/CommunityBuilders';
 import FamousPost from '../components/community/FamousPost';
 import CommunityDepthGallery from '../components/community/depth-gallery/CommunityDepthGallery';
 import { canOpenCommunityGallery } from '../components/community/depth-gallery/gallerySet';
@@ -460,6 +461,7 @@ export default function CommunityPage({ profile }: Props) {
     }
     return (
       <>
+        <CommunityBuilders />
         {showFamous && famousPost ? (
           <FamousPost
             post={famousPost}
