@@ -1,6 +1,6 @@
 import { useLang } from '../../i18n';
 import type { AvatarProfileFields } from '../../lib/avatarDisplay';
-import ProfileAvatarPreview from '../profileAvatar/ProfileAvatarPreview';
+import CommunityBuilderItem from './CommunityBuilderItem';
 import { useCommunityBuilders, type CommunityBuilderMember } from './useCommunityBuilders';
 
 type Props = {
@@ -10,6 +10,21 @@ type Props = {
 
 function displayName(profile: AvatarProfileFields): string {
   return profile.displayName?.trim() || profile.email?.trim() || 'member';
+}
+
+function asBuilderMember(
+  member: CommunityBuilderMember | AvatarProfileFields,
+  index: number,
+): CommunityBuilderMember {
+  const base = member as CommunityBuilderMember;
+  return {
+    ...member,
+    userId: base.userId || `builder-${index}`,
+    postCount: base.postCount ?? 0,
+    commentCount: base.commentCount ?? 0,
+    supportCount: base.supportCount ?? 0,
+    contributionCount: base.contributionCount ?? 0,
+  };
 }
 
 /**
@@ -24,32 +39,28 @@ export default function CommunityBuilders({ members: membersOverride }: Props = 
   if (!members.length) return null;
 
   const title = t.community.buildersTitle;
-  const labelTemplate = t.community.builderAvatarLabel;
 
   return (
     <section className="community-builders-wrap" aria-label={title}>
       <div className="community-builders-label">{title}</div>
       <ul className="community-builders-row" role="list">
-        {members.map((member, index) => {
+        {members.map((raw, index) => {
+          const member = asBuilderMember(raw, index);
           const name = displayName(member);
-          const aria = labelTemplate.replace('{name}', name);
+          const count = member.contributionCount;
+          const contributions =
+            count === 1
+              ? t.community.builderContributionSingular.replace('{count}', String(count))
+              : t.community.builderContributionPlural.replace('{count}', String(count));
+          const itemLabel = t.community.builderItemLabel
+            .replace('{name}', name)
+            .replace('{contributions}', contributions);
           return (
-            <li
-              key={(member as CommunityBuilderMember).userId || `builder-${index}`}
-              className="community-builders-item"
-              aria-label={aria}
-            >
-              <div className="community-builder-avatar community-builder-avatar--recognized">
-                <ProfileAvatarPreview
-                  profile={member}
-                  size={36}
-                  previewEnabled
-                  desktopHoverPreview
-                  mobileTapPreview
-                  className="community-builder-avatar-trigger"
-                />
-              </div>
-            </li>
+            <CommunityBuilderItem
+              key={member.userId}
+              member={member}
+              itemLabel={itemLabel}
+            />
           );
         })}
       </ul>

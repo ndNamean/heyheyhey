@@ -15,6 +15,8 @@ interface Props {
   size?: number;
   previewEnabled?: boolean;
   desktopHoverPreview?: boolean;
+  /** When true, fine-pointer click opens the desktop photo popover (default false). */
+  desktopClickPreview?: boolean;
   mobileTapPreview?: boolean;
   onTriggerClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   className?: string;
@@ -105,6 +107,7 @@ export default function ProfileAvatarPreview({
   size = 34,
   previewEnabled = false,
   desktopHoverPreview = true,
+  desktopClickPreview = false,
   mobileTapPreview = true,
   onTriggerClick,
   className,
@@ -274,6 +277,14 @@ export default function ProfileAvatarPreview({
     }, CLOSE_DELAY_MS);
   }
 
+  function openDesktopImmediate() {
+    if (previewDisabled) return;
+    clearTimers();
+    closeOtherPreview(previewId);
+    activePreviewId = previewId;
+    setIsDesktopOpen(true);
+  }
+
   function openMobile() {
     if (previewDisabled) return;
     clearTimers();
@@ -424,6 +435,10 @@ export default function ProfileAvatarPreview({
           if (onTriggerClick) {
             closeAllPreviews();
             onTriggerClick(event);
+            return;
+          }
+          if (isDesktopFinePointer && desktopClickPreview) {
+            openDesktopImmediate();
             return;
           }
           if (!isDesktopFinePointer && mobileTapPreview) {

@@ -3,15 +3,24 @@ import { db } from '../../db';
 import type { AvatarProfileFields } from '../../lib/avatarDisplay';
 import {
   COMMUNITY_BUILDERS_LIMIT,
+  builderContributionCount,
   communityBuildersMonthStartIso,
   rankCommunityBuilders,
+  type BuilderCandidate,
   type BuilderCommentRow,
   type BuilderPostRow,
   type BuilderReactionRow,
 } from '../../lib/communityBuilders';
 import { indexProfilesByUserId } from '../../lib/communityReactionPeople';
 
-export type CommunityBuilderMember = AvatarProfileFields & { userId: string };
+export type CommunityBuilderMember = AvatarProfileFields & {
+  userId: string;
+  postCount: number;
+  commentCount: number;
+  supportCount: number;
+  /** Raw post+comment+support sum — never the weighted ranking score. */
+  contributionCount: number;
+};
 
 type ProfileRow = AvatarProfileFields & {
   userId?: string;
@@ -57,20 +66,24 @@ export function useCommunityBuilders(): { members: CommunityBuilderMember[] } {
   const { data: sourceData, isLoading: sourceLoading, error: sourceError } =
     db.useQuery(sourceQuery);
 
-  const rankedUserIds = useMemo(() => {
-    if (sourceLoading || sourceError) return [] as string[];
+  const rankedCandidates = useMemo((): BuilderCandidate[] => {
+    if (sourceLoading || sourceError) return [];
     try {
       const posts = (sourceData?.communityPosts ?? []) as BuilderPostRow[];
       const comments = (sourceData?.communityComments ?? []) as BuilderCommentRow[];
       const reactions = (sourceData?.communityReactions ?? []) as BuilderReactionRow[];
       return rankCommunityBuilders(posts, comments, reactions, {
         monthStartIso,
-      }).map((row) => row.userId);
+      });
     } catch {
-      return [] as string[];
+      return [];
     }
   }, [sourceData?.communityPosts, sourceData?.communityComments, sourceData?.communityReactions, sourceLoading, sourceError, monthStartIso]);
 
+  const rankedUserIds = useMemo(
+    () => rankedCandidates.map((row) => row.userId),
+    [rankedCandidates],
+  );
   const rankedKey = rankedUserIds.join('|');
 
   const profileQuery = useMemo(() => {
@@ -88,24 +101,31 @@ export function useCommunityBuilders(): { members: CommunityBuilderMember[] } {
 
   const members = useMemo((): CommunityBuilderMember[] => {
     if (sourceLoading || sourceError || profileLoading || profileError) return [];
-    if (!rankedUserIds.length) return [];
+    if (!rankedCandidates.length) return [];
     try {
       const rows = (profileData?.profiles ?? []) as ProfileRow[];
       const approved = rows.filter((p) => (p.approvalStatus || '').trim() === 'approved');
       const byUserId = indexProfilesByUserId(approved);
       const out: CommunityBuilderMember[] = [];
-      for (const userId of rankedUserIds) {
+      for (const candidate of rankedCandidates) {
         if (out.length >= COMMUNITY_BUILDERS_LIMIT) break;
-        const profile = byUserId.get(userId);
+        const profile = byUserId.get(candidate.userId);
         if (!profile) continue;
-        out.push({ ...profile, userId });
+        out.push({
+          ...profile,
+          userId: candidate.userId,
+          postCount: candidate.postCount,
+          commentCount: candidate.commentCount,
+          supportCount: candidate.supportCount,
+          contributionCount: builderContributionCount(candidate),
+        });
       }
       return out;
     } catch {
       return [];
     }
   }, [
-    rankedUserIds,
+    rankedCandidates,
     rankedKey,
     profileData?.profiles,
     sourceLoading,

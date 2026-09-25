@@ -47,6 +47,13 @@ export type BuilderCandidate = {
   supportCount: number;
 };
 
+/** Raw action sum for UI tooltips — not the weighted ranking score. */
+export function builderContributionCount(
+  c: Pick<BuilderCandidate, 'postCount' | 'commentCount' | 'supportCount'>,
+): number {
+  return (c.postCount || 0) + (c.commentCount || 0) + (c.supportCount || 0);
+}
+
 function isActiveStatus(status: string | undefined): boolean {
   return (status || '').trim() === 'active';
 }

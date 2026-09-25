@@ -5,6 +5,7 @@ import {
   COMMUNITY_BUILDER_SUPPORT_WEIGHT,
   COMMUNITY_BUILDERS_LIMIT,
   COMMUNITY_BUILDERS_TIMEZONE,
+  builderContributionCount,
   communityBuildersMonthStartIso,
   rankCommunityBuilders,
   selectCommunityBuilders,
@@ -85,6 +86,21 @@ describe('supportDedupeKey', () => {
 
   it('keys comment reactions independently', () => {
     expect(supportDedupeKey({ userId: 'u1', postId: 'p1', commentId: 'c1' })).toBe('u1:p1:c1');
+  });
+});
+
+describe('builderContributionCount', () => {
+  it('sums post + comment + support as raw actions (not weighted score)', () => {
+    expect(
+      builderContributionCount({ postCount: 3, commentCount: 4, supportCount: 8 }),
+    ).toBe(15);
+    // Weighted score would be 3*3 + 4*2 + 8*1 = 25 — must not equal contributionCount
+    expect(3 * COMMUNITY_BUILDER_POST_WEIGHT + 4 * COMMUNITY_BUILDER_COMMENT_WEIGHT + 8).toBe(25);
+  });
+
+  it('treats missing counts as zero', () => {
+    expect(builderContributionCount({ postCount: 0, commentCount: 0, supportCount: 0 })).toBe(0);
+    expect(builderContributionCount({ postCount: 2, commentCount: 0, supportCount: 1 })).toBe(3);
   });
 });
 

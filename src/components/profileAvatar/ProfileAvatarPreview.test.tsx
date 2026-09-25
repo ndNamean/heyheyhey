@@ -331,5 +331,67 @@ describe('ProfileAvatarPreview', () => {
 
     fireEvent.click(trigger);
     expect(screen.queryByRole('dialog', { name: 'Profile photo of Disabled Modes' })).toBeNull();
+    expect(screen.queryByAltText('Profile photo of Disabled Modes')).toBeNull();
+  });
+
+  it('does not open desktop popover on click by default when hover preview is off', () => {
+    setMatchMedia(true);
+    render(
+      <ProfileAvatarPreview
+        profile={{
+          displayName: 'No Click',
+          email: 'noclick@example.com',
+          avatarFile: withFile('https://cdn/noclick.png'),
+        }}
+        previewEnabled
+        desktopHoverPreview={false}
+        mobileTapPreview={false}
+      />,
+    );
+
+    fireEvent.click(getTrigger('No Click'));
+    expect(screen.queryByAltText('Profile photo of No Click')).toBeNull();
+  });
+
+  it('opens desktop popover on click when desktopClickPreview is enabled', () => {
+    setMatchMedia(true);
+    render(
+      <ProfileAvatarPreview
+        profile={{
+          displayName: 'Click Open',
+          email: 'click@example.com',
+          avatarFile: withFile('https://cdn/click.png'),
+        }}
+        previewEnabled
+        desktopHoverPreview={false}
+        desktopClickPreview
+        mobileTapPreview={false}
+      />,
+    );
+
+    fireEvent.click(getTrigger('Click Open'));
+    expect(screen.getByAltText('Profile photo of Click Open')).toBeTruthy();
+  });
+
+  it('lets onTriggerClick win over desktopClickPreview', () => {
+    setMatchMedia(true);
+    const onTriggerClick = vi.fn();
+    render(
+      <ProfileAvatarPreview
+        profile={{
+          displayName: 'Click Wins',
+          email: 'wins@example.com',
+          avatarFile: withFile('https://cdn/wins.png'),
+        }}
+        previewEnabled
+        desktopHoverPreview={false}
+        desktopClickPreview
+        onTriggerClick={onTriggerClick}
+      />,
+    );
+
+    fireEvent.click(getTrigger('Click Wins'));
+    expect(onTriggerClick).toHaveBeenCalledTimes(1);
+    expect(screen.queryByAltText('Profile photo of Click Wins')).toBeNull();
   });
 });

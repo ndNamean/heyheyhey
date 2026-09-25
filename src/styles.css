@@ -925,8 +925,10 @@ textarea { min-height: 88px; resize: vertical; }
 }
 
 .community-builders-item {
+  position: relative;
   margin: 0;
   padding: 0;
+  list-style: none;
 }
 
 .community-builder-avatar {
@@ -955,6 +957,73 @@ textarea { min-height: 88px; resize: vertical; }
   position: relative;
   z-index: 1;
   border-radius: 50%;
+}
+
+.community-builder-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  z-index: 8;
+  min-width: max-content;
+  max-width: 180px;
+  padding: 6px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--card-border);
+  border-bottom: 2px solid var(--accent);
+  background: var(--card-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+  color: var(--text-primary);
+  text-align: center;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(0) scale(1);
+  opacity: 1;
+}
+
+.community-builder-tooltip-name {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+.community-builder-tooltip-count {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .community-builder-tooltip {
+    animation: community-builder-tooltip-in 180ms ease-out both;
+  }
+}
+
+@keyframes community-builder-tooltip-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .community-builder-tooltip {
+    animation: none;
+    opacity: 1;
+    transform: translateX(-50%);
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
